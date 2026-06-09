@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import Modal from '../common/Modal'
 import useStore from '../../store/useStore'
 import { PREBUILT_TEMPLATES } from '../../constants/templates'
+import Button from '../ui/Button'
+import Input from '../ui/Input'
 
 function CreateProjectModal({ isOpen, onClose }) {
   const [title, setTitle] = useState('')
@@ -19,56 +21,46 @@ function CreateProjectModal({ isOpen, onClose }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create New Project">
-      <div className="space-y-4">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create New Project" size="lg">
+      <div className="space-y-5">
         <div>
-          <label className="block text-sm font-medium mb-1.5">Project Title</label>
-          <input
+          <label className="block text-sm font-medium text-fg mb-1.5">Project Title</label>
+          <Input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="My Awesome Website"
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-primary-500"
             autoFocus
           />
         </div>
         <div>
-          <label className="block text-sm font-medium mb-2">Choose Template</label>
-          <div className="grid grid-cols-2 gap-3">
+          <label className="block text-sm font-medium text-fg mb-2">Choose Template</label>
+          <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
             {PREBUILT_TEMPLATES.map((template) => (
               <button
                 key={template.id}
+                type="button"
                 onClick={() => setTemplateId(template.id)}
-                className={`p-3 rounded-xl border-2 text-left transition-all ${
+                className={`p-3 rounded-lg border-2 text-left transition-all ${
                   templateId === template.id
-                    ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-                    : 'border-slate-200 dark:border-slate-700 hover:border-slate-300'
+                    ? 'border-accent bg-accent-muted'
+                    : 'border-border hover:border-border-strong bg-bg-subtle'
                 }`}
               >
-                <img
-                  src={template.thumbnail}
-                  alt={template.name}
-                  className="w-full h-20 object-cover rounded-lg mb-2"
-                />
-                <p className="text-sm font-medium">{template.name}</p>
-                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{template.description}</p>
+                <div className="w-full h-16 rounded-md bg-bg-muted flex items-center justify-center text-2xl mb-2">
+                  {typeof template.thumbnail === 'string' && template.thumbnail.length <= 4
+                    ? template.thumbnail
+                    : '📄'}
+                </div>
+                <p className="text-sm font-medium text-fg">{template.name}</p>
+                <p className="text-xs text-fg-muted mt-0.5 line-clamp-2">{template.description}</p>
               </button>
             ))}
           </div>
         </div>
-        <div className="flex justify-end gap-3 pt-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleCreate}
-            className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
-          >
-            Create
-          </button>
+        <div className="flex justify-end gap-3 pt-2 border-t border-border">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={handleCreate}>Create Project</Button>
         </div>
       </div>
     </Modal>

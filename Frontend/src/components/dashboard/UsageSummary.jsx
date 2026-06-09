@@ -14,16 +14,18 @@ function UsageSummary() {
   ]
 
   return (
-    <div className="glass rounded-2xl p-6">
-      <div className="flex items-center gap-2 mb-4">
-        <BarChart3 className="w-5 h-5 text-primary-600" />
-        <h3 className="font-semibold font-display">Usage Summary</h3>
+    <div className="glass rounded-xl p-6">
+      <div className="flex items-center gap-2 mb-5">
+        <div className="p-1.5 rounded-md bg-accent-muted text-accent">
+          <BarChart3 className="w-4 h-4" />
+        </div>
+        <h3 className="font-semibold font-display text-fg">Usage Summary</h3>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
         {items.map((item) => (
-          <div key={item.label} className="text-center">
-            <p className="text-2xl font-bold text-primary-600">{item.value}</p>
-            <p className="text-xs text-slate-500">{item.label}</p>
+          <div key={item.label} className="text-center p-3 rounded-lg bg-bg-subtle border border-border">
+            <p className="text-2xl font-bold text-accent font-display">{item.value}</p>
+            <p className="text-xs text-fg-muted mt-0.5">{item.label}</p>
           </div>
         ))}
       </div>

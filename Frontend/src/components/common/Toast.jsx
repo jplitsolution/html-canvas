@@ -8,10 +8,10 @@ const icons = {
   info: Info,
 }
 
-const colors = {
-  success: 'bg-emerald-500',
-  error: 'bg-red-500',
-  info: 'bg-blue-500',
+const variants = {
+  success: 'bg-success text-fg-inverse border-success/30',
+  error: 'bg-danger text-danger-fg border-danger/30',
+  info: 'bg-info text-fg-inverse border-info/30',
 }
 
 function Toast({ toast }) {
@@ -19,10 +19,10 @@ function Toast({ toast }) {
   const Icon = icons[toast.type] || Info
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-white ${colors[toast.type] || colors.info} animate-slide-up`}>
+    <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border animate-slide-up ${variants[toast.type] || variants.info}`}>
       <Icon className="w-5 h-5 shrink-0" />
       <span className="text-sm font-medium flex-1">{toast.message}</span>
-      <button onClick={() => removeToast(toast.id)} className="p-0.5 hover:opacity-70" aria-label="Dismiss">
+      <button onClick={() => removeToast(toast.id)} className="p-0.5 hover:opacity-70 rounded" aria-label="Dismiss">
         <X className="w-4 h-4" />
       </button>
     </div>

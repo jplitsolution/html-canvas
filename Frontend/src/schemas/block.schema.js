@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { normalizeButtonContent } from '../utils/buttonLinks'
 
 const VALID_TYPES = [
   'navbar', 'header', 'hero', 'text', 'button', 'image',
@@ -8,6 +9,7 @@ const VALID_TYPES = [
 export const styleSchema = z.object({
   color: z.string().default('#1e293b'),
   backgroundColor: z.string().default('transparent'),
+  backgroundImage: z.string().default(''),
   fontSize: z.string().default('16px'),
   fontWeight: z.string().default('400'),
   textAlign: z.enum(['left', 'center', 'right']).default('left'),
@@ -57,11 +59,15 @@ export function normalizeStyles(styles) {
 
 export function repairBlock(block) {
   if (!VALID_TYPES.includes(block.type)) return null
+  const content = block.type === 'button'
+    ? normalizeButtonContent(block.content || {})
+    : (block.content || {})
+
   const repaired = {
     id: block.id || crypto.randomUUID(),
     type: block.type,
     parentId: block.parentId ?? null,
-    content: block.content || {},
+    content,
     styles: normalizeStyles(block.styles),
     children: block.type === 'container' ? (block.children || []) : undefined,
   }

@@ -1,43 +1,18 @@
+/**
+ * Design token reference — runtime values live in index.css as CSS custom properties.
+ * Components should use Tailwind semantic classes (bg-bg-base, text-fg, text-accent, etc.)
+ * rather than importing colors from this file.
+ */
 export const theme = {
-  colors: {
-    primary: {
-      50: '#eff6ff',
-      100: '#dbeafe',
-      200: '#bfdbfe',
-      300: '#93c5fd',
-      400: '#60a5fa',
-      500: '#3b82f6',
-      600: '#2563eb',
-      700: '#1d4ed8',
-      800: '#1e40af',
-      900: '#1e3a8a',
-    },
-    slate: {
-      50: '#f8fafc',
-      100: '#f1f5f9',
-      200: '#e2e8f0',
-      300: '#cbd5e1',
-      400: '#94a3b8',
-      500: '#64748b',
-      600: '#475569',
-      700: '#334155',
-      800: '#1e293b',
-      900: '#0f172a',
-      950: '#020617',
-    },
-    success: '#059669',
-    error: '#dc2626',
-    warning: '#d97706',
-    info: '#2563eb',
-    white: '#ffffff',
-    black: '#000000',
+  fonts: {
+    sans: "'Inter', ui-sans-serif, system-ui, sans-serif",
+    display: "'Outfit', ui-sans-serif, system-ui, sans-serif",
   },
   radius: {
-    sm: '4px',
-    md: '8px',
-    lg: '12px',
-    xl: '16px',
-    '2xl': '24px',
+    sm: 'var(--radius-sm)',
+    md: 'var(--radius-md)',
+    lg: 'var(--radius-lg)',
+    xl: 'var(--radius-xl)',
     full: '9999px',
   },
   spacing: {
@@ -50,14 +25,10 @@ export const theme = {
     '3xl': '64px',
   },
   shadows: {
-    sm: '0 1px 2px rgba(0,0,0,0.05)',
-    md: '0 4px 6px rgba(0,0,0,0.07)',
-    lg: '0 10px 15px rgba(0,0,0,0.1)',
-    xl: '0 20px 25px rgba(0,0,0,0.1)',
-  },
-  fonts: {
-    sans: "'Inter', ui-sans-serif, system-ui, sans-serif",
-    display: "'Outfit', ui-sans-serif, system-ui, sans-serif",
+    sm: 'var(--shadow-sm)',
+    md: 'var(--shadow-md)',
+    lg: 'var(--shadow-lg)',
+    xl: 'var(--shadow-xl)',
   },
   zIndex: {
     dropdown: 10,

@@ -4,6 +4,7 @@ import { normalizeStyles } from '../schemas/block.schema'
 export const DEFAULT_STYLES = {
   color: '#1e293b',
   backgroundColor: 'transparent',
+  backgroundImage: '',
   fontSize: '16px',
   fontWeight: '400',
   textAlign: 'left',
@@ -48,7 +49,7 @@ export const DEFAULT_CONTENT = {
   },
   button: {
     buttonText: 'Click Me',
-    buttonLink: '#',
+    buttonLinks: [{ url: '#' }],
   },
   image: {
     imageUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&h=400&fit=crop',

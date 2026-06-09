@@ -33,6 +33,7 @@ function Builder() {
   const reparentBlock = useStore((s) => s.reparentBlock)
   const announce = useStore((s) => s.announce)
   const error = useStore((s) => s.error)
+  const isDirty = useStore((s) => s.isDirty)
 
   const lastOverRef = useRef(null)
 
@@ -46,6 +47,17 @@ function Builder() {
   useEffect(() => {
     if (error) navigate('/dashboard')
   }, [error, navigate])
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (isDirty) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [isDirty])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
@@ -145,8 +157,8 @@ function Builder() {
 
   if (!project) {
     return (
-      <div className="h-screen flex items-center justify-center">
-        <div className="animate-pulse text-slate-400">Loading project...</div>
+      <div className="h-screen flex items-center justify-center bg-bg-base">
+        <div className="animate-pulse text-fg-muted">Loading project...</div>
       </div>
     )
   }

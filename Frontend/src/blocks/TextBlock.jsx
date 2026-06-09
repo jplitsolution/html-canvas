@@ -1,15 +1,10 @@
 import { memo } from 'react'
 import { useBlockStyles } from '../hooks/useBlockStyles'
+import { TextContent } from './shared/BlockPrimitives'
 
 function TextBlock({ block }) {
   const style = useBlockStyles(block)
-
-  return (
-    <div style={style}>
-      <p style={{ margin: 0, lineHeight: 1.7 }}>{block.content.text}</p>
-    </div>
-  )
+  return <TextContent content={block.content} style={style} />
 }
 
 export default memo(TextBlock)
-

@@ -23,13 +23,13 @@ function DragOverlayContent({ activeId, layout }) {
   const Icon = info?.icon
 
   return (
-    <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-primary-400 bg-white dark:bg-slate-800 shadow-xl">
+    <div className="flex items-center gap-3 p-3 rounded-lg border-2 border-accent bg-bg-elevated shadow-xl">
       {Icon && (
-        <div className="p-2 rounded-lg bg-primary-50 dark:bg-primary-900/30 text-primary-600">
+        <div className="p-2 rounded-md bg-accent-muted text-accent">
           <Icon className="w-5 h-5" />
         </div>
       )}
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm font-medium text-fg">{label}</span>
     </div>
   )
 }

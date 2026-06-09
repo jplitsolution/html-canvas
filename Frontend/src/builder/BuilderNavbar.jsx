@@ -1,12 +1,18 @@
 import { memo, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  ArrowLeft, Monitor, Tablet, Smartphone, Undo2, Redo2,
-  Save, Eye, Download, Check, Loader2, Cloud, FileJson,
+  ArrowLeft, Undo2, Redo2, Save, Eye, Download, Check, Loader2, FileJson,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import { generateExport, downloadExport } from '../utils/exportEngine'
+import { setPreviewHandoff } from '../utils/previewHandoff'
 import { trackEvent } from '../utils/analytics'
+import Button from '../components/ui/Button'
+import IconButton from '../components/ui/IconButton'
+import DeviceSwitcher from '../components/ui/DeviceSwitcher'
+import Badge from '../components/ui/Badge'
+import Input from '../components/ui/Input'
+import ThemeToggle from '../components/common/ThemeToggle'
 
 function BuilderNavbar() {
   const navigate = useNavigate()
@@ -28,62 +34,111 @@ function BuilderNavbar() {
   const [editingTitle, setEditingTitle] = useState(false)
   const [titleValue, setTitleValue] = useState(project?.title || '')
 
-  const saveStatus = useMemo(() => saving ? 'Saving...' : isDirty ? 'Unsaved' : 'Autosaved', [saving, isDirty])
+  const saveBadge = useMemo(() => {
+    if (saving) return { variant: 'default', label: 'Saving...', icon: Loader2, spin: true }
+    if (isDirty) return { variant: 'warning', label: 'Unsaved', icon: null }
+    return { variant: 'success', label: 'Saved', icon: Check }
+  }, [saving, isDirty])
 
   const handleExport = useCallback(async (format) => {
     if (!project) return
-    saveProject()
     const result = await generateExport({ ...project, layout }, { format })
     downloadExport(result)
     trackEvent('exports')
-  }, [project, layout, saveProject])
+  }, [project, layout])
+
+  const handlePreview = useCallback(() => {
+    if (!project) return
+    setPreviewHandoff(project.id, {
+      layout,
+      title: project.title,
+      previewMode,
+    })
+    window.open(`/preview/${project.id}`, '_blank')
+  }, [project, layout, previewMode])
 
   const handleTitleSave = useCallback(() => {
     updateProjectTitle(titleValue)
     setEditingTitle(false)
   }, [titleValue, updateProjectTitle])
 
-  const devices = useMemo(() => [
-    { mode: 'desktop', icon: Monitor, label: 'Desktop' },
-    { mode: 'tablet', icon: Tablet, label: 'Tablet' },
-    { mode: 'mobile', icon: Smartphone, label: 'Mobile' },
-  ], [])
+  const StatusIcon = saveBadge.icon
 
   return (
-    <header className="h-14 shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center gap-3 px-4">
-      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors">
+    <header className="h-12 shrink-0 border-b border-border glass flex items-center gap-2 px-3">
+      <Button variant="ghost" size="sm" onClick={() => navigate('/dashboard')} className="!px-2">
         <ArrowLeft className="w-4 h-4" /> Dashboard
-      </button>
-      <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+      </Button>
+      <div className="divider-v" />
       {editingTitle ? (
-        <input value={titleValue} onChange={(e) => setTitleValue(e.target.value)} onBlur={handleTitleSave} onKeyDown={(e) => { if (e.key === 'Enter') handleTitleSave(); if (e.key === 'Escape') { setTitleValue(project?.title || ''); setEditingTitle(false) } }} autoFocus className="px-2 py-1 text-sm font-medium rounded border border-primary-400 bg-slate-50 dark:bg-slate-800 focus:outline-none" aria-label="Project title" />
+        <Input
+          value={titleValue}
+          onChange={(e) => setTitleValue(e.target.value)}
+          onBlur={handleTitleSave}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleTitleSave()
+            if (e.key === 'Escape') {
+              setTitleValue(project?.title || '')
+              setEditingTitle(false)
+            }
+          }}
+          autoFocus
+          className="!py-1 !px-2 w-48 text-sm font-medium"
+          aria-label="Project title"
+        />
       ) : (
-        <button onClick={() => setEditingTitle(true)} className="text-sm font-medium hover:text-primary-600 transition-colors">{project?.title || 'Untitled'}</button>
+        <button
+          type="button"
+          onClick={() => setEditingTitle(true)}
+          className="text-sm font-medium text-fg hover:text-accent transition-colors px-1 font-display"
+        >
+          {project?.title || 'Untitled'}
+        </button>
       )}
-      <div className="flex items-center gap-1 text-xs text-slate-400" aria-live="polite">
-        {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : isDirty ? <Cloud className="w-3 h-3" /> : <Check className="w-3 h-3 text-emerald-500" />}
-        <span>{saveStatus}</span>
-      </div>
+      <Badge variant={saveBadge.variant} className="ml-1">
+        {StatusIcon && <StatusIcon className={`w-3 h-3 ${saveBadge.spin ? 'animate-spin' : ''}`} />}
+        {saveBadge.label}
+      </Badge>
       <div className="flex-1" />
-      <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1" role="group" aria-label="Device preview">
-        {devices.map(({ mode, icon: Icon, label }) => (
-          <button key={mode} onClick={() => setPreviewMode(mode)} className={`p-1.5 rounded-md transition-colors ${previewMode === mode ? 'bg-white dark:bg-slate-700 shadow-sm text-primary-600' : 'text-slate-500 hover:text-slate-700'}`} title={label} aria-label={label} aria-pressed={previewMode === mode}>
-            <Icon className="w-4 h-4" />
-          </button>
-        ))}
-      </div>
-      <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
-      <button onClick={undo} disabled={historyIndex <= 0} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30" title="Undo (Ctrl+Z)" aria-label="Undo"><Undo2 className="w-4 h-4" /></button>
-      <button onClick={redo} disabled={historyIndex >= history.length - 1} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30" title="Redo (Ctrl+Y)" aria-label="Redo"><Redo2 className="w-4 h-4" /></button>
+      <DeviceSwitcher value={previewMode} onChange={setPreviewMode} />
+      <div className="divider-v" />
+      <IconButton onClick={undo} disabled={historyIndex <= 0} title="Undo (Ctrl+Z)" aria-label="Undo">
+        <Undo2 className="w-4 h-4" />
+      </IconButton>
+      <IconButton onClick={redo} disabled={historyIndex >= history.length - 1} title="Redo (Ctrl+Y)" aria-label="Redo">
+        <Redo2 className="w-4 h-4" />
+      </IconButton>
       <div className="flex items-center gap-2">
-        <input type="range" min={50} max={150} value={zoom} onChange={(e) => setZoom(Number(e.target.value))} className="w-20 accent-primary-500" aria-label={`Zoom ${zoom}%`} />
-        <span className="text-xs text-slate-400 w-10">{zoom}%</span>
+        <input
+          type="range"
+          min={50}
+          max={150}
+          value={zoom}
+          onChange={(e) => setZoom(Number(e.target.value))}
+          className="w-16 accent-accent"
+          aria-label={`Zoom ${zoom}%`}
+        />
+        <span className="text-xs text-fg-subtle w-8 tabular-nums">{zoom}%</span>
       </div>
-      <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
-      <button onClick={saveProject} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"><Save className="w-4 h-4" /> Save</button>
-      <button onClick={() => { saveProject(); window.open(`/preview/${project?.id}`, '_blank') }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700"><Eye className="w-4 h-4" /> Preview</button>
-      <button onClick={() => handleExport('html')} className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700"><Download className="w-4 h-4" /> Export</button>
-      <button onClick={() => handleExport('json')} className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800" title="Export JSON" aria-label="Export JSON"><FileJson className="w-4 h-4" /></button>
+      <div className="divider-v" />
+      <Button
+        variant={isDirty ? 'primary' : 'secondary'}
+        size="sm"
+        onClick={saveProject}
+        disabled={saving || !isDirty}
+      >
+        <Save className="w-4 h-4" /> Save
+      </Button>
+      <Button variant="secondary" size="sm" onClick={handlePreview}>
+        <Eye className="w-4 h-4" /> Preview
+      </Button>
+      <Button variant="primary" size="sm" onClick={() => handleExport('html')}>
+        <Download className="w-4 h-4" /> Export
+      </Button>
+      <IconButton onClick={() => handleExport('json')} title="Export JSON" aria-label="Export JSON">
+        <FileJson className="w-4 h-4" />
+      </IconButton>
+      <ThemeToggle />
     </header>
   )
 }

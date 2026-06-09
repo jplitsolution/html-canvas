@@ -1,4 +1,5 @@
 import { normalizeStyles } from '../schemas/block.schema'
+import { appendBackgroundImageCss } from './backgroundStyles'
 
 const DEVICES = ['desktop', 'tablet', 'mobile']
 const DEVICE_ORDER = { desktop: 0, tablet: 1, mobile: 2 }
@@ -28,7 +29,7 @@ export function isStyleInherited(styles, device, key) {
 
 export function getResolvedStyleObject(styles, device = 'desktop') {
   const resolved = resolveBlockStyles(styles, device)
-  return {
+  return appendBackgroundImageCss({
     color: resolved.color,
     backgroundColor: resolved.backgroundColor,
     fontSize: resolved.fontSize,
@@ -46,5 +47,5 @@ export function getResolvedStyleObject(styles, device = 'desktop') {
     borderColor: resolved.borderColor,
     width: resolved.width,
     height: resolved.height,
-  }
+  }, resolved.backgroundImage)
 }

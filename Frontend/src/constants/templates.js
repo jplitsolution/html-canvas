@@ -128,7 +128,7 @@ export const PREBUILT_TEMPLATES = [
         id: 'saas-cta',
         type: 'button',
         parentId: null,
-        content: { buttonText: 'Start Your Free Trial', buttonLink: '#signup' },
+        content: { buttonText: 'Start Your Free Trial', buttonLinks: [{ url: '#signup' }] },
         styles: {
           color: '#ffffff', backgroundColor: '#7c3aed', fontSize: '16px', fontWeight: '400',
           textAlign: 'center', paddingTop: 48, paddingBottom: 48, paddingLeft: 32, paddingRight: 32,
@@ -338,7 +338,7 @@ export const PREBUILT_TEMPLATES = [
         id: 'launch-cta',
         type: 'button',
         parentId: null,
-        content: { buttonText: 'Reserve Yours Today', buttonLink: '#order' },
+        content: { buttonText: 'Reserve Yours Today', buttonLinks: [{ url: '#order' }] },
         styles: {
           color: '#ffffff', backgroundColor: '#dc2626', fontSize: '16px', fontWeight: '600',
           textAlign: 'center', paddingTop: 32, paddingBottom: 32, paddingLeft: 32, paddingRight: 32,

@@ -1,8 +1,11 @@
 import { resolveBlockStyles } from '../utils/responsiveStyles'
+import { appendBackgroundImageCss } from '../utils/backgroundStyles'
 
 export function styleToString(styles, device = 'desktop') {
   const resolved = resolveBlockStyles(styles, device)
-  return Object.entries(resolved)
+  const { backgroundImage, ...rest } = resolved
+  const styled = appendBackgroundImageCss(rest, backgroundImage)
+  return Object.entries(styled)
     .filter(([, v]) => v !== undefined && v !== 'auto' && v !== 'transparent')
     .map(([k, v]) => {
       const prop = k.replace(/([A-Z])/g, '-$1').toLowerCase()

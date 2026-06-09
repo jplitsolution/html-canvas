@@ -24,18 +24,18 @@ function ContainerBlock({ block }) {
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
         gap: '16px',
         minHeight: children.length === 0 ? '120px' : undefined,
-        outline: isOver ? '2px dashed #2563eb' : undefined,
+        outline: isOver ? '2px dashed var(--accent)' : undefined,
         outlineOffset: '4px',
       }}
     >
       {children.length === 0 ? (
-        <div className="col-span-full flex items-center justify-center py-8 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg text-slate-400 text-sm" style={{ gridColumn: '1 / -1' }}>
+        <div className="col-span-full flex items-center justify-center py-8 border-2 border-dashed border-border-strong rounded-lg text-fg-subtle text-sm" style={{ gridColumn: '1 / -1' }}>
           Grid Container (Drop items inside)
         </div>
       ) : (
         <SortableContext items={children.map((c) => c.id)} strategy={verticalListSortingStrategy}>
           {children.map((child) => (
-            <Suspense key={child.id} fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-primary-500" /></div>}>
+            <Suspense key={child.id} fallback={<div className="flex items-center justify-center p-8"><Loader2 className="w-6 h-6 animate-spin text-accent" /></div>}>
               <BlockWrapper block={child} isChild />
             </Suspense>
           ))}

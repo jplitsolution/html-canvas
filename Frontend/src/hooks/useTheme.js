@@ -1,20 +1,10 @@
-import { useState, useEffect } from 'react'
-import { loadTheme, saveTheme } from '../utils/storage'
+import { useContext } from 'react'
+import { ThemeContext } from '../context/ThemeContext'
 
 export function useTheme() {
-  const [theme, setTheme] = useState(() => loadTheme())
-
-  useEffect(() => {
-    const root = document.documentElement
-    if (theme === 'dark') {
-      root.classList.add('dark')
-    } else {
-      root.classList.remove('dark')
-    }
-    saveTheme(theme)
-  }, [theme])
-
-  const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
-
-  return { theme, toggleTheme }
+  const ctx = useContext(ThemeContext)
+  if (!ctx) {
+    throw new Error('useTheme must be used within ThemeProvider')
+  }
+  return ctx
 }

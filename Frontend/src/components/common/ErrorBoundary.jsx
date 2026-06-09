@@ -14,7 +14,7 @@ export default class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="border-2 border-dashed border-red-400 bg-red-50 dark:bg-red-950/30 rounded-lg p-6 flex flex-col items-center gap-2 text-red-600 dark:text-red-400">
+        <div className="border-2 border-dashed border-danger bg-danger-muted rounded-lg p-6 flex flex-col items-center gap-2 text-danger">
           <AlertTriangle className="w-6 h-6" />
           <p className="text-sm font-medium">Block render error</p>
           <p className="text-xs opacity-70">{this.state.error?.message}</p>
