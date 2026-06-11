@@ -3,6 +3,34 @@ import { appendBackgroundImageCss } from './backgroundStyles'
 
 const DEVICES = ['desktop', 'tablet', 'mobile']
 const DEVICE_ORDER = { desktop: 0, tablet: 1, mobile: 2 }
+const PADDING_KEYS = ['paddingTop', 'paddingBottom', 'paddingLeft', 'paddingRight']
+const DEVICE_PADDING_SCALE = { tablet: 0.75, mobile: 0.55 }
+const MIN_PADDING = 12
+
+function applyImplicitDeviceStyles(resolved, normalized, device) {
+  if (device === 'desktop') return resolved
+
+  const scale = DEVICE_PADDING_SCALE[device]
+  if (!scale) return resolved
+
+  const overrides = normalized[device] || {}
+  const next = { ...resolved }
+
+  for (const key of PADDING_KEYS) {
+    if (!(key in overrides) || overrides[key] === undefined) {
+      next[key] = Math.max(MIN_PADDING, Math.round((resolved[key] || 16) * scale))
+    }
+  }
+
+  if (device === 'mobile') {
+    if (!('paddingTop' in overrides)) next.paddingTop = Math.min(next.paddingTop, 40)
+    if (!('paddingBottom' in overrides)) next.paddingBottom = Math.min(next.paddingBottom, 40)
+    if (!('paddingLeft' in overrides)) next.paddingLeft = Math.min(next.paddingLeft, 20)
+    if (!('paddingRight' in overrides)) next.paddingRight = Math.min(next.paddingRight, 20)
+  }
+
+  return next
+}
 
 export function resolveBlockStyles(styles, device = 'desktop') {
   const normalized = normalizeStyles(styles)
@@ -14,7 +42,7 @@ export function resolveBlockStyles(styles, device = 'desktop') {
     resolved = { ...resolved, ...normalized[dev] }
   }
 
-  return resolved
+  return applyImplicitDeviceStyles(resolved, normalized, device)
 }
 
 export function getStyleOverrides(styles, device) {

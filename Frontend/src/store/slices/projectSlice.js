@@ -1,5 +1,4 @@
-import { persistence } from '../adapters/persistence'
-import { migrateProjects } from '../../utils/migration'
+import * as projectsApi from '../../services/api/projects'
 import { getTemplateById, cloneLayout } from '../../constants/templates'
 import { validateLayout } from '../../schemas/layout.schema'
 import { repairProject, CURRENT_VERSION } from '../../schemas/project.schema'
@@ -9,52 +8,40 @@ import {
   loadSessionDraft, deleteSessionDraft,
 } from '../../utils/sessionDraft'
 
-function seedProjects() {
-  const saasTemplate = getTemplateById('saas-landing')
-  const portfolioTemplate = getTemplateById('minimal-portfolio')
-
-  return [
-    repairProject({
-      id: crypto.randomUUID(),
-      title: 'SaaS Business Site',
-      layout: cloneLayout(saasTemplate.layout),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      version: CURRENT_VERSION,
-      metadata: { tags: [], description: '' },
-    }),
-    repairProject({
-      id: crypto.randomUUID(),
-      title: 'Alex Portfolio',
-      layout: cloneLayout(portfolioTemplate.layout),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      version: CURRENT_VERSION,
-      metadata: { tags: [], description: '' },
-    }),
-  ].filter(Boolean)
-}
-
-function initProjects() {
-  const stored = migrateProjects(persistence.listProjects())
-  if (stored.length === 0) {
-    const seeded = seedProjects()
-    persistence.saveProjects(seeded, true)
-    return seeded
-  }
-  return stored
-}
-
 export function createProjectSlice(set, get) {
   return {
-    projects: initProjects(),
+    projects: [],
     project: null,
     isDirty: false,
+    projectsLoading: false,
 
-    loadProject: (id) => {
+    fetchProjects: async () => {
+      set({ projectsLoading: true, error: null })
+      try {
+        const projects = await projectsApi.listProjects()
+        set({ projects, projectsLoading: false })
+      } catch (err) {
+        set({ projectsLoading: false, error: err.message })
+      }
+    },
+
+    loadProject: async (id) => {
       set({ loading: true, error: null })
-      const projects = get().projects.length ? get().projects : initProjects()
-      const project = projects.find((p) => p.id === id)
+      let projects = get().projects
+      let project = projects.find((p) => p.id === id)
+
+      if (!project) {
+        try {
+          project = await projectsApi.getProject(id)
+          if (project) {
+            projects = [...projects.filter((p) => p.id !== project.id), project]
+            set({ projects })
+          }
+        } catch {
+          project = null
+        }
+      }
+
       if (!project) {
         set({ loading: false, error: 'Project not found' })
         return
@@ -83,7 +70,7 @@ export function createProjectSlice(set, get) {
       }
 
       set({
-        projects, project, layout,
+        project, layout,
         selectedBlockId: null, selectedBlocks: [],
         history: [entry], historyIndex: 0,
         loading: false, isDirty: false,
@@ -119,33 +106,42 @@ export function createProjectSlice(set, get) {
       })
     },
 
-    saveProject: () => {
+    saveProject: async () => {
       const { project, layout } = get()
       if (!project) return
 
       set({ saving: true })
-      const updatedProject = repairProject({
-        ...project,
-        layout: validateLayout(structuredClone(layout)),
-        updatedAt: new Date().toISOString(),
-      })
+      try {
+        const updatedProject = repairProject({
+          ...project,
+          layout: validateLayout(structuredClone(layout)),
+          updatedAt: new Date().toISOString(),
+        })
 
-      const projects = get().projects.map((p) =>
-        p.id === project.id ? updatedProject : p
-      )
+        const saved = await projectsApi.saveProject(updatedProject)
+        const projects = get().projects.map((p) =>
+          p.id === saved.id ? saved : p
+        )
+        if (!projects.find((p) => p.id === saved.id)) {
+          projects.push(saved)
+        }
 
-      persistence.saveProjects(projects, true)
-      deleteSessionDraft(project.id)
-      trackEvent('saveCount')
+        deleteSessionDraft(project.id)
+        trackEvent('saveCount')
 
-      set({ projects, project: updatedProject, saving: false, isDirty: false })
-      get().announce('Project saved')
+        set({ projects, project: saved, saving: false, isDirty: false })
+        get().announce('Project saved')
+        get().addToast('Project saved successfully', 'success')
+      } catch (err) {
+        set({ saving: false })
+        get().addToast(err.message || 'Failed to save project', 'error')
+      }
     },
 
-    createProject: (title, templateId = 'blank') => {
+    createProject: async (title, templateId = 'blank') => {
       const template = getTemplateById(templateId)
       const project = repairProject({
-        id: crypto.randomUUID(),
+        id: 'new',
         title: title || 'Untitled Project',
         layout: validateLayout(cloneLayout(template.layout)),
         createdAt: new Date().toISOString(),
@@ -154,20 +150,24 @@ export function createProjectSlice(set, get) {
         metadata: { tags: [], description: '' },
       })
 
-      const projects = [...get().projects, project]
-      persistence.saveProjects(projects, true)
+      const saved = await projectsApi.saveProject(project)
+      const projects = [...get().projects, saved]
       trackEvent('projectsCreated')
       set({ projects })
       get().addToast('Project created successfully', 'success')
-      return project.id
+      return saved.id
     },
 
-    deleteProject: (id) => {
-      const projects = get().projects.filter((p) => p.id !== id)
-      persistence.saveProjects(projects, true)
-      deleteSessionDraft(id)
-      set({ projects })
-      get().addToast('Project deleted', 'info')
+    deleteProject: async (id) => {
+      try {
+        await projectsApi.deleteProject(id)
+        const projects = get().projects.filter((p) => p.id !== id)
+        deleteSessionDraft(id)
+        set({ projects })
+        get().addToast('Project deleted', 'info')
+      } catch (err) {
+        get().addToast(err.message || 'Failed to delete project', 'error')
+      }
     },
 
     updateProjectTitle: (title) => {

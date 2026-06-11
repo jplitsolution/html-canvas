@@ -18,6 +18,36 @@ export const blockTokens = {
   spacing: { sm: '8px', md: '16px', lg: '24px', xl: '32px' },
 }
 
+const DEVICE_FONT_SIZES = {
+  desktop: blockTokens.fontSize,
+  tablet: {
+    sm: '0.875rem',
+    base: '1rem',
+    lg: '1.0625rem',
+    xl: '1.125rem',
+    '2xl': '1.375rem',
+    '3xl': '2rem',
+    '4xl': '2.25rem',
+  },
+  mobile: {
+    sm: '0.8125rem',
+    base: '0.9375rem',
+    lg: '1rem',
+    xl: '1.0625rem',
+    '2xl': '1.25rem',
+    '3xl': '1.75rem',
+    '4xl': '2rem',
+  },
+}
+
+export function getDeviceFontSizes(device = 'desktop') {
+  return DEVICE_FONT_SIZES[device] || DEVICE_FONT_SIZES.desktop
+}
+
+export function isCompactDevice(device) {
+  return device === 'mobile' || device === 'tablet'
+}
+
 export const ctaButtonStyle = {
   display: 'inline-block',
   background: blockTokens.primary,

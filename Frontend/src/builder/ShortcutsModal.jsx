@@ -18,9 +18,9 @@ function ShortcutsModal({ isOpen, onClose }) {
     <Modal isOpen={isOpen} onClose={onClose} title="Keyboard Shortcuts" size="md">
       <div className="space-y-2">
         {SHORTCUTS.map((s) => (
-          <div key={s.keys} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+          <div key={s.keys} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-3 py-2 border-b border-border last:border-0">
             <span className="text-sm text-fg-muted">{s.action}</span>
-            <kbd className="px-2 py-1 text-xs font-mono bg-bg-subtle border border-border rounded-md text-fg">{s.keys}</kbd>
+            <kbd className="px-2 py-1 text-xs font-mono bg-bg-subtle border border-border rounded-md text-fg shrink-0 self-start sm:self-auto">{s.keys}</kbd>
           </div>
         ))}
       </div>

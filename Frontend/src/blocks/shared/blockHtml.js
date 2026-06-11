@@ -1,4 +1,4 @@
-import { blockTokens } from './blockTokens'
+import { blockTokens, getDeviceFontSizes } from './blockTokens'
 import { getButtonUrlList, buildButtonClickScript } from '../../utils/buttonLinks'
 
 export function escapeHtml(str) {
@@ -19,32 +19,59 @@ export function renderLinksHtml(links = []) {
 const t = blockTokens
 
 export const blockHtmlGenerators = {
-  navbar: (block, s) => {
+  navbar: (block, s, device = 'desktop') => {
     const { logoText, buttonText, buttonLink, links } = block.content || {}
-    return `<nav style="${s};display:flex;align-items:center;justify-content:space-between;width:100%">
-      <div style="font-weight:700;font-size:1.25rem;color:inherit">${escapeHtml(logoText)}</div>
+    const fonts = getDeviceFontSizes(device)
+    const isMobile = device === 'mobile'
+
+    if (isMobile) {
+      const linksHtml = (links || []).map((l) =>
+        `<a href="${escapeHtml(l.url)}" style="color:inherit;text-decoration:none;display:block;padding:10px 0;font-size:1rem">${escapeHtml(l.label)}</a>`
+      ).join('')
+      const ctaHtml = buttonText
+        ? `<a href="${escapeHtml(buttonLink)}" style="background:${t.primary};color:${t.surface};padding:10px 16px;border-radius:${t.radius.sm};text-decoration:none;display:block;text-align:center;margin-top:8px">${escapeHtml(buttonText)}</a>`
+        : ''
+      return `<nav style="${s};width:100%">
+        <details style="width:100%">
+          <summary style="display:flex;align-items:center;justify-content:space-between;list-style:none;cursor:pointer">
+            <span style="font-weight:700;font-size:${fonts.xl};color:inherit">${escapeHtml(logoText)}</span>
+            <span style="font-size:1.25rem;line-height:1">☰</span>
+          </summary>
+          <div style="padding-top:12px;margin-top:12px;border-top:1px solid rgba(255,255,255,0.12)">
+            ${linksHtml}
+            ${ctaHtml}
+          </div>
+        </details>
+      </nav>`
+    }
+
+    return `<nav style="${s};display:flex;align-items:center;justify-content:space-between;width:100%;flex-wrap:wrap;gap:8px">
+      <div style="font-weight:700;font-size:${fonts.xl};color:inherit">${escapeHtml(logoText)}</div>
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         ${renderLinksHtml(links)}
-        ${buttonText ? `<a href="${escapeHtml(buttonLink)}" style="background:${t.primary};color:${t.surface};padding:8px 20px;border-radius:${t.radius.sm};text-decoration:none;margin-left:16px">${escapeHtml(buttonText)}</a>` : ''}
+        ${buttonText ? `<a href="${escapeHtml(buttonLink)}" style="background:${t.primary};color:${t.surface};padding:8px 20px;border-radius:${t.radius.sm};text-decoration:none;margin-left:16px;font-size:${fonts.sm}">${escapeHtml(buttonText)}</a>` : ''}
       </div>
     </nav>`
   },
 
-  header: (block, s) => {
+  header: (block, s, device = 'desktop') => {
     const { title, subtitle } = block.content || {}
+    const fonts = getDeviceFontSizes(device)
     return `<header style="${s};text-align:center;width:100%">
-      <h1 style="font-size:2.5rem;font-weight:700;margin:0 0 8px;color:inherit">${escapeHtml(title)}</h1>
-      <p style="font-size:1.125rem;opacity:0.8;margin:0;color:inherit">${escapeHtml(subtitle)}</p>
+      <h1 style="font-size:${fonts['3xl']};font-weight:700;margin:0 0 8px;color:inherit;line-height:1.2">${escapeHtml(title)}</h1>
+      <p style="font-size:${fonts.lg};opacity:0.8;margin:0;color:inherit;line-height:1.5">${escapeHtml(subtitle)}</p>
     </header>`
   },
 
-  hero: (block, s) => {
+  hero: (block, s, device = 'desktop') => {
     const { title, subtitle, buttonText, buttonLink, imageUrl } = block.content || {}
+    const fonts = getDeviceFontSizes(device)
+    const isMobile = device === 'mobile'
     return `<section style="${s};text-align:center;width:100%">
-      <h1 style="font-size:3rem;font-weight:800;margin:0 0 16px;color:inherit">${escapeHtml(title)}</h1>
-      <p style="font-size:1.25rem;opacity:0.9;margin:0 0 32px;color:inherit">${escapeHtml(subtitle)}</p>
-      ${buttonText ? `<a href="${escapeHtml(buttonLink)}" style="display:inline-block;background:${t.surface};color:${t.primary};padding:12px 32px;border-radius:${t.radius.md};text-decoration:none;font-weight:600">${escapeHtml(buttonText)}</a>` : ''}
-      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" style="max-width:100%;margin-top:40px;border-radius:${t.radius.lg};display:block;margin-left:auto;margin-right:auto" />` : ''}
+      <h1 style="font-size:${fonts['4xl']};font-weight:800;margin:0 0 ${isMobile ? '12px' : '16px'};color:inherit;line-height:1.15;word-break:break-word">${escapeHtml(title)}</h1>
+      <p style="font-size:${fonts.lg};opacity:0.9;margin:0 0 ${isMobile ? '20px' : '32px'};color:inherit;line-height:1.5;max-width:${isMobile ? '100%' : '640px'};margin-left:auto;margin-right:auto">${escapeHtml(subtitle)}</p>
+      ${buttonText ? `<a href="${escapeHtml(buttonLink)}" style="display:inline-block;background:${t.surface};color:${t.primary};padding:${isMobile ? '10px 20px' : '12px 32px'};border-radius:${t.radius.md};text-decoration:none;font-weight:600;font-size:${fonts.base}">${escapeHtml(buttonText)}</a>` : ''}
+      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="" style="max-width:100%;width:100%;height:auto;margin-top:${isMobile ? '24px' : '40px'};border-radius:${t.radius.lg};display:block;margin-left:auto;margin-right:auto" />` : ''}
     </section>`
   },
 

@@ -57,7 +57,7 @@ function Canvas() {
 
   return (
     <div
-      className="flex-1 overflow-auto bg-bg-canvas bg-stripe-pattern p-6"
+      className="builder-canvas-area"
       onClick={deselectAll}
       role="region"
       aria-label="Canvas"
@@ -77,7 +77,7 @@ function Canvas() {
         <div
           id="canvas-content"
           ref={setNodeRef}
-          className={`min-h-[600px] flex flex-col bg-bg-elevated rounded-xl shadow-md border transition-colors ${
+          className={`builder-canvas-frame flex flex-col bg-bg-elevated rounded-lg sm:rounded-xl shadow-md border transition-colors overflow-x-hidden ${
             previewMode !== 'desktop' ? 'border-border-strong' : 'border-border'
           } ${isOver ? 'border-accent border-dashed' : ''}`}
         >

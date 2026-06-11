@@ -5,13 +5,15 @@ import { Loader2 } from 'lucide-react'
 import { getChildBlocks } from '../utils/blockUtils'
 import useStore from '../store/useStore'
 import { useBlockStyles } from '../hooks/useBlockStyles'
+import { usePreviewMode } from '../hooks/usePreviewMode'
 import BlockWrapper from '../builder/BlockWrapper'
 
 function ContainerBlock({ block }) {
   const layout = useStore((s) => s.layout)
   const children = getChildBlocks(layout, block.id)
   const style = useBlockStyles(block)
-  const cols = block.content.columns || 2
+  const device = usePreviewMode()
+  const cols = device === 'mobile' ? 1 : (block.content.columns || 2)
 
   const { setNodeRef, isOver } = useDroppable({ id: `container-${block.id}` })
 

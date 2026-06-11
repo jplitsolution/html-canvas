@@ -1,15 +1,34 @@
-export async function getCurrentUser() {
-  return null
+import { apiClient, setAuthToken, getAuthToken } from './client'
+
+export async function register(credentials) {
+  const result = await apiClient('/auth/register', {
+    method: 'POST',
+    body: credentials,
+  })
+  return result
 }
 
-export async function login(_credentials) {
-  throw new Error('Authentication requires backend — not yet implemented')
+export async function login(credentials) {
+  const result = await apiClient('/auth/login', {
+    method: 'POST',
+    body: credentials,
+  })
+  if (result?.accessToken) {
+    setAuthToken(result.accessToken)
+  }
+  return result
 }
 
 export async function logout() {
-  localStorage.removeItem('templatecraft_auth_token')
+  setAuthToken(null)
 }
 
-export async function register(_credentials) {
-  throw new Error('Registration requires backend — not yet implemented')
+export async function getCurrentUser() {
+  if (!getAuthToken()) return null
+  try {
+    return await apiClient('/auth/me')
+  } catch {
+    setAuthToken(null)
+    return null
+  }
 }

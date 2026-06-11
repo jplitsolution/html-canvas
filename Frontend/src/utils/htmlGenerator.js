@@ -11,13 +11,14 @@ function renderBlock(block, layout, device = 'desktop') {
     const cols = block.content?.columns || 2
     const s = styleToString(block.styles, device)
     const childrenHtml = children.map((c) => renderBlock(c, layout, device)).join('')
-    return `<div style="${s};display:grid;grid-template-columns:repeat(${cols},1fr);gap:16px;width:100%">${childrenHtml}</div>`
+    const gridCols = device === 'mobile' ? 1 : cols
+    return `<div style="${s};display:grid;grid-template-columns:repeat(${gridCols},1fr);gap:16px;width:100%">${childrenHtml}</div>`
   }
 
   const generator = getBlockHTMLGenerator(block.type)
   if (!generator) return ''
   const s = styleToString(block.styles, device)
-  return generator(block, s)
+  return generator(block, s, device)
 }
 
 export function generateHTML(layout, title = 'My Website', device = 'desktop') {
@@ -60,8 +61,9 @@ export function generateHTML(layout, title = 'My Website', device = 'desktop') {
     img { max-width: 100%; height: auto; display: block; }
     a { color: inherit; }
     @media (max-width: 768px) {
-      h1 { font-size: 2rem !important; }
-      nav { flex-direction: column !important; gap: 12px !important; }
+      h1 { font-size: 2rem !important; line-height: 1.15 !important; }
+      img { width: 100% !important; }
+      nav details summary::-webkit-details-marker { display: none; }
     }
   </style>
 </head>

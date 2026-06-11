@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors,
@@ -17,6 +17,8 @@ import DragOverlayContent from '../builder/DragOverlayContent'
 import ShortcutsModal from '../builder/ShortcutsModal'
 import RecoveryDialog from '../builder/RecoveryDialog'
 import BulkToolbar from '../builder/BulkToolbar'
+import BuilderMobileBar from '../builder/BuilderMobileBar'
+import SlidePanel from '../components/ui/SlidePanel'
 
 function Builder() {
   const { id } = useParams()
@@ -36,6 +38,17 @@ function Builder() {
   const isDirty = useStore((s) => s.isDirty)
 
   const lastOverRef = useRef(null)
+  const [mobilePanel, setMobilePanel] = useState(null)
+
+  const closeMobilePanel = useCallback(() => setMobilePanel(null), [])
+  const toggleToolbox = useCallback(
+    () => setMobilePanel((p) => (p === 'toolbox' ? null : 'toolbox')),
+    []
+  )
+  const toggleProperties = useCallback(
+    () => setMobilePanel((p) => (p === 'properties' ? null : 'properties')),
+    []
+  )
 
   useKeyboardShortcuts()
   useDraftRecovery()
@@ -172,13 +185,24 @@ function Builder() {
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
     >
-      <div className="h-screen flex flex-col overflow-hidden">
+      <div className="h-screen flex flex-col overflow-hidden safe-top">
         <BuilderNavbar />
-        <div className="flex flex-1 overflow-hidden">
-          <Toolbox />
+        <div className="flex flex-1 min-h-0 overflow-hidden">
+          <Toolbox className="hidden lg:flex" />
           <Canvas />
-          <PropertiesPanel />
+          <PropertiesPanel className="hidden lg:flex" />
         </div>
+        <BuilderMobileBar
+          activePanel={mobilePanel}
+          onToggleToolbox={toggleToolbox}
+          onToggleProperties={toggleProperties}
+        />
+        <SlidePanel isOpen={mobilePanel === 'toolbox'} onClose={closeMobilePanel} side="left">
+          <Toolbox onClose={closeMobilePanel} />
+        </SlidePanel>
+        <SlidePanel isOpen={mobilePanel === 'properties'} onClose={closeMobilePanel} side="right">
+          <PropertiesPanel onClose={closeMobilePanel} />
+        </SlidePanel>
       </div>
       <DragOverlay dropAnimation={null}>{dragOverlay}</DragOverlay>
       <BulkToolbar />

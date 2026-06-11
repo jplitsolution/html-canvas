@@ -60,7 +60,7 @@ function BlockWrapper({ block, isChild = false }) {
       <div className="absolute -top-3 left-3 z-10 px-2 py-0.5 bg-accent text-accent-fg text-xs font-medium rounded capitalize">
         {BLOCK_LABELS[block.type] || block.type}
       </div>
-      <div className="absolute -top-3 right-3 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute -top-3 right-3 z-10 flex gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
         <button {...attributes} {...listeners} className={`${toolbarBtn} cursor-grab active:cursor-grabbing`} aria-label="Drag block">
           <GripVertical className="w-4 h-4" />
         </button>

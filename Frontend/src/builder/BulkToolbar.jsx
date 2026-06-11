@@ -12,7 +12,7 @@ function BulkToolbar() {
   if (selectedBlocks.length < 2) return null
 
   return (
-    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-4 py-2 glass rounded-xl shadow-lg animate-slide-up" role="toolbar" aria-label="Bulk actions">
+    <div className="fixed bottom-20 lg:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3 sm:px-4 py-2 glass rounded-xl shadow-lg animate-slide-up max-w-[calc(100vw-1.5rem)]" role="toolbar" aria-label="Bulk actions">
       <span className="text-sm font-medium text-fg mr-2">{selectedBlocks.length} selected</span>
       <IconButton onClick={duplicateMultiple} title="Duplicate" aria-label="Duplicate selected">
         <Copy className="w-4 h-4" />

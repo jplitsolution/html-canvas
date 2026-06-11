@@ -44,7 +44,7 @@ const DraggableTool = memo(function DraggableTool({ item, onDoubleClickAdd }) {
   )
 })
 
-function Toolbox() {
+function Toolbox({ className = '', onClose }) {
   const [search, setSearch] = useState('')
   const deferredSearch = useDeferredValue(search)
   const [, startTransition] = useTransition()
@@ -77,9 +77,23 @@ function Toolbox() {
   }
 
   return (
-    <aside className="w-[240px] shrink-0 border-r border-border bg-bg-elevated flex flex-col h-full" aria-label="Toolbox">
-      <div className="p-3 border-b border-border">
-        <h2 className="text-sm font-semibold text-fg font-display mb-2">Components</h2>
+    <aside
+      className={`w-full lg:w-[240px] shrink-0 border-r border-border bg-bg-elevated flex flex-col h-full min-h-0 ${className}`}
+      aria-label="Toolbox"
+    >
+      <div className="p-3 border-b border-border shrink-0">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h2 className="text-sm font-semibold text-fg font-display">Components</h2>
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="lg:hidden text-xs font-medium text-accent hover:underline"
+            >
+              Done
+            </button>
+          )}
+        </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
           <Input

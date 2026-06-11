@@ -1,23 +1,36 @@
-import { memo, useState } from 'react'
+import { memo, useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Modal from '../common/Modal'
 import useStore from '../../store/useStore'
-import { PREBUILT_TEMPLATES } from '../../constants/templates'
+import { listTemplates } from '../../services/api/templates'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
 
 function CreateProjectModal({ isOpen, onClose }) {
   const [title, setTitle] = useState('')
   const [templateId, setTemplateId] = useState('blank')
+  const [templates, setTemplates] = useState([])
+  const [creating, setCreating] = useState(false)
   const createProject = useStore((s) => s.createProject)
   const navigate = useNavigate()
 
-  const handleCreate = () => {
-    const id = createProject(title || 'Untitled Project', templateId)
-    setTitle('')
-    setTemplateId('blank')
-    onClose()
-    navigate(`/builder/${id}`)
+  useEffect(() => {
+    if (isOpen) {
+      listTemplates().then(setTemplates)
+    }
+  }, [isOpen])
+
+  const handleCreate = async () => {
+    setCreating(true)
+    try {
+      const id = await createProject(title || 'Untitled Project', templateId)
+      setTitle('')
+      setTemplateId('blank')
+      onClose()
+      navigate(`/builder/${id}`)
+    } catch {
+      setCreating(false)
+    }
   }
 
   return (
@@ -36,7 +49,7 @@ function CreateProjectModal({ isOpen, onClose }) {
         <div>
           <label className="block text-sm font-medium text-fg mb-2">Choose Template</label>
           <div className="grid grid-cols-2 gap-3 max-h-64 overflow-y-auto pr-1">
-            {PREBUILT_TEMPLATES.map((template) => (
+            {templates.map((template) => (
               <button
                 key={template.id}
                 type="button"
@@ -47,10 +60,12 @@ function CreateProjectModal({ isOpen, onClose }) {
                     : 'border-border hover:border-border-strong bg-bg-subtle'
                 }`}
               >
-                <div className="w-full h-16 rounded-md bg-bg-muted flex items-center justify-center text-2xl mb-2">
-                  {typeof template.thumbnail === 'string' && template.thumbnail.length <= 4
-                    ? template.thumbnail
-                    : '📄'}
+                <div className="w-full h-16 rounded-md bg-bg-muted flex items-center justify-center text-2xl mb-2 overflow-hidden">
+                  {typeof template.thumbnail === 'string' && template.thumbnail.startsWith('http') ? (
+                    <img src={template.thumbnail} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    template.thumbnail || '📄'
+                  )}
                 </div>
                 <p className="text-sm font-medium text-fg">{template.name}</p>
                 <p className="text-xs text-fg-muted mt-0.5 line-clamp-2">{template.description}</p>
@@ -59,8 +74,10 @@ function CreateProjectModal({ isOpen, onClose }) {
           </div>
         </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-border">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={handleCreate}>Create Project</Button>
+          <Button variant="outline" onClick={onClose} disabled={creating}>Cancel</Button>
+          <Button variant="primary" onClick={handleCreate} disabled={creating}>
+            {creating ? 'Creating...' : 'Create Project'}
+          </Button>
         </div>
       </div>
     </Modal>

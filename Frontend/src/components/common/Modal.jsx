@@ -22,9 +22,9 @@ function Modal({ isOpen, onClose, title, children, size = 'md' }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fade-in safe-bottom">
       <div className="absolute inset-0 bg-bg-overlay backdrop-blur-sm" onClick={onClose} />
-      <div className={`relative w-full ${sizes[size]} bg-bg-elevated rounded-xl border border-border shadow-xl animate-slide-up`}>
+      <div className={`relative w-full ${sizes[size]} bg-bg-elevated rounded-t-xl sm:rounded-xl border border-border shadow-xl animate-slide-up max-h-[90vh] overflow-y-auto`}>
         <div className="flex items-center justify-between px-5 py-4 border-b border-border">
           <h2 className="text-base font-semibold text-fg font-display">{title}</h2>
           <IconButton onClick={onClose} aria-label="Close modal">

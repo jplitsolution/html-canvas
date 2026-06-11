@@ -1,29 +1,40 @@
-import { persistence } from '../../store/adapters/persistence'
-import { migrateProjects } from '../../utils/migration'
-import { repairProject } from '../../schemas/project.schema'
+import { apiClient } from './client'
+import { mapBackendProject, mapProjectToBackend } from './mappers'
 
 export async function listProjects() {
-  return migrateProjects(persistence.listProjects())
+  const projects = await apiClient('/projects')
+  return (projects || []).map(mapBackendProject).filter(Boolean)
 }
 
 export async function getProject(id) {
-  const projects = await listProjects()
-  return projects.find((p) => p.id === id) || null
+  const project = await apiClient(`/projects/${id}`)
+  return mapBackendProject(project)
 }
 
 export async function saveProject(project) {
-  const repaired = repairProject(project)
-  const projects = (await listProjects()).map((p) =>
-    p.id === repaired.id ? repaired : p
-  )
-  if (!projects.find((p) => p.id === repaired.id)) {
-    projects.push(repaired)
+  const payload = mapProjectToBackend(project)
+  const numericId = Number(project.id)
+
+  if (
+    project.id &&
+    project.id !== 'new' &&
+    !Number.isNaN(numericId) &&
+    String(numericId) === project.id
+  ) {
+    const updated = await apiClient(`/projects/${numericId}`, {
+      method: 'PATCH',
+      body: payload,
+    })
+    return mapBackendProject(updated)
   }
-  persistence.saveProjects(projects, true)
-  return repaired
+
+  const created = await apiClient('/projects', {
+    method: 'POST',
+    body: payload,
+  })
+  return mapBackendProject(created)
 }
 
 export async function deleteProject(id) {
-  const projects = (await listProjects()).filter((p) => p.id !== id)
-  persistence.saveProjects(projects, true)
+  await apiClient(`/projects/${id}`, { method: 'DELETE' })
 }

@@ -1,7 +1,8 @@
-import { memo, useState, useMemo } from 'react'
+import { memo, useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, LayoutTemplate, Sparkles } from 'lucide-react'
+import { Search, Plus, LayoutTemplate, Sparkles, LogIn } from 'lucide-react'
 import useStore from '../store/useStore'
+import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -13,12 +14,21 @@ import UsageSummary from '../components/dashboard/UsageSummary'
 
 function DashboardPage() {
   const navigate = useNavigate()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const projects = useStore((s) => s.projects)
+  const projectsLoading = useStore((s) => s.projectsLoading)
+  const fetchProjects = useStore((s) => s.fetchProjects)
   const deleteProject = useStore((s) => s.deleteProject)
 
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProjects()
+    }
+  }, [isAuthenticated, fetchProjects])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return projects
@@ -26,11 +36,41 @@ function DashboardPage() {
     return projects.filter((p) => p.title.toLowerCase().includes(q))
   }, [projects, search])
 
-  const handleDeleteConfirm = () => {
+  const handleDeleteConfirm = async () => {
     if (deleteTarget) {
-      deleteProject(deleteTarget.id)
+      await deleteProject(deleteTarget.id)
       setDeleteTarget(null)
     }
+  }
+
+  if (authLoading) {
+    return (
+      <AppShell>
+        <main className="page-container flex items-center justify-center min-h-[50vh]">
+          <p className="text-fg-muted">Loading...</p>
+        </main>
+      </AppShell>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <AppShell>
+        <main className="page-container">
+          <EmptyState
+            icon={LogIn}
+            title="Sign in to get started"
+            description="Create an account to save projects, use templates, and export your designs"
+            action={
+              <Button variant="primary" onClick={() => navigate('/login')}>
+                <LogIn className="w-4 h-4" />
+                Sign in
+              </Button>
+            }
+          />
+        </main>
+      </AppShell>
+    )
   }
 
   return (
@@ -43,8 +83,8 @@ function DashboardPage() {
       }
     >
       <main className="page-container">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-fg font-display tracking-tight">Your Projects</h1>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl font-bold text-fg font-display tracking-tight">Your Projects</h1>
           <p className="text-sm text-fg-muted mt-1">Create, edit, and export beautiful page templates</p>
         </div>
 
@@ -65,7 +105,9 @@ function DashboardPage() {
           </Button>
         </div>
 
-        {filtered.length === 0 ? (
+        {projectsLoading ? (
+          <div className="surface-card p-12 text-center text-fg-muted">Loading projects...</div>
+        ) : filtered.length === 0 ? (
           <div className="surface-card">
             <EmptyState
               icon={LayoutTemplate}

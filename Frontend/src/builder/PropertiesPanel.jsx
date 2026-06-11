@@ -1,5 +1,6 @@
-import { memo, useState, useCallback, useMemo } from 'react'
+import { memo, useState, useCallback, useMemo, useRef } from 'react'
 import useStore from '../store/useStore'
+import { uploadAsset } from '../assets/assetManager'
 import { getBlock } from '../registry/index'
 import { getBlockById } from '../utils/blockUtils'
 import { isStyleInherited } from '../utils/responsiveStyles'
@@ -12,7 +13,10 @@ import LinksEditor from '../components/ui/LinksEditor'
 import UrlsEditor from '../components/ui/UrlsEditor'
 import { getButtonLinks } from '../utils/buttonLinks'
 
-function RegistryField({ field, block, updateBlock, previewMode }) {
+function RegistryField({ field, block, updateBlock, previewMode, onUploadError }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+
   const updateContent = useCallback((key, value) => {
     updateBlock(block.id, { content: { [key]: value } })
   }, [block.id, updateBlock])
@@ -54,6 +58,58 @@ function RegistryField({ field, block, updateBlock, previewMode }) {
           onChange={(v) => updateContent(field.key, v)}
           rows={field.key === 'text' ? 5 : 3}
         />
+      )
+    }
+    if (field.key === 'imageUrl') {
+      const imageUrl = value || ''
+      const handleFile = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploading(true)
+        try {
+          const asset = await uploadAsset(file)
+          updateContent(field.key, asset.url || asset.data)
+        } catch (err) {
+          onUploadError?.(err.message || 'Upload failed')
+        } finally {
+          setUploading(false)
+          e.target.value = ''
+        }
+      }
+      return (
+        <div className="space-y-2">
+          <FormField
+            label={field.label}
+            value={imageUrl}
+            onChange={(v) => updateContent(field.key, v)}
+            placeholder="https://example.com/image.jpg"
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFile}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="text-xs font-medium text-accent hover:underline disabled:opacity-50"
+          >
+            {uploading ? 'Uploading...' : 'Upload image'}
+          </button>
+          {imageUrl && (
+            <div
+              className="h-20 rounded-lg border border-border overflow-hidden bg-bg-muted"
+              style={{
+                backgroundImage: `url("${String(imageUrl).replace(/"/g, '%22')}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+          )}
+        </div>
       )
     }
     return (
@@ -124,7 +180,7 @@ function RegistryField({ field, block, updateBlock, previewMode }) {
   return null
 }
 
-function ContentTab({ block, updateBlock }) {
+function ContentTab({ block, updateBlock, onUploadError }) {
   const def = getBlock(block.type)
   const contentFields = (def?.propertyPanel || []).filter((f) => f.scope === 'content')
 
@@ -135,7 +191,13 @@ function ContentTab({ block, updateBlock }) {
   return (
     <div className="space-y-4">
       {contentFields.map((field) => (
-        <RegistryField key={field.key} field={field} block={block} updateBlock={updateBlock} />
+        <RegistryField
+          key={field.key}
+          field={field}
+          block={block}
+          updateBlock={updateBlock}
+          onUploadError={onUploadError}
+        />
       ))}
     </div>
   )
@@ -211,18 +273,19 @@ function DesignTab({ block, updateBlock }) {
   )
 }
 
-function PropertiesPanel() {
+function PropertiesPanel({ className = '', onClose }) {
   const [tab, setTab] = useState('content')
   const selectedBlockId = useStore((s) => s.selectedBlockId)
   const layout = useStore((s) => s.layout)
   const updateBlock = useStore((s) => s.updateBlock)
+  const addToast = useStore((s) => s.addToast)
   const block = useMemo(
     () => (selectedBlockId ? getBlockById(layout, selectedBlockId) : null),
     [selectedBlockId, layout]
   )
 
   return (
-    <Panel title="Properties" className="w-[280px] border-l">
+    <Panel title="Properties" className={`w-full lg:w-[280px] border-l ${className}`} onClose={onClose}>
       {!block ? (
         <EmptyState
           title="No block selected"
@@ -250,7 +313,7 @@ function PropertiesPanel() {
           </div>
           <div className="flex-1 overflow-y-auto p-4" role="tabpanel">
             {tab === 'content'
-              ? <ContentTab block={block} updateBlock={updateBlock} />
+              ? <ContentTab block={block} updateBlock={updateBlock} onUploadError={(msg) => addToast(msg, 'error')} />
               : <DesignTab block={block} updateBlock={updateBlock} />}
           </div>
         </>

@@ -36,7 +36,7 @@ function ProjectCard({ project, onDelete }) {
         <div className="p-2.5 rounded-lg bg-accent-muted text-accent">
           <LayoutTemplate className="w-5 h-5" />
         </div>
-        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <IconButton onClick={handleExport} title="Export HTML">
             <Download className="w-4 h-4" />
           </IconButton>

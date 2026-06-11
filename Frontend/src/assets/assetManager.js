@@ -1,3 +1,6 @@
+import { uploadImage } from '../services/api/upload'
+import { getAuthToken } from '../services/api/client'
+
 const ASSETS_KEY = 'templatecraft_assets'
 const MAX_SIZE = 5 * 1024 * 1024
 
@@ -33,6 +36,24 @@ function compressImage(dataUrl, maxWidth = 1200) {
 
 export async function uploadAsset(file) {
   if (file.size > MAX_SIZE) throw new Error('Image must be under 5MB')
+
+  if (getAuthToken()) {
+    const result = await uploadImage(file)
+    const asset = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      data: result.url,
+      url: result.url,
+      publicId: result.publicId,
+      createdAt: new Date().toISOString(),
+    }
+    const assets = loadAssets()
+    assets.push(asset)
+    saveAssets(assets)
+    return asset
+  }
 
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -75,7 +96,7 @@ export function getUnusedAssets(layout) {
   const used = new Set()
   const layoutStr = JSON.stringify(layout)
   const assets = loadAssets()
-  return assets.filter((a) => !layoutStr.includes(a.data))
+  return assets.filter((a) => !layoutStr.includes(a.data) && !layoutStr.includes(a.url || ''))
 }
 
 export function cleanupUnusedAssets(layout) {
