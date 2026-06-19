@@ -62,7 +62,11 @@ export function getResolvedStyleObject(styles, device = 'desktop') {
     backgroundColor: resolved.backgroundColor,
     fontSize: resolved.fontSize,
     fontWeight: resolved.fontWeight,
+    fontStyle: resolved.fontStyle,
     textAlign: resolved.textAlign,
+    fontFamily: resolved.fontFamily,
+    lineHeight: resolved.lineHeight,
+    letterSpacing: resolved.letterSpacing !== undefined ? (typeof resolved.letterSpacing === 'number' ? `${resolved.letterSpacing}px` : resolved.letterSpacing) : undefined,
     paddingTop: `${resolved.paddingTop}px`,
     paddingBottom: `${resolved.paddingBottom}px`,
     paddingLeft: `${resolved.paddingLeft}px`,
@@ -75,5 +79,7 @@ export function getResolvedStyleObject(styles, device = 'desktop') {
     borderColor: resolved.borderColor,
     width: resolved.width,
     height: resolved.height,
+    gap: resolved.gap !== undefined ? `${resolved.gap}px` : undefined,
   }, resolved.backgroundImage)
 }
+

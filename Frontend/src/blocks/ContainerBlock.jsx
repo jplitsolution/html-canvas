@@ -24,7 +24,7 @@ function ContainerBlock({ block }) {
         ...style,
         display: 'grid',
         gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gap: '16px',
+        gap: style.gap || '16px',
         minHeight: children.length === 0 ? '120px' : undefined,
         outline: isOver ? '2px dashed var(--accent)' : undefined,
         outlineOffset: '4px',

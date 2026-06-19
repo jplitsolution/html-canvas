@@ -9,6 +9,7 @@ const SHORTCUTS = [
   { keys: 'Delete', action: 'Delete block' },
   { keys: 'Escape', action: 'Deselect' },
   { keys: 'Arrow Up / Down', action: 'Move block' },
+  { keys: 'Space + Drag', action: 'Pan workspace' },
   { keys: 'Shift + Click', action: 'Multi select' },
   { keys: '?', action: 'Show shortcuts' },
 ]

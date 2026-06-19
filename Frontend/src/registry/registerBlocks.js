@@ -65,16 +65,29 @@ export function registerAllBlocks() {
   })
 
   registerBlock({
-    type: 'text', icon: Type, category: 'Typography', label: 'Paragraph Text',
+    type: 'typography', icon: Type, category: 'Typography', label: 'Paragraph Text',
     description: 'Rich paragraph text block',
-    component: lazy(() => import('../blocks/TextBlock.jsx')),
-    defaultContent: DEFAULT_CONTENT.text,
+    component: lazy(() => import('../blocks/TypographyBlock.jsx')),
+    defaultContent: DEFAULT_CONTENT.typography,
     defaultStyles: DEFAULT_STYLES,
     propertyPanel: [
       { key: 'text', label: 'Paragraph Text', type: 'textarea', scope: 'content' },
       ...STYLE_FIELDS,
     ],
-    generateHTML: blockHtmlGenerators.text,
+    generateHTML: blockHtmlGenerators.typography,
+  })
+
+  registerBlock({
+    type: 'text', icon: Type, category: 'Typography', label: 'Paragraph Text',
+    description: 'Rich paragraph text block',
+    component: lazy(() => import('../blocks/TypographyBlock.jsx')),
+    defaultContent: DEFAULT_CONTENT.typography,
+    defaultStyles: DEFAULT_STYLES,
+    propertyPanel: [
+      { key: 'text', label: 'Paragraph Text', type: 'textarea', scope: 'content' },
+      ...STYLE_FIELDS,
+    ],
+    generateHTML: blockHtmlGenerators.typography,
   })
 
   registerBlock({

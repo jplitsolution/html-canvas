@@ -15,7 +15,7 @@ async function bootstrap() {
     const environment = configService.get('environment') || 'development';
     app.setGlobalPrefix('api');
     app.enableCors({
-        origin: true,
+        origin: ['http://localhost:5173', 'http://localhost:5174'],
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         credentials: true,
     });

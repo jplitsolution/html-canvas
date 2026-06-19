@@ -5,6 +5,7 @@ import { escapeHtml } from '../blocks/shared/blockHtml'
 
 function renderBlock(block, layout, device = 'desktop') {
   if (!block?.type) return ''
+  if (block.content?.hidden) return ''
 
   if (block.type === 'container') {
     const children = getChildBlocks(layout, block.id)

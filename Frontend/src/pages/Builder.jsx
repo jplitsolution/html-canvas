@@ -5,7 +5,7 @@ import {
 } from '@dnd-kit/core'
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import useStore from '../store/useStore'
-import { customCollisionDetection, isValidDropTarget } from '../utils/collision'
+import { customCollisionDetection } from '../utils/collision'
 import { isDescendant } from '../utils/blockUtils'
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
 import { useDraftRecovery } from '../hooks/useDraftRecovery'
@@ -31,7 +31,6 @@ function Builder() {
   const showShortcutsModal = useStore((s) => s.showShortcutsModal)
   const setShowShortcutsModal = useStore((s) => s.setShowShortcutsModal)
   const addBlock = useStore((s) => s.addBlock)
-  const moveBlock = useStore((s) => s.moveBlock)
   const reparentBlock = useStore((s) => s.reparentBlock)
   const announce = useStore((s) => s.announce)
   const error = useStore((s) => s.error)
@@ -95,8 +94,11 @@ function Builder() {
     const overId = over?.id ?? lastOverRef.current?.id
     lastOverRef.current = null
 
+    const dragHoverZone = useStore.getState().dragHoverZone
+    useStore.getState().setDragHoverZone(null)
+
     if (typeof activeId === 'string' && activeId.startsWith('toolbox-')) {
-      if (!overId || !isValidDropTarget(overId)) {
+      if (!overId) {
         announce('Drop cancelled — release over the canvas to add')
         return
       }
@@ -105,20 +107,32 @@ function Builder() {
       let parentId = null
       let index = -1
 
-      if (typeof overId === 'string' && overId.startsWith('container-')) {
-        parentId = overId.replace('container-', '')
-      } else if (overId !== 'canvas-root') {
-        const overBlock = layout.find((b) => b.id === overId)
-        if (overBlock?.type === 'container') {
-          parentId = overBlock.id
-        } else if (overBlock) {
-          parentId = overBlock.parentId
-          const siblings = parentId
-            ? layout.find((b) => b.id === parentId)?.children || []
-            : layout.filter((b) => !b.parentId).map((b) => b.id)
-          index = siblings.indexOf(overId)
-        } else {
-          return
+      if (overId === 'canvas-root') {
+        parentId = null
+        index = -1
+      } else {
+        let targetId = overId
+        if (typeof overId === 'string' && overId.startsWith('container-')) {
+          targetId = overId.replace('container-', '')
+        }
+
+        const overBlock = layout.find((b) => b.id === targetId)
+        if (overBlock) {
+          if (overBlock.type === 'container' && dragHoverZone === 'center') {
+            parentId = overBlock.id
+            index = 0
+          } else {
+            parentId = overBlock.parentId
+            const siblings = parentId
+              ? layout.find((b) => b.id === parentId)?.children || []
+              : layout.filter((b) => !b.parentId).map((b) => b.id)
+            const idx = siblings.indexOf(targetId)
+            if (dragHoverZone === 'top' || dragHoverZone === 'left') {
+              index = idx
+            } else {
+              index = idx + 1
+            }
+          }
         }
       }
 
@@ -127,16 +141,16 @@ function Builder() {
       return
     }
 
-    if (!over) return
+    if (!overId) return
     if (activeId === overId) return
 
+    let targetId = overId
     if (typeof overId === 'string' && overId.startsWith('container-')) {
-      const parentId = overId.replace('container-', '')
-      if (isDescendant(layout, activeId, parentId)) {
-        announce('Cannot drop container inside itself')
-        return
-      }
-      reparentBlock(activeId, parentId, 0)
+      targetId = overId.replace('container-', '')
+    }
+
+    if (isDescendant(layout, activeId, targetId)) {
+      announce('Cannot drop container inside itself')
       return
     }
 
@@ -145,17 +159,32 @@ function Builder() {
       return
     }
 
-    const overBlock = layout.find((b) => b.id === overId)
+    const overBlock = layout.find((b) => b.id === targetId)
     if (!overBlock) return
-    if (overBlock.type === 'container') {
-      if (isDescendant(layout, activeId, overId)) return
-      reparentBlock(activeId, overId, 0)
-      return
+
+    let parentId = null
+    let index
+
+    if (overBlock.type === 'container' && dragHoverZone === 'center') {
+      parentId = overBlock.id
+      index = 0
+      reparentBlock(activeId, parentId, index)
+    } else {
+      parentId = overBlock.parentId
+      const siblings = parentId
+        ? layout.find((b) => b.id === parentId)?.children || []
+        : layout.filter((b) => !b.parentId).map((b) => b.id)
+      const idx = siblings.indexOf(targetId)
+      if (dragHoverZone === 'top' || dragHoverZone === 'left') {
+        index = idx
+      } else {
+        index = idx + 1
+      }
+      reparentBlock(activeId, parentId, index)
     }
 
-    moveBlock(activeId, overId, overBlock.parentId)
     announce('Block reordered')
-  }, [layout, addBlock, moveBlock, reparentBlock, setActiveDragId, announce])
+  }, [layout, addBlock, reparentBlock, setActiveDragId, announce])
 
   const handleDragCancel = useCallback(() => {
     lastOverRef.current = null

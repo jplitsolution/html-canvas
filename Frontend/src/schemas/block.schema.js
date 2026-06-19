@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { normalizeButtonContent } from '../utils/buttonLinks'
 
 const VALID_TYPES = [
-  'navbar', 'header', 'hero', 'text', 'button', 'image',
+  'navbar', 'header', 'hero', 'text', 'typography', 'button', 'image',
   'card', 'form', 'divider', 'container', 'footer',
 ]
 
@@ -12,6 +12,10 @@ export const styleSchema = z.object({
   backgroundImage: z.string().default(''),
   fontSize: z.string().default('16px'),
   fontWeight: z.string().default('400'),
+  fontStyle: z.string().default('normal'),
+  fontFamily: z.string().default('Inter'),
+  lineHeight: z.string().default('1.5'),
+  letterSpacing: z.string().default('0px'),
   textAlign: z.enum(['left', 'center', 'right']).default('left'),
   paddingTop: z.number().default(16),
   paddingBottom: z.number().default(16),
@@ -39,6 +43,7 @@ export const blockSchema = z.object({
   parentId: z.string().nullable().default(null),
   content: z.record(z.unknown()).default({}),
   styles: z.union([styleSchema, responsiveStylesSchema]).default({}),
+  style: z.union([styleSchema, responsiveStylesSchema]).optional(),
   children: z.array(z.string()).optional(),
 })
 
@@ -58,18 +63,23 @@ export function normalizeStyles(styles) {
 }
 
 export function repairBlock(block) {
-  if (!VALID_TYPES.includes(block.type)) return null
-  const content = block.type === 'button'
+  let type = block.type
+  if (type === 'text') type = 'typography'
+  if (!VALID_TYPES.includes(type)) return null
+  const content = type === 'button'
     ? normalizeButtonContent(block.content || {})
     : (block.content || {})
 
+  const normStyles = normalizeStyles(block.styles || block.style)
+
   const repaired = {
     id: block.id || crypto.randomUUID(),
-    type: block.type,
+    type,
     parentId: block.parentId ?? null,
     content,
-    styles: normalizeStyles(block.styles),
-    children: block.type === 'container' ? (block.children || []) : undefined,
+    styles: normStyles,
+    style: normStyles,
+    children: type === 'container' ? (block.children || []) : undefined,
   }
   const result = blockSchema.safeParse(repaired)
   return result.success ? result.data : null

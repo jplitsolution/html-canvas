@@ -4,7 +4,7 @@ import { NavBarContent } from './shared/BlockPrimitives'
 
 function NavbarBlock({ block }) {
   const style = useBlockStyles(block)
-  return <NavBarContent content={block.content} style={style} />
+  return <NavBarContent content={block.content} style={style} blockId={block.id} />
 }
 
 export default memo(NavbarBlock)

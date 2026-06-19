@@ -75,8 +75,11 @@ export const blockHtmlGenerators = {
     </section>`
   },
 
+  typography: (block, s) =>
+    `<div style="${s};width:100%"><p style="margin:0;line-height:inherit;color:inherit">${block.content?.text || ''}</p></div>`,
+
   text: (block, s) =>
-    `<div style="${s};width:100%"><p style="margin:0;line-height:1.7;color:inherit">${escapeHtml(block.content?.text)}</p></div>`,
+    `<div style="${s};width:100%"><p style="margin:0;line-height:inherit;color:inherit">${block.content?.text || ''}</p></div>`,
 
   button: (block, s) => {
     const { buttonText } = block.content || {}
@@ -90,9 +93,19 @@ export const blockHtmlGenerators = {
   },
 
   image: (block, s) => {
-    const { imageUrl, altText, caption } = block.content || {}
+    const { imageUrl, altText, caption, width, height, objectFit, objectPosition } = block.content || {}
+    const imgStyles = [
+      'max-width:100%',
+      `width:${width ? `${width}px` : '100%'}`,
+      `height:${height ? `${height}px` : 'auto'}`,
+      `object-fit:${objectFit || 'cover'}`,
+      `object-position:${objectPosition || 'center'}`,
+      `border-radius:${t.radius.md}`,
+      'display:block',
+      'margin:0 auto'
+    ].join(';')
     return `<figure style="${s};text-align:center;width:100%">
-      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(altText || '')}" style="max-width:100%;border-radius:${t.radius.md};display:block;margin:0 auto" />` : ''}
+      ${imageUrl ? `<img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(altText || '')}" style="${imgStyles}" />` : ''}
       ${caption ? `<figcaption style="margin-top:8px;font-size:0.875rem;opacity:0.7;color:inherit">${escapeHtml(caption)}</figcaption>` : ''}
     </figure>`
   },

@@ -47,6 +47,9 @@ export const DEFAULT_CONTENT = {
   text: {
     text: 'Add your paragraph text here. Click to edit in the properties panel.',
   },
+  typography: {
+    text: '',
+  },
   button: {
     buttonText: 'Click Me',
     buttonLinks: [{ url: '#' }],
@@ -94,6 +97,7 @@ export const BLOCK_LABELS = {
   header: 'header',
   hero: 'hero',
   text: 'text',
+  typography: 'typography',
   button: 'button',
   image: 'image',
   card: 'card',

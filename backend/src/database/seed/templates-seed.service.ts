@@ -31,7 +31,9 @@ export class TemplatesSeedService implements OnModuleInit {
     });
 
     if (existing > 0) {
-      this.logger.log(`Skipping seed — ${existing} prebuilt template(s) already exist`);
+      this.logger.log(
+        `Skipping seed — ${existing} prebuilt template(s) already exist`,
+      );
       return;
     }
 

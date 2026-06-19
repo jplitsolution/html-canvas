@@ -13,12 +13,18 @@ export function createUiSlice(set, get) {
     showRecoveryDialog: false,
     showShortcutsModal: false,
     pendingDraft: null,
+    dragHoverZone: null,
+    editingBlockId: null,
+    newlyAddedBlockId: null,
 
     setPreviewMode: (mode) => set({ previewMode: mode }),
     setZoom: (zoom) => set({ zoom: Math.min(150, Math.max(50, zoom)) }),
-    setSelectedBlockId: (id) => set({ selectedBlockId: id, selectedBlocks: id ? [id] : [] }),
+    setSelectedBlockId: (id) => set((s) => ({ selectedBlockId: id, selectedBlocks: id ? [id] : [], editingBlockId: s.selectedBlockId === id ? s.editingBlockId : null })),
     setActiveDragId: (id) => set({ activeDragId: id }),
     setShowShortcutsModal: (show) => set({ showShortcutsModal: show }),
+    setDragHoverZone: (zone) => set({ dragHoverZone: zone }),
+    setEditingBlockId: (id) => set({ editingBlockId: id }),
+    clearNewlyAddedBlockId: () => set({ newlyAddedBlockId: null }),
 
     selectMultiple: (ids) => set({ selectedBlocks: ids, selectedBlockId: ids[0] || null }),
 
@@ -34,7 +40,7 @@ export function createUiSlice(set, get) {
       }
     },
 
-    deselectAll: () => set({ selectedBlockId: null, selectedBlocks: [] }),
+    deselectAll: () => set({ selectedBlockId: null, selectedBlocks: [], editingBlockId: null }),
 
     addToast: (message, type = 'info') => {
       const id = crypto.randomUUID()

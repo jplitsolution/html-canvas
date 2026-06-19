@@ -4,7 +4,7 @@ import { HeaderContent } from './shared/BlockPrimitives'
 
 function HeaderBlock({ block }) {
   const style = useBlockStyles(block)
-  return <HeaderContent content={block.content} style={style} />
+  return <HeaderContent content={block.content} style={style} blockId={block.id} />
 }
 
 export default memo(HeaderBlock)

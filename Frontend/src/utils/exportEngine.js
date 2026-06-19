@@ -37,7 +37,7 @@ function exportJSON(project) {
 }
 
 function exportReact(layout, title) {
-  const roots = getRootBlocks(layout)
+  const roots = getRootBlocks(layout).filter((b) => !b.content?.hidden)
   const components = roots.map((b) => {
     const gen = getBlockHTMLGenerator(b.type)
     const jsx = gen ? gen(b, '') : `<div>${b.type}</div>`

@@ -36,11 +36,23 @@ export function createEditorSlice(set, get) {
           children.splice(index >= 0 ? index : children.length, 0, block.id)
           layout = layout.map((b) => b.id === parentId ? { ...b, children } : b)
         }
+        layout = [...layout, block]
+      } else if (index >= 0) {
+        const rootBlocks = layout.filter((b) => !b.parentId)
+        const nestedBlocks = layout.filter((b) => b.parentId)
+        const newRootBlocks = [...rootBlocks]
+        newRootBlocks.splice(index, 0, block)
+        layout = [...newRootBlocks, ...nestedBlocks]
+      } else {
+        layout = [...layout, block]
       }
 
-      layout = validateLayout([...layout, block])
+      layout = validateLayout(layout)
       get().updateLayoutState(layout, 'addBlock')
       get().setSelectedBlockId(block.id)
+      if (type === 'typography') {
+        set({ newlyAddedBlockId: block.id })
+      }
       trackEvent('blocksAdded')
       get().announce(`Added ${type} block`)
 
@@ -55,6 +67,7 @@ export function createEditorSlice(set, get) {
       set((s) => ({
         selectedBlockId: s.selectedBlockId === id ? null : s.selectedBlockId,
         selectedBlocks: s.selectedBlocks.filter((bid) => bid !== id),
+        editingBlockId: s.editingBlockId === id ? null : s.editingBlockId,
       }))
       get().announce('Block removed')
     },
@@ -79,10 +92,12 @@ export function createEditorSlice(set, get) {
         if (b.id !== id) return b
         const updated = { ...b }
         if (updates.content) updated.content = { ...b.content, ...updates.content }
-        if (updates.styles) {
-          const normalized = normalizeStyles(b.styles)
-          normalized[device] = { ...normalized[device], ...updates.styles }
+        if (updates.styles || updates.style) {
+          const upStyles = updates.styles || updates.style
+          const normalized = normalizeStyles(b.styles || b.style)
+          normalized[device] = { ...normalized[device], ...upStyles }
           updated.styles = normalized
+          updated.style = normalized
         }
         return updated
       })
@@ -95,10 +110,12 @@ export function createEditorSlice(set, get) {
         if (b.id !== id) return b
         const updated = { ...b }
         if (updates.content) updated.content = { ...b.content, ...updates.content }
-        if (updates.styles) {
-          const normalized = normalizeStyles(b.styles)
-          normalized[device] = { ...normalized[device], ...updates.styles }
+        if (updates.styles || updates.style) {
+          const upStyles = updates.styles || updates.style
+          const normalized = normalizeStyles(b.styles || b.style)
+          normalized[device] = { ...normalized[device], ...upStyles }
           updated.styles = normalized
+          updated.style = normalized
         }
         return updated
       })

@@ -251,15 +251,31 @@
 }
 
 .builder-canvas-area {
-  @apply flex-1 min-w-0 min-h-0 overflow-auto bg-bg-canvas p-2 sm:p-4 lg:p-6;
+  @apply flex-1 min-w-0 min-h-0 overflow-auto p-4 sm:p-6 lg:p-8;
+  background-color: #111111;
   background-image:
-    linear-gradient(45deg, var(--stripe) 25%, transparent 25%),
-    linear-gradient(-45deg, var(--stripe) 25%, transparent 25%);
-  background-size: 8px 8px;
+    radial-gradient(ellipse at 50% 0%, rgba(107, 92, 231, 0.15) 0%, rgba(107, 92, 231, 0) 70%),
+    radial-gradient(ellipse at 50% 100%, rgba(107, 92, 231, 0.05) 0%, rgba(107, 92, 231, 0) 70%),
+    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
+  background-size: 100% 100%, 100% 100%, 24px 24px;
 }
 
 .builder-canvas-frame {
-  @apply min-h-[min(400px,70vh)] sm:min-h-[min(500px,75vh)] lg:min-h-[600px];
+  @apply min-h-[min(400px,70vh)] sm:min-h-[min(500px,75vh)] lg:min-h-[600px] transition-all duration-300;
+  background: linear-gradient(180deg, #171717 0%, #111111 100%);
+  border: 1px solid #252525;
+  border-radius: 14px;
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.03),
+    0 4px 24px rgba(0, 0, 0, 0.6);
+}
+
+.builder-canvas-frame:hover {
+  border-color: rgba(107, 92, 231, 0.3);
+  box-shadow: 
+    inset 0 1px 1px rgba(255, 255, 255, 0.04),
+    0 8px 32px rgba(0, 0, 0, 0.7),
+    0 0 24px -4px rgba(107, 92, 231, 0.1);
 }
 
 .slide-panel-left {
@@ -322,3 +338,141 @@
   animation: none !important;
   transition: none !important;
 }
+
+/* ── Premium Builder Upgrades ────────────────────────────────────────── */
+
+/* Canvas Spacebar Panning Classes */
+.builder-canvas-area.is-panning {
+  cursor: grab !important;
+}
+.builder-canvas-area.is-panning-active {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+
+/* Diagonal Hatch for Hidden Elements */
+.block-hidden-state {
+  opacity: 0.3 !important;
+  position: relative;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(255, 255, 255, 0.05),
+    rgba(255, 255, 255, 0.05) 10px,
+    transparent 10px,
+    transparent 20px
+  ) !important;
+}
+
+/* Premium Selection outline handles */
+.block-selection-corner {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border: 1.5px solid #6b5ce7;
+  border-radius: 1px;
+  z-index: 25;
+  pointer-events: none;
+}
+.block-selection-corner-tl { top: -3px; left: -3px; }
+.block-selection-corner-tr { top: -3px; right: -3px; }
+.block-selection-corner-bl { bottom: -3px; left: -3px; }
+.block-selection-corner-br { bottom: -3px; right: -3px; }
+
+/* Image resizer styling */
+.image-resize-handle-square {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #ffffff;
+  border: 2px solid #6b5ce7;
+  border-radius: 50%;
+  z-index: 30;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.image-resize-handle-square:hover {
+  transform: scale(1.4);
+  background: #6b5ce7;
+}
+
+/* Spacing guide styling */
+.spacing-guide-indicator {
+  position: absolute;
+  border: 1px dashed rgba(107, 92, 231, 0.5);
+  pointer-events: none;
+  font-family: monospace;
+  font-size: 9px;
+  color: #818cf8;
+  background: rgba(107, 92, 231, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+
+/* Floating dimensions tooltip during drag resize */
+.resize-tooltip-badge {
+  position: absolute;
+  bottom: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e1e24;
+  border: 1px solid rgba(107, 92, 231, 0.4);
+  color: #e2e8f0;
+  font-size: 9px;
+  font-family: monospace;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 40;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+}
+
+/* Micro-animations and hover states for elements tree */
+.layer-node-item {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.layer-node-item:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+.layer-node-item.is-selected {
+  background-color: rgba(107, 92, 231, 0.15);
+  border-color: rgba(107, 92, 231, 0.3);
+}
+.layer-node-item.is-selected:hover {
+  background-color: rgba(107, 92, 231, 0.2);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.18s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out forwards;
+}
+
+.layer-node-item:hover .layer-node-actions,
+.layer-node-item:focus-within .layer-node-actions {
+  opacity: 1 !important;
+}
+
+

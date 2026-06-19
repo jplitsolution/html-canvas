@@ -4,7 +4,7 @@ import { CardContent } from './shared/BlockPrimitives'
 
 function CardBlock({ block }) {
   const style = useBlockStyles(block)
-  return <CardContent content={block.content} style={style} />
+  return <CardContent content={block.content} style={style} blockId={block.id} />
 }
 
 export default memo(CardBlock)

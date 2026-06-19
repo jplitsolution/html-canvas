@@ -17,7 +17,13 @@ export function useKeyboardShortcuts() {
 
   const handleKeyDown = useCallback((e) => {
     const target = e.target
-    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+    const isInput = target.tagName === 'INPUT' || 
+                    target.tagName === 'TEXTAREA' || 
+                    target.tagName === 'SELECT' ||
+                    target.isContentEditable ||
+                    target.closest('[contenteditable="true"]')
+
+    const isShortcut = (e.ctrlKey || e.metaKey) && ['z', 'y', 's'].includes(e.key.toLowerCase())
 
     if (e.key === '?' && !isInput) {
       e.preventDefault()
@@ -26,11 +32,15 @@ export function useKeyboardShortcuts() {
     }
 
     if (e.key === 'Escape') {
+      if (isInput) {
+        target.blur()
+        return
+      }
       deselectAll()
       return
     }
 
-    if (isInput) return
+    if (isInput && !isShortcut) return
 
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault()

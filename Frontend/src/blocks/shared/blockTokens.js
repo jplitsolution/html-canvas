@@ -1,11 +1,11 @@
 export const blockTokens = {
-  primary: '#2563eb',
-  primaryHover: '#1d4ed8',
-  text: '#1e293b',
-  textMuted: '#64748b',
-  border: '#e2e8f0',
-  surface: '#ffffff',
-  radius: { sm: '6px', md: '8px', lg: '12px' },
+  primary: '#6B5CE7',
+  primaryHover: '#5b4cd4',
+  text: '#e8e8e8',
+  textMuted: '#aaaaaa',
+  border: '#252525',
+  surface: '#181818',
+  radius: { sm: '8px', md: '12px', lg: '14px' },
   fontSize: {
     sm: '0.875rem',
     base: '1rem',
@@ -76,6 +76,8 @@ export const linkStyle = {
 export const inputStyle = {
   width: '100%',
   padding: '10px',
+  background: '#111111',
+  color: '#e8e8e8',
   border: `1px solid ${blockTokens.border}`,
   borderRadius: blockTokens.radius.sm,
   boxSizing: 'border-box',
