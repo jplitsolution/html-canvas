@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 
 export default function Tabs({
   tabs = [],
@@ -7,9 +7,9 @@ export default function Tabs({
   className = ''
 }) {
   return (
-    <div className={`flex bg-[#111111] p-1 rounded-xl border border-[#252525] ${className}`}>
+    <div className={`flex bg-bg-subtle p-1 rounded-xl border border-border ${className}`}>
       {tabs.map((tab) => {
-        const isActive = activeTab === tab.id;
+        const isActive = activeTab === tab.id
         return (
           <button
             key={tab.id}
@@ -18,15 +18,15 @@ export default function Tabs({
             className={`
               flex-1 py-2 text-xs font-semibold uppercase tracking-wider rounded-lg transition-all duration-200
               ${isActive
-                ? 'bg-[#181818] text-[#e8e8e8] shadow-sm border border-[#252525]'
-                : 'text-[#666666] hover:text-[#aaaaaa] border border-transparent'
+                ? 'bg-bg-elevated text-fg shadow-sm border border-border'
+                : 'text-fg-subtle hover:text-fg-muted border border-transparent'
               }
             `}
           >
             {tab.label}
           </button>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

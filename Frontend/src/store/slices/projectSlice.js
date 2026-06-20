@@ -1,12 +1,7 @@
 import * as projectsApi from '../../services/api/projects'
-import { getTemplateById, cloneLayout } from '../../constants/templates'
-import { validateLayout } from '../../schemas/layout.schema'
+import { getTemplateById } from '../../constants/templates'
 import { repairProject, CURRENT_VERSION } from '../../schemas/project.schema'
-import { createHistoryEntry } from '../../utils/history'
 import { trackEvent } from '../../utils/analytics'
-import {
-  loadSessionDraft, deleteSessionDraft,
-} from '../../utils/sessionDraft'
 
 export function createProjectSlice(set, get) {
   return {
@@ -47,103 +42,59 @@ export function createProjectSlice(set, get) {
         return
       }
 
-      const draft = loadSessionDraft(id)
-      const layout = validateLayout(project.layout || [])
-      const entry = createHistoryEntry('load', layout)
-
-      if (draft && draft.savedAt > project.updatedAt) {
-        set({
-          pendingDraft: draft,
-          showRecoveryDialog: true,
-          loading: false,
-          project,
-          layout,
-          selectedBlockId: null,
-          selectedBlocks: [],
-          history: [entry],
-          historyIndex: 0,
-          isDirty: false,
-          previewMode: 'desktop',
-          zoom: 100,
-        })
-        return
-      }
-
       set({
-        project, layout,
-        selectedBlockId: null, selectedBlocks: [],
-        history: [entry], historyIndex: 0,
-        loading: false, isDirty: false,
-        previewMode: 'desktop', zoom: 100,
-        pendingDraft: null,
-        showRecoveryDialog: false,
-      })
-    },
-
-    restoreDraft: () => {
-      const { pendingDraft } = get()
-      if (!pendingDraft) return
-      const layout = validateLayout(pendingDraft.layout || [])
-      set({
-        layout, selectedBlockId: pendingDraft.selectedBlockId || null,
-        selectedBlocks: pendingDraft.selectedBlocks || [],
-        zoom: pendingDraft.zoom || 100,
-        history: [createHistoryEntry('restore', layout)],
-        historyIndex: 0, isDirty: true,
-        showRecoveryDialog: false, pendingDraft: null,
-      })
-      get().announce('Draft restored')
-    },
-
-    discardDraft: () => {
-      const { project, pendingDraft } = get()
-      if (project && pendingDraft) deleteSessionDraft(project.id)
-      const layout = validateLayout(project?.layout || [])
-      set({
-        layout, pendingDraft: null, showRecoveryDialog: false,
-        history: [createHistoryEntry('load', layout)], historyIndex: 0,
+        project,
+        loading: false,
         isDirty: false,
+        previewMode: 'desktop',
       })
+
+      if (project.upgradedFromLegacy) {
+        get().addToast('Project upgraded to the new editor', 'info')
+      }
     },
 
-    saveProject: async () => {
-      const { project, layout } = get()
-      if (!project) return
+    saveProjectFromEditor: async (editorData) => {
+      const { project } = get()
+      if (!project) return null
 
       set({ saving: true })
       try {
         const updatedProject = repairProject({
           ...project,
-          layout: validateLayout(structuredClone(layout)),
+          ...editorData,
           updatedAt: new Date().toISOString(),
         })
 
         const saved = await projectsApi.saveProject(updatedProject)
-        const projects = get().projects.map((p) =>
-          p.id === saved.id ? saved : p
-        )
+        const projects = get().projects.map((p) => (p.id === saved.id ? saved : p))
         if (!projects.find((p) => p.id === saved.id)) {
           projects.push(saved)
         }
 
-        deleteSessionDraft(project.id)
         trackEvent('saveCount')
-
         set({ projects, project: saved, saving: false, isDirty: false })
         get().announce('Project saved')
         get().addToast('Project saved successfully', 'success')
+        return saved
       } catch (err) {
         set({ saving: false })
         get().addToast(err.message || 'Failed to save project', 'error')
+        throw err
       }
     },
 
-    createProject: async (title, templateId = 'blank') => {
-      const template = getTemplateById(templateId)
+    setProjectDirty: (dirty) => set({ isDirty: dirty }),
+
+    createProject: async (title, templateId = 'blank', templateData = null) => {
+      const template = templateData || getTemplateById(templateId)
       const project = repairProject({
         id: 'new',
         title: title || 'Untitled Project',
-        layout: validateLayout(cloneLayout(template.layout)),
+        editor: 'grapesjs',
+        projectData: template?.projectData || {},
+        html: template?.html || '',
+        css: template?.css || '',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         version: CURRENT_VERSION,
@@ -162,7 +113,6 @@ export function createProjectSlice(set, get) {
       try {
         await projectsApi.deleteProject(id)
         const projects = get().projects.filter((p) => p.id !== id)
-        deleteSessionDraft(id)
         set({ projects })
         get().addToast('Project deleted', 'info')
       } catch (err) {

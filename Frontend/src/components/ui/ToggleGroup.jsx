@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 
 export default function ToggleGroup({
   label,
@@ -10,16 +10,16 @@ export default function ToggleGroup({
   return (
     <div className={`flex flex-col gap-1.5 w-full ${className}`}>
       {label && (
-        <span className="text-xs font-semibold text-[#aaaaaa] uppercase tracking-wider">
+        <span className="text-xs font-semibold text-fg-muted uppercase tracking-wider">
           {label}
         </span>
       )}
-      <div className="flex bg-[#111111] p-1 rounded-lg border border-[#252525] w-full">
+      <div className="flex bg-bg-subtle p-1 rounded-lg border border-border w-full">
         {options.map((opt) => {
-          const id = opt.id !== undefined ? opt.id : opt;
-          const optLabel = opt.label !== undefined ? opt.label : opt;
-          const optIcon = opt.icon;
-          const isActive = value === id;
+          const id = opt.id !== undefined ? opt.id : opt
+          const optLabel = opt.label !== undefined ? opt.label : opt
+          const optIcon = opt.icon
+          const isActive = value === id
 
           return (
             <button
@@ -29,17 +29,17 @@ export default function ToggleGroup({
               className={`
                 flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 text-xs font-medium rounded-md transition-all duration-200
                 ${isActive
-                  ? 'bg-[#6B5CE7] text-white shadow-sm shadow-[#6B5CE7]/20 font-semibold'
-                  : 'text-[#666666] hover:text-[#aaaaaa]'
+                  ? 'bg-accent text-accent-fg shadow-sm font-semibold'
+                  : 'text-fg-subtle hover:text-fg-muted'
                 }
               `}
             >
               {optIcon && <i className={`ti ${optIcon} text-sm`} />}
               {optLabel && <span>{optLabel}</span>}
             </button>
-          );
+          )
         })}
       </div>
     </div>
-  );
+  )
 }

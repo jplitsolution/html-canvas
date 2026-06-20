@@ -1,56 +1,28 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import {
-  DndContext, DragOverlay, KeyboardSensor, PointerSensor, useSensor, useSensors,
-} from '@dnd-kit/core'
-import { sortableKeyboardCoordinates } from '@dnd-kit/sortable'
 import useStore from '../store/useStore'
-import { customCollisionDetection } from '../utils/collision'
-import { isDescendant } from '../utils/blockUtils'
-import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts'
-import { useDraftRecovery } from '../hooks/useDraftRecovery'
-import BuilderNavbar from '../builder/BuilderNavbar'
-import Toolbox from '../builder/Toolbox'
-import Canvas from '../builder/Canvas'
-import PropertiesPanel from '../builder/PropertiesPanel'
-import DragOverlayContent from '../builder/DragOverlayContent'
-import ShortcutsModal from '../builder/ShortcutsModal'
-import RecoveryDialog from '../builder/RecoveryDialog'
-import BulkToolbar from '../builder/BulkToolbar'
-import BuilderMobileBar from '../builder/BuilderMobileBar'
-import SlidePanel from '../components/ui/SlidePanel'
+import { savePreviewHandoff } from '../utils/previewHandoff'
 
-function Builder() {
+const TemplateEditor = lazy(() => import('../editor/TemplateEditor'))
+
+function BuilderFallback() {
+  return (
+    <div className="h-screen flex items-center justify-center bg-bg-canvas">
+      <div className="text-sm text-fg-muted animate-pulse">Loading editor...</div>
+    </div>
+  )
+}
+
+export default function Builder() {
   const { id } = useParams()
   const navigate = useNavigate()
   const loadProject = useStore((s) => s.loadProject)
   const project = useStore((s) => s.project)
-  const layout = useStore((s) => s.layout)
-  const activeDragId = useStore((s) => s.activeDragId)
-  const setActiveDragId = useStore((s) => s.setActiveDragId)
-  const showShortcutsModal = useStore((s) => s.showShortcutsModal)
-  const setShowShortcutsModal = useStore((s) => s.setShowShortcutsModal)
-  const addBlock = useStore((s) => s.addBlock)
-  const reparentBlock = useStore((s) => s.reparentBlock)
-  const announce = useStore((s) => s.announce)
+  const loading = useStore((s) => s.loading)
   const error = useStore((s) => s.error)
   const isDirty = useStore((s) => s.isDirty)
-
-  const lastOverRef = useRef(null)
-  const [mobilePanel, setMobilePanel] = useState(null)
-
-  const closeMobilePanel = useCallback(() => setMobilePanel(null), [])
-  const toggleToolbox = useCallback(
-    () => setMobilePanel((p) => (p === 'toolbox' ? null : 'toolbox')),
-    []
-  )
-  const toggleProperties = useCallback(
-    () => setMobilePanel((p) => (p === 'properties' ? null : 'properties')),
-    []
-  )
-
-  useKeyboardShortcuts()
-  useDraftRecovery()
+  const setProjectDirty = useStore((s) => s.setProjectDirty)
+  const saveProjectFromEditor = useStore((s) => s.saveProjectFromEditor)
 
   useEffect(() => {
     if (id) loadProject(id)
@@ -71,174 +43,70 @@ function Builder() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
   }, [isDirty])
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 10 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  )
-
-  const handleDragStart = useCallback((event) => {
-    lastOverRef.current = null
-    setActiveDragId(event.active.id)
-    announce(`Dragging ${event.active.data.current?.type || 'block'}`)
-  }, [setActiveDragId, announce])
-
-  const handleDragOver = useCallback((event) => {
-    lastOverRef.current = event.over
+  const handleEditorSave = useCallback((savedProject) => {
+    if (!savedProject) return
+    useStore.setState((s) => ({
+      project: savedProject,
+      projects: s.projects.map((p) => (p.id === savedProject.id ? savedProject : p)),
+      isDirty: false,
+      saving: false,
+    }))
+    useStore.getState().addToast('Project saved successfully', 'success')
   }, [])
 
-  const handleDragEnd = useCallback((event) => {
-    const { active, over } = event
-    setActiveDragId(null)
-
-    const activeId = active.id
-    const overId = over?.id ?? lastOverRef.current?.id
-    lastOverRef.current = null
-
-    const dragHoverZone = useStore.getState().dragHoverZone
-    useStore.getState().setDragHoverZone(null)
-
-    if (typeof activeId === 'string' && activeId.startsWith('toolbox-')) {
-      if (!overId) {
-        announce('Drop cancelled — release over the canvas to add')
-        return
-      }
-
-      const type = activeId.replace('toolbox-', '')
-      let parentId = null
-      let index = -1
-
-      if (overId === 'canvas-root') {
-        parentId = null
-        index = -1
-      } else {
-        let targetId = overId
-        if (typeof overId === 'string' && overId.startsWith('container-')) {
-          targetId = overId.replace('container-', '')
-        }
-
-        const overBlock = layout.find((b) => b.id === targetId)
-        if (overBlock) {
-          if (overBlock.type === 'container' && dragHoverZone === 'center') {
-            parentId = overBlock.id
-            index = 0
-          } else {
-            parentId = overBlock.parentId
-            const siblings = parentId
-              ? layout.find((b) => b.id === parentId)?.children || []
-              : layout.filter((b) => !b.parentId).map((b) => b.id)
-            const idx = siblings.indexOf(targetId)
-            if (dragHoverZone === 'top' || dragHoverZone === 'left') {
-              index = idx
-            } else {
-              index = idx + 1
-            }
-          }
-        }
-      }
-
-      addBlock(type, parentId, index >= 0 ? index : undefined)
-      announce(`Dropped ${type} block`)
-      return
-    }
-
-    if (!overId) return
-    if (activeId === overId) return
-
-    let targetId = overId
-    if (typeof overId === 'string' && overId.startsWith('container-')) {
-      targetId = overId.replace('container-', '')
-    }
-
-    if (isDescendant(layout, activeId, targetId)) {
-      announce('Cannot drop container inside itself')
-      return
-    }
-
-    if (overId === 'canvas-root') {
-      reparentBlock(activeId, null, 0)
-      return
-    }
-
-    const overBlock = layout.find((b) => b.id === targetId)
-    if (!overBlock) return
-
-    let parentId = null
-    let index
-
-    if (overBlock.type === 'container' && dragHoverZone === 'center') {
-      parentId = overBlock.id
-      index = 0
-      reparentBlock(activeId, parentId, index)
-    } else {
-      parentId = overBlock.parentId
-      const siblings = parentId
-        ? layout.find((b) => b.id === parentId)?.children || []
-        : layout.filter((b) => !b.parentId).map((b) => b.id)
-      const idx = siblings.indexOf(targetId)
-      if (dragHoverZone === 'top' || dragHoverZone === 'left') {
-        index = idx
-      } else {
-        index = idx + 1
-      }
-      reparentBlock(activeId, parentId, index)
-    }
-
-    announce('Block reordered')
-  }, [layout, addBlock, reparentBlock, setActiveDragId, announce])
-
-  const handleDragCancel = useCallback(() => {
-    lastOverRef.current = null
-    setActiveDragId(null)
-    announce('Drag cancelled')
-  }, [setActiveDragId, announce])
-
-  const dragOverlay = useMemo(
-    () => activeDragId ? <DragOverlayContent activeId={activeDragId} layout={layout} /> : null,
-    [activeDragId, layout]
+  const handleDirtyChange = useCallback(
+    (dirty) => setProjectDirty(dirty),
+    [setProjectDirty]
   )
 
-  if (!project) {
+  const handlePreview = useCallback(
+    async (payload) => {
+      if (!id || !project) return
+      try {
+        await saveProjectFromEditor({
+          projectData: payload.projectData,
+          html: payload.html,
+          css: payload.css,
+        })
+      } catch {
+        return
+      }
+      savePreviewHandoff(id, {
+        html: payload.html,
+        css: payload.css,
+        title: payload.name,
+      })
+      navigate(`/preview/${id}`)
+    },
+    [id, project, saveProjectFromEditor, navigate]
+  )
+
+  if (loading || !project) {
     return (
-      <div className="h-screen flex items-center justify-center bg-bg-base">
-        <div className="animate-pulse text-fg-muted">Loading project...</div>
+      <div className="h-screen flex items-center justify-center bg-bg-canvas">
+        <div className="text-sm text-fg-muted animate-pulse">Loading project...</div>
       </div>
     )
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={customCollisionDetection}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
-    >
-      <div className="h-screen flex flex-col overflow-hidden safe-top">
-        <BuilderNavbar />
-        <div className="flex flex-1 min-h-0 overflow-hidden">
-          <Toolbox className="hidden lg:flex" />
-          <Canvas />
-          <PropertiesPanel className="hidden lg:flex" />
-        </div>
-        <BuilderMobileBar
-          activePanel={mobilePanel}
-          onToggleToolbox={toggleToolbox}
-          onToggleProperties={toggleProperties}
+    <div className="h-screen flex flex-col bg-bg-canvas safe-top overflow-hidden">
+      <Suspense fallback={<BuilderFallback />}>
+        <TemplateEditor
+          projectId={project.id}
+          projectTitle={project.title}
+          projectCreatedAt={project.createdAt}
+          projectMetadata={project.metadata}
+          initialData={{
+            projectData: project.projectData,
+            html: project.html,
+            css: project.css,
+          }}
+          onSave={handleEditorSave}
+          onDirtyChange={handleDirtyChange}
+          onPreview={handlePreview}
         />
-        <SlidePanel isOpen={mobilePanel === 'toolbox'} onClose={closeMobilePanel} side="left">
-          <Toolbox onClose={closeMobilePanel} />
-        </SlidePanel>
-        <SlidePanel isOpen={mobilePanel === 'properties'} onClose={closeMobilePanel} side="right">
-          <PropertiesPanel onClose={closeMobilePanel} />
-        </SlidePanel>
-      </div>
-      <DragOverlay dropAnimation={null}>{dragOverlay}</DragOverlay>
-      <BulkToolbar />
-      <ShortcutsModal isOpen={showShortcutsModal} onClose={() => setShowShortcutsModal(false)} />
-      <RecoveryDialog />
-    </DndContext>
+      </Suspense>
+    </div>
   )
 }
-
-export default memo(Builder)

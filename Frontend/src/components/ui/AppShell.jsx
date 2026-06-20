@@ -39,7 +39,7 @@ function AppShell({ title, children, actions }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col safe-top">
+    <div className="min-h-screen flex flex-col safe-top bg-bg-base text-fg">
       <header className="sticky top-0 z-40 glass border-b border-border">
         <div className="shell-header-inner">
           <div className="flex items-center gap-3 sm:gap-6 min-w-0">

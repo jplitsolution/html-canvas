@@ -1,28 +1,33 @@
 import { memo, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { LayoutTemplate, Download, Trash2 } from 'lucide-react'
-import { countBlocks } from '../../utils/blockUtils'
-import { downloadHTML } from '../../utils/htmlGenerator'
+import { downloadProjectHtml, projectHasContent } from '../../utils/exportProject'
 import IconButton from '../ui/IconButton'
 import Card from '../ui/Card'
 
 function ProjectCard({ project, onDelete }) {
   const navigate = useNavigate()
-  const blockCount = countBlocks(project.layout || [])
+  const hasContent = projectHasContent(project)
 
   const handleCardClick = useCallback(() => {
     navigate(`/builder/${project.id}`)
   }, [navigate, project.id])
 
-  const handleExport = useCallback((e) => {
-    e.stopPropagation()
-    downloadHTML(project.layout || [], project.title)
-  }, [project])
+  const handleExport = useCallback(
+    (e) => {
+      e.stopPropagation()
+      downloadProjectHtml(project)
+    },
+    [project]
+  )
 
-  const handleDelete = useCallback((e) => {
-    e.stopPropagation()
-    onDelete(project)
-  }, [onDelete, project])
+  const handleDelete = useCallback(
+    (e) => {
+      e.stopPropagation()
+      onDelete(project)
+    },
+    [onDelete, project]
+  )
 
   const formattedDate = new Date(project.updatedAt).toLocaleDateString('en-US', {
     month: 'short',
@@ -37,7 +42,7 @@ function ProjectCard({ project, onDelete }) {
           <LayoutTemplate className="w-5 h-5" />
         </div>
         <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          <IconButton onClick={handleExport} title="Export HTML">
+          <IconButton onClick={handleExport} title="Export HTML" disabled={!hasContent}>
             <Download className="w-4 h-4" />
           </IconButton>
           <IconButton onClick={handleDelete} title="Delete project" className="!text-danger hover:!bg-danger-muted">
@@ -47,7 +52,7 @@ function ProjectCard({ project, onDelete }) {
       </div>
       <h3 className="font-semibold text-sm text-fg font-display mb-1 truncate">{project.title}</h3>
       <p className="text-xs text-fg-muted">
-        {blockCount} {blockCount === 1 ? 'block' : 'blocks'} · Updated {formattedDate}
+        {hasContent ? 'Has content' : 'Empty'} · Updated {formattedDate}
       </p>
     </Card>
   )

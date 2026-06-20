@@ -1,0 +1,419 @@
+/* Modern builder — override default GrapesJS chrome */
+
+.tc-builder .gjs-editor {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Canvas host fills drop zone */
+.tc-builder .gjs-editor-host {
+  position: absolute;
+  inset: 0;
+  min-height: 600px;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.tc-builder .gjs-editor-host .gjs-editor {
+  height: 100% !important;
+  min-height: 600px;
+}
+
+.tc-builder .gjs-editor-host .gjs-cv-canvas,
+.tc-builder .gjs-editor-host iframe {
+  pointer-events: auto !important;
+}
+
+/* Drop zone visual feedback */
+.tc-drop-zone {
+  border: 2px solid var(--border);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.tc-drop-zone--dragging {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+
+.tc-drop-zone--over,
+body.tc-canvas-drop-over .tc-drop-zone--dragging {
+  border-color: var(--accent) !important;
+  border-style: solid;
+  box-shadow: 0 0 0 4px var(--accent-muted), var(--shadow-lg);
+}
+
+body.tc-is-dragging {
+  cursor: grabbing;
+}
+
+body.tc-is-dragging .tc-blocks-mount .gjs-block {
+  cursor: grabbing !important;
+}
+
+.tc-builder .gjs-cv-canvas {
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: transparent !important;
+}
+
+.tc-builder .gjs-cv-canvas__frames {
+  height: 100% !important;
+}
+
+.tc-builder .gjs-editor-cont {
+  height: 100% !important;
+}
+
+.tc-builder .gjs-frame-wrapper {
+  background: #fff;
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0 auto;
+}
+
+.tc-builder .gjs-cv-canvas__frames {
+  height: 100% !important;
+}
+
+.tc-builder .gjs-editor-cont {
+  height: 100% !important;
+}
+
+/* Hide default GrapesJS panels & badges */
+.tc-builder .gjs-pn-panels,
+.tc-builder .gjs-pn-commands,
+.tc-builder .gjs-pn-options,
+.tc-builder .gjs-toolbar,
+.tc-builder .gjs-badge,
+.tc-builder .gjs-com-badge,
+.tc-builder .gjs-off-prv {
+  display: none !important;
+}
+
+/* Keep selection & resize handles visible */
+.tc-builder .gjs-selected {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+}
+
+.tc-builder .gjs-resizer-h {
+  display: block !important;
+  border-color: var(--accent) !important;
+}
+
+/* Layer manager in sidebar */
+.tc-layers-host .gjs-layer,
+.tc-builder #tc-layers-panel .gjs-layer {
+  font-family: inherit;
+  font-size: 12px;
+  border-radius: 6px;
+  margin-bottom: 2px;
+}
+
+.tc-builder #tc-layers-panel .gjs-one-bg {
+  background: var(--bg-subtle) !important;
+}
+
+.tc-builder #tc-layers-panel .gjs-two-color {
+  color: var(--fg) !important;
+}
+
+.tc-builder #tc-layers-panel .gjs-layer.gjs-selected {
+  background: var(--accent-muted) !important;
+}
+
+/* Advanced style & trait managers in properties panel */
+.tc-advanced-styles-host,
+.tc-advanced-traits-host {
+  min-height: 48px;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector,
+.tc-advanced-traits-host .gjs-trt-trait {
+  margin-bottom: 8px;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector-title,
+.tc-advanced-traits-host .gjs-trt-header {
+  background: var(--bg-subtle) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: var(--fg) !important;
+  padding: 8px 10px !important;
+  cursor: pointer;
+}
+
+.tc-advanced-styles-host .gjs-sm-properties,
+.tc-advanced-traits-host .gjs-trt-traits {
+  padding: 8px 4px !important;
+  font-size: 12px;
+}
+
+.tc-advanced-styles-host .gjs-sm-property,
+.tc-advanced-traits-host .gjs-field {
+  margin-bottom: 8px;
+}
+
+.tc-advanced-styles-host .gjs-sm-label,
+.tc-advanced-traits-host .gjs-label {
+  color: var(--fg-muted) !important;
+  font-size: 11px !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector-caret,
+.tc-advanced-styles-host .gjs-sm-clear {
+  color: var(--fg-muted) !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-input-holder input,
+.tc-advanced-styles-host .gjs-sm-input-holder select,
+.tc-advanced-traits-host input,
+.tc-advanced-traits-host select {
+  background: var(--bg-subtle) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  color: var(--fg) !important;
+  font-size: 12px !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector .gjs-sm-sector-title.gjs-sm-open {
+  border-color: var(--accent) !important;
+}
+
+/* Advanced style manager (legacy host) */
+.tc-advanced-styles-host .gjs-sm-sector {
+  border: none !important;
+  background: transparent !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector-title {
+  background: var(--bg-subtle) !important;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--fg) !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-properties {
+  font-size: 12px;
+}
+
+/* Modal (asset picker fallback) */
+.gjs-mdl-dialog {
+  border-radius: 12px !important;
+  font-family: Inter, sans-serif !important;
+}
+
+.gjs-am-assets-cont {
+  border-radius: 8px;
+}
+
+/* Drag ghost */
+.gjs-block.__dragging {
+  opacity: 0.85;
+}
+
+/* Page frame shadow on canvas area */
+.tc-page-frame {
+  transition: box-shadow 0.2s ease;
+}
+
+.tc-page-frame:focus-within {
+  box-shadow: var(--shadow-lg);
+}
+
+/* Drag placeholder & sorter — enhanced drop preview */
+.tc-builder .gjs-sorter-hint,
+.tc-builder .gjs-placeholder {
+  border: none !important;
+  background: transparent !important;
+  opacity: 1 !important;
+  pointer-events: none;
+}
+
+.tc-builder .gjs-placeholder-int {
+  border: 2px dashed var(--accent) !important;
+  background: var(--accent-muted) !important;
+  border-radius: 10px;
+  min-height: 4px;
+  transition: min-height 0.12s ease;
+}
+
+body:not(.tc-is-dragging) .tc-builder .gjs-placeholder.tc-placer-active {
+  display: none !important;
+}
+
+body.tc-is-dragging .tc-builder .gjs-placeholder.tc-placer-active .gjs-placeholder-int {
+  min-height: 88px !important;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 24px rgba(79, 70, 229, 0.18);
+}
+
+.tc-placer-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  user-select: none;
+}
+
+.tc-placer-preview__media {
+  width: 100%;
+  max-width: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid var(--border);
+}
+
+.tc-placer-preview__media svg {
+  width: 100%;
+  height: auto;
+}
+
+.tc-placer-preview__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* Floating cursor ghost while dragging from sidebar */
+.tc-drag-preview {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 100000;
+  pointer-events: none;
+  width: 148px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 2px solid var(--accent);
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.18);
+  opacity: 0.96;
+  will-change: transform;
+}
+
+.tc-drag-preview__media {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 5 / 3;
+  margin-bottom: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+.tc-drag-preview__media svg {
+  width: 100%;
+  height: auto;
+}
+
+.tc-drag-preview__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg);
+  text-align: center;
+  line-height: 1.3;
+}
+
+.tc-drag-preview--asset {
+  width: 120px;
+  padding: 6px;
+}
+
+.tc-drag-preview__photo {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  display: block;
+}
+
+body.tc-is-dragging .tc-blocks-mount .gjs-block.__dragging,
+body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
+  opacity: 0.45;
+}
+
+/* Sidebar block cards — GrapesJS native blocks */
+.tc-blocks-mount .gjs-blocks-c {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0 !important;
+}
+
+.tc-blocks-mount .gjs-block {
+  width: 100% !important;
+  min-height: unset !important;
+  margin: 0 !important;
+  padding: 8px !important;
+  border-radius: 10px !important;
+  border: 1px solid var(--border) !important;
+  background: var(--bg-elevated) !important;
+  box-shadow: none !important;
+  cursor: grab !important;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  user-select: none;
+}
+
+.tc-blocks-mount .gjs-block:active {
+  cursor: grabbing !important;
+}
+
+.tc-blocks-mount .gjs-block:hover {
+  border-color: var(--accent) !important;
+  box-shadow: var(--shadow-sm) !important;
+}
+
+.tc-blocks-mount .gjs-block__media {
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 5 / 3;
+  margin-bottom: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.tc-blocks-mount .gjs-block__media svg {
+  width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.tc-blocks-mount .gjs-block-label {
+  font-size: 11px !important;
+  font-weight: 500;
+  color: var(--fg) !important;
+  padding: 0 2px 2px;
+  line-height: 1.3;
+}
+
+.tc-asset-tile img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Hidden grapes mounts */
+#tc-traits-hidden,
+#tc-styles-hidden {
+  display: none !important;
+  height: 0;
+  overflow: hidden;
+}

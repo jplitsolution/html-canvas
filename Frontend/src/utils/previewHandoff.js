@@ -12,6 +12,10 @@ export function setPreviewHandoff(projectId, data) {
   }
 }
 
+export function savePreviewHandoff(projectId, data) {
+  setPreviewHandoff(projectId, data)
+}
+
 export function loadPreviewHandoff(projectId) {
   try {
     const raw = sessionStorage.getItem(getPreviewHandoffKey(projectId))

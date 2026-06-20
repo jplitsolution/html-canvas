@@ -32,7 +32,7 @@ function Templates() {
     }
     setCreating(true)
     try {
-      const id = await createProject(template.name, template.id)
+      const id = await createProject(template.name, template.id, template)
       navigate(`/builder/${id}`)
     } catch {
       setCreating(false)
@@ -86,7 +86,7 @@ function Templates() {
                   )}
                   <Badge variant="primary" className="absolute top-3 right-3">
                     <Blocks className="w-3 h-3" />
-                    {template.layout?.length || 0} blocks
+                    {template.html?.trim() ? 'Page' : 'Blank'}
                   </Badge>
                 </div>
                 <div className="p-4">
@@ -131,7 +131,7 @@ function Templates() {
             <div className="flex items-center gap-2">
               <Badge variant="primary">
                 <Blocks className="w-3 h-3" />
-                {previewTemplate.layout?.length || 0} blocks
+                {previewTemplate.html?.trim() ? 'Full page template' : 'Blank template'}
               </Badge>
             </div>
             <Button

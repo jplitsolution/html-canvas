@@ -9,7 +9,11 @@ interface PrebuiltTemplateSeed {
   name: string;
   description: string;
   thumbnail: string;
-  layout: unknown[];
+  editor?: string;
+  projectData?: Record<string, unknown>;
+  html?: string;
+  css?: string;
+  layout?: unknown[];
 }
 
 @Injectable()
@@ -48,7 +52,10 @@ export class TemplatesSeedService implements OnModuleInit {
           slug: seed.id,
           description: seed.description,
           thumbnail: seed.thumbnail,
-          layout: seed.layout,
+          editor: seed.editor || 'grapesjs',
+          projectData: seed.projectData || {},
+          html: seed.html || '',
+          css: seed.css || '',
         },
       });
       await this.templateRepository.save(template);

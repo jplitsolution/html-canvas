@@ -1,19 +1,18 @@
-import { memo, useEffect, useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import useStore from '../store/useStore'
-import { generateHTML } from '../utils/htmlGenerator'
 import { loadPreviewHandoff, clearPreviewHandoff } from '../utils/previewHandoff'
+import { buildPreviewDocument } from '../editor/services/exportSite'
 import Button from '../components/ui/Button'
 import DeviceSwitcher from '../components/ui/DeviceSwitcher'
 import ThemeToggle from '../components/common/ThemeToggle'
 
-function Preview() {
+export default function Preview() {
   const { id } = useParams()
   const navigate = useNavigate()
   const loadProject = useStore((s) => s.loadProject)
   const project = useStore((s) => s.project)
-  const layout = useStore((s) => s.layout)
   const previewMode = useStore((s) => s.previewMode)
   const setPreviewMode = useStore((s) => s.setPreviewMode)
 
@@ -24,20 +23,17 @@ function Preview() {
   }, [id, loadProject])
 
   useEffect(() => {
-    if (handoff?.previewMode) setPreviewMode(handoff.previewMode)
-  }, [handoff, setPreviewMode])
-
-  useEffect(() => {
     if (id && handoff) clearPreviewHandoff(id)
   }, [id, handoff])
 
-  const previewLayout = handoff?.layout ?? layout
   const previewTitle = handoff?.title ?? project?.title ?? 'Preview'
+  const previewHtml = handoff?.html ?? project?.html ?? ''
+  const previewCss = handoff?.css ?? project?.css ?? ''
 
-  const html = useMemo(() => {
-    if (!previewLayout.length) return generateHTML([], previewTitle, previewMode)
-    return generateHTML(previewLayout, previewTitle, previewMode)
-  }, [previewLayout, previewTitle, previewMode])
+  const srcDoc = useMemo(
+    () => buildPreviewDocument(previewTitle, previewHtml, previewCss),
+    [previewHtml, previewCss, previewTitle]
+  )
 
   const widthMap = { desktop: '100%', tablet: '768px', mobile: '375px' }
 
@@ -68,19 +64,17 @@ function Preview() {
       </header>
       <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-4 lg:p-6 flex justify-center bg-stripe-pattern">
         <div
-          className="bg-bg-elevated shadow-lg rounded-lg sm:rounded-xl overflow-hidden border border-border w-full builder-canvas-frame"
+          className="bg-bg-elevated shadow-lg rounded-lg sm:rounded-xl overflow-hidden border border-border w-full preview-canvas-frame"
           style={{ width: widthMap[previewMode], maxWidth: '100%' }}
         >
           <iframe
             title={`Preview: ${previewTitle}`}
-            srcDoc={html}
+            srcDoc={srcDoc}
             className="w-full h-full min-h-[min(400px,70vh)] sm:min-h-[min(500px,75vh)] lg:min-h-[600px] border-0"
-            sandbox="allow-same-origin"
+            sandbox="allow-same-origin allow-scripts"
           />
         </div>
       </div>
     </div>
   )
 }
-
-export default memo(Preview)

@@ -10,6 +10,8 @@ exports.UploadModule = void 0;
 const common_1 = require("@nestjs/common");
 const config_1 = require("@nestjs/config");
 const cloudinary_provider_1 = require("./cloudinary.provider");
+const local_upload_service_1 = require("./local-upload.service");
+const s3_upload_service_1 = require("./s3-upload.service");
 const upload_service_1 = require("./upload.service");
 const upload_controller_1 = require("./upload.controller");
 let UploadModule = class UploadModule {
@@ -18,7 +20,12 @@ exports.UploadModule = UploadModule;
 exports.UploadModule = UploadModule = __decorate([
     (0, common_1.Module)({
         imports: [config_1.ConfigModule],
-        providers: [cloudinary_provider_1.CloudinaryProvider, upload_service_1.UploadService],
+        providers: [
+            cloudinary_provider_1.CloudinaryProvider,
+            local_upload_service_1.LocalUploadService,
+            s3_upload_service_1.S3UploadService,
+            upload_service_1.UploadService,
+        ],
         controllers: [upload_controller_1.UploadController],
         exports: [upload_service_1.UploadService],
     })

@@ -32,8 +32,8 @@ let UploadController = class UploadController {
         }
         const uploadResult = await this.authServiceUpload(file);
         return {
-            url: uploadResult.secure_url,
-            publicId: uploadResult.public_id,
+            url: uploadResult.url,
+            publicId: uploadResult.key,
             format: uploadResult.format,
             bytes: uploadResult.bytes,
         };
@@ -49,7 +49,7 @@ __decorate([
     (0, swagger_1.ApiBearerAuth)(),
     (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file')),
     (0, swagger_1.ApiConsumes)('multipart/form-data'),
-    (0, swagger_1.ApiOperation)({ summary: 'Upload an image to Cloudinary' }),
+    (0, swagger_1.ApiOperation)({ summary: 'Upload an image to CloudFront (S3) or Cloudinary fallback' }),
     (0, swagger_1.ApiBody)({
         schema: {
             type: 'object',

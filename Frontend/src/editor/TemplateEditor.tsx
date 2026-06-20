@@ -1,0 +1,199 @@
+import './editor.css'
+import { useEffect, useRef, useCallback, useState } from 'react'
+import grapesjs from 'grapesjs'
+import 'grapesjs/dist/css/grapes.min.css'
+import { createGrapesConfig } from './grapesConfig'
+import { registerAllBlocks } from './blocks'
+import { setupAssetUpload, restoreAssetsFromProjectData } from './plugins/assetUpload'
+import { setupAssetCanvasDrop } from './plugins/assetDrag'
+import { setupCanvasEnhancements, setCanvasZoom } from './plugins/canvasEnhancements'
+import { setupEditorExperience } from './plugins/editorExperience'
+import { setupTextEditing } from './plugins/textEditing'
+import { ensureAllTextEditable } from './utils/textContent'
+import { setupPagesManager } from './plugins/pagesManager'
+import {
+  setupDragAndDrop,
+  ensureBlockManagerMounted,
+  filterBlockElements,
+  type DragDebugState,
+} from './plugins/dragAndDrop'
+import { loadIntoEditor } from './services/loadTemplate'
+import { saveTemplate, getTemplatePayload } from './services/saveTemplate'
+import { exportAllPagesFromEditor, exportCurrentPageFromEditor } from './services/exportSite'
+import { EditorProvider } from './context/EditorContext'
+import { EditorShell } from './shell/EditorShell'
+import type { TemplateEditorProps, GrapesEditor } from './types'
+
+export default function TemplateEditor({
+  projectId,
+  projectTitle,
+  projectCreatedAt,
+  projectMetadata,
+  initialData,
+  onSave,
+  onDirtyChange,
+  onPreview,
+}: TemplateEditorProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<GrapesEditor | null>(null)
+  const initializedRef = useRef(false)
+  const cleanupExperienceRef = useRef<(() => void) | null>(null)
+
+  const [editor, setEditor] = useState<GrapesEditor | null>(null)
+  const [isEmpty, setIsEmpty] = useState(true)
+  const [device, setDevice] = useState('Desktop')
+  const [zoom, setZoom] = useState(100)
+  const [advancedMode, setAdvancedMode] = useState(false)
+  const [selectionVersion, setSelectionVersion] = useState(0)
+  const [saving, setSaving] = useState(false)
+  const [isDirty, setIsDirty] = useState(false)
+  const [dragDebug, setDragDebug] = useState<DragDebugState>({
+    draggedItem: null,
+    selectedItem: null,
+    editorState: 'idle',
+    componentCount: 0,
+    lastEvent: '—',
+    dropSuccess: false,
+    isDragging: false,
+    isOverCanvas: false,
+  })
+
+  const refreshSelection = useCallback(() => setSelectionVersion((v) => v + 1), [])
+
+  const callbacksRef = useRef({ onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle })
+  useEffect(() => {
+    callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle }
+  }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle])
+
+  const handleSave = useCallback(async () => {
+    const ed = editorRef.current
+    if (!ed) return
+    setSaving(true)
+    try {
+      const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb } =
+        callbacksRef.current
+      const saved = await saveTemplate(ed, { id, name, createdAt, metadata })
+      dirtyCb?.(false)
+      setIsDirty(false)
+      saveCb?.(saved)
+    } finally {
+      setSaving(false)
+    }
+  }, [])
+
+  const handlePreview = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    const { projectTitle: name, onPreview: previewCb } = callbacksRef.current
+    previewCb?.(getTemplatePayload(ed, name))
+  }, [])
+
+  const handlePublish = useCallback(async () => {
+    await handleSave()
+    handlePreview()
+  }, [handleSave, handlePreview])
+
+  const handleExportCurrent = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    exportCurrentPageFromEditor(ed, callbacksRef.current.projectTitle)
+  }, [])
+
+  const handleExportAll = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    exportAllPagesFromEditor(ed, callbacksRef.current.projectTitle)
+  }, [])
+
+  useEffect(() => {
+    if (!containerRef.current || initializedRef.current) return
+
+    initializedRef.current = true
+    let mounted = true
+
+    const ed = grapesjs.init(createGrapesConfig(containerRef.current))
+    editorRef.current = ed
+    setEditor(ed)
+
+    registerAllBlocks(ed)
+    setupAssetUpload(ed)
+    setupAssetCanvasDrop(ed)
+    setupDragAndDrop(ed, setDragDebug)
+    setupCanvasEnhancements(ed, (empty) => mounted && setIsEmpty(empty))
+    setupTextEditing(ed, refreshSelection)
+
+    loadIntoEditor(ed, initialData)
+    setTimeout(() => ensureAllTextEditable(ed), 0)
+    restoreAssetsFromProjectData(ed, initialData.projectData)
+
+    const hasExistingPages =
+      initialData.projectData &&
+      typeof initialData.projectData === 'object' &&
+      Array.isArray((initialData.projectData as { pages?: unknown[] }).pages) &&
+      ((initialData.projectData as { pages?: unknown[] }).pages?.length ?? 0) > 0
+
+    if (!hasExistingPages && !initialData.html?.trim()) {
+      setupPagesManager(ed)
+    }
+
+    cleanupExperienceRef.current = setupEditorExperience(ed, { onSave: handleSave })
+
+    ed.on('change:changesCount', () => {
+      if (!mounted) return
+      setIsDirty(true)
+      callbacksRef.current.onDirtyChange?.(true)
+    })
+
+    ed.on('component:selected', () => mounted && refreshSelection())
+    ed.on('component:deselected', () => mounted && refreshSelection())
+    ed.on('device:select', (dev) => mounted && setDevice(dev.get('name') as string))
+
+    ed.on('load', () => {
+      ed.UndoManager.clear()
+      setCanvasZoom(ed, 100)
+      requestAnimationFrame(() => {
+        ensureBlockManagerMounted(ed)
+        filterBlockElements(ed, 'sections', '')
+      })
+    })
+
+    return () => {
+      mounted = false
+      initializedRef.current = false
+      cleanupExperienceRef.current?.()
+      ed.destroy()
+      editorRef.current = null
+      setEditor(null)
+    }
+  }, [projectId, handleSave, handlePreview, initialData, refreshSelection])
+
+  const contextValue = {
+    editor,
+    isEmpty,
+    device,
+    zoom,
+    advancedMode,
+    setAdvancedMode,
+    setZoom,
+    setDevice,
+    refreshSelection,
+    selectionVersion,
+    dragDebug,
+  }
+
+  return (
+    <EditorProvider value={contextValue}>
+      <EditorShell
+        projectTitle={projectTitle}
+        isDirty={isDirty}
+        saving={saving}
+        canvasRef={containerRef}
+        onSave={handleSave}
+        onPreview={handlePreview}
+        onPublish={handlePublish}
+        onExportCurrent={handleExportCurrent}
+        onExportAll={handleExportAll}
+      />
+    </EditorProvider>
+  )
+}

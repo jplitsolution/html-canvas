@@ -1,75 +1,72 @@
 import { describe, it, expect } from 'vitest'
-import { validateLayout, validateExport } from '../../src/schemas/layout.schema'
-import { repairProject, CURRENT_VERSION } from '../../src/schemas/project.schema'
-import { normalizeStyles, repairBlock } from '../../src/schemas/block.schema'
-import { createHistoryEntry, pushHistory } from '../../src/utils/history'
-import { resolveBlockStyles } from '../../src/utils/responsiveStyles'
+import { repairProject, CURRENT_VERSION, createEmptyProject } from '../../src/schemas/project.schema'
+import { mapBackendProject, mapProjectToBackend } from '../../src/services/api/mappers'
 
-describe('Schema Validation', () => {
-  it('validates and repairs blocks', () => {
-    const block = repairBlock({ id: 'test-1', type: 'text', content: { text: 'Hello' }, styles: { color: '#000' } })
-    expect(block).toBeTruthy()
-    expect(block.styles.desktop).toBeDefined()
-  })
-
-  it('rejects invalid block types', () => {
-    expect(repairBlock({ id: 'x', type: 'invalid' })).toBeNull()
-  })
-
-  it('validates layout and removes orphans', () => {
-    const layout = validateLayout([
-      { id: 'c1', type: 'container', parentId: null, content: {}, styles: {}, children: ['missing'] },
-    ])
-    expect(layout[0].children).toEqual([])
-  })
-
-  it('repairs project with version migration', () => {
-    const project = repairProject({ id: 'p1', title: 'Test', layout: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() })
+describe('Project Schema', () => {
+  it('repairs project with grapesjs defaults', () => {
+    const project = repairProject({
+      id: 'p1',
+      title: 'Test',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    })
     expect(project.version).toBe(CURRENT_VERSION)
+    expect(project.editor).toBe('grapesjs')
+    expect(project.projectData).toEqual({})
+    expect(project.html).toBe('')
+    expect(project.css).toBe('')
   })
 
-  it('validates export data', () => {
-    const result = validateExport({ layout: [{ id: 'b1', type: 'text', content: { text: 'Hi' }, styles: {} }] })
-    expect(result).toBeTruthy()
-  })
-})
-
-describe('Responsive Styles', () => {
-  it('inherits desktop styles to tablet', () => {
-    const styles = normalizeStyles({ color: '#000', backgroundColor: 'transparent', fontSize: '16px', fontWeight: '400', textAlign: 'left', paddingTop: 16, paddingBottom: 16, paddingLeft: 16, paddingRight: 16, marginTop: 0, marginBottom: 0, borderRadius: 0, borderWidth: 0, borderStyle: 'solid', borderColor: '#e2e8f0', width: '100%', height: 'auto' })
-    const resolved = resolveBlockStyles(styles, 'tablet')
-    expect(resolved.color).toBe('#000')
-  })
-
-  it('applies tablet overrides', () => {
-    const styles = { desktop: { color: '#000', fontSize: '16px' }, tablet: { fontSize: '14px' }, mobile: {} }
-    const resolved = resolveBlockStyles(styles, 'tablet')
-    expect(resolved.fontSize).toBe('14px')
-    expect(resolved.color).toBe('#000')
+  it('creates empty project', () => {
+    const project = createEmptyProject({ title: 'Blank' })
+    expect(project.title).toBe('Blank')
+    expect(project.editor).toBe('grapesjs')
   })
 })
 
-describe('History Optimization', () => {
-  it('creates history entries with patches', () => {
-    const layout = [{ id: 'b1', type: 'text' }]
-    const entry = createHistoryEntry('update', layout)
-    expect(entry.action).toBe('update')
-    expect(entry.patch.layout).toEqual(layout)
+describe('API Mappers', () => {
+  it('maps backend grapesjs project', () => {
+    const mapped = mapBackendProject({
+      id: 1,
+      name: 'My Site',
+      data: {
+        editor: 'grapesjs',
+        version: 2,
+        projectData: { pages: [] },
+        html: '<div>Hello</div>',
+        css: 'div { color: red; }',
+        metadata: { tags: [], description: '' },
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    })
+    expect(mapped.html).toBe('<div>Hello</div>')
+    expect(mapped.projectData).toEqual({ pages: [] })
   })
 
-  it('batches typing updates', () => {
-    const layout = [{ id: 'b1', type: 'text' }]
-    const entry = createHistoryEntry('typing', layout)
-    const { history, historyIndex } = pushHistory([], -1, entry, 'typing')
-    const batched = pushHistory(history, historyIndex, createHistoryEntry('typing', layout), 'typing')
-    expect(batched.history.length).toBe(1)
+  it('maps legacy project to empty grapesjs canvas', () => {
+    const mapped = mapBackendProject({
+      id: 2,
+      name: 'Legacy',
+      data: { layout: [{ id: 'b1', type: 'text' }] },
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    })
+    expect(mapped.upgradedFromLegacy).toBe(true)
+    expect(mapped.html).toBe('')
   })
-})
 
-describe('Block Utils', () => {
-  it('counts blocks correctly', async () => {
-    const { countBlocks } = await import('../../src/utils/blockUtils')
-    expect(countBlocks([{ id: '1' }, { id: '2' }])).toBe(2)
+  it('maps project to backend payload', () => {
+    const payload = mapProjectToBackend({
+      title: 'Export',
+      version: 2,
+      projectData: {},
+      html: '<p>Hi</p>',
+      css: '',
+      metadata: { tags: [], description: '' },
+    })
+    expect(payload.data.editor).toBe('grapesjs')
+    expect(payload.data.html).toBe('<p>Hi</p>')
   })
 })
 
@@ -82,33 +79,10 @@ describe('Analytics', () => {
   })
 })
 
-describe('Export Engine', () => {
-  it('generates JSON export', async () => {
-    const { generateExport } = await import('../../src/utils/exportEngine')
-    const project = { title: 'Test', layout: [{ id: 'b1', type: 'text', content: { text: 'Hi' }, styles: { desktop: {} }, parentId: null }] }
-    const result = await generateExport(project, { format: 'json' })
-    expect(result.mimeType).toBe('application/json')
-    expect(result.content).toContain('Test')
-  })
-})
-
-describe('Collaboration Structure', () => {
-  it('creates sync queue operations', async () => {
-    const { createOperation, enqueueOperation, createSyncQueue, OPERATION_TYPES } = await import('../../src/utils/collaboration')
-    const queue = createSyncQueue()
-    const op = createOperation(OPERATION_TYPES.CREATE, { blockId: 'b1' })
-    const updated = enqueueOperation(queue, op)
-    expect(updated.operations).toHaveLength(1)
-    expect(updated.futureSyncQueue).toHaveLength(1)
-  })
-})
-
-describe('Registry', () => {
-  it('registers and retrieves blocks', async () => {
-    const { registerAllBlocks } = await import('../../src/registry/registerBlocks')
-    const { getBlock, getBlocks } = await import('../../src/registry/index')
-    registerAllBlocks()
-    expect(getBlocks().length).toBeGreaterThan(0)
-    expect(getBlock('navbar')).toBeTruthy()
+describe('Export Project', () => {
+  it('detects project content', async () => {
+    const { projectHasContent } = await import('../../src/utils/exportProject')
+    expect(projectHasContent({ html: '<p>x</p>' })).toBe(true)
+    expect(projectHasContent({ html: '', projectData: {} })).toBe(false)
   })
 })

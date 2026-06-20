@@ -3,11 +3,9 @@ import { createRoot } from 'react-dom/client'
 import '../index.css'
 import App from './App'
 import { loadTheme } from '../utils/storage'
-import { registerAllBlocks } from '../registry/registerBlocks'
-
-registerAllBlocks()
 
 const theme = loadTheme()
+document.documentElement.style.colorScheme = theme === 'dark' ? 'dark' : 'light'
 if (theme === 'dark') {
   document.documentElement.classList.add('dark')
 }

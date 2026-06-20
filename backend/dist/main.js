@@ -7,15 +7,25 @@ const config_1 = require("@nestjs/config");
 const swagger_1 = require("@nestjs/swagger");
 const http_exception_filter_1 = require("./common/filters/http-exception.filter");
 const transform_interceptor_1 = require("./common/interceptors/transform.interceptor");
+const path_1 = require("path");
+const fs_1 = require("fs");
 async function bootstrap() {
     const logger = new common_1.Logger('Bootstrap');
     const app = await core_1.NestFactory.create(app_module_1.AppModule);
     const configService = app.get(config_1.ConfigService);
     const port = configService.get('port') || 3000;
     const environment = configService.get('environment') || 'development';
+    const localUploadDir = configService.get('uploads.localDir') ||
+        (0, path_1.join)(process.cwd(), 'uploads');
+    if (!(0, fs_1.existsSync)(localUploadDir)) {
+        (0, fs_1.mkdirSync)(localUploadDir, { recursive: true });
+    }
     app.setGlobalPrefix('api');
+    app.useStaticAssets(localUploadDir, {
+        prefix: '/api/media/',
+    });
     app.enableCors({
-        origin: ['http://localhost:5173', 'http://localhost:5174'],
+        origin: 'http://localhost:5173',
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         credentials: true,
     });

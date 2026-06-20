@@ -28,7 +28,7 @@ export class UploadController {
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload an image to Cloudinary' })
+  @ApiOperation({ summary: 'Upload an image to CloudFront (S3) or Cloudinary fallback' })
   @ApiBody({
     schema: {
       type: 'object',
@@ -56,8 +56,8 @@ export class UploadController {
 
     const uploadResult = await this.authServiceUpload(file);
     return {
-      url: uploadResult.secure_url,
-      publicId: uploadResult.public_id,
+      url: uploadResult.url,
+      publicId: uploadResult.key,
       format: uploadResult.format,
       bytes: uploadResult.bytes,
     };

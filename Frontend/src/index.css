@@ -168,6 +168,14 @@
 }
 
 @layer base {
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
   body {
     @apply bg-bg-base text-fg font-sans antialiased;
     background-image:
@@ -252,30 +260,25 @@
 
 .builder-canvas-area {
   @apply flex-1 min-w-0 min-h-0 overflow-auto p-4 sm:p-6 lg:p-8;
-  background-color: #111111;
+  background-color: var(--bg-canvas);
   background-image:
-    radial-gradient(ellipse at 50% 0%, rgba(107, 92, 231, 0.15) 0%, rgba(107, 92, 231, 0) 70%),
-    radial-gradient(ellipse at 50% 100%, rgba(107, 92, 231, 0.05) 0%, rgba(107, 92, 231, 0) 70%),
-    radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
+    radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--accent) 15%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse at 50% 100%, color-mix(in srgb, var(--accent) 5%, transparent) 0%, transparent 70%),
+    radial-gradient(color-mix(in srgb, var(--fg-subtle) 30%, transparent) 1px, transparent 0);
   background-size: 100% 100%, 100% 100%, 24px 24px;
 }
 
 .builder-canvas-frame {
   @apply min-h-[min(400px,70vh)] sm:min-h-[min(500px,75vh)] lg:min-h-[600px] transition-all duration-300;
-  background: linear-gradient(180deg, #171717 0%, #111111 100%);
-  border: 1px solid #252525;
+  background: linear-gradient(180deg, var(--bg-elevated) 0%, var(--bg-canvas) 100%);
+  border: 1px solid var(--border);
   border-radius: 14px;
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.03),
-    0 4px 24px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-lg);
 }
 
 .builder-canvas-frame:hover {
-  border-color: rgba(107, 92, 231, 0.3);
-  box-shadow: 
-    inset 0 1px 1px rgba(255, 255, 255, 0.04),
-    0 8px 32px rgba(0, 0, 0, 0.7),
-    0 0 24px -4px rgba(107, 92, 231, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  box-shadow: var(--shadow-xl), 0 0 24px -4px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .slide-panel-left {
@@ -475,4 +478,7 @@
   opacity: 1 !important;
 }
 
+.preview-canvas-frame {
+  transition: width 0.2s ease;
+}
 

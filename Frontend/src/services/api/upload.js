@@ -1,5 +1,20 @@
 import { getApiBase, getAuthToken } from './client'
 
+/** Unwrap Nest transform interceptor + legacy nested `{ data: { url } }` shapes */
+function unwrapUploadPayload(json) {
+  let payload = json
+
+  if (payload && typeof payload === 'object' && 'success' in payload && 'data' in payload) {
+    payload = payload.data
+  }
+
+  if (payload && typeof payload === 'object' && payload.data?.url) {
+    payload = payload.data
+  }
+
+  return payload
+}
+
 export async function uploadImage(file) {
   const formData = new FormData()
   formData.append('file', file)
@@ -18,5 +33,11 @@ export async function uploadImage(file) {
   }
 
   const json = await response.json()
-  return json.data || json
+  const result = unwrapUploadPayload(json)
+
+  if (!result?.url) {
+    throw new Error('Upload succeeded but no image URL was returned')
+  }
+
+  return result
 }

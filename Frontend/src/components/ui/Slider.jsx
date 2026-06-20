@@ -1,4 +1,4 @@
-import React from 'react';
+import React from 'react'
 
 export default function Slider({
   label,
@@ -10,13 +10,13 @@ export default function Slider({
   suffix = '',
   className = ''
 }) {
-  const percentage = ((value - min) / (max - min)) * 100;
+  const percentage = ((value - min) / (max - min)) * 100
 
   return (
     <div className={`flex flex-col gap-1.5 w-full ${className}`}>
-      <div className="flex justify-between items-center text-xs font-semibold uppercase tracking-wider text-[#aaaaaa]">
+      <div className="flex justify-between items-center text-xs font-semibold uppercase tracking-wider text-fg-muted">
         <span>{label}</span>
-        <span className="text-xs font-mono text-[#e8e8e8] bg-[#1e1e1e] px-1.5 py-0.5 rounded border border-[#252525]">
+        <span className="text-xs font-mono text-fg bg-bg-subtle px-1.5 py-0.5 rounded border border-border">
           {value}{suffix}
         </span>
       </div>
@@ -29,24 +29,24 @@ export default function Slider({
           value={value ?? 0}
           onChange={(e) => onChange(Number(e.target.value))}
           style={{
-            background: `linear-gradient(to right, #6B5CE7 0%, #6B5CE7 ${percentage}%, #252525 ${percentage}%, #252525 100%)`
+            background: `linear-gradient(to right, var(--accent) 0%, var(--accent) ${percentage}%, var(--border-strong) ${percentage}%, var(--border-strong) 100%)`
           }}
           className="
-            w-full h-1 bg-[#252525] rounded-lg appearance-none cursor-pointer outline-none
+            w-full h-1 bg-border-strong rounded-lg appearance-none cursor-pointer outline-none accent-accent
             [&::-webkit-slider-thumb]:appearance-none
             [&::-webkit-slider-thumb]:h-3.5
             [&::-webkit-slider-thumb]:w-3.5
             [&::-webkit-slider-thumb]:rounded-full
-            [&::-webkit-slider-thumb]:bg-[#e8e8e8]
+            [&::-webkit-slider-thumb]:bg-bg-elevated
             [&::-webkit-slider-thumb]:border
-            [&::-webkit-slider-thumb]:border-[#6B5CE7]
+            [&::-webkit-slider-thumb]:border-accent
             [&::-webkit-slider-thumb]:transition-all
             [&::-webkit-slider-thumb]:active:scale-125
-            [&::-webkit-slider-thumb]:hover:bg-[#ffffff]
-            [&::-webkit-slider-thumb]:shadow-[0_0_8px_rgba(107,92,231,0.5)]
+            [&::-webkit-slider-thumb]:hover:bg-fg-inverse
+            [&::-webkit-slider-thumb]:shadow-[0_0_8px_color-mix(in_srgb,var(--accent)_50%,transparent)]
           "
         />
       </div>
     </div>
-  );
+  )
 }

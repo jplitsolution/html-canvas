@@ -1,7 +1,6 @@
 import { z } from 'zod'
-import { validateLayout } from './layout.schema'
 
-export const CURRENT_VERSION = 1
+export const CURRENT_VERSION = 2
 
 export const projectMetadataSchema = z.object({
   tags: z.array(z.string()).default([]),
@@ -15,17 +14,30 @@ export const projectSchema = z.object({
   title: z.string().min(1).default('Untitled Project'),
   createdAt: z.string(),
   updatedAt: z.string(),
-  layout: z.array(z.unknown()).default([]),
+  editor: z.literal('grapesjs').default('grapesjs'),
+  projectData: z.record(z.unknown()).default({}),
+  html: z.string().default(''),
+  css: z.string().default(''),
   metadata: projectMetadataSchema,
 })
+
+const emptyGrapesDefaults = {
+  editor: 'grapesjs',
+  version: CURRENT_VERSION,
+  projectData: {},
+  html: '',
+  css: '',
+}
 
 export function migrateProject(oldVersion, newVersion, project) {
   let migrated = { ...project }
 
-  if (oldVersion < 1 && newVersion >= 1) {
-    migrated.version = 1
-    migrated.metadata = migrated.metadata || { tags: [], description: '' }
-    migrated.layout = validateLayout(migrated.layout || [])
+  if (oldVersion < 2 && newVersion >= 2) {
+    migrated = {
+      ...migrated,
+      ...emptyGrapesDefaults,
+      layout: undefined,
+    }
   }
 
   migrated.version = newVersion
@@ -39,12 +51,14 @@ export function repairProject(project) {
     title: project.title || 'Untitled Project',
     createdAt: project.createdAt || new Date().toISOString(),
     updatedAt: project.updatedAt || new Date().toISOString(),
-    layout: project.layout || [],
+    editor: project.editor || 'grapesjs',
+    projectData: project.projectData || {},
+    html: project.html || '',
+    css: project.css || '',
     metadata: project.metadata || { tags: [], description: '' },
     version,
   })
 
-  repaired.layout = validateLayout(repaired.layout)
   const result = projectSchema.safeParse(repaired)
   return result.success ? result.data : null
 }
@@ -52,4 +66,16 @@ export function repairProject(project) {
 export function validateProject(project) {
   const repaired = repairProject(project)
   return repaired ? { success: true, data: repaired } : { success: false, error: 'Invalid project' }
+}
+
+export function createEmptyProject(overrides = {}) {
+  return repairProject({
+    id: 'new',
+    title: 'Untitled Project',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    ...emptyGrapesDefaults,
+    metadata: { tags: [], description: '' },
+    ...overrides,
+  })
 }
