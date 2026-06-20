@@ -83,7 +83,9 @@ export class UploadService {
           if (error) {
             const detail =
               error.message ||
-              (typeof error === 'object' ? JSON.stringify(error) : String(error));
+              (typeof error === 'object'
+                ? JSON.stringify(error)
+                : String(error));
             return reject(
               new BadRequestException(`Cloudinary upload failed: ${detail}`),
             );

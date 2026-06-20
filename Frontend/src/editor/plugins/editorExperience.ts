@@ -8,9 +8,17 @@ function isTypingInFormField(target: EventTarget | null): boolean {
   return !!target.closest('input, textarea, select, [contenteditable="true"]')
 }
 
-/** Match GrapesJS keymap guard — skip shortcuts while inline text edit or panel inputs are active */
+/** ✅ FIX: Check if editor is in editing mode safely */
 function isKeyboardBlocked(editor: Editor, target: EventTarget | null): boolean {
-  return editor.isEditing() || editor.Canvas.isInputFocused() || isTypingInFormField(target)
+  // ✅ Check if editor has isEditing method, if not, use alternative checks
+  const isEditing = typeof editor.isEditing === 'function' ? editor.isEditing() : false;
+  
+  // ✅ Check if canvas input is focused
+  const isInputFocused = typeof editor.Canvas?.isInputFocused === 'function' 
+    ? editor.Canvas.isInputFocused() 
+    : false;
+  
+  return isEditing || isInputFocused || isTypingInFormField(target);
 }
 
 export function setupEditorExperience(

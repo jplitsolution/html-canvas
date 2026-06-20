@@ -76,10 +76,16 @@ function DashboardPage() {
   return (
     <AppShell
       actions={
-        <Button variant="outline" size="sm" onClick={() => navigate('/templates')}>
-          <Sparkles className="w-4 h-4" />
-          Templates
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/canvas-demo')}>
+            <LayoutTemplate className="w-4 h-4 text-indigo-400" />
+            Canvas Demo
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => navigate('/templates')}>
+            <Sparkles className="w-4 h-4" />
+            Templates
+          </Button>
+        </div>
       }
     >
       <main className="page-container">

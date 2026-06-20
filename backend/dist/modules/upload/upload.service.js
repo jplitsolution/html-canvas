@@ -71,7 +71,9 @@ let UploadService = class UploadService {
             }, (error, result) => {
                 if (error) {
                     const detail = error.message ||
-                        (typeof error === 'object' ? JSON.stringify(error) : String(error));
+                        (typeof error === 'object'
+                            ? JSON.stringify(error)
+                            : String(error));
                     return reject(new common_1.BadRequestException(`Cloudinary upload failed: ${detail}`));
                 }
                 if (!result) {

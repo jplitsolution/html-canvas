@@ -13,24 +13,25 @@ import {
   ArrowLeft,
   Download,
   ChevronDown,
-} from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useEditor } from '../context/EditorContext'
-import { setCanvasZoom, getCanvasZoom } from '../plugins/canvasEnhancements'
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useEditor } from '../context/EditorContext';
+import { setCanvasZoom, getCanvasZoom } from '../plugins/canvasEnhancements';
 
 interface EditorToolbarProps {
-  projectTitle: string
-  isDirty?: boolean
-  saving?: boolean
-  onSave: () => void
-  onPreview: () => void
-  onPublish: () => void
-  onExportCurrent: () => void
-  onExportAll: () => void
-  onSearchFocus?: () => void
+  projectTitle: string;
+  isDirty?: boolean;
+  saving?: boolean;
+  onSave: () => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  onExportCurrent: () => void;
+  onExportAll: () => void;
+  onSearchFocus?: () => void;
 }
 
+// ✅ Use 'export function'
 export function EditorToolbar({
   projectTitle,
   isDirty,
@@ -42,33 +43,33 @@ export function EditorToolbar({
   onExportAll,
   onSearchFocus,
 }: EditorToolbarProps) {
-  const navigate = useNavigate()
-  const { editor, device, setDevice, zoom, setZoom } = useEditor()
-  const [searchOpen, setSearchOpen] = useState(false)
-  const [exportOpen, setExportOpen] = useState(false)
-  const exportRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate();
+  const { editor, device, setDevice, zoom, setZoom } = useEditor();
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!exportOpen) return
+    if (!exportOpen) return;
     const close = (e: MouseEvent) => {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [exportOpen])
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) setExportOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [exportOpen]);
 
   const handleZoom = (delta: number) => {
-    if (!editor) return
-    const next = Math.min(150, Math.max(50, getCanvasZoom(editor) + delta))
-    setCanvasZoom(editor, next)
-    setZoom(next)
-  }
+    if (!editor) return;
+    const next = Math.min(150, Math.max(50, getCanvasZoom(editor) + delta));
+    setCanvasZoom(editor, next);
+    setZoom(next);
+  };
 
   const devices = [
     { id: 'Desktop', icon: Monitor },
     { id: 'Tablet', icon: Tablet },
     { id: 'Mobile', icon: Smartphone },
-  ] as const
+  ] as const;
 
   return (
     <header className="tc-toolbar shrink-0 h-14 flex items-center gap-2 px-3 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
@@ -97,8 +98,8 @@ export function EditorToolbar({
             type="button"
             title={id}
             onClick={() => {
-              editor?.setDevice(id)
-              setDevice(id)
+              editor?.setDevice(id);
+              setDevice(id);
             }}
             className={`p-2 rounded-md transition-colors ${
               device === id ? 'bg-bg-elevated text-accent shadow-sm' : 'text-fg-muted hover:text-fg'
@@ -122,8 +123,8 @@ export function EditorToolbar({
       <button
         type="button"
         onClick={() => {
-          setSearchOpen(!searchOpen)
-          onSearchFocus?.()
+          setSearchOpen(!searchOpen);
+          onSearchFocus?.();
         }}
         className="p-2 rounded-lg text-fg-muted hover:bg-bg-subtle hover:text-fg hidden sm:block"
         title="Search components"
@@ -168,8 +169,8 @@ export function EditorToolbar({
               type="button"
               className="w-full text-left px-3 py-2 text-sm hover:bg-bg-subtle"
               onClick={() => {
-                setExportOpen(false)
-                onExportCurrent()
+                setExportOpen(false);
+                onExportCurrent();
               }}
             >
               Current page (.html)
@@ -178,8 +179,8 @@ export function EditorToolbar({
               type="button"
               className="w-full text-left px-3 py-2 text-sm hover:bg-bg-subtle"
               onClick={() => {
-                setExportOpen(false)
-                onExportAll()
+                setExportOpen(false);
+                onExportAll();
               }}
             >
               All pages (.zip)
@@ -216,5 +217,7 @@ export function EditorToolbar({
         <span className="hidden sm:inline">Publish</span>
       </button>
     </header>
-  )
+  );
 }
+
+export default EditorToolbar;

@@ -11,6 +11,8 @@ import Builder from '../pages/Builder'
 import Preview from '../pages/Preview'
 import LoginPage from '../pages/LoginPage'
 
+import ImageContainer from '../components/common/ImageContainer'
+
 function App() {
   return (
     <GlobalErrorBoundary name="App">
@@ -27,6 +29,11 @@ function App() {
               <Route path="/builder/:id" element={<Builder />} />
               <Route path="/preview/:id" element={<Preview />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/canvas-demo" element={
+                <div className="min-h-screen bg-slate-950 py-10">
+                  <ImageContainer />
+                </div>
+              } />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </main>

@@ -1,20 +1,19 @@
-import { EditorToolbar } from './EditorToolbar'
-import { EditorSidebar } from './EditorSidebar'
-import { PropertyPanelConnected } from './PropertyPanel'
-import { useEditor } from '../context/EditorContext'
-
-import { LayoutTemplate } from 'lucide-react'
+import { EditorToolbar } from './EditorToolbar';
+import { EditorSidebar } from './EditorSidebar';
+import { PropertyPanelConnected } from './PropertyPanel';
+import { useEditor } from '../context/EditorContext';
+import { LayoutTemplate } from 'lucide-react';
 
 interface EditorShellProps {
-  projectTitle: string
-  isDirty?: boolean
-  saving?: boolean
-  canvasRef: React.RefObject<HTMLDivElement | null>
-  onSave: () => void
-  onPreview: () => void
-  onPublish: () => void
-  onExportCurrent: () => void
-  onExportAll: () => void
+  projectTitle: string;
+  isDirty?: boolean;
+  saving?: boolean;
+  canvasRef: React.RefObject<HTMLDivElement | null>;
+  onSave: () => void;
+  onPreview: () => void;
+  onPublish: () => void;
+  onExportCurrent: () => void;
+  onExportAll: () => void;
 }
 
 export function EditorShell({
@@ -28,7 +27,7 @@ export function EditorShell({
   onExportCurrent,
   onExportAll,
 }: EditorShellProps) {
-  const { isEmpty, dragDebug } = useEditor()
+  const { isEmpty, dragDebug } = useEditor();
 
   return (
     <div className="tc-builder flex flex-col h-full min-h-0 bg-bg-canvas">
@@ -75,5 +74,8 @@ export function EditorShell({
         <PropertyPanelConnected />
       </div>
     </div>
-  )
+  );
 }
+
+// ✅ Default export for compatibility
+export default EditorShell;

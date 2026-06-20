@@ -1,10 +1,10 @@
-import { useLayoutEffect, useRef, useState } from 'react'
-import { useEditor } from '../context/EditorContext'
-import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions'
-import { getLinkText, getTextContent, setLinkText, setTextContent } from '../utils/textContent'
-import { getSectionAnchorId, setSectionAnchorId, listSectionAnchorsOnPage, ANCHOR_PRESETS } from '../utils/sectionAnchor'
-import { mountAdvancedPanels, ensureComponentStylable } from '../utils/mountAdvancedPanels'
-import type { Component } from 'grapesjs'
+import { useLayoutEffect, useRef, useState } from 'react';
+import { useEditor } from '../context/EditorContext';
+import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
+import { getLinkText, getTextContent, setLinkText, setTextContent } from '../utils/textContent';
+import { getSectionAnchorId, setSectionAnchorId, listSectionAnchorsOnPage, ANCHOR_PRESETS } from '../utils/sectionAnchor';
+import { mountAdvancedPanels, ensureComponentStylable } from '../utils/mountAdvancedPanels';
+import type { Component } from 'grapesjs';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -12,51 +12,50 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-xs font-medium text-fg-muted">{label}</span>
       {children}
     </label>
-  )
+  );
 }
 
 const inputClass =
-  'w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-subtle text-fg focus:outline-none focus:ring-2 focus:ring-accent/30'
+  'w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-subtle text-fg focus:outline-none focus:ring-2 focus:ring-accent/30';
 
 export function PropertyPanel() {
-  const { editor, selectionVersion, advancedMode, setAdvancedMode, refreshSelection } = useEditor()
-  const styleHostRef = useRef<HTMLDivElement>(null)
-  const traitHostRef = useRef<HTMLDivElement>(null)
-  const [anchorError, setAnchorError] = useState<string | null>(null)
+  const { editor, selectionVersion, advancedMode, setAdvancedMode, refreshSelection } = useEditor();
+  const styleHostRef = useRef<HTMLDivElement>(null);
+  const traitHostRef = useRef<HTMLDivElement>(null);
+  const [anchorError, setAnchorError] = useState<string | null>(null);
 
-  const selected = editor?.getSelected() as Component | null
-  const kind = editor && selected ? getComponentKind(selected) : 'none'
-  const pageAnchors = editor && selected ? listSectionAnchorsOnPage(editor, selected) : []
-
-  useLayoutEffect(() => {
-    setAnchorError(null)
-  }, [selectionVersion])
+  const selected = editor?.getSelected() as Component | null;
+  const kind = editor && selected ? getComponentKind(selected) : 'none';
+  const pageAnchors = editor && selected ? listSectionAnchorsOnPage(editor, selected) : [];
 
   useLayoutEffect(() => {
-    if (!editor || !advancedMode) return
-    const cmp = editor.getSelected() as Component | null
-    if (!cmp || getComponentKind(cmp) === 'none') return
+    setAnchorError(null);
+  }, [selectionVersion]);
 
-    ensureComponentStylable(cmp)
+  useLayoutEffect(() => {
+    if (!editor || !advancedMode) return;
+    const cmp = editor.getSelected() as Component | null;
+    if (!cmp || getComponentKind(cmp) === 'none') return;
 
-    if (styleHostRef.current) styleHostRef.current.id = 'tc-advanced-styles'
-    if (traitHostRef.current) traitHostRef.current.id = 'tc-advanced-traits'
+    ensureComponentStylable(cmp);
 
-    mountAdvancedPanels(editor, cmp)
-  }, [editor, advancedMode, selectionVersion])
+    if (styleHostRef.current) styleHostRef.current.id = 'tc-advanced-styles';
+    if (traitHostRef.current) traitHostRef.current.id = 'tc-advanced-traits';
+
+    mountAdvancedPanels(editor, cmp);
+  }, [editor, advancedMode, selectionVersion]);
 
   if (!editor) {
     return (
       <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated p-4">
         <p className="text-sm text-fg-muted">Loading...</p>
       </aside>
-    )
+    );
   }
 
   const update = () => {
-    // Keep GrapesJS selection; only refresh panel fields
-    refreshSelection()
-  }
+    refreshSelection();
+  };
 
   if (!selected || kind === 'none') {
     return (
@@ -68,7 +67,7 @@ export function PropertyPanel() {
           <p className="text-sm text-fg-muted">Select an element on the canvas to edit its properties.</p>
         </div>
       </aside>
-    )
+    );
   }
 
   return (
@@ -106,8 +105,8 @@ export function PropertyPanel() {
                 className={`${inputClass} min-h-[80px] resize-y`}
                 value={getTextContent(selected)}
                 onChange={(e) => {
-                  setTextContent(selected, e.target.value, editor)
-                  update()
+                  setTextContent(selected, e.target.value, editor);
+                  update();
                 }}
               />
               <p className="text-xs text-fg-muted pt-0.5">Double-click text on the canvas to edit inline.</p>
@@ -117,8 +116,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'font-size') || '16px'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'font-size', e.target.value)
-                  update()
+                  setStyleProp(selected, 'font-size', e.target.value);
+                  update();
                 }}
               >
                 {['14px', '16px', '18px', '24px', '32px', '48px'].map((s) => (
@@ -131,8 +130,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'font-weight') || '400'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'font-weight', e.target.value)
-                  update()
+                  setStyleProp(selected, 'font-weight', e.target.value);
+                  update();
                 }}
               >
                 <option value="400">Regular</option>
@@ -147,8 +146,8 @@ export function PropertyPanel() {
                 className="w-full h-9 rounded-lg border border-border cursor-pointer"
                 value={toHex(getStyleProp(selected, 'color') || '#334155')}
                 onChange={(e) => {
-                  setStyleProp(selected, 'color', e.target.value)
-                  update()
+                  setStyleProp(selected, 'color', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -157,8 +156,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'text-align') || 'left'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'text-align', e.target.value)
-                  update()
+                  setStyleProp(selected, 'text-align', e.target.value);
+                  update();
                 }}
               >
                 <option value="left">Left</option>
@@ -176,8 +175,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getLinkText(selected)}
                 onChange={(e) => {
-                  setLinkText(selected, e.target.value, editor)
-                  update()
+                  setLinkText(selected, e.target.value, editor);
+                  update();
                 }}
               />
             </Field>
@@ -186,8 +185,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={selected.getAttributes()?.href || '#'}
                 onChange={(e) => {
-                  selected.addAttributes({ href: e.target.value })
-                  update()
+                  selected.addAttributes({ href: e.target.value });
+                  update();
                 }}
               />
               {pageAnchors.length > 0 && (
@@ -197,8 +196,8 @@ export function PropertyPanel() {
                       key={anchor}
                       type="button"
                       onClick={() => {
-                        selected.addAttributes({ href: `#${anchor}` })
-                        update()
+                        selected.addAttributes({ href: `#${anchor}` });
+                        update();
                       }}
                       className="px-2 py-0.5 text-[11px] rounded-md border border-border bg-bg-subtle hover:border-accent hover:text-accent"
                     >
@@ -215,8 +214,8 @@ export function PropertyPanel() {
                 className="w-full h-9 rounded-lg border border-border"
                 value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#4f46e5')}
                 onChange={(e) => {
-                  setStyleProp(selected, 'background-color', e.target.value)
-                  update()
+                  setStyleProp(selected, 'background-color', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -225,8 +224,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'border-radius') || '8px'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'border-radius', e.target.value)
-                  update()
+                  setStyleProp(selected, 'border-radius', e.target.value);
+                  update();
                 }}
               >
                 {['0', '4px', '8px', '12px', '999px'].map((v) => (
@@ -242,9 +241,9 @@ export function PropertyPanel() {
                     sm: '8px 16px',
                     md: '12px 24px',
                     lg: '16px 32px',
-                  }
-                  setStyleProp(selected, 'padding', map[e.target.value] || map.md)
-                  update()
+                  };
+                  setStyleProp(selected, 'padding', map[e.target.value] || map.md);
+                  update();
                 }}
               >
                 <option value="sm">Small</option>
@@ -262,8 +261,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={selected.getAttributes()?.src || ''}
                 onChange={(e) => {
-                  selected.addAttributes({ src: e.target.value })
-                  update()
+                  selected.addAttributes({ src: e.target.value });
+                  update();
                 }}
               />
             </Field>
@@ -279,8 +278,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={selected.getAttributes()?.alt || ''}
                 onChange={(e) => {
-                  selected.addAttributes({ alt: e.target.value })
-                  update()
+                  selected.addAttributes({ alt: e.target.value });
+                  update();
                 }}
               />
             </Field>
@@ -289,8 +288,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'width') || '100%'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'width', e.target.value)
-                  update()
+                  setStyleProp(selected, 'width', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -299,8 +298,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'height') || 'auto'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'height', e.target.value)
-                  update()
+                  setStyleProp(selected, 'height', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -315,10 +314,10 @@ export function PropertyPanel() {
                 placeholder="contact"
                 value={getSectionAnchorId(selected)}
                 onChange={(e) => {
-                  if (!editor) return
-                  const result = setSectionAnchorId(editor, selected, e.target.value)
-                  setAnchorError(result.ok ? null : result.error ?? null)
-                  if (result.ok) update()
+                  if (!editor) return;
+                  const result = setSectionAnchorId(editor, selected, e.target.value);
+                  setAnchorError(result.ok ? null : result.error ?? null);
+                  if (result.ok) update();
                 }}
               />
               <div className="flex flex-wrap gap-1.5 pt-1.5">
@@ -327,10 +326,10 @@ export function PropertyPanel() {
                     key={preset}
                     type="button"
                     onClick={() => {
-                      if (!editor) return
-                      const result = setSectionAnchorId(editor, selected, preset)
-                      setAnchorError(result.ok ? null : result.error ?? null)
-                      if (result.ok) update()
+                      if (!editor) return;
+                      const result = setSectionAnchorId(editor, selected, preset);
+                      setAnchorError(result.ok ? null : result.error ?? null);
+                      if (result.ok) update();
                     }}
                     className="px-2 py-0.5 text-[11px] rounded-md border border-border bg-bg-subtle hover:border-accent hover:text-accent capitalize"
                   >
@@ -343,14 +342,48 @@ export function PropertyPanel() {
               </p>
               {anchorError && <p className="text-xs text-danger pt-0.5">{anchorError}</p>}
             </Field>
+
+            {/* ✅ Background Overlay Opacity - only show if background-image is set */}
+            {getStyleProp(selected, 'background-image') && (
+              <Field label="Overlay Opacity">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={parseFloat(getStyleProp(selected, '--overlay-opacity') || '0.45')}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value);
+                      // Update the overlay div inside this section
+                      const overlayDivs = selected.components().filter((c: Component) => 
+                        c.get('tagName') === 'div' && 
+                        c.getAttributes?.()?.['data-overlay'] === 'true'
+                      );
+                      if (overlayDivs.length > 0) {
+                        overlayDivs[0].setStyle({ opacity: String(val) });
+                      }
+                      setStyleProp(selected, '--overlay-opacity', String(val));
+                      update();
+                    }}
+                    className="flex-1 accent-accent h-1.5 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <span className="text-xs font-mono text-fg-muted min-w-[40px] text-center">
+                    {Math.round(parseFloat(getStyleProp(selected, '--overlay-opacity') || '0.45') * 100)}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-fg-subtle mt-1">Adjust overlay darkness for better text readability</p>
+              </Field>
+            )}
+
             <Field label="Width">
               <input
                 className={inputClass}
                 placeholder="e.g. 100%, 960px"
                 value={getStyleProp(selected, 'width') || ''}
                 onChange={(e) => {
-                  setStyleProp(selected, 'width', e.target.value)
-                  update()
+                  setStyleProp(selected, 'width', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -360,8 +393,8 @@ export function PropertyPanel() {
                 placeholder="e.g. auto, 400px"
                 value={getStyleProp(selected, 'height') || ''}
                 onChange={(e) => {
-                  setStyleProp(selected, 'height', e.target.value)
-                  update()
+                  setStyleProp(selected, 'height', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -371,8 +404,8 @@ export function PropertyPanel() {
                 placeholder="e.g. 400px"
                 value={getStyleProp(selected, 'min-height') || ''}
                 onChange={(e) => {
-                  setStyleProp(selected, 'min-height', e.target.value)
-                  update()
+                  setStyleProp(selected, 'min-height', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -382,8 +415,8 @@ export function PropertyPanel() {
                 className="w-full h-9 rounded-lg border border-border"
                 value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#ffffff')}
                 onChange={(e) => {
-                  setStyleProp(selected, 'background-color', e.target.value)
-                  update()
+                  setStyleProp(selected, 'background-color', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -393,8 +426,8 @@ export function PropertyPanel() {
                 placeholder="e.g. 64px 32px"
                 value={getStyleProp(selected, 'padding') || ''}
                 onChange={(e) => {
-                  setStyleProp(selected, 'padding', e.target.value)
-                  update()
+                  setStyleProp(selected, 'padding', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -404,8 +437,8 @@ export function PropertyPanel() {
                 placeholder="e.g. 0 auto"
                 value={getStyleProp(selected, 'margin') || ''}
                 onChange={(e) => {
-                  setStyleProp(selected, 'margin', e.target.value)
-                  update()
+                  setStyleProp(selected, 'margin', e.target.value);
+                  update();
                 }}
               />
             </Field>
@@ -414,8 +447,8 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={getStyleProp(selected, 'display') || 'block'}
                 onChange={(e) => {
-                  setStyleProp(selected, 'display', e.target.value)
-                  update()
+                  setStyleProp(selected, 'display', e.target.value);
+                  update();
                 }}
               >
                 <option value="block">Block</option>
@@ -430,8 +463,8 @@ export function PropertyPanel() {
                     className={inputClass}
                     value={getStyleProp(selected, 'flex-direction') || 'row'}
                     onChange={(e) => {
-                      setStyleProp(selected, 'flex-direction', e.target.value)
-                      update()
+                      setStyleProp(selected, 'flex-direction', e.target.value);
+                      update();
                     }}
                   >
                     <option value="row">Row</option>
@@ -444,8 +477,8 @@ export function PropertyPanel() {
                     placeholder="e.g. 16px, 24px"
                     value={getStyleProp(selected, 'gap') || ''}
                     onChange={(e) => {
-                      setStyleProp(selected, 'gap', e.target.value)
-                      update()
+                      setStyleProp(selected, 'gap', e.target.value);
+                      update();
                     }}
                   />
                 </Field>
@@ -454,8 +487,8 @@ export function PropertyPanel() {
                     className={inputClass}
                     value={getStyleProp(selected, 'align-items') || 'stretch'}
                     onChange={(e) => {
-                      setStyleProp(selected, 'align-items', e.target.value)
-                      update()
+                      setStyleProp(selected, 'align-items', e.target.value);
+                      update();
                     }}
                   >
                     <option value="stretch">Stretch</option>
@@ -469,8 +502,8 @@ export function PropertyPanel() {
                     className={inputClass}
                     value={getStyleProp(selected, 'justify-content') || 'flex-start'}
                     onChange={(e) => {
-                      setStyleProp(selected, 'justify-content', e.target.value)
-                      update()
+                      setStyleProp(selected, 'justify-content', e.target.value);
+                      update();
                     }}
                   >
                     <option value="flex-start">Start</option>
@@ -513,15 +546,18 @@ export function PropertyPanel() {
         )}
       </div>
     </aside>
-  )
+  );
 }
 
 function toHex(color: string): string {
-  if (color.startsWith('#')) return color.length === 7 ? color : '#000000'
-  return '#334155'
+  if (color.startsWith('#')) return color.length === 7 ? color : '#000000';
+  return '#334155';
 }
 
-// Re-render when selection changes via context
+// ✅ Re-render when selection changes via context
 export function PropertyPanelConnected() {
-  return <PropertyPanel />
+  return <PropertyPanel />;
 }
+
+// ✅ Default export for compatibility
+export default PropertyPanel;
