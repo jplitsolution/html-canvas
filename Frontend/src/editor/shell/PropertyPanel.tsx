@@ -180,34 +180,95 @@ export function PropertyPanel() {
                 }}
               />
             </Field>
-            <Field label="Link URL">
-              <input
+            <Field label="Link type">
+              <select
                 className={inputClass}
-                value={selected.getAttributes()?.href || '#'}
+                value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
                 onChange={(e) => {
-                  selected.addAttributes({ href: e.target.value });
+                  if (e.target.value === 'anchor') {
+                    const anchors = listSectionAnchorsOnPage(editor, selected);
+                    selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
+                  } else {
+                    selected.addAttributes({ href: 'https://' });
+                  }
                   update();
                 }}
-              />
-              {pageAnchors.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {pageAnchors.map((anchor) => (
-                    <button
-                      key={anchor}
-                      type="button"
-                      onClick={() => {
-                        selected.addAttributes({ href: `#${anchor}` });
-                        update();
-                      }}
-                      className="px-2 py-0.5 text-[11px] rounded-md border border-border bg-bg-subtle hover:border-accent hover:text-accent"
-                    >
-                      #{anchor}
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-fg-muted pt-0.5">Use #section-id to scroll on this page (test in Preview).</p>
+              >
+                <option value="anchor">Internal Section</option>
+                <option value="external">External URL</option>
+              </select>
             </Field>
+
+            {(selected.getAttributes()?.href || '').startsWith('#') ? (
+              <Field label="Target section">
+                <select
+                  className={inputClass}
+                  value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
+                  onChange={(e) => {
+                    selected.addAttributes({ href: `#${e.target.value}` });
+                    update();
+                  }}
+                >
+                  <option value="">Select a section...</option>
+                  {(() => {
+                    const sections: { id: string; label: string }[] = [];
+                    const wrapper = editor.getWrapper();
+                    if (wrapper) {
+                      const walk = (cmp: any) => {
+                        const tag = (cmp.get('tagName') || '').toLowerCase();
+                        const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
+                        const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
+                        if (isSection && tag !== 'header' && tag !== 'footer') {
+                          const id = cmp.getAttributes()?.id || cmp.getId();
+                          const label = cmp.get('sectionLabel') || id || 'Untitled Section';
+                          sections.push({ id, label });
+                        }
+                        cmp.components().forEach(walk);
+                      };
+                      walk(wrapper);
+                    }
+                    const seen = new Set();
+                    const uniqueSections = sections.filter((s) => {
+                      if (seen.has(s.id)) return false;
+                      seen.add(s.id);
+                      return true;
+                    });
+                    return uniqueSections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.label} (#{sec.id})
+                      </option>
+                    ));
+                  })()}
+                </select>
+                <p className="text-[11px] text-fg-muted pt-1">
+                  List of top-level sections auto-detected on this page.
+                </p>
+                {(() => {
+                  const currentHref = selected.getAttributes()?.href || '';
+                  const targetId = currentHref.replace(/^#/, '');
+                  const isBroken = currentHref.startsWith('#') && currentHref !== '#' && currentHref !== '' && !pageAnchors.includes(targetId);
+                  if (isBroken) {
+                    return (
+                      <p className="text-xs text-danger font-medium mt-1 flex items-center gap-1">
+                        ⚠️ Broken Link: The section "#{targetId}" does not exist on this page.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </Field>
+            ) : (
+              <Field label="Link URL">
+                <input
+                  className={inputClass}
+                  value={selected.getAttributes()?.href || ''}
+                  onChange={(e) => {
+                    selected.addAttributes({ href: e.target.value });
+                    update();
+                  }}
+                />
+              </Field>
+            )}
             <Field label="Background color">
               <input
                 type="color"
@@ -308,6 +369,17 @@ export function PropertyPanel() {
 
         {(kind === 'section' || kind === 'generic') && (
           <>
+            <Field label="Section label (for builder dropdown)">
+              <input
+                className={inputClass}
+                placeholder="e.g. Hero Section"
+                value={selected.get('sectionLabel') || ''}
+                onChange={(e) => {
+                  selected.set('sectionLabel', e.target.value);
+                  update();
+                }}
+              />
+            </Field>
             <Field label="Section anchor (for nav links)">
               <input
                 className={inputClass}

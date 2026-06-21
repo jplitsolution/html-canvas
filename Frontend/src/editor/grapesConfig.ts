@@ -11,7 +11,8 @@ export function createGrapesConfig(container: HTMLElement): EditorConfig {
     noticeOnUnload: false,
     showOffsets: true,
     showStylesOnChange: true,
-    avoidInlineStyle: false,
+    avoidInlineStyle: true,
+    mediaCondition: 'max-width',
     /** Use mousedown + ComponentSorter (not HTML5 drag). Native DnD breaks iframe drops. */
     nativeDnD: false,
 
@@ -46,8 +47,8 @@ export function createGrapesConfig(container: HTMLElement): EditorConfig {
     deviceManager: {
       devices: [
         { name: 'Desktop', width: '' },
-        { name: 'Tablet', width: '768px', widthMedia: '992px' },
-        { name: 'Mobile', width: '375px', widthMedia: '480px' },
+        { name: 'Tablet', width: '768px', widthMedia: '1023px' },
+        { name: 'Mobile', width: '375px', widthMedia: '767px' },
       ],
     },
 

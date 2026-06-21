@@ -13,6 +13,8 @@ a:hover { opacity: 0.88; }
 export const landingHtml = `
 <header style="display:flex;align-items:center;justify-content:space-between;padding:16px 32px;background:#fff;border-bottom:1px solid #e2e8f0;">
   <div style="font-size:22px;font-weight:700;">LaunchPad</div>
+  <input type="checkbox" id="tc-nav-toggle-landing" class="tc-nav-toggle" style="display:none;" />
+  <label for="tc-nav-toggle-landing" class="tc-nav-hamburger" style="display:none;cursor:pointer;font-size:24px;user-select:none;color:#0f172a;">☰</label>
   <nav style="display:flex;align-items:center;gap:24px;">
     <a href="#features" style="color:#64748b;text-decoration:none;">Features</a>
     <a href="#testimonials" style="color:#64748b;text-decoration:none;">Reviews</a>
@@ -22,8 +24,8 @@ export const landingHtml = `
 <section style="display:flex;align-items:center;gap:48px;padding:72px 32px;max-width:1100px;margin:0 auto;flex-wrap:wrap;">
   <div style="flex:1;min-width:280px;">
     <p style="color:#4f46e5;font-weight:600;font-size:14px;margin:0 0 12px;">NEW · Product launch kit</p>
-    <h1 style="font-size:44px;font-weight:800;line-height:1.1;margin:0 0 16px;">Launch your next big idea faster</h1>
-    <p style="font-size:18px;color:#64748b;line-height:1.6;margin:0 0 28px;">Everything you need to ship a polished landing page — hero, features, social proof, and CTAs.</p>
+    <h1 style="font-size:clamp(32px, 8vw, 44px);font-weight:800;line-height:1.1;margin:0 0 16px;">Launch your next big idea faster</h1>
+    <p style="font-size:clamp(16px, 3vw, 18px);color:#64748b;line-height:1.6;margin:0 0 28px;">Everything you need to ship a polished landing page — hero, features, social proof, and CTAs.</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
       <a href="#signup" style="background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Start Free</a>
       <a href="#demo" style="border:1px solid #cbd5e1;color:#0f172a;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">See demo</a>
@@ -34,7 +36,7 @@ export const landingHtml = `
   </div>
 </section>
 <section id="features" style="padding:64px 32px;background:#f8fafc;">
-  <h2 style="text-align:center;font-size:32px;font-weight:700;margin:0 0 40px;">Why teams choose LaunchPad</h2>
+  <h2 style="text-align:center;font-size:clamp(24px, 5vw, 32px);font-weight:700;margin:0 0 40px;">Why teams choose LaunchPad</h2>
   <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:960px;margin:0 auto;">
     <div style="flex:1;min-width:220px;background:#fff;padding:24px;border-radius:12px;border:1px solid #e2e8f0;">
       <div style="font-size:28px;margin-bottom:12px;">⚡</div>
@@ -54,7 +56,7 @@ export const landingHtml = `
   </div>
 </section>
 <section id="testimonials" style="padding:64px 32px;">
-  <h2 style="text-align:center;font-size:32px;font-weight:700;margin:0 0 40px;">Loved by founders</h2>
+  <h2 style="text-align:center;font-size:clamp(24px, 5vw, 32px);font-weight:700;margin:0 0 40px;">Loved by founders</h2>
   <div style="display:flex;gap:24px;flex-wrap:wrap;max-width:900px;margin:0 auto;">
     <div style="flex:1;min-width:260px;padding:24px;border:1px solid #e2e8f0;border-radius:12px;">
       <p style="color:#475569;line-height:1.6;margin:0 0 16px;">"We shipped our MVP landing page in one afternoon. The templates saved us weeks."</p>
@@ -73,7 +75,7 @@ export const landingHtml = `
   </div>
 </section>
 <section id="signup" style="padding:56px 32px;background:#4f46e5;text-align:center;">
-  <h2 style="color:#fff;font-size:28px;margin:0 0 12px;">Ready to launch?</h2>
+  <h2 style="color:#fff;font-size:clamp(20px, 4vw, 28px);margin:0 0 12px;">Ready to launch?</h2>
   <p style="color:rgba(255,255,255,0.85);margin:0 0 24px;">Join 2,000+ teams building with LaunchPad.</p>
   <a href="#" style="background:#fff;color:#4f46e5;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Get started today</a>
 </section>
@@ -85,6 +87,8 @@ export const landingHtml = `
 export const saasHtml = `
 <header style="display:flex;justify-content:space-between;align-items:center;padding:16px 32px;border-bottom:1px solid #e2e8f0;">
   <div style="font-weight:700;font-size:20px;">CloudFlow</div>
+  <input type="checkbox" id="tc-nav-toggle-saas" class="tc-nav-toggle" style="display:none;" />
+  <label for="tc-nav-toggle-saas" class="tc-nav-hamburger" style="display:none;cursor:pointer;font-size:24px;user-select:none;color:#0f172a;">☰</label>
   <nav style="display:flex;gap:20px;align-items:center;">
     <a href="#features" style="color:#64748b;text-decoration:none;">Features</a>
     <a href="#pricing" style="color:#64748b;text-decoration:none;">Pricing</a>
@@ -92,14 +96,14 @@ export const saasHtml = `
   </nav>
 </header>
 <section style="padding:72px 32px;text-align:center;background:linear-gradient(180deg,#eef2ff,#fff);">
-  <h1 style="font-size:46px;font-weight:800;margin:0 0 12px;">Ship products faster</h1>
-  <p style="color:#64748b;font-size:18px;max-width:520px;margin:0 auto 32px;">The all-in-one platform for modern SaaS teams — analytics, billing, and growth tools.</p>
+  <h1 style="font-size:clamp(32px, 8vw, 46px);font-weight:800;margin:0 0 12px;">Ship products faster</h1>
+  <p style="color:#64748b;font-size:clamp(16px, 3vw, 18px);max-width:520px;margin:0 auto 32px;">The all-in-one platform for modern SaaS teams — analytics, billing, and growth tools.</p>
   <img src="${IMG.heroWorkspace}" alt="Team workspace" style="max-width:900px;width:100%;margin:0 auto;border-radius:16px;box-shadow:0 20px 40px rgba(79,70,229,0.15);"/>
 </section>
 <section id="features" style="padding:64px 32px;display:flex;align-items:center;gap:48px;max-width:1000px;margin:0 auto;flex-wrap:wrap;">
   <img src="${IMG.saasFeature}" alt="Analytics dashboard" style="flex:1;min-width:280px;border-radius:12px;"/>
   <div style="flex:1;min-width:280px;">
-    <h2 style="font-size:32px;margin:0 0 16px;">Real-time insights</h2>
+    <h2 style="font-size:clamp(24px, 5vw, 32px);margin:0 0 16px;">Real-time insights</h2>
     <p style="color:#64748b;line-height:1.7;margin:0 0 20px;">Track MRR, churn, and activation from a single dashboard built for founders.</p>
     <ul style="color:#475569;line-height:2;padding-left:20px;margin:0;">
       <li>Custom funnels & cohorts</li>
@@ -109,7 +113,7 @@ export const saasHtml = `
   </div>
 </section>
 <section id="pricing" style="padding:64px 32px;background:#f8fafc;text-align:center;">
-  <h2 style="font-size:32px;margin:0 0 32px;">Simple pricing</h2>
+  <h2 style="font-size:clamp(24px, 5vw, 32px);margin:0 0 32px;">Simple pricing</h2>
   <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
     <div style="background:#fff;padding:32px;border-radius:12px;border:1px solid #e2e8f0;min-width:240px;text-align:left;">
       <h3 style="margin:0 0 8px;">Starter</h3>
@@ -131,14 +135,14 @@ export const portfolioHtml = `
 <section style="padding:80px 32px;display:flex;align-items:center;gap:40px;max-width:1000px;margin:0 auto;flex-wrap:wrap;">
   <img src="${IMG.portrait}" alt="Jane Designer" style="width:280px;height:340px;object-fit:cover;border-radius:16px;"/>
   <div style="flex:1;min-width:260px;">
-    <h1 style="font-size:42px;margin:0 0 8px;">Jane Designer</h1>
-    <p style="color:#64748b;font-size:18px;margin:0 0 20px;">UI/UX · Brand · Product Design</p>
+    <h1 style="font-size:clamp(30px, 8vw, 42px);margin:0 0 8px;">Jane Designer</h1>
+    <p style="color:#64748b;font-size:clamp(16px, 3vw, 18px);margin:0 0 20px;">UI/UX · Brand · Product Design</p>
     <p style="color:#475569;line-height:1.7;margin:0 0 24px;">I help startups and agencies craft memorable digital experiences. Based in Mumbai, working worldwide.</p>
     <a href="#work" style="background:#0f172a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">View my work</a>
   </div>
 </section>
 <section id="work" style="padding:48px 32px;background:#f8fafc;">
-  <h2 style="text-align:center;font-size:32px;margin:0 0 32px;">Selected projects</h2>
+  <h2 style="text-align:center;font-size:clamp(24px, 5vw, 32px);margin:0 0 32px;">Selected projects</h2>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;max-width:960px;margin:0 auto;">
     <img src="${IMG.gallery1}" alt="Brand identity" style="width:100%;border-radius:12px;aspect-ratio:4/3;object-fit:cover;"/>
     <img src="${IMG.gallery2}" alt="Mobile app UI" style="width:100%;border-radius:12px;aspect-ratio:4/3;object-fit:cover;"/>
@@ -149,7 +153,7 @@ export const portfolioHtml = `
   </div>
 </section>
 <section style="padding:64px 32px;text-align:center;">
-  <h2 style="margin:0 0 12px;">Let's collaborate</h2>
+  <h2 style="margin:0 0 12px;font-size:clamp(24px, 5vw, 32px);">Let's collaborate</h2>
   <p style="color:#64748b;margin:0 0 20px;">Available for freelance & full-time roles</p>
   <a href="mailto:jane@design.studio" style="color:#4f46e5;font-weight:600;text-decoration:none;">jane@design.studio</a>
 </section>
@@ -163,12 +167,12 @@ export const agencyHtml = `
 <section style="position:relative;padding:120px 32px 80px;background:url('${IMG.agencyHero}') center/cover no-repeat;color:#fff;text-align:center;">
   <div style="background:rgba(15,23,42,0.55);position:absolute;inset:0;"></div>
   <div style="position:relative;max-width:640px;margin:0 auto;">
-    <h1 style="font-size:48px;font-weight:800;margin:0 0 16px;">We build brands that stand out</h1>
-    <p style="font-size:18px;opacity:0.9;line-height:1.6;">Strategy, design, and development for ambitious teams ready to grow.</p>
+    <h1 style="font-size:clamp(32px, 8vw, 48px);font-weight:800;margin:0 0 16px;">We build brands that stand out</h1>
+    <p style="font-size:clamp(16px, 3vw, 18px);opacity:0.9;line-height:1.6;">Strategy, design, and development for ambitious teams ready to grow.</p>
   </div>
 </section>
 <section style="padding:64px 32px;">
-  <h2 style="text-align:center;margin:0 0 40px;font-size:32px;">Our services</h2>
+  <h2 style="text-align:center;margin:0 0 40px;font-size:clamp(24px, 5vw, 32px);">Our services</h2>
   <div style="display:flex;gap:20px;flex-wrap:wrap;max-width:960px;margin:0 auto;">
     <div style="flex:1;min-width:220px;padding:24px;border:1px solid #e2e8f0;border-radius:12px;"><h3 style="margin:0 0 8px;">Brand strategy</h3><p style="margin:0;color:#64748b;">Positioning, messaging, visual identity.</p></div>
     <div style="flex:1;min-width:220px;padding:24px;border:1px solid #e2e8f0;border-radius:12px;"><h3 style="margin:0 0 8px;">Web design</h3><p style="margin:0;color:#64748b;">Marketing sites & product UI.</p></div>
@@ -176,7 +180,7 @@ export const agencyHtml = `
   </div>
 </section>
 <section style="padding:64px 32px;background:#f8fafc;text-align:center;">
-  <h2 style="margin:0 0 32px;">Meet the team</h2>
+  <h2 style="margin:0 0 32px;font-size:clamp(24px, 5vw, 32px);">Meet the team</h2>
   <div style="display:flex;gap:24px;justify-content:center;flex-wrap:wrap;max-width:900px;margin:0 auto;">
     <div style="max-width:180px;"><img src="${IMG.team1}" alt="Rahul" style="width:120px;height:120px;border-radius:50%;object-fit:cover;margin:0 auto 12px;"/><strong>Rahul K.</strong><p style="margin:4px 0 0;color:#64748b;font-size:14px;">Creative Director</p></div>
     <div style="max-width:180px;"><img src="${IMG.team2}" alt="Sara" style="width:120px;height:120px;border-radius:50%;object-fit:cover;margin:0 auto 12px;"/><strong>Sara M.</strong><p style="margin:4px 0 0;color:#64748b;font-size:14px;">Lead Designer</p></div>
@@ -185,7 +189,7 @@ export const agencyHtml = `
   </div>
 </section>
 <section id="contact" style="padding:64px 32px;text-align:center;">
-  <h2>Let's work together</h2>
+  <h2 style="font-size:clamp(24px, 5vw, 32px);">Let's work together</h2>
   <p style="color:#64748b;margin:0 0 16px;">Tell us about your project</p>
   <a href="mailto:hello@studioapex.com" style="color:#4f46e5;font-weight:600;font-size:18px;text-decoration:none;">hello@studioapex.com</a>
 </section>
@@ -195,13 +199,13 @@ export const restaurantHtml = `
 <section style="position:relative;padding:100px 32px;text-align:center;color:#fff;background:url('${IMG.heroFood}') center/cover no-repeat;">
   <div style="position:absolute;inset:0;background:rgba(28,25,23,0.65);"></div>
   <div style="position:relative;">
-    <h1 style="font-size:48px;margin:0 0 8px;font-family:Georgia,serif;">Bella Cucina</h1>
-    <p style="opacity:0.9;font-size:18px;margin:0 0 24px;">Authentic Italian dining since 1998</p>
+    <h1 style="font-size:clamp(32px, 8vw, 48px);margin:0 0 8px;font-family:Georgia,serif;">Bella Cucina</h1>
+    <p style="opacity:0.9;font-size:clamp(16px, 3vw, 18px);margin:0 0 24px;">Authentic Italian dining since 1998</p>
     <a href="#reserve" style="display:inline-block;background:#d97706;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Reserve a table</a>
   </div>
 </section>
 <section style="padding:64px 32px;text-align:center;">
-  <h2 style="margin:0 0 8px;font-family:Georgia,serif;">Featured dishes</h2>
+  <h2 style="margin:0 0 8px;font-size:clamp(24px, 5vw, 32px);font-family:Georgia,serif;">Featured dishes</h2>
   <p style="color:#64748b;margin:0 0 40px;">Seasonal ingredients, timeless recipes</p>
   <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:960px;margin:0 auto;">
     <div style="max-width:280px;text-align:left;">
@@ -225,7 +229,7 @@ export const restaurantHtml = `
   </div>
 </section>
 <section id="reserve" style="padding:56px 32px;background:#1c1917;color:#fff;text-align:center;">
-  <h2 style="margin:0 0 12px;font-family:Georgia,serif;">Book your evening</h2>
+  <h2 style="margin:0 0 12px;font-size:clamp(24px, 5vw, 32px);font-family:Georgia,serif;">Book your evening</h2>
   <p style="opacity:0.8;margin:0 0 20px;">Open Tue–Sun · 6pm–11pm · Bandra West, Mumbai</p>
   <a href="tel:+912212345678" style="color:#d97706;font-weight:600;text-decoration:none;">+91 22 1234 5678</a>
 </section>
@@ -239,24 +243,24 @@ export const blogHtml = `
 <section style="padding:48px 32px;max-width:900px;margin:0 auto;">
   <img src="${IMG.blogFeatured}" alt="Featured article" style="width:100%;border-radius:12px;margin-bottom:24px;aspect-ratio:16/9;object-fit:cover;"/>
   <p style="color:#4f46e5;font-size:13px;font-weight:600;margin:0 0 8px;">FEATURED</p>
-  <h1 style="font-size:36px;margin:0 0 12px;line-height:1.2;">Stories worth reading every morning</h1>
+  <h1 style="font-size:clamp(28px, 6vw, 36px);margin:0 0 12px;line-height:1.2;">Stories worth reading every morning</h1>
   <p style="color:#64748b;line-height:1.7;margin:0;">Insights on design, technology, and creative work from builders around the world.</p>
 </section>
 <section style="padding:0 32px 48px;max-width:900px;margin:0 auto;">
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;">
     <article>
       <img src="${IMG.blog1}" alt="Article" style="width:100%;border-radius:8px;margin-bottom:12px;aspect-ratio:16/10;object-fit:cover;"/>
-      <h2 style="margin:0 0 8px;font-size:18px;">Getting started with visual builders</h2>
+      <h2 style="margin:0 0 8px;font-size:clamp(16px, 4vw, 18px);">Getting started with visual builders</h2>
       <p style="margin:0;color:#64748b;font-size:14px;line-height:1.5;">A practical guide for teams moving to no-code workflows.</p>
     </article>
     <article>
       <img src="${IMG.blog2}" alt="Article" style="width:100%;border-radius:8px;margin-bottom:12px;aspect-ratio:16/10;object-fit:cover;"/>
-      <h2 style="margin:0 0 8px;font-size:18px;">Design systems that scale</h2>
+      <h2 style="margin:0 0 8px;font-size:clamp(16px, 4vw, 18px);">Design systems that scale</h2>
       <p style="margin:0;color:#64748b;font-size:14px;line-height:1.5;">How we unified 40 products under one token library.</p>
     </article>
     <article>
       <img src="${IMG.blog3}" alt="Article" style="width:100%;border-radius:8px;margin-bottom:12px;aspect-ratio:16/10;object-fit:cover;"/>
-      <h2 style="margin:0 0 8px;font-size:18px;">Shipping faster with AI</h2>
+      <h2 style="margin:0 0 8px;font-size:clamp(16px, 4vw, 18px);">Shipping faster with AI</h2>
       <p style="margin:0;color:#64748b;font-size:14px;line-height:1.5;">What actually helps developers in 2026 — and what doesn't.</p>
     </article>
   </div>
@@ -266,6 +270,8 @@ export const blogHtml = `
 export const ecommerceHtml = `
 <header style="padding:16px 32px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e2e8f0;">
   <div style="font-weight:700;font-size:20px;">ShopWave</div>
+  <input type="checkbox" id="tc-nav-toggle-ecommerce" class="tc-nav-toggle" style="display:none;" />
+  <label for="tc-nav-toggle-ecommerce" class="tc-nav-hamburger" style="display:none;cursor:pointer;font-size:24px;user-select:none;color:#0f172a;">☰</label>
   <nav style="display:flex;gap:20px;align-items:center;">
     <a href="#" style="color:#64748b;text-decoration:none;">New in</a>
     <a href="#" style="color:#64748b;text-decoration:none;">Sale</a>
@@ -274,14 +280,14 @@ export const ecommerceHtml = `
 </header>
 <section style="padding:64px 32px;background:#fef3c7;display:flex;align-items:center;gap:40px;max-width:1000px;margin:0 auto;flex-wrap:wrap;">
   <div style="flex:1;min-width:260px;">
-    <h1 style="font-size:40px;margin:0 0 8px;">Summer collection</h1>
+    <h1 style="font-size:clamp(28px, 8vw, 40px);margin:0 0 8px;">Summer collection</h1>
     <p style="color:#92400e;margin:0 0 20px;">Up to 40% off selected items · Free shipping over ₹999</p>
     <a href="#products" style="background:#0f172a;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Shop now</a>
   </div>
   <img src="${IMG.product4}" alt="Summer sneakers" style="flex:1;min-width:260px;max-width:400px;border-radius:12px;"/>
 </section>
 <section id="products" style="padding:48px 32px;">
-  <h2 style="text-align:center;margin:0 0 32px;">Best sellers</h2>
+  <h2 style="text-align:center;margin:0 0 32px;font-size:clamp(24px, 5vw, 32px);">Best sellers</h2>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:20px;max-width:960px;margin:0 auto;">
     <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
       <img src="${IMG.product1}" alt="Watch" style="width:100%;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
@@ -319,12 +325,12 @@ export const travelHtml = `
 <section style="position:relative;padding:100px 32px;text-align:center;color:#fff;background:url('${IMG.heroBeach}') center/cover no-repeat;">
   <div style="position:absolute;inset:0;background:rgba(14,165,233,0.35);"></div>
   <div style="position:relative;">
-    <h1 style="font-size:44px;margin:0 0 12px;">Escape to paradise</h1>
-    <p style="font-size:18px;opacity:0.95;margin:0;">Luxury beachfront villas · Spa · Infinity pool</p>
+    <h1 style="font-size:clamp(30px, 8vw, 44px);margin:0 0 12px;">Escape to paradise</h1>
+    <p style="font-size:clamp(16px, 3vw, 18px);opacity:0.95;margin:0;">Luxury beachfront villas · Spa · Infinity pool</p>
   </div>
 </section>
 <section style="padding:64px 32px;">
-  <h2 style="text-align:center;margin:0 0 32px;">Our accommodations</h2>
+  <h2 style="text-align:center;margin:0 0 32px;font-size:clamp(24px, 5vw, 32px);">Our accommodations</h2>
   <div style="display:flex;gap:24px;flex-wrap:wrap;justify-content:center;max-width:900px;margin:0 auto;">
     <div style="max-width:400px;">
       <img src="${IMG.travelRoom}" alt="Ocean suite" style="width:100%;border-radius:12px;margin-bottom:12px;aspect-ratio:3/2;object-fit:cover;"/>
@@ -341,7 +347,7 @@ export const travelHtml = `
   </div>
 </section>
 <section id="book" style="padding:56px 32px;background:#f0f9ff;text-align:center;">
-  <h2 style="margin:0 0 12px;">Plan your getaway</h2>
+  <h2 style="margin:0 0 12px;font-size:clamp(24px, 5vw, 32px);">Plan your getaway</h2>
   <p style="color:#64748b;margin:0 0 20px;">Limited summer availability — book 30 days ahead and save 15%</p>
   <a href="#" style="background:#0ea5e9;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Check availability</a>
 </section>
@@ -354,14 +360,14 @@ export const fitnessHtml = `
 </header>
 <section style="display:flex;align-items:center;gap:40px;padding:64px 32px;max-width:1000px;margin:0 auto;flex-wrap:wrap;background:#0f172a;color:#fff;">
   <div style="flex:1;min-width:280px;">
-    <h1 style="font-size:42px;font-weight:800;margin:0 0 12px;text-transform:uppercase;">Train harder.<br/>Live stronger.</h1>
+    <h1 style="font-size:clamp(30px, 8vw, 42px);font-weight:800;margin:0 0 12px;text-transform:uppercase;">Train harder.<br/>Live stronger.</h1>
     <p style="color:#94a3b8;line-height:1.6;margin:0 0 24px;">24/7 access · personal trainers · group classes · nutrition coaching.</p>
     <a href="#join" style="background:#ef4444;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:700;">Free 7-day trial</a>
   </div>
   <img src="${IMG.heroGym}" alt="Gym interior" style="flex:1;min-width:280px;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
 </section>
 <section style="padding:64px 32px;text-align:center;">
-  <h2 style="margin:0 0 32px;">Membership plans</h2>
+  <h2 style="margin:0 0 32px;font-size:clamp(24px, 5vw, 32px);">Membership plans</h2>
   <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
     <div style="border:2px solid #e2e8f0;padding:28px;border-radius:8px;min-width:220px;">
       <h3 style="margin:0 0 8px;">Basic</h3>

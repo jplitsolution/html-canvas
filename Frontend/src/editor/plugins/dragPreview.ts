@@ -149,4 +149,13 @@ export function setupDragPreview(editor: Editor, onOverCanvasChange?: OverCanvas
 
   window.addEventListener('tc-asset-drag-start', onAssetDragStart)
   window.addEventListener('tc-asset-drag-stop', onAssetDragStop)
+
+  return () => {
+    window.removeEventListener('tc-asset-drag-start', onAssetDragStart)
+    window.removeEventListener('tc-asset-drag-stop', onAssetDragStop)
+    previewEl?.remove()
+    previewEl = null
+    placerLabelEl?.remove()
+    placerLabelEl = null
+  }
 }

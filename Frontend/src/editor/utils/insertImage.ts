@@ -1,9 +1,14 @@
 import type { Editor } from 'grapesjs'
 import { buildImageHtml } from './imageHtml'
+import { canInsert } from './insertionLock'
 
 /** Insert a rendered <img> on the canvas (not a URL text node) */
 export function insertImageComponent(editor: Editor, src: string, alt = 'Image') {
   if (!src?.trim()) return null
+  if (!canInsert()) {
+    console.log('[TC Lock] Image insertion blocked by lock')
+    return null
+  }
 
   const wrapper = editor.getWrapper()
   const selected = editor.getSelected()

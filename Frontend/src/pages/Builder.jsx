@@ -62,23 +62,27 @@ export default function Builder() {
   const handlePreview = useCallback(
     async (payload) => {
       if (!id || !project) return
-      try {
-        await saveProjectFromEditor({
-          projectData: payload.projectData,
-          html: payload.html,
-          css: payload.css,
-        })
-      } catch {
-        return
+      if (isDirty) {
+        try {
+          await saveProjectFromEditor({
+            projectData: payload.projectData,
+            html: payload.html,
+            css: payload.css,
+          })
+        } catch {
+          return
+        }
       }
       savePreviewHandoff(id, {
         html: payload.html,
         css: payload.css,
         title: payload.name,
+        pages: payload.pages,
+        activePageFilename: payload.activePageFilename,
       })
       navigate(`/preview/${id}`)
     },
-    [id, project, saveProjectFromEditor, navigate]
+    [id, project, isDirty, saveProjectFromEditor, navigate]
   )
 
   if (loading || !project) {

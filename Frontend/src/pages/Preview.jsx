@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -17,22 +17,36 @@ export default function Preview() {
   const setPreviewMode = useStore((s) => s.setPreviewMode)
 
   const handoff = useMemo(() => (id ? loadPreviewHandoff(id) : null), [id])
+  const [activeFilename, setActiveFilename] = useState(() => handoff?.activePageFilename || 'index.html')
 
   useEffect(() => {
     if (id) loadProject(id)
   }, [id, loadProject])
 
-  useEffect(() => {
-    if (id && handoff) clearPreviewHandoff(id)
-  }, [id, handoff])
+  const pages = useMemo(() => handoff?.pages || [], [handoff])
+  const activePage = useMemo(() => pages.find((p) => p.filename === activeFilename), [pages, activeFilename])
 
-  const previewTitle = handoff?.title ?? project?.title ?? 'Preview'
-  const previewHtml = handoff?.html ?? project?.html ?? ''
-  const previewCss = handoff?.css ?? project?.css ?? ''
+  useEffect(() => {
+    const handleMessage = (e) => {
+      if (e.data && e.data.type === 'NAVIGATE_TO_PAGE') {
+        const targetFilename = e.data.filename
+        const targetPage = pages.find((p) => p.filename === targetFilename)
+        if (targetPage) {
+          setActiveFilename(targetFilename)
+        }
+      }
+    }
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [pages])
+
+  const previewTitle = activePage ? `${handoff?.title || project?.title || 'Preview'} — ${activePage.name}` : (handoff?.title ?? project?.title ?? 'Preview')
+  const previewHtml = activePage ? activePage.html : (handoff?.html ?? project?.html ?? '')
+  const previewCss = activePage ? activePage.css : (handoff?.css ?? project?.css ?? '')
 
   const srcDoc = useMemo(
-    () => buildPreviewDocument(previewTitle, previewHtml, previewCss),
-    [previewHtml, previewCss, previewTitle]
+    () => buildPreviewDocument(previewTitle, previewHtml, previewCss, pages),
+    [previewHtml, previewCss, previewTitle, pages]
   )
 
   const widthMap = { desktop: '100%', tablet: '768px', mobile: '375px' }
@@ -65,7 +79,7 @@ export default function Preview() {
       <div className="flex-1 min-h-0 overflow-auto p-2 sm:p-4 lg:p-6 flex justify-center bg-stripe-pattern">
         <div
           className="bg-bg-elevated shadow-lg rounded-lg sm:rounded-xl overflow-hidden border border-border w-full preview-canvas-frame"
-          style={{ width: widthMap[previewMode], maxWidth: '100%' }}
+          style={{ width: widthMap[previewMode], maxWidth: '100%', transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}
         >
           <iframe
             title={`Preview: ${previewTitle}`}

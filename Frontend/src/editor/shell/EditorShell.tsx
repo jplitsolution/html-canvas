@@ -27,7 +27,13 @@ export function EditorShell({
   onExportCurrent,
   onExportAll,
 }: EditorShellProps) {
-  const { isEmpty, dragDebug } = useEditor();
+  const { isEmpty, dragDebug, device } = useEditor();
+
+  const deviceWidthClass = device === 'Mobile'
+    ? 'max-w-[375px] w-full'
+    : device === 'Tablet'
+    ? 'max-w-[768px] w-full'
+    : 'max-w-full w-full';
 
   return (
     <div className="tc-builder flex flex-col h-full min-h-0 bg-bg-canvas">
@@ -48,7 +54,7 @@ export function EditorShell({
         <main className="tc-canvas-area flex-1 min-w-0 flex flex-col relative overflow-hidden">
           <div className="flex-1 min-h-0 overflow-auto p-6 md:p-8 bg-stripe-pattern">
             <div
-              className={`tc-page-frame tc-drop-zone mx-auto w-full max-w-[1200px] min-h-[min(800px,100%)] rounded-xl shadow-lg border bg-white overflow-hidden relative ${
+              className={`tc-page-frame tc-drop-zone mx-auto w-full ${deviceWidthClass} min-h-[min(800px,100%)] rounded-xl shadow-lg border bg-white overflow-hidden relative ${
                 dragDebug.isOverCanvas ? 'tc-drop-zone--over' : ''
               } ${dragDebug.isDragging ? 'tc-drop-zone--dragging' : ''}`}
             >

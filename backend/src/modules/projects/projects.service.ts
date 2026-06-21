@@ -17,9 +17,18 @@ export class ProjectsService {
   ) {}
 
   async findAll(userId: number): Promise<Project[]> {
-    return this.projectRepository.find({
+    const projects = await this.projectRepository.find({
       where: { userId },
       order: { updatedAt: 'DESC' },
+    });
+    return projects.map((project) => {
+      if (project.data) {
+        project.data = { ...project.data };
+        delete project.data.projectData;
+        delete project.data.html;
+        delete project.data.css;
+      }
+      return project;
     });
   }
 

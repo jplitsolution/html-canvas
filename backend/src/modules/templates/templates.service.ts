@@ -16,16 +16,34 @@ export class TemplatesService {
   ) {}
 
   async findAllPrebuilt(): Promise<Template[]> {
-    return this.templateRepository.find({
+    const templates = await this.templateRepository.find({
       where: { isPrebuilt: true },
       order: { createdAt: 'DESC' },
+    });
+    return templates.map((template) => {
+      if (template.data) {
+        template.data = { ...template.data };
+        delete template.data.projectData;
+        delete template.data.html;
+        delete template.data.css;
+      }
+      return template;
     });
   }
 
   async findUserTemplates(userId: number): Promise<Template[]> {
-    return this.templateRepository.find({
+    const templates = await this.templateRepository.find({
       where: { userId, isPrebuilt: false },
       order: { updatedAt: 'DESC' },
+    });
+    return templates.map((template) => {
+      if (template.data) {
+        template.data = { ...template.data };
+        delete template.data.projectData;
+        delete template.data.html;
+        delete template.data.css;
+      }
+      return template;
     });
   }
 

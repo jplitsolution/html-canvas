@@ -87,7 +87,19 @@ export function createProjectSlice(set, get) {
     setProjectDirty: (dirty) => set({ isDirty: dirty }),
 
     createProject: async (title, templateId = 'blank', templateData = null) => {
-      const template = templateData || getTemplateById(templateId)
+      let template = templateData
+      if (templateId !== 'blank') {
+        if (!template || !template.projectData || Object.keys(template.projectData).length === 0) {
+          try {
+            const { getTemplate } = await import('../../services/api/templates')
+            template = await getTemplate(templateId)
+          } catch {
+            template = getTemplateById(templateId)
+          }
+        }
+      } else if (!template) {
+        template = getTemplateById('blank')
+      }
       const project = repairProject({
         id: 'new',
         title: title || 'Untitled Project',

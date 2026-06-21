@@ -11,6 +11,8 @@ export interface SavedTemplatePayload {
   projectData: Record<string, unknown>
   html: string
   css: string
+  pages?: any[]
+  activePageFilename?: string
 }
 
 export interface TemplateEditorProps {

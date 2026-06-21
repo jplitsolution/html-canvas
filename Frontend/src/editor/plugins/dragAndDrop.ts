@@ -164,7 +164,7 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
     })
   })
 
-  setupDragPreview(editor, (over) => {
+  const cleanupPreview = setupDragPreview(editor, (over) => {
     patchDebug({ isOverCanvas: over, lastEvent: over ? 'over canvas' : 'off canvas' })
   })
 
@@ -176,7 +176,9 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
     const label = block?.get('label') || block?.get('id') || 'unknown'
     const success = !!component
     log('drag stop', { block: label, success, component: component?.get('tagName') })
-    document.body.classList.remove('tc-is-dragging')
+    setTimeout(() => {
+      document.body.classList.remove('tc-is-dragging')
+    }, 50)
     document.body.classList.remove('tc-canvas-drop-over')
 
     patchDebug({
@@ -230,6 +232,10 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
   // Block sorter + droppable targets must target the newly selected page iframe
   editor.on('page:select', () => onActivePageFrameReady(editor))
   editor.on('canvas:frame:load', () => onActivePageFrameReady(editor))
+
+  return () => {
+    cleanupPreview?.()
+  }
 }
 
 /** GrapesJS init runs before React renders #tc-blocks-mount — mount on first use */

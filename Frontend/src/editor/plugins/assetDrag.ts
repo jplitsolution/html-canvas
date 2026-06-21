@@ -2,6 +2,7 @@ import type { Editor } from 'grapesjs'
 import type { Component } from 'grapesjs'
 import { ensureBlockManagerMounted } from './dragAndDrop'
 import { buildImageHtml } from '../utils/imageHtml'
+import { lockInsertion, unlockInsertion } from '../utils/insertionLock'
 
 type BlocksViewLike = {
   getSorter?: () => {
@@ -44,6 +45,8 @@ function getAssetSorter(editor: Editor) {
 export function startAssetDrag(editor: Editor, src: string, ev: MouseEvent) {
   if (ev.button !== 0) return false
 
+  lockInsertion()
+
   const sorter = getAssetSorter(editor)
   if (!sorter) return false
 
@@ -71,7 +74,11 @@ export function startAssetDrag(editor: Editor, src: string, ev: MouseEvent) {
     sorter.endDrag()
     bm.endDrag(false)
     editor.em.set({ dragResult: null, dragSource: undefined })
-    document.body.classList.remove('tc-is-dragging', 'tc-canvas-drop-over')
+    unlockInsertion()
+    setTimeout(() => {
+      document.body.classList.remove('tc-is-dragging')
+    }, 50)
+    document.body.classList.remove('tc-canvas-drop-over')
     window.dispatchEvent(new CustomEvent('tc-asset-drag-stop'))
   }
 

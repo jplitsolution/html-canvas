@@ -70,6 +70,7 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   border-radius: 0;
   box-shadow: none;
   margin: 0 auto;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tc-builder .gjs-cv-canvas__frames {
@@ -217,7 +218,7 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
 
 /* Page frame shadow on canvas area */
 .tc-page-frame {
-  transition: box-shadow 0.2s ease;
+  transition: max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
 }
 
 .tc-page-frame:focus-within {

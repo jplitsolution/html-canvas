@@ -23,6 +23,8 @@ import { exportAllPagesFromEditor, exportCurrentPageFromEditor } from './service
 import { EditorProvider } from './context/EditorContext'
 import { EditorShell } from './shell/EditorShell'
 import type { TemplateEditorProps, GrapesEditor } from './types'
+import useStore from '../store/useStore'
+import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 
 export default function TemplateEditor({
   projectId,
@@ -111,6 +113,13 @@ export default function TemplateEditor({
     initializedRef.current = true
     let mounted = true
 
+    // Clear previous elements to avoid strict mode duplicates
+    if (containerRef.current) containerRef.current.innerHTML = ''
+    const blocksMount = document.getElementById('tc-blocks-mount')
+    if (blocksMount) blocksMount.innerHTML = ''
+    const layersMount = document.getElementById('tc-layers-panel')
+    if (layersMount) layersMount.innerHTML = ''
+
     const ed = grapesjs.init(createGrapesConfig(containerRef.current))
     editorRef.current = ed
     setEditor(ed)
@@ -118,9 +127,115 @@ export default function TemplateEditor({
     registerAllBlocks(ed)
     setupAssetUpload(ed)
     setupAssetCanvasDrop(ed)
-    setupDragAndDrop(ed, setDragDebug)
+    const cleanupDragAndDrop = setupDragAndDrop(ed, setDragDebug)
     setupCanvasEnhancements(ed, (empty) => mounted && setIsEmpty(empty))
     setupTextEditing(ed, refreshSelection)
+
+    // Register section ID auto-generation and nav link validation hooks
+    ed.on('component:add', (component) => {
+      const parent = component.parent()
+      const isTopLevel = parent && (parent.get('type') === 'wrapper' || parent === ed.getWrapper())
+      if (!isTopLevel) return
+
+      const tag = (component.get('tagName') || '').toLowerCase()
+      const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article'])
+      const isSection = SECTION_TAGS.has(tag) || component.getAttributes()?.['data-tc-type'] === 'section'
+      if (!isSection || tag === 'header' || tag === 'footer') return
+
+      // Auto-detect proposed ID based on content
+      const html = component.toHTML ? component.toHTML() : ''
+      const text = (component.text ? component.text() : '').toLowerCase()
+      
+      let proposed = ''
+      if (html.includes('<form') || text.includes('contact') || text.includes('get in touch')) {
+        proposed = 'contact'
+      } else if (text.includes('pricing') || html.includes('pricing') || text.includes('$') || text.includes('/mo')) {
+        proposed = 'pricing'
+      } else if (text.includes('features') || text.includes('lightning fast') || text.includes('responsive')) {
+        proposed = 'features'
+      } else if (text.includes('about') || text.includes('our team') || text.includes('meet the team')) {
+        proposed = 'about'
+      } else {
+        // First non-header section gets 'hero'
+        const children = parent.components().models || []
+        const nonHeaderSections = children.filter((c: any) => {
+          const t = (c.get('tagName') || '').toLowerCase()
+          return t !== 'header' && t !== 'nav'
+        })
+        if (nonHeaderSections.length === 0 || nonHeaderSections[0] === component) {
+          proposed = 'hero'
+        }
+      }
+
+      if (!proposed) proposed = 'section'
+
+      // Ensure proposed ID is unique on page
+      let finalId = proposed
+      let counter = 1
+      if (proposed === 'section') {
+        finalId = `section-${counter}`
+      }
+
+      const findConflict = (anchorId: string) => {
+        let found = false
+        ed.Pages.getAll().forEach((page) => {
+          const root = page.getMainComponent()
+          if (!root) return
+          const walk = (cmp: any) => {
+            if (cmp === component) return
+            if (cmp.getAttributes()?.id === anchorId) found = true
+            cmp.components().forEach(walk)
+          }
+          walk(root)
+        })
+        return found
+      }
+
+      while (findConflict(finalId)) {
+        if (proposed === 'section') {
+          counter++
+          finalId = `section-${counter}`
+        } else {
+          finalId = `${proposed}-${counter}`
+          counter++
+        }
+      }
+
+      component.setId(finalId)
+      component.set('sectionId', finalId)
+
+      // Set sectionLabel
+      let label = 'Section'
+      if (proposed === 'hero') label = 'Hero Section'
+      else if (proposed === 'features') label = 'Features Section'
+      else if (proposed === 'pricing') label = 'Pricing Section'
+      else if (proposed === 'contact') label = 'Contact Section'
+      else if (proposed === 'about') label = 'About Section'
+      else if (proposed.startsWith('section-')) label = `Section ${proposed.split('-')[1]}`
+      
+      component.set('sectionLabel', label)
+    })
+
+    ed.on('component:remove', (removedComponent) => {
+      const id = removedComponent.getAttributes()?.id || removedComponent.getId()
+      if (!id) return
+
+      const root = ed.getWrapper()
+      if (!root) return
+
+      const walk = (cmp: any) => {
+        const href = cmp.getAttributes()?.href
+        if (href === `#${id}`) {
+          cmp.addAttributes({ href: '#' })
+          const addToast = useStore.getState().addToast
+          if (typeof addToast === 'function') {
+            addToast(`Section "#${id}" was deleted. Intersecting navigation links have been reset.`, 'info')
+          }
+        }
+        cmp.components().forEach(walk)
+      }
+      walk(root)
+    })
 
     loadIntoEditor(ed, initialData)
     setTimeout(() => ensureAllTextEditable(ed), 0)
@@ -148,6 +263,29 @@ export default function TemplateEditor({
     ed.on('component:deselected', () => mounted && refreshSelection())
     ed.on('device:select', (dev) => mounted && setDevice(dev.get('name') as string))
 
+    ed.on('component:update', (component) => {
+      if (!mounted) return
+      const tag = (component.get('tagName') || '').toLowerCase()
+      const type = component.get('type') || ''
+      if (tag === 'a' || type === 'link') {
+        const text = (component.getEl?.()?.textContent || '').trim()
+        if (text) {
+          const href = component.getAttributes()?.href || ''
+          if (!href || href === '#' || href.startsWith('#')) {
+            const pageAnchors = listSectionAnchorsOnPage(ed, component)
+            const normalized = text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9_-]/g, '')
+            const common = ['features', 'pricing', 'contact', 'about', 'faq', 'services', 'hero']
+            if (pageAnchors.includes(normalized) || common.includes(normalized)) {
+              if (href !== `#${normalized}`) {
+                component.addAttributes({ href: `#${normalized}` })
+                refreshSelection()
+              }
+            }
+          }
+        }
+      }
+    })
+
     ed.on('load', () => {
       ed.UndoManager.clear()
       setCanvasZoom(ed, 100)
@@ -161,9 +299,16 @@ export default function TemplateEditor({
       mounted = false
       initializedRef.current = false
       cleanupExperienceRef.current?.()
+      cleanupDragAndDrop?.()
       ed.destroy()
       editorRef.current = null
       setEditor(null)
+
+      // Clear external panels
+      const bMount = document.getElementById('tc-blocks-mount')
+      if (bMount) bMount.innerHTML = ''
+      const lMount = document.getElementById('tc-layers-panel')
+      if (lMount) lMount.innerHTML = ''
     }
   }, [projectId, handleSave, handlePreview, initialData, refreshSelection])
 

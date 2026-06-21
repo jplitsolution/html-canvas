@@ -1,9 +1,14 @@
 import type { Editor, Component } from 'grapesjs';
+import { canInsert } from './insertionLock';
 
 /**
  * Insert a section with background image, overlay, and editable text
  */
 export function insertBackgroundWithText(editor: Editor, imageUrl: string): Component | null {
+  if (!canInsert()) {
+    console.log('[TC Lock] Background insertion blocked by lock');
+    return null;
+  }
   const wrapper = editor.getWrapper();
   if (!wrapper) return null;
 

@@ -24,7 +24,7 @@ export async function listUserTemplates() {
 export async function getTemplate(id) {
   try {
     const numericId = Number(id)
-    if (!Number.isNaN(numericId) && String(numericId) === id) {
+    if (!Number.isNaN(numericId) && String(numericId) === String(id)) {
       const template = await apiClient(`/templates/${numericId}`)
       return mapBackendTemplate(template)
     }

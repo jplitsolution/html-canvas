@@ -1,0 +1,10 @@
+.ai-project-memory
+
+# frontend
+Frontend/node_modules
+Frontend/dist
+
+# backend
+backend/node_modules
+backend/dist
+backend/*.tsbuildinfo

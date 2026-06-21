@@ -1,4 +1,5 @@
 import type { Editor } from 'grapesjs'
+import { RESPONSIVE_STYLE_RULES } from '../services/exportSite'
 
 export function setupCanvasEnhancements(editor: Editor, onEmptyChange?: (empty: boolean) => void) {
   const checkEmpty = () => {
@@ -24,6 +25,7 @@ export function setupCanvasEnhancements(editor: Editor, onEmptyChange?: (empty: 
         [data-gjs-type="wrapper"] { min-height: 100vh; }
         *:hover { outline: 1px dashed rgba(79, 70, 229, 0.35); outline-offset: 2px; }
         .gjs-selected { outline: 2px solid #4f46e5 !important; outline-offset: 2px; }
+        ${RESPONSIVE_STYLE_RULES}
       `
       doc.head.appendChild(style)
     }

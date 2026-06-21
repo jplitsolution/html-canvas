@@ -55,11 +55,13 @@ export function setSectionAnchorId(
   component: Component,
   rawValue: string
 ): { ok: boolean; error?: string } {
+  const oldId = component.getAttributes()?.id || component.getId()
   const anchorId = normalizeAnchorId(rawValue)
 
   if (!anchorId) {
     component.removeAttributes('id')
     component.resetId()
+    component.set('sectionId', '')
     return { ok: true }
   }
 
@@ -74,9 +76,25 @@ export function setSectionAnchorId(
     }
     conflict.removeAttributes('id')
     conflict.resetId()
+    conflict.set('sectionId', '')
   }
 
   component.setId(anchorId)
+  component.set('sectionId', anchorId)
+
+  // Rename intersecting nav links pointing to the renamed section
+  const root = editor.getWrapper()
+  if (root && oldId && oldId !== anchorId) {
+    const walk = (cmp: any) => {
+      const href = cmp.getAttributes()?.href
+      if (href === `#${oldId}`) {
+        cmp.addAttributes({ href: `#${anchorId}` })
+      }
+      cmp.components().forEach(walk)
+    }
+    walk(root)
+  }
+
   return { ok: true }
 }
 
