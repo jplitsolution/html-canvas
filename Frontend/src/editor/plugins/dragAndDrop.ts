@@ -126,15 +126,19 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
       editorState: 'component added',
     })
 
-    component.set({
-      draggable: true,
-      droppable: ['section', 'header', 'footer', 'nav', 'main', 'div'].includes(tag),
-      removable: true,
-      copyable: true,
-      selectable: true,
-      hoverable: true,
-      stylable: true,
-    })
+    // Defer modifications to prevent layout conflicts during the initial add/render lifecycle
+    setTimeout(() => {
+      if (!editor.getWrapper()) return
+      component.set({
+        draggable: true,
+        droppable: ['section', 'header', 'footer', 'nav', 'main', 'div'].includes(tag),
+        removable: true,
+        copyable: true,
+        selectable: true,
+        hoverable: true,
+        stylable: true,
+      })
+    }, 0)
   })
 
   editor.on('component:remove', () => {
@@ -194,6 +198,8 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
 
     if (success) {
       window.dispatchEvent(new CustomEvent('tc-drop-success', { detail: { label } }))
+      // Force immediate canvas update
+      editor.Canvas.refresh()
     }
   })
 

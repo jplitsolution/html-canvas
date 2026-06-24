@@ -1,3 +1,5 @@
+import useStore from '../store/useStore'
+
 const METRICS_KEY = 'templatecraft_metrics'
 
 const defaultMetrics = {
@@ -30,6 +32,13 @@ export function trackEvent(event, value = 1) {
     metrics[event] = (metrics[event] || 0) + value
   }
   saveMetrics(metrics)
+
+  // Sync to Zustand store if defined
+  if (event === 'saveCount') {
+    useStore.setState({ saveCount: metrics.saveCount || 0 })
+  } else if (event === 'exports') {
+    useStore.setState({ exports: metrics.exports || 0 })
+  }
 }
 
 export function startSession() {
@@ -37,11 +46,17 @@ export function startSession() {
   trackEvent('sessions')
 }
 
+export function getActiveSessionDuration() {
+  return Math.round((Date.now() - sessionStart) / 1000)
+}
+
 export function endSession() {
-  const duration = Math.round((Date.now() - sessionStart) / 1000)
+  const duration = getActiveSessionDuration()
   const metrics = loadMetrics()
   metrics.sessionTime = (metrics.sessionTime || 0) + duration
   saveMetrics(metrics)
+
+  useStore.setState({ sessionTime: metrics.sessionTime || 0 })
 }
 
 export function getUsageSummary() {

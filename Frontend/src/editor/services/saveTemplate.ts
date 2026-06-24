@@ -2,6 +2,7 @@ import type { Editor } from 'grapesjs'
 import * as projectsApi from '../../services/api/projects'
 import type { SavedTemplatePayload } from '../types'
 import { getActivePageSnapshot, collectPageExports, pageExportFilename } from './exportSite'
+import { trackEvent } from '../../utils/analytics'
 
 export interface SaveTemplateMeta {
   id: string
@@ -26,6 +27,8 @@ export async function saveTemplate(editor: Editor, meta: SaveTemplateMeta) {
     updatedAt: new Date().toISOString(),
     metadata: meta.metadata || { tags: [], description: '' },
   })
+
+  trackEvent('saveCount')
 
   return saved
 }

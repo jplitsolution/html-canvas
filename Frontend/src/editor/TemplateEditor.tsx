@@ -6,7 +6,7 @@ import { createGrapesConfig } from './grapesConfig'
 import { registerAllBlocks } from './blocks'
 import { setupAssetUpload, restoreAssetsFromProjectData } from './plugins/assetUpload'
 import { setupAssetCanvasDrop } from './plugins/assetDrag'
-import { setupCanvasEnhancements, setCanvasZoom } from './plugins/canvasEnhancements'
+import { setupCanvasEnhancements, setCanvasZoom, applyDeviceViewport } from './plugins/canvasEnhancements'
 import { setupEditorExperience } from './plugins/editorExperience'
 import { setupTextEditing } from './plugins/textEditing'
 import { ensureAllTextEditable } from './utils/textContent'
@@ -25,6 +25,7 @@ import { EditorShell } from './shell/EditorShell'
 import type { TemplateEditorProps, GrapesEditor } from './types'
 import useStore from '../store/useStore'
 import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
+import { trackEvent } from '../utils/analytics'
 
 export default function TemplateEditor({
   projectId,
@@ -59,6 +60,8 @@ export default function TemplateEditor({
     isDragging: false,
     isOverCanvas: false,
   })
+
+  console.log('[TemplateEditor] Rendering. isEmpty:', isEmpty, 'dragDebugState:', dragDebug.editorState)
 
   const refreshSelection = useCallback(() => setSelectionVersion((v) => v + 1), [])
 
@@ -99,17 +102,24 @@ export default function TemplateEditor({
     const ed = editorRef.current
     if (!ed) return
     exportCurrentPageFromEditor(ed, callbacksRef.current.projectTitle)
+    trackEvent('exports')
   }, [])
 
   const handleExportAll = useCallback(() => {
     const ed = editorRef.current
     if (!ed) return
     exportAllPagesFromEditor(ed, callbacksRef.current.projectTitle)
+    trackEvent('exports')
   }, [])
 
   useEffect(() => {
-    if (!containerRef.current || initializedRef.current) return
+    console.log('[TemplateEditor] useEffect triggered for projectId:', projectId)
+    if (!containerRef.current || initializedRef.current) {
+      console.log('[TemplateEditor] useEffect skip. Already initialized:', initializedRef.current)
+      return
+    }
 
+    console.log('[TemplateEditor] Initializing GrapesJS...')
     initializedRef.current = true
     let mounted = true
 
@@ -201,19 +211,23 @@ export default function TemplateEditor({
         }
       }
 
-      component.setId(finalId)
-      component.set('sectionId', finalId)
+      // Defer modifications to prevent layout conflicts during the initial add/render lifecycle
+      setTimeout(() => {
+        if (!ed.getWrapper()) return
+        component.setId(finalId)
+        component.set('sectionId', finalId)
 
-      // Set sectionLabel
-      let label = 'Section'
-      if (proposed === 'hero') label = 'Hero Section'
-      else if (proposed === 'features') label = 'Features Section'
-      else if (proposed === 'pricing') label = 'Pricing Section'
-      else if (proposed === 'contact') label = 'Contact Section'
-      else if (proposed === 'about') label = 'About Section'
-      else if (proposed.startsWith('section-')) label = `Section ${proposed.split('-')[1]}`
-      
-      component.set('sectionLabel', label)
+        // Set sectionLabel
+        let label = 'Section'
+        if (proposed === 'hero') label = 'Hero Section'
+        else if (proposed === 'features') label = 'Features Section'
+        else if (proposed === 'pricing') label = 'Pricing Section'
+        else if (proposed === 'contact') label = 'Contact Section'
+        else if (proposed === 'about') label = 'About Section'
+        else if (proposed.startsWith('section-')) label = `Section ${proposed.split('-')[1]}`
+        
+        component.set('sectionLabel', label)
+      }, 0)
     })
 
     ed.on('component:remove', (removedComponent) => {
@@ -292,10 +306,16 @@ export default function TemplateEditor({
       requestAnimationFrame(() => {
         ensureBlockManagerMounted(ed)
         filterBlockElements(ed, 'sections', '')
+        // Apply the correct viewport meta for the default device (Desktop)
+        const selectedDev = ed.Devices.getSelected()
+        if (selectedDev) {
+          applyDeviceViewport(ed, String(selectedDev.get('name')))
+        }
       })
     })
 
     return () => {
+      console.log('[TemplateEditor] useEffect cleanup: destroying GrapesJS...')
       mounted = false
       initializedRef.current = false
       cleanupExperienceRef.current?.()
@@ -310,7 +330,7 @@ export default function TemplateEditor({
       const lMount = document.getElementById('tc-layers-panel')
       if (lMount) lMount.innerHTML = ''
     }
-  }, [projectId, handleSave, handlePreview, initialData, refreshSelection])
+  }, [projectId])
 
   const contextValue = {
     editor,

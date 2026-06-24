@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useStore from '../store/useStore'
 import { savePreviewHandoff } from '../utils/previewHandoff'
@@ -85,6 +85,12 @@ export default function Builder() {
     [id, project, isDirty, saveProjectFromEditor, navigate]
   )
 
+  const initialData = useMemo(() => ({
+    projectData: project?.projectData || {},
+    html: project?.html || '',
+    css: project?.css || '',
+  }), [project?.id])
+
   if (loading || !project) {
     return (
       <div className="h-screen flex items-center justify-center bg-bg-canvas">
@@ -101,11 +107,7 @@ export default function Builder() {
           projectTitle={project.title}
           projectCreatedAt={project.createdAt}
           projectMetadata={project.metadata}
-          initialData={{
-            projectData: project.projectData,
-            html: project.html,
-            css: project.css,
-          }}
+          initialData={initialData}
           onSave={handleEditorSave}
           onDirtyChange={handleDirtyChange}
           onPreview={handlePreview}

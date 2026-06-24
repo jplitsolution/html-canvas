@@ -38,7 +38,7 @@ function ProjectCard({ project, onDelete }) {
   return (
     <Card interactive className="p-4 group" onClick={handleCardClick}>
       <div className="flex items-start justify-between mb-3">
-        <div className="p-2.5 rounded-lg bg-accent-muted text-accent">
+        <div className="p-2.5 rounded-lg bg-gradient-to-br from-[#7C4DFF] to-[#00E5FF] text-white shadow-[0_0_10px_rgba(0,229,255,0.2)]">
           <LayoutTemplate className="w-5 h-5" />
         </div>
         <div className="flex gap-0.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">

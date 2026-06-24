@@ -44,10 +44,10 @@ function AppShell({ title, children, actions }) {
         <div className="shell-header-inner">
           <div className="flex items-center gap-3 sm:gap-6 min-w-0">
             <Link to="/dashboard" className="flex items-center gap-2.5 shrink-0 group">
-              <div className="p-1.5 rounded-md bg-accent-muted text-accent group-hover:bg-accent group-hover:text-accent-fg transition-colors">
-                <LayoutTemplate className="w-4 h-4" />
+              <div className="p-1.5 rounded-md bg-gradient-to-r from-[#7C4DFF] to-[#00E5FF] text-white shadow-[0_0_12px_rgba(0,229,255,0.3)] transition-all duration-200 group-hover:scale-105">
+                <LayoutTemplate className="w-4.5 h-4.5" />
               </div>
-              <span className="font-display font-semibold text-fg tracking-tight hidden sm:block">
+              <span className="font-display font-bold text-metallic-aurora tracking-tight hidden sm:block text-lg">
                 TemplateCraft
               </span>
             </Link>
@@ -58,10 +58,10 @@ function AppShell({ title, children, actions }) {
                   <Link
                     key={to}
                     to={to}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
                       active
-                        ? 'bg-accent-muted text-accent'
-                        : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
+                        ? 'bg-accent-muted text-accent shadow-[0_0_12px_rgba(124,77,255,0.15)] border border-accent/20'
+                        : 'text-fg-muted hover:text-fg hover:bg-bg-subtle border border-transparent'
                     }`}
                   >
                     {label}

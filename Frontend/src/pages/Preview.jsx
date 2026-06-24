@@ -8,6 +8,58 @@ import Button from '../components/ui/Button'
 import DeviceSwitcher from '../components/ui/DeviceSwitcher'
 import ThemeToggle from '../components/common/ThemeToggle'
 
+// ── Module-level constants (stable across renders) ─────────────────────────
+const MOBILE_OVERRIDE_STYLES = `
+  <style id="tc-preview-device-styles">
+    /* Preview mobile overrides — applied unconditionally in mobile mode */
+    html, body { width: 100% !important; max-width: 100% !important; overflow-x: hidden !important; }
+    .tc-nav-hamburger { display: flex !important; font-size: 24px !important; cursor: pointer !important; color: #0f172a !important; }
+    header, [data-tc-type="section"] > header {
+      position: relative !important; display: flex !important; flex-wrap: wrap !important;
+      align-items: center !important; justify-content: space-between !important; padding: 12px 16px !important;
+    }
+    header nav, header > nav, header nav[style], header > nav[style] {
+      display: none !important; flex-direction: column !important; width: 100% !important;
+      order: 3 !important; background: #fff !important; padding: 12px 16px !important;
+      border-top: 1px solid #e2e8f0 !important; gap: 8px !important;
+    }
+    header nav a, header > nav a {
+      width: 100% !important; text-align: center !important; padding: 10px 16px !important;
+      display: block !important; white-space: normal !important;
+    }
+    .tc-nav-toggle:checked ~ nav, .tc-nav-toggle:checked ~ nav[style] { display: flex !important; }
+    [data-tc-type="section"], section, footer { padding: 32px 16px !important; width: 100% !important; overflow-x: hidden !important; }
+    section[style*="display:flex"], section[style*="display: flex"] { flex-direction: column !important; gap: 24px !important; }
+    section > div[style*="display:flex"], section > div[style*="display: flex"] { flex-direction: column !important; align-items: stretch !important; }
+    a[data-tc-type="button"] { display: block !important; width: 100% !important; text-align: center !important; box-sizing: border-box !important; }
+    div[style*="grid-template-columns:repeat(auto-fit"], div[style*="grid-template-columns: repeat(auto-fit"] { grid-template-columns: 1fr !important; }
+    h1 { font-size: clamp(24px, 8vw, 32px) !important; } h2 { font-size: clamp(20px, 6vw, 26px) !important; }
+  </style>
+`
+
+/**
+ * Builds a preview srcDoc string with device-specific viewport meta and CSS overrides.
+ * Must be called with the same args each time to leverage useMemo correctly.
+ */
+function buildDeviceAwareSrcDoc(mode, html, css, title, pgs) {
+  const baseDoc = buildPreviewDocument(title, html, css, pgs)
+  if (mode === 'mobile') {
+    return baseDoc
+      .replace(
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+        '<meta name="viewport" content="width=375, initial-scale=1.0">'
+      )
+      .replace('</head>', `${MOBILE_OVERRIDE_STYLES}</head>`)
+  }
+  if (mode === 'tablet') {
+    return baseDoc.replace(
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+      '<meta name="viewport" content="width=768, initial-scale=1.0">'
+    )
+  }
+  return baseDoc
+}
+
 export default function Preview() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -45,8 +97,8 @@ export default function Preview() {
   const previewCss = activePage ? activePage.css : (handoff?.css ?? project?.css ?? '')
 
   const srcDoc = useMemo(
-    () => buildPreviewDocument(previewTitle, previewHtml, previewCss, pages),
-    [previewHtml, previewCss, previewTitle, pages]
+    () => buildDeviceAwareSrcDoc(previewMode, previewHtml, previewCss, previewTitle, pages),
+    [previewHtml, previewCss, previewTitle, pages, previewMode]
   )
 
   const widthMap = { desktop: '100%', tablet: '768px', mobile: '375px' }
