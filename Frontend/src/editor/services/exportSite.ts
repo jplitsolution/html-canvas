@@ -1,5 +1,6 @@
 import type { Editor } from 'grapesjs'
 import { createZipBlob } from '../../utils/zip'
+import { getActiveStylesheetsContent, transformReactComponentsInHtml } from '../utils/styleUtils'
 
 export interface PageExport {
   id: string
@@ -319,8 +320,10 @@ export function renderPageDocument(
   activePageFilename: string,
   isPreview = false
 ): string {
-  const { optimizedHtml, optimizedCss } = optimizePageContent(html, css, pages, activePageFilename, isPreview)
+  const compiledHtml = transformReactComponentsInHtml(html)
+  const { optimizedHtml, optimizedCss } = optimizePageContent(compiledHtml, css, pages, activePageFilename, isPreview)
   const scrollBehavior = `html { scroll-behavior: smooth; }`
+  const hostCss = getActiveStylesheetsContent()
   
   return `<!DOCTYPE html>
 <html lang="en">
@@ -328,7 +331,14 @@ export function renderPageDocument(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${escapeHtml(title)}</title>
-  <style>${optimizedCss}
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>${hostCss}
+${optimizedCss}
 ${scrollBehavior}
 ${RESPONSIVE_STYLE_RULES}</style>
 </head>

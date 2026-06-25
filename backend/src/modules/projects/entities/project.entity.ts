@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 
@@ -16,6 +17,13 @@ export class Project {
 
   @Column()
   name: string;
+
+  @Index({ unique: true })
+  @Column({ nullable: true })
+  slug?: string;
+
+  @Column({ name: 'service_id', nullable: true })
+  serviceId?: string;
 
   @Column({ type: 'json', nullable: true })
   data: any;

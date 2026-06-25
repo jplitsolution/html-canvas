@@ -1,5 +1,6 @@
 import type { Editor } from 'grapesjs'
 import type { GrapesEditorData } from '../types'
+import { transformReactComponentsInHtml } from '../utils/styleUtils'
 
 export function loadIntoEditor(editor: Editor, data: GrapesEditorData) {
   const hasProjectData =
@@ -12,8 +13,9 @@ export function loadIntoEditor(editor: Editor, data: GrapesEditorData) {
     return
   }
 
-  editor.setComponents(data.html || '')
   editor.setStyle(data.css || '')
+  const compiledHtml = transformReactComponentsInHtml(data.html || '')
+  editor.setComponents(compiledHtml)
 }
 
 export function extractEditorData(editor: Editor): GrapesEditorData {

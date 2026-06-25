@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
 import useStore from '../store/useStore'
@@ -7,6 +7,7 @@ import { buildPreviewDocument } from '../editor/services/exportSite'
 import Button from '../components/ui/Button'
 import DeviceSwitcher from '../components/ui/DeviceSwitcher'
 import ThemeToggle from '../components/common/ThemeToggle'
+import { runDevModeStylesValidation } from '../editor/utils/styleUtils'
 
 // ── Module-level constants (stable across renders) ─────────────────────────
 const MOBILE_OVERRIDE_STYLES = `
@@ -103,6 +104,17 @@ export default function Preview() {
 
   const widthMap = { desktop: '100%', tablet: '768px', mobile: '375px' }
 
+  const iframeRef = useRef(null)
+
+  const handleIframeLoad = () => {
+    if (import.meta.env.DEV && iframeRef.current) {
+      const doc = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document
+      if (doc) {
+        runDevModeStylesValidation(doc)
+      }
+    }
+  }
+
   if (!project) {
     return (
       <div className="h-screen flex items-center justify-center bg-bg-canvas">
@@ -134,6 +146,8 @@ export default function Preview() {
           style={{ width: widthMap[previewMode], maxWidth: '100%', transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)' }}
         >
           <iframe
+            ref={iframeRef}
+            onLoad={handleIframeLoad}
             title={`Preview: ${previewTitle}`}
             srcDoc={srcDoc}
             className="w-full h-full min-h-[min(400px,70vh)] sm:min-h-[min(500px,75vh)] lg:min-h-[600px] border-0"

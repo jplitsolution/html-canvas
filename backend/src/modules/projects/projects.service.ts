@@ -69,6 +69,12 @@ export class ProjectsService {
     if (updateProjectDto.data !== undefined) {
       project.data = updateProjectDto.data as Record<string, unknown>;
     }
+    if (updateProjectDto.slug !== undefined) {
+      project.slug = updateProjectDto.slug;
+    }
+    if (updateProjectDto.serviceId !== undefined) {
+      project.serviceId = updateProjectDto.serviceId;
+    }
 
     return this.projectRepository.save(project);
   }

@@ -26,6 +26,7 @@ import type { TemplateEditorProps, GrapesEditor } from './types'
 import useStore from '../store/useStore'
 import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
+import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 
 export default function TemplateEditor({
   projectId,
@@ -130,7 +131,24 @@ export default function TemplateEditor({
     const layersMount = document.getElementById('tc-layers-panel')
     if (layersMount) layersMount.innerHTML = ''
 
-    const ed = grapesjs.init(createGrapesConfig(containerRef.current))
+    const config = createGrapesConfig(containerRef.current)
+    const hostLinks = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+      .map((l: any) => l.href)
+      .filter(Boolean)
+    const defaultStyles = [
+      'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap',
+      'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css',
+      'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
+    ]
+    if (config.canvas) {
+      config.canvas.styles = [
+        ...(config.canvas.styles || []),
+        ...defaultStyles,
+        ...hostLinks,
+      ]
+    }
+
+    const ed = grapesjs.init(config)
     editorRef.current = ed
     setEditor(ed)
 
@@ -251,22 +269,6 @@ export default function TemplateEditor({
       walk(root)
     })
 
-    loadIntoEditor(ed, initialData)
-    setTimeout(() => ensureAllTextEditable(ed), 0)
-    restoreAssetsFromProjectData(ed, initialData.projectData)
-
-    const hasExistingPages =
-      initialData.projectData &&
-      typeof initialData.projectData === 'object' &&
-      Array.isArray((initialData.projectData as { pages?: unknown[] }).pages) &&
-      ((initialData.projectData as { pages?: unknown[] }).pages?.length ?? 0) > 0
-
-    if (!hasExistingPages && !initialData.html?.trim()) {
-      setupPagesManager(ed)
-    }
-
-    cleanupExperienceRef.current = setupEditorExperience(ed, { onSave: handleSave })
-
     ed.on('change:changesCount', () => {
       if (!mounted) return
       setIsDirty(true)
@@ -275,6 +277,8 @@ export default function TemplateEditor({
 
     ed.on('component:selected', () => mounted && refreshSelection())
     ed.on('component:deselected', () => mounted && refreshSelection())
+    ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
+    ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
     ed.on('device:select', (dev) => mounted && setDevice(dev.get('name') as string))
 
     ed.on('component:update', (component) => {
@@ -301,6 +305,12 @@ export default function TemplateEditor({
     })
 
     ed.on('load', () => {
+      injectStylesheetsIntoCanvas(ed)
+
+      const iframeDoc = ed.Canvas.getDocument()
+      if (iframeDoc) {
+        runDevModeStylesValidation(iframeDoc)
+      }
       ed.UndoManager.clear()
       setCanvasZoom(ed, 100)
       requestAnimationFrame(() => {
@@ -313,6 +323,40 @@ export default function TemplateEditor({
         }
       })
     })
+
+    const hasExistingPages =
+      initialData.projectData &&
+      typeof initialData.projectData === 'object' &&
+      Array.isArray((initialData.projectData as { pages?: unknown[] }).pages) &&
+      ((initialData.projectData as { pages?: unknown[] }).pages?.length ?? 0) > 0
+
+    if (!hasExistingPages) {
+      setupPagesManager(ed)
+    }
+
+    try {
+      loadIntoEditor(ed, initialData)
+    } catch (err: any) {
+      console.error('[TemplateEditor] Error loading template:', err)
+      const addToast = useStore.getState().addToast
+      if (typeof addToast === 'function') {
+        addToast(err.message || 'Failed to load template', 'error')
+      }
+    }
+
+    const intervals = [0, 50, 150, 300, 600, 1200]
+    intervals.forEach((delay) => {
+      setTimeout(() => {
+        if (mounted && ed) {
+          ensureAllTextEditable(ed)
+          injectStylesheetsIntoCanvas(ed)
+        }
+      }, delay)
+    })
+
+    restoreAssetsFromProjectData(ed, initialData.projectData)
+
+    cleanupExperienceRef.current = setupEditorExperience(ed, { onSave: handleSave })
 
     return () => {
       console.log('[TemplateEditor] useEffect cleanup: destroying GrapesJS...')

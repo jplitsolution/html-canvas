@@ -1,5 +1,6 @@
 import type { Editor } from 'grapesjs'
 import type { Component } from 'grapesjs'
+import { transformReactComponentsInHtml } from './styleUtils'
 
 export function insertBlock(editor: Editor, blockId: string) {
   const block = editor.BlockManager.get(blockId)
@@ -20,8 +21,9 @@ export function insertBlock(editor: Editor, blockId: string) {
 }
 
 export function applyStarterHtml(editor: Editor, html: string, css = '') {
-  editor.setComponents(html)
   if (css) editor.setStyle(css)
+  const compiledHtml = transformReactComponentsInHtml(html)
+  editor.setComponents(compiledHtml)
   editor.UndoManager.clear()
 }
 

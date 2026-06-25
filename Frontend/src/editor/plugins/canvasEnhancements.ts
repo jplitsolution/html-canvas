@@ -185,6 +185,7 @@ export function setupCanvasEnhancements(editor: Editor, onEmptyChange?: (empty: 
   const checkEmpty = () => {
     // Defer check to prevent React state update from clashing with the browser paint event
     setTimeout(() => {
+      if (!editor || !editor.Pages || !editor.Pages.getSelected()) return
       const wrapper = editor.getWrapper()
       const count = wrapper?.components().length || 0
       console.log('[TC Canvas] checkEmpty - component count:', count)

@@ -34,8 +34,8 @@ export function migrateProject(oldVersion, newVersion, project) {
 
   if (oldVersion < 2 && newVersion >= 2) {
     migrated = {
-      ...migrated,
       ...emptyGrapesDefaults,
+      ...migrated,
       layout: undefined,
     }
   }

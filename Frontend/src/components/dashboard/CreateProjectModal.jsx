@@ -61,10 +61,10 @@ function CreateProjectModal({ isOpen, onClose }) {
                 }`}
               >
                 <div className="w-full h-16 rounded-md bg-bg-muted flex items-center justify-center text-2xl mb-2 overflow-hidden">
-                  {typeof template.thumbnail === 'string' && template.thumbnail.startsWith('http') ? (
-                    <img src={template.thumbnail} alt="" className="w-full h-full object-cover" />
+                  {typeof template.previewImage === 'string' && template.previewImage.startsWith('http') ? (
+                    <img src={template.previewImage} alt="" className="w-full h-full object-cover" />
                   ) : (
-                    template.thumbnail || '📄'
+                    template.previewImage || '📄'
                   )}
                 </div>
                 <p className="text-sm font-medium text-fg">{template.name}</p>

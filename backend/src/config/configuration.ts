@@ -1,4 +1,5 @@
 export interface DatabaseConfig {
+  type: string;
   host: string;
   port: number;
   username: string;
@@ -46,8 +47,9 @@ export default (): AppConfig => ({
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
   database: {
+    type: process.env.DB_TYPE || 'mysql',
     host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '3306', 10),
+    port: parseInt(process.env.DB_PORT || (process.env.DB_TYPE === 'postgres' ? '5432' : '3306'), 10),
     username: process.env.DB_USERNAME || 'root',
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE || 'templatecraft',

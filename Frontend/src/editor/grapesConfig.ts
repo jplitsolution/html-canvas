@@ -11,7 +11,7 @@ export function createGrapesConfig(container: HTMLElement): EditorConfig {
     noticeOnUnload: false,
     showOffsets: true,
     showStylesOnChange: true,
-    avoidInlineStyle: true,
+    avoidInlineStyle: false,
     mediaCondition: 'max-width',
     /** Use mousedown + ComponentSorter (not HTML5 drag). Native DnD breaks iframe drops. */
     nativeDnD: false,
