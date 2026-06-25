@@ -1,8 +1,7 @@
 import { create } from 'zustand'
-import { createProjectSlice } from './slices/projectSlice'
+import { createCampaignSlice } from './slices/campaignSlice'
 import { createUiSlice } from './slices/uiSlice'
 
-// Load initial metrics from local storage to avoid circular import issues
 const METRICS_KEY = 'templatecraft_metrics'
 const defaultMetrics = {
   projectsCreated: 0,
@@ -25,25 +24,20 @@ function getInitialMetrics() {
 const initialMetrics = getInitialMetrics()
 
 const useStore = create((set, get) => ({
-  // ✅ Merge existing slices
-  ...createProjectSlice(set, get),
+  ...createCampaignSlice(set, get),
   ...createUiSlice(set, get),
 
-  // ✅ Reactive Analytics State
   saveCount: initialMetrics.saveCount || 0,
   exports: initialMetrics.exports || 0,
   sessionTime: initialMetrics.sessionTime || 0,
-  
-  // ✅ Add logError without TypeScript types (plain JavaScript)
+
   logError: (componentName, error) => {
-    console.error(`[${componentName}] Error:`, error);
-    
-    // Add a toast notification for the user
-    const addToast = get().addToast;
+    console.error(`[${componentName}] Error:`, error)
+    const addToast = get().addToast
     if (typeof addToast === 'function') {
-      addToast('An error occurred. Please try again.', 'error');
+      addToast('An error occurred. Please try again.', 'error')
     }
   },
-}));
+}))
 
-export default useStore;
+export default useStore

@@ -4,7 +4,7 @@ This is the backend API for the Visual Builder and Dynamic Subscription Flow Eng
 
 ---
 
-## 🛠️ Tech Stack & Key Modules
+## Tech Stack & Key Modules
 - **Core**: NestJS + TypeScript
 - **Database**: PostgreSQL / MySQL + TypeORM Migrations
 - **Authentication**: Passport.js + JWT
@@ -13,24 +13,20 @@ This is the backend API for the Visual Builder and Dynamic Subscription Flow Eng
 
 ---
 
-## 🏗️ Architecture & Module Overview
+## Architecture & Module Overview
 
-- **Auth**: JWT Register / Login and profile authentication.
+- **Auth**: JWT register / login and profile authentication.
 - **Users**: User account entities.
-- **Projects**: Visual layouts management. Added indexable unique `slug` and billing `serviceId`.
+- **Campaigns**: Country + operator campaigns with per-page canvas templates (HOME, CONFIRM, THANKYOU, BLOCKED, ERROR) and partner API config.
+- **Flow**: Public runtime API — resolves campaign by country/operator, calls partner blocklist/subscribe APIs, and serves rendered HTML.
 - **Templates**: Reusable canvas layouts and system seeds.
-- **Pages**: Handles multi-page visual routing (`LOADING`, `PLAN`, `THANKYOU`, `BLOCKED`, `ERROR`).
-- **Blocklist**: Manages blocked telephone lists.
-- **Subscriptions**: Tracks user subscriptions status.
-- **API Config**: Holds custom integrations / headers JSON per project.
-- **Routing**: Determines flows (Blocklist ➔ Subscription ➔ Plan/Subscribe flow).
-- **Variable Engine**: Render placeholders like `{{phone}}`, `{{country}}`, `{{operator}}` dynamically inside HTML.
-- **Publish**: Public endpoints for resolving slug-based campaigns and subscribing.
-- **Analytics**: Captures Visits and VisitEvents to calculate conversion rates.
+- **Variable Engine**: Renders placeholders like `{{phone}}`, `{{country}}`, `{{operator}}` dynamically inside HTML.
+- **Analytics**: Captures visits and visit events per campaign to calculate conversion rates.
+- **Upload**: Image upload for canvas assets.
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
 Copy `.env.example` to `.env` and configure:
 
@@ -54,7 +50,7 @@ JWT_EXPIRATION=24h
 
 ---
 
-## 🚀 Installation & Running
+## Installation & Running
 
 ```bash
 # Install dependencies
@@ -63,38 +59,48 @@ $ npm install
 # Start database container
 $ docker-compose up -d
 
-# Initialize database
+# Create database (first time)
 $ npm run db:setup
 
-# Run migrations (automatically executes on application startup as well)
+# Fresh install / after schema changes — drops and recreates the database
+$ npm run db:reset
+
+# Migrations run automatically on startup (single file: InitialSchema)
 $ npm run start:dev
 ```
 
 ---
 
-## 🧪 Running Tests
+## Running Tests
 
 ```bash
-# Run unit tests (including the new engine tests)
+# Unit tests
 $ npm run test
+
+# End-to-end API smoke test (server must be running)
+$ node scripts/test-apis.mjs
 ```
 
 ---
 
-## 🔄 Core Flows
+## Core Flows
 
-### 1. Routing Flow
-Checks blocklist and active subscriptions to serve the correct layout:
-`Incoming Traffic` ➔ `Blocklist Verification` ➔ `Active Subscription Check` ➔ `Plan Confirmation`.
+### 1. Admin — Campaign Setup
+1. Create a campaign with `country`, `operator`, and `serviceId`.
+2. Apply default funnel pages or edit each page in the canvas editor.
+3. Configure partner API URLs on the campaign (`blocklistApi`, `subscribeApi`, etc.).
+4. Activate the campaign.
 
-### 2. Publish Flow
-`GET /api/p/:slug?msisdn=919876543210&country=IN&operator=airtel`
-- Resolves appropriate page type (e.g. `PLAN`, `BLOCKED`, `THANKYOU`).
-- Replaces HTML layout variables in real-time.
-- Creates a visit log.
+### 2. Public — Subscription Flow
+`GET /api/flow/page?country=India&operator=Zain&page=HOME&msisdn=919876543210`
 
-### 3. Subscribe Flow
-`POST /api/public/subscribe`
-- Logs user click action.
-- Dispatches authorization or billing request to Partner APIs.
-- Updates visit funnel status and records subscription.
+Resolves the active campaign, calls partner APIs as needed, and returns rendered HTML for the requested funnel step.
+
+`POST /api/flow/transition`
+
+Handles button actions (`data-action` in template HTML) such as confirm subscribe, advancing the funnel.
+
+### 3. Analytics
+`GET /api/analytics/campaign/:campaignId`
+
+Returns visit counts, blocked/subscribed users, and conversion rate for a campaign.

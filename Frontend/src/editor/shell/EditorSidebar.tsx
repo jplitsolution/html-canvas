@@ -10,7 +10,9 @@ import {
   Type,
   Upload,
   X,
+  Code2,
 } from 'lucide-react'
+import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
 import { STARTER_TEMPLATES } from '../templates/starterTemplates'
@@ -22,11 +24,12 @@ import { insertImageComponent } from '../utils/insertImage'
 import { insertBackgroundWithText } from '../utils/insertBackground'
 import { uploadImage } from '../../services/api/upload'
 
-type SidebarTab = 'templates' | 'components' | 'sections' | 'assets' | 'pages' | 'layers'
+type SidebarTab = 'templates' | 'components' | 'sections' | 'assets' | 'pages' | 'layers' | 'html'
 
 const TABS: { id: SidebarTab; label: string; icon: typeof Boxes }[] = [
   { id: 'templates', label: 'Templates', icon: LayoutTemplate },
   { id: 'components', label: 'Components', icon: Boxes },
+  { id: 'html', label: 'HTML', icon: Code2 },
   { id: 'sections', label: 'Sections', icon: Layers3 },
   { id: 'assets', label: 'Assets', icon: ImageIcon },
   { id: 'pages', label: 'Pages', icon: FileStack },
@@ -221,6 +224,7 @@ export function EditorSidebar() {
   )
 
   const showBlocks = tab === 'sections' || tab === 'components'
+  const showHtml = tab === 'html'
 
   return (
     <aside className="tc-sidebar w-72 shrink-0 flex flex-col border-r border-border bg-bg-elevated min-h-0">
@@ -264,7 +268,7 @@ export function EditorSidebar() {
         className={`tc-blocks-mount flex-1 min-h-0 overflow-y-auto px-3 pb-3 ${showBlocks ? '' : 'hidden'}`}
       />
 
-      <div className={`flex-1 min-h-0 overflow-y-auto p-3 ${showBlocks ? 'hidden' : ''}`}>
+      <div className={`flex-1 min-h-0 overflow-hidden p-3 flex flex-col ${showBlocks || showHtml ? 'hidden' : ''}`}>
         {tab === 'templates' && (
           <div className="grid grid-cols-1 gap-3">
             {STARTER_TEMPLATES.map((t) => (
@@ -465,6 +469,12 @@ export function EditorSidebar() {
             </button>
           </div>
         )}
+      </div>
+
+      <div
+        className={`flex-1 min-h-0 overflow-hidden px-3 pb-3 ${showHtml ? '' : 'hidden'}`}
+      >
+        <RawHtmlPanel editor={editor} active={showHtml} />
       </div>
 
       <div

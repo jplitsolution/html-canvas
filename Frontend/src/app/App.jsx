@@ -5,13 +5,12 @@ import ToastContainer from '../components/common/Toast'
 import ScreenReaderAnnouncer from '../components/common/ScreenReaderAnnouncer'
 import AuthProvider from '../context/AuthContext'
 import { ThemeProvider } from '../context/ThemeContext'
-import DashboardPage from '../pages/DashboardPage'
-import Templates from '../pages/Templates'
-import Builder from '../pages/Builder'
-import Preview from '../pages/Preview'
+import RequireAuth from '../components/auth/RequireAuth'
 import LoginPage from '../pages/LoginPage'
-
-import ImageContainer from '../components/common/ImageContainer'
+import CampaignsPage from '../pages/CampaignsPage'
+import CampaignDetailPage from '../pages/CampaignDetailPage'
+import CampaignBuilder from '../pages/CampaignBuilder'
+import SubscriptionPage from '../pages/SubscriptionPage'
 
 function App() {
   useEffect(() => {
@@ -34,17 +33,27 @@ function App() {
           </a>
           <main id="main-content">
             <Routes>
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/templates" element={<Templates />} />
-              <Route path="/builder/:id" element={<Builder />} />
-              <Route path="/preview/:id" element={<Preview />} />
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/canvas-demo" element={
-                <div className="min-h-screen bg-slate-950 py-10">
-                  <ImageContainer />
-                </div>
-              } />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route
+                path="/campaigns/:id"
+                element={
+                  <RequireAuth>
+                    <CampaignDetailPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/campaigns/:id/edit/:pageType"
+                element={
+                  <RequireAuth>
+                    <CampaignBuilder />
+                  </RequireAuth>
+                }
+              />
+              <Route path="/subscription" element={<SubscriptionPage />} />
+              <Route path="/" element={<Navigate to="/campaigns" replace />} />
+              <Route path="*" element={<Navigate to="/campaigns" replace />} />
             </Routes>
           </main>
           <ToastContainer />

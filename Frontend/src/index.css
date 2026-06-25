@@ -624,3 +624,45 @@ html.dark .cursor-glow-element {
   transition: width 0.2s ease;
 }
 
+/* Subscription funnel page transitions */
+.flow-runtime-root {
+  background: #f8fafc;
+}
+
+.flow-runtime-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 60;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flow-runtime-progress::after {
+  content: '';
+  display: block;
+  height: 100%;
+  width: 35%;
+  background: linear-gradient(90deg, #7c4dff, #00e5ff);
+  animation: flowProgress 0.9s ease-in-out infinite;
+}
+
+@keyframes flowProgress {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(320%); }
+}
+
+.flow-runtime-host {
+  display: block;
+  width: 100%;
+  min-height: 100vh;
+}
+
+.reduce-motion .flow-runtime-progress::after {
+  animation: none;
+  width: 100%;
+  transform: none;
+}
+

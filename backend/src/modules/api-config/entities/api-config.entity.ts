@@ -4,11 +4,8 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
-  OneToOne,
-  JoinColumn,
   Index,
 } from 'typeorm';
-import { Project } from '../../projects/entities/project.entity';
 
 @Entity('api_configs')
 export class ApiConfig {
@@ -16,12 +13,8 @@ export class ApiConfig {
   id: number;
 
   @Index({ unique: true })
-  @Column({ name: 'project_id' })
-  projectId: number;
-
-  @OneToOne(() => Project, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'project_id' })
-  project: Project;
+  @Column({ name: 'campaign_id' })
+  campaignId: number;
 
   @Column({ name: 'user_api', nullable: true })
   userApi?: string;

@@ -163,7 +163,7 @@ export function injectStylesheetsIntoCanvas(editor: Editor): void {
 }
 
 /**
- * Validates whether the document head contains Google Fonts, Tailwind, and Icon libraries.
+ * Validates whether the document head contains Google Fonts and icon libraries.
  * Returns a list of missing resource descriptions.
  */
 export function validateStylesheets(doc: Document): string[] {
@@ -178,13 +178,9 @@ export function validateStylesheets(doc: Document): string[] {
     missing.push('Google Fonts (Inter/Outfit/Plus Jakarta Sans)');
   }
 
-  // Tailwind CSS Check
-  const hasTailwind = htmlContent.includes('tailwind') ||
-                      Array.from(doc.querySelectorAll('link')).some(l => l.href && (l.href.includes('tailwind') || l.href.includes('index.css') || l.href.includes('globals.css'))) ||
-                      Array.from(doc.querySelectorAll('style')).some(s => s.innerHTML.includes('tailwind') || s.innerHTML.includes('--tw-') || s.innerHTML.includes('tailwindcss'));
-  if (!hasTailwind) {
-    missing.push('Tailwind CSS');
-  }
+  // Tailwind is bundled into the host app (Vite + @import "tailwindcss") but is intentionally
+  // NOT copied into the GrapesJS canvas iframe — preflight resets break inline-styled templates.
+  // Campaign funnel pages use inline styles, so skip this check on the canvas document.
 
   // Icon Library Check (Tabler / FontAwesome)
   const hasIcons = htmlContent.includes('tabler-icons') || htmlContent.includes('font-awesome') || htmlContent.includes('fontawesome') ||

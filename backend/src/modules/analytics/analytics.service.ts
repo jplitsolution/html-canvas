@@ -3,8 +3,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Visit, VisitStatus } from './entities/visit.entity';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
-import { ProjectAnalyticsDto } from './dto/project-analytics.dto';
-import { ProjectsService } from '../projects/projects.service';
+import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
+import { CampaignsService } from '../campaigns/campaigns.service';
 
 @Injectable()
 export class AnalyticsService {
@@ -13,16 +13,13 @@ export class AnalyticsService {
     private readonly visitRepository: Repository<Visit>,
     @InjectRepository(VisitEvent)
     private readonly visitEventRepository: Repository<VisitEvent>,
-    private readonly projectsService: ProjectsService,
+    private readonly campaignsService: CampaignsService,
   ) {}
 
   async createVisit(data: Partial<Visit>): Promise<Visit> {
     const visit = this.visitRepository.create(data);
     const saved = await this.visitRepository.save(visit);
-    
-    // Log the initial visit event
     await this.logEvent(saved.id, VisitEventType.VISIT);
-    
     return saved;
   }
 
@@ -47,32 +44,27 @@ export class AnalyticsService {
     return this.visitEventRepository.save(event);
   }
 
-  async getProjectAnalytics(projectId: number, userId: number): Promise<ProjectAnalyticsDto> {
-    // Validate project ownership
-    await this.projectsService.findOne(projectId, userId);
+  async getCampaignAnalytics(campaignId: number, userId: number): Promise<CampaignAnalyticsDto> {
+    await this.campaignsService.findOne(campaignId, userId);
 
-    const totalVisits = await this.visitRepository.count({ where: { projectId } });
-
-    // Status aggregates
+    const totalVisits = await this.visitRepository.count({ where: { campaignId } });
     const blockedUsers = await this.visitRepository.count({
-      where: { projectId, visitStatus: VisitStatus.BLOCKED },
+      where: { campaignId, visitStatus: VisitStatus.BLOCKED },
     });
-
     const subscribedUsers = await this.visitRepository.count({
-      where: { projectId, visitStatus: VisitStatus.SUBSCRIBED },
+      where: { campaignId, visitStatus: VisitStatus.SUBSCRIBED },
     });
-
     const successfulSubscriptions = await this.visitRepository.count({
-      where: { projectId, visitStatus: VisitStatus.SUCCESS },
+      where: { campaignId, visitStatus: VisitStatus.SUCCESS },
     });
-
     const failedSubscriptions = await this.visitRepository.count({
-      where: { projectId, visitStatus: VisitStatus.FAILED },
+      where: { campaignId, visitStatus: VisitStatus.FAILED },
     });
 
-    const conversionRate = totalVisits > 0 
-      ? parseFloat(((successfulSubscriptions / totalVisits) * 100).toFixed(2))
-      : 0;
+    const conversionRate =
+      totalVisits > 0
+        ? parseFloat(((successfulSubscriptions / totalVisits) * 100).toFixed(2))
+        : 0;
 
     return {
       totalVisits,

@@ -7,17 +7,15 @@ import ThemeToggle from '../common/ThemeToggle'
 import Button from './Button'
 import IconButton from './IconButton'
 
-const navLinks = [
-  { to: '/dashboard', label: 'Projects' },
-  { to: '/templates', label: 'Templates' },
-]
+const navLinks = [{ to: '/campaigns', label: 'Campaigns' }]
 
-function AppShell({ title, children, actions }) {
+function AppShell({ title, children, actions, immersive = false }) {
   const location = useLocation()
   const navigate = useNavigate()
   const { isAuthenticated, user } = useAuth()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const navRef = useRef(null)
+  const isLoginPage = location.pathname === '/login'
 
   useEffect(() => {
     setMobileNavOpen(false)
@@ -39,11 +37,15 @@ function AppShell({ title, children, actions }) {
   }
 
   return (
-    <div className="min-h-screen flex flex-col safe-top bg-bg-base text-fg">
-      <header className="sticky top-0 z-40 glass border-b border-border">
+    <div className={`min-h-screen flex flex-col safe-top text-fg ${immersive ? 'bg-transparent' : 'bg-bg-base'}`}>
+      <header
+        className={`sticky top-0 z-40 border-b border-border ${
+          immersive ? 'bg-bg-base/80 backdrop-blur-md' : 'glass'
+        }`}
+      >
         <div className="shell-header-inner">
           <div className="flex items-center gap-3 sm:gap-6 min-w-0">
-            <Link to="/dashboard" className="flex items-center gap-2.5 shrink-0 group">
+            <Link to="/campaigns" className="flex items-center gap-2.5 shrink-0 group">
               <div className="p-1.5 rounded-md bg-gradient-to-r from-[#7C4DFF] to-[#00E5FF] text-white shadow-[0_0_12px_rgba(0,229,255,0.3)] transition-all duration-200 group-hover:scale-105">
                 <LayoutTemplate className="w-4.5 h-4.5" />
               </div>
@@ -53,7 +55,8 @@ function AppShell({ title, children, actions }) {
             </Link>
             <nav className="hidden md:flex items-center gap-1" aria-label="Main navigation">
               {navLinks.map(({ to, label }) => {
-                const active = location.pathname === to
+                const active =
+                  location.pathname === to || location.pathname.startsWith(`${to}/`)
                 return (
                   <Link
                     key={to}
@@ -92,12 +95,12 @@ function AppShell({ title, children, actions }) {
                   <span className="hidden sm:inline">Logout</span>
                 </Button>
               </>
-            ) : (
+            ) : !isLoginPage ? (
               <Button variant="outline" size="sm" onClick={() => navigate('/login')}>
                 <LogIn className="w-4 h-4" />
                 <span className="hidden sm:inline">Sign in</span>
               </Button>
-            )}
+            ) : null}
             <ThemeToggle />
             <div className="relative md:hidden" ref={navRef}>
               <IconButton
@@ -110,7 +113,8 @@ function AppShell({ title, children, actions }) {
               {mobileNavOpen && (
                 <div className="absolute right-0 top-full mt-1 w-56 py-2 bg-bg-elevated border border-border rounded-lg shadow-lg z-50 animate-fade-in">
                   {navLinks.map(({ to, label }) => {
-                    const active = location.pathname === to
+                    const active =
+                      location.pathname === to || location.pathname.startsWith(`${to}/`)
                     return (
                       <Link
                         key={to}

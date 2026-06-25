@@ -14,6 +14,8 @@ export enum VisitStatus {
   BLOCKED = 'BLOCKED',
   SUBSCRIBED = 'SUBSCRIBED',
   PLAN_SHOWN = 'PLAN_SHOWN',
+  HOME_SHOWN = 'HOME_SHOWN',
+  CONFIRM_SHOWN = 'CONFIRM_SHOWN',
   SUCCESS = 'SUCCESS',
   FAILED = 'FAILED',
 }
@@ -24,8 +26,8 @@ export class Visit {
   id: number;
 
   @Index()
-  @Column({ name: 'project_id' })
-  projectId: number;
+  @Column({ name: 'campaign_id', nullable: true })
+  campaignId?: number;
 
   @Column({ nullable: true })
   phone?: string;

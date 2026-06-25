@@ -4,13 +4,10 @@ import { Visit } from './entities/visit.entity';
 import { VisitEvent } from './entities/visit-event.entity';
 import { AnalyticsService } from './analytics.service';
 import { AnalyticsController } from './analytics.controller';
-import { ProjectsModule } from '../projects/projects.module';
+import { CampaignsModule } from '../campaigns/campaigns.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Visit, VisitEvent]),
-    ProjectsModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Visit, VisitEvent]), CampaignsModule],
   controllers: [AnalyticsController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],

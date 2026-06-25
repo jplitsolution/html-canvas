@@ -6,30 +6,21 @@ import configuration from './config/configuration';
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UploadModule } from './modules/upload/upload.module';
-import { ProjectsModule } from './modules/projects/projects.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { DatabaseModule } from './database/database.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-
-// New Features Modules
-import { PagesModule } from './modules/pages/pages.module';
-import { BlocklistModule } from './modules/blocklist/blocklist.module';
-import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
-import { ApiConfigModule } from './modules/api-config/api-config.module';
-import { RoutingModule } from './modules/routing/routing.module';
-import { PublishModule } from './modules/publish/publish.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { FlowModule } from './modules/flow/flow.module';
 
 @Module({
   imports: [
-    // Configuration
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
     }),
 
-    // Database Integration (TypeORM dynamic dialect support)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -41,28 +32,20 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
         password: configService.get<string>('database.password'),
         database: configService.get<string>('database.database'),
         autoLoadEntities: true,
-        synchronize: false, // synchronize disabled for production readiness / migrations
+        synchronize: false,
         migrations: [join(__dirname, 'database/migrations/*{.ts,.js}')],
-        migrationsRun: true, // auto-run migrations on application start
+        migrationsRun: true,
       }),
     }),
 
-    // Features Modules
     UsersModule,
     AuthModule,
     UploadModule,
-    ProjectsModule,
     TemplatesModule,
     DatabaseModule,
-    
-    // New Feature Modules Registered
-    PagesModule,
-    BlocklistModule,
-    SubscriptionsModule,
-    ApiConfigModule,
-    RoutingModule,
-    PublishModule,
     AnalyticsModule,
+    CampaignsModule,
+    FlowModule,
   ],
   controllers: [AppController],
   providers: [AppService],

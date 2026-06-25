@@ -15,6 +15,13 @@ export interface SavedTemplatePayload {
   activePageFilename?: string
 }
 
+export interface SaveTemplateMeta {
+  id: string
+  name: string
+  createdAt?: string
+  metadata?: { tags: string[]; description: string }
+}
+
 export interface TemplateEditorProps {
   projectId: string
   projectTitle: string
@@ -24,6 +31,7 @@ export interface TemplateEditorProps {
   onSave?: (saved: unknown) => void
   onDirtyChange?: (dirty: boolean) => void
   onPreview?: (payload: SavedTemplatePayload) => void
+  saveHandler?: (editor: import('grapesjs').Editor, meta: SaveTemplateMeta) => Promise<unknown>
 }
 
 export interface ToolbarCallbacks {

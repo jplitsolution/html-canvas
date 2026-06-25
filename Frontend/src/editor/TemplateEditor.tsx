@@ -18,7 +18,7 @@ import {
   type DragDebugState,
 } from './plugins/dragAndDrop'
 import { loadIntoEditor } from './services/loadTemplate'
-import { saveTemplate, getTemplatePayload } from './services/saveTemplate'
+import { getTemplatePayload } from './services/saveTemplate'
 import { exportAllPagesFromEditor, exportCurrentPageFromEditor } from './services/exportSite'
 import { EditorProvider } from './context/EditorContext'
 import { EditorShell } from './shell/EditorShell'
@@ -37,6 +37,7 @@ export default function TemplateEditor({
   onSave,
   onDirtyChange,
   onPreview,
+  saveHandler,
 }: TemplateEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const editorRef = useRef<GrapesEditor | null>(null)
@@ -66,19 +67,24 @@ export default function TemplateEditor({
 
   const refreshSelection = useCallback(() => setSelectionVersion((v) => v + 1), [])
 
-  const callbacksRef = useRef({ onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle })
+  const callbacksRef = useRef({ onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler })
   useEffect(() => {
-    callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle }
-  }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle])
+    callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler }
+  }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler])
 
   const handleSave = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
     setSaving(true)
     try {
-      const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb } =
+      const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb, saveHandler: customSave } =
         callbacksRef.current
-      const saved = await saveTemplate(ed, { id, name, createdAt, metadata })
+      const meta = { id, name, createdAt, metadata }
+      if (!customSave) {
+        useStore.getState().addToast('Save handler not configured', 'error')
+        return
+      }
+      const saved = await customSave(ed, meta)
       dirtyCb?.(false)
       setIsDirty(false)
       saveCb?.(saved)

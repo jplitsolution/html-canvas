@@ -75,9 +75,9 @@ export function EditorToolbar({
     <header className="tc-toolbar shrink-0 h-14 flex items-center gap-2 px-3 border-b border-border bg-bg-elevated/95 backdrop-blur-sm">
       <button
         type="button"
-        onClick={() => navigate('/dashboard')}
+        onClick={() => navigate('/campaigns')}
         className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
-        title="Back to dashboard"
+        title="Back to campaigns"
       >
         <ArrowLeft className="w-4 h-4" />
       </button>
