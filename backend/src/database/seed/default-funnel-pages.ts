@@ -195,6 +195,42 @@ const defaultPages: Record<CampaignPageType, { html: string; css: string }> = {
     `),
   },
 
+  [CampaignPageType.OTP]: {
+    css: sharedCss,
+    html: wrapPage(
+      `
+      <div style="padding:32px 28px 28px;text-align:center;">
+        <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:24px;">🔐</div>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:800;color:#0f172a;">Verify Mobile Number</h1>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#64748b;">
+          We couldn't detect your number automatically. Enter it to continue.
+        </p>
+
+        <div style="text-align:left;margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
+          <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210"
+            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+        </div>
+
+        <button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Get OTP</button>
+
+        <div style="text-align:left;margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">OTP</label>
+          <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP"
+            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+        </div>
+
+        <div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>
+        <div data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>
+
+        <button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>
+        <p class="flow-footnote">You'll receive a one-time code via SMS (dev: returned in response).</p>
+      </div>
+    `,
+      '#6366f1',
+    ),
+  },
+
   [CampaignPageType.THANKYOU]: {
     css: sharedCss,
     html: wrapPage(

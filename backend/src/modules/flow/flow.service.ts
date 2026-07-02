@@ -174,25 +174,23 @@ export class FlowService {
 
     if (input.fromPage === CampaignPageType.HOME && input.action === 'SUBSCRIBE') {
       await this.analyticsService.logEvent(input.visitId, VisitEventType.SUBSCRIBE_CLICK);
+      const nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
       await this.analyticsService.updateVisit(
         input.visitId,
-        VisitStatus.CONFIRM_SHOWN,
-        CampaignPageType.CONFIRM,
+        nextPage === CampaignPageType.CONFIRM ? VisitStatus.CONFIRM_SHOWN : VisitStatus.HOME_SHOWN,
+        nextPage,
       );
-      await this.analyticsService.logEvent(input.visitId, VisitEventType.CONFIRM_VIEW);
-      const confirmVariables = {
+      if (nextPage === CampaignPageType.CONFIRM) {
+        await this.analyticsService.logEvent(input.visitId, VisitEventType.CONFIRM_VIEW);
+      }
+      const variables = {
         phone,
         country: campaign.country,
         operator: campaign.operator,
         service_id: serviceId,
         plan: '',
       };
-      return this.buildPageResponse(
-        campaign,
-        CampaignPageType.CONFIRM,
-        confirmVariables,
-        input.visitId,
-      );
+      return this.buildPageResponse(campaign, nextPage, variables, input.visitId);
     }
 
     if (input.fromPage === CampaignPageType.CONFIRM && input.action === 'CONFIRM') {
@@ -200,7 +198,7 @@ export class FlowService {
         throw new BadRequestException('Please select a subscription pack');
       }
       const selectedPack = this.normalizePack(input.planId);
-      const subscriptionUrl = this.buildSubscriptionUrl(campaign, phone, selectedPack);
+      const subscriptionUrl = this.buildSubscriptionUrl(campaign, selectedPack);
       const confirmVariables = {
         phone,
         country: campaign.country,
@@ -319,6 +317,7 @@ export class FlowService {
 
   private getActions(pageType: CampaignPageType): string[] {
     if (pageType === CampaignPageType.HOME) return ['SUBSCRIBE'];
+    if (pageType === CampaignPageType.OTP) return ['OTP_SEND', 'OTP_VERIFY'];
     if (pageType === CampaignPageType.CONFIRM) return ['CONFIRM'];
     return [];
   }
@@ -338,7 +337,6 @@ export class FlowService {
 
   private buildSubscriptionUrl(
     campaign: { country: string; operator: string },
-    phone: string,
     pack: string,
   ): string {
     const params = new URLSearchParams({
@@ -346,7 +344,6 @@ export class FlowService {
       operator: campaign.operator,
       pack,
     });
-    if (phone) params.set('msisdn', phone);
     return `/subscription?${params.toString()}`;
   }
 
@@ -368,7 +365,7 @@ export class FlowService {
     const resolvedSubscriptionUrl =
       subscriptionUrl ||
       (resolvedPack
-        ? this.buildSubscriptionUrl(campaign!, variables.phone || '', resolvedPack)
+        ? this.buildSubscriptionUrl(campaign!, resolvedPack)
         : undefined);
     return {
       campaignId: campaign!.id,

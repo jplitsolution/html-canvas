@@ -12,11 +12,18 @@ export class FlowController {
   @Get('page')
   @ApiOperation({ summary: 'Resolve campaign page by country, operator, and step' })
   async getPage(@Query() query: GetFlowPageQueryDto, @Req() req: any) {
+    const headerMsisdn =
+      (req.headers['x-msisdn'] as string) ||
+      (req.headers['x-msisdn-number'] as string) ||
+      (req.headers['msisdn'] as string) ||
+      '';
     return this.flowService.getPage({
       country: query.country,
       operator: query.operator,
       pageType: query.page as CampaignPageType,
-      phone: query.msisdn,
+      // Prefer operator / proxy-injected MSISDN header over query params.
+      // Query param is kept only for backward compatibility / local testing.
+      phone: headerMsisdn || query.msisdn,
       visitId: query.visitId ? Number(query.visitId) : undefined,
       pack: query.pack,
       ipAddress:

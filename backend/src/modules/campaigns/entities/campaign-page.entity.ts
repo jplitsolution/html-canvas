@@ -14,6 +14,7 @@ import { Template } from '../../templates/entities/template.entity';
 export enum CampaignPageType {
   HOME = 'HOME',
   CONFIRM = 'CONFIRM',
+  OTP = 'OTP',
   THANKYOU = 'THANKYOU',
   BLOCKED = 'BLOCKED',
   ERROR = 'ERROR',
@@ -22,12 +23,14 @@ export enum CampaignPageType {
 export const REQUIRED_CAMPAIGN_PAGE_TYPES: CampaignPageType[] = [
   CampaignPageType.HOME,
   CampaignPageType.CONFIRM,
+  CampaignPageType.OTP,
   CampaignPageType.THANKYOU,
 ];
 
 export const ALL_CAMPAIGN_PAGE_TYPES: CampaignPageType[] = [
   CampaignPageType.HOME,
   CampaignPageType.CONFIRM,
+  CampaignPageType.OTP,
   CampaignPageType.THANKYOU,
   CampaignPageType.BLOCKED,
   CampaignPageType.ERROR,

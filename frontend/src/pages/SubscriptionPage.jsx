@@ -257,18 +257,11 @@ function SubscriptionPage() {
       setTransitioning(true)
       setError('')
 
-      const optimisticPage =
-        fromPage === 'HOME' && action === 'SUBSCRIBE'
-          ? pageCacheRef.current.get('CONFIRM')
-          : null
+      // Avoid optimistic page swaps here.
+      // Backend may decide OTP is required even when CONFIRM is prefetched, which causes
+      // a brief CONFIRM->OTP flash. Better UX: keep current page + show progress until response.
 
-      if (optimisticPage) {
-        selectedPackRef.current = 'daily'
-        cachePage({ ...optimisticPage, visitId: visitIdRef.current })
-      }
-
-      const planId =
-        fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined
+      const planId = fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined
 
       try {
         const next = await transitionFlow({
@@ -285,9 +278,6 @@ function SubscriptionPage() {
           selectedPackRef.current = 'daily'
         }
       } catch (err) {
-        if (optimisticPage && currentPage) {
-          cachePage(currentPage)
-        }
         setError(err.message || 'Action failed')
       } finally {
         setTransitioning(false)

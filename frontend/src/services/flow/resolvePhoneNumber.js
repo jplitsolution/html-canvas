@@ -82,10 +82,9 @@ async function resolveCustomHook() {
 }
 
 function resolveDevFallback() {
-  if (!import.meta.env.DEV || typeof window === 'undefined') return ''
-  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-    return '919876543210'
-  }
+  // Keep URLs clean and ensure the OTP gate appears when MSISDN
+  // isn't truly available. If you need a dev override, pass it
+  // explicitly via URL (?msisdn=...) or storage.
   return ''
 }
 

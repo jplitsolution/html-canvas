@@ -13,6 +13,7 @@ import { AppService } from './app.service';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { FlowModule } from './modules/flow/flow.module';
+import { OtpModule } from './modules/otp/otp.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { FlowModule } from './modules/flow/flow.module';
     AnalyticsModule,
     CampaignsModule,
     FlowModule,
+    OtpModule,
   ],
   controllers: [AppController],
   providers: [AppService],

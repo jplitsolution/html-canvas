@@ -1,16 +1,17 @@
 import { apiClient } from './client'
 
-export const PAGE_TYPES = ['HOME', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+export const PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
 
 export const PAGE_TYPE_LABELS = {
   HOME: 'Home',
+  OTP: 'OTP',
   CONFIRM: 'Confirm',
   THANKYOU: 'Thank you',
   BLOCKED: 'Blocked',
   ERROR: 'Error',
 }
 
-export const REQUIRED_PAGE_TYPES = ['HOME', 'CONFIRM', 'THANKYOU']
+export const REQUIRED_PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU']
 
 function mapCampaign(campaign) {
   if (!campaign) return null

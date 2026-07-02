@@ -63,7 +63,10 @@ export default function TemplateEditor({
     isOverCanvas: false,
   })
 
-  console.log('[TemplateEditor] Rendering. isEmpty:', isEmpty, 'dragDebugState:', dragDebug.editorState)
+  if (import.meta.env.DEV) {
+    // Keep logs dev-only; the editor renders frequently during drag/selection.
+    console.log('[TemplateEditor] Rendering. isEmpty:', isEmpty, 'dragDebugState:', dragDebug.editorState)
+  }
 
   const refreshSelection = useCallback(() => setSelectionVersion((v) => v + 1), [])
 
@@ -120,13 +123,15 @@ export default function TemplateEditor({
   }, [])
 
   useEffect(() => {
-    console.log('[TemplateEditor] useEffect triggered for projectId:', projectId)
+    if (import.meta.env.DEV) console.log('[TemplateEditor] useEffect triggered for projectId:', projectId)
     if (!containerRef.current || initializedRef.current) {
-      console.log('[TemplateEditor] useEffect skip. Already initialized:', initializedRef.current)
+      if (import.meta.env.DEV) {
+        console.log('[TemplateEditor] useEffect skip. Already initialized:', initializedRef.current)
+      }
       return
     }
 
-    console.log('[TemplateEditor] Initializing GrapesJS...')
+    if (import.meta.env.DEV) console.log('[TemplateEditor] Initializing GrapesJS...')
     initializedRef.current = true
     let mounted = true
 
@@ -365,7 +370,7 @@ export default function TemplateEditor({
     cleanupExperienceRef.current = setupEditorExperience(ed, { onSave: handleSave })
 
     return () => {
-      console.log('[TemplateEditor] useEffect cleanup: destroying GrapesJS...')
+      if (import.meta.env.DEV) console.log('[TemplateEditor] useEffect cleanup: destroying GrapesJS...')
       mounted = false
       initializedRef.current = false
       cleanupExperienceRef.current?.()

@@ -6,6 +6,8 @@ export function createCampaignSlice(set, get) {
     campaignsLoading: false,
     campaign: null,
     campaignPage: null,
+    campaignLoadingId: null,
+    campaignPageLoadingKey: null,
 
     fetchCampaigns: async () => {
       set({ campaignsLoading: true })
@@ -19,26 +21,41 @@ export function createCampaignSlice(set, get) {
     },
 
     loadCampaign: async (id) => {
-      set({ loading: true, error: null })
+      const current = get().campaign
+      if (current?.id === String(id) && !get().error) return current
+
+      if (get().campaignLoadingId === String(id) && get().loading) {
+        return get().campaign
+      }
+
+      set({ loading: true, error: null, campaignLoadingId: String(id) })
       try {
         const campaign = await campaignsApi.getCampaign(id)
-        set({ campaign, loading: false })
+        set({ campaign, loading: false, campaignLoadingId: null })
         return campaign
       } catch (err) {
-        set({ loading: false, error: err.message })
+        set({ loading: false, error: err.message, campaignLoadingId: null })
         get().addToast(err.message || 'Failed to load campaign', 'error')
         throw err
       }
     },
 
     loadCampaignPage: async (campaignId, pageType) => {
-      set({ loading: true, error: null })
+      const key = `${String(campaignId)}|${String(pageType)}`
+      const current = get().campaignPage
+      if (current?.pageType === pageType && !get().error) return current
+
+      if (get().campaignPageLoadingKey === key && get().loading) {
+        return get().campaignPage
+      }
+
+      set({ loading: true, error: null, campaignPageLoadingKey: key })
       try {
         const page = await campaignsApi.getCampaignPage(campaignId, pageType)
-        set({ campaignPage: page, loading: false })
+        set({ campaignPage: page, loading: false, campaignPageLoadingKey: null })
         return page
       } catch (err) {
-        set({ loading: false, error: err.message })
+        set({ loading: false, error: err.message, campaignPageLoadingKey: null })
         get().addToast(err.message || 'Failed to load page', 'error')
         throw err
       }
