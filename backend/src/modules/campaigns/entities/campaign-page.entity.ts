@@ -45,7 +45,9 @@ export class CampaignPage {
   @Column({ name: 'campaign_id' })
   campaignId: number;
 
-  @ManyToOne(() => Campaign, (campaign) => campaign.pages, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Campaign, (campaign) => campaign.pages, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'campaign_id' })
   campaign: Campaign;
 

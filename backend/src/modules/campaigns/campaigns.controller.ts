@@ -16,7 +16,10 @@ import {
   ApiBearerAuth,
 } from '@nestjs/swagger';
 import { CampaignsService } from './campaigns.service';
-import { CreateCampaignDto, UpdateCampaignDto } from './dto/create-campaign.dto';
+import {
+  CreateCampaignDto,
+  UpdateCampaignDto,
+} from './dto/create-campaign.dto';
 import { UpdateCampaignPageDto } from './dto/update-campaign-page.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -44,7 +47,10 @@ export class CampaignsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get campaign details with pages' })
-  async findOne(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
     return this.campaignsService.findOne(id, user.id);
   }
 
@@ -60,14 +66,20 @@ export class CampaignsController {
 
   @Delete(':id')
   @ApiOperation({ summary: 'Delete a campaign' })
-  async remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  async remove(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
     await this.campaignsService.remove(id, user.id);
     return { message: 'Campaign deleted successfully' };
   }
 
   @Post(':id/apply-defaults')
   @ApiOperation({ summary: 'Apply default funnel templates to campaign pages' })
-  async applyDefaults(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  async applyDefaults(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
     return this.campaignsService.applyDefaultTemplates(id, user.id, true);
   }
 
@@ -94,7 +106,10 @@ export class CampaignsController {
 
   @Get(':id/api-config')
   @ApiOperation({ summary: 'Get partner API configuration for a campaign' })
-  async getApiConfig(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: User) {
+  async getApiConfig(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
     const config = await this.campaignsService.getApiConfig(id, user.id);
     return config || {};
   }
@@ -106,6 +121,6 @@ export class CampaignsController {
     @Body() body: Record<string, unknown>,
     @CurrentUser() user: User,
   ) {
-    return this.campaignsService.upsertApiConfig(id, body as any, user.id);
+    return this.campaignsService.upsertApiConfig(id, body, user.id);
   }
 }

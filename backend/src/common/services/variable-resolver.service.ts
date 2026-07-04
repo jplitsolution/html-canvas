@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 
 @Injectable()
 export class VariableResolverService {
-  replaceVariables(html: string, variables: Record<string, string | undefined>): string {
+  replaceVariables(
+    html: string,
+    variables: Record<string, string | undefined>,
+  ): string {
     if (!html) return '';
     let rendered = html;
 

@@ -11,6 +11,7 @@ import CampaignsPage from '../pages/CampaignsPage'
 import CampaignDetailPage from '../pages/CampaignDetailPage'
 import CampaignBuilder from '../pages/CampaignBuilder'
 import SubscriptionPage from '../pages/SubscriptionPage'
+import OtpAnalyticsPage from '../pages/OtpAnalyticsPage'
 
 function App() {
   useEffect(() => {
@@ -35,6 +36,14 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route
+                path="/analytics"
+                element={
+                  <RequireAuth>
+                    <OtpAnalyticsPage />
+                  </RequireAuth>
+                }
+              />
               <Route
                 path="/campaigns/:id"
                 element={

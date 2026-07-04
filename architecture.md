@@ -13,35 +13,35 @@ The platform enables marketing campaigns to dynamically route traffic based on o
 ## 2. Module Architecture
 
 ```
-                       [ AppModule ]
-                             │
-       ┌─────────────────────┼─────────────────────┐
-       ▼                     ▼                     ▼
-[ AuthModule ]        [ UsersModule ]       [ ProjectsModule ]
-       │                                           │
-       │                                           ▼
-       │                                    [ TemplatesModule ]
-       │                                           │
-       ▼                                           ▼
-[ UploadModule ]                             [ PagesModule ]
-                                                   │
-                                                   ▼
-                                            [ ApiConfigModule ]
-                                                   │
-                                                   ▼
-                                            [ BlocklistModule ]
-                                                   │
-                                                   ▼
-                                          [ SubscriptionsModule ]
-                                                   │
-                                                   ▼
-                                            [ RoutingModule ]
-                                                   │
-                                                   ▼
-                                           [ AnalyticsModule ]
-                                                   │
-                                                   ▼
-                                            [ PublishModule ]
+                        [ AppModule ]
+                              │
+        ┌─────────────────────┼─────────────────────┐
+        ▼                     ▼                     ▼
+ [ AuthModule ]        [ UsersModule ]       [ CampaignsModule ]
+        │                                           │
+        │                                           ▼
+        │                                    [ TemplatesModule ]
+        │                                           │
+        │                                           ▼
+        │                                     [ PagesModule ]
+        │                                           │
+        ▼                                           ▼
+ [ UploadModule ]                            [ ApiConfigModule ]
+                                                    │
+                                                    ▼
+                                             [ BlocklistModule ]
+                                                    │
+                                                    ▼
+                                           [ SubscriptionsModule ]
+                                                    │
+                                                    ▼
+                                             [ RoutingModule ]
+                                                    │
+                                                    ▼
+                                            [ AnalyticsModule ]
+                                                    │
+                                                    ▼
+                                              [ OtpModule ]
 ```
 
 ---
@@ -50,21 +50,22 @@ The platform enables marketing campaigns to dynamically route traffic based on o
 
 All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 
-### Projects
+### Campaigns
 - `id` (int, Primary Key)
 - `name` (varchar)
-- `slug` (varchar, Unique, Indexed)
+- `country` (varchar)
+- `operator` (varchar)
 - `service_id` (varchar, Nullable)
 - `data` (json, Nullable)
 - `user_id` (int, Foreign Key to users)
 
-### Pages
+### Campaign Pages
 - `id` (int, Primary Key)
-- `project_id` (int, Foreign Key to projects, Cascade Delete)
+- `campaign_id` (int, Foreign Key to campaigns, Cascade Delete)
 - `template_id` (int, Foreign Key to templates, Set Null)
 - `name` (varchar)
 - `slug` (varchar)
-- `page_type` (varchar: LOADING, PLAN, THANKYOU, BLOCKED, ERROR)
+- `page_type` (varchar: HOME, CONFIRM, OTP, THANKYOU, BLOCKED, ERROR)
 
 ### Blocklist Entries
 - `id` (int, Primary Key)
@@ -81,36 +82,52 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 
 ### API Configs
 - `id` (int, Primary Key)
-- `project_id` (int, Unique, Foreign Key to projects, Cascade Delete)
+- `campaign_id` (int, Unique, Foreign Key to campaigns, Cascade Delete)
 - `user_api` (varchar, Nullable)
 - `blocklist_api` (varchar, Nullable)
 - `subscription_api` (varchar, Nullable)
 - `subscribe_api` (varchar, Nullable)
 - `headers_json` (text, Nullable)
+- `otp_provider` (varchar(32), Nullable)
+- `otp_config_json` (text, Nullable)
 
 ### Visits
 - `id` (int, Primary Key)
-- `project_id` (int)
+- `campaign_id` (int)
 - `phone` (varchar)
 - `country` (varchar)
 - `operator` (varchar)
 - `ip_address` (varchar)
 - `user_agent` (varchar)
 - `landing_url` (text)
-- `visit_status` (varchar: VISIT, BLOCKED, SUBSCRIBED, PLAN_SHOWN, SUCCESS, FAILED)
+- `visit_status` (varchar: VISIT, BLOCKED, OTP_SHOWN, CONFIRM_SHOWN, SUCCESS, FAILED)
 - `page_type` (varchar, Nullable)
 
 ### Visit Events
 - `id` (int, Primary Key)
 - `visit_id` (int, Foreign Key to visits, Cascade Delete)
-- `event_type` (varchar: VISIT, BLOCKED, PLAN_VIEW, SUBSCRIBE_CLICK, SUBSCRIBE_SUCCESS, SUBSCRIBE_FAILED)
+- `event_type` (varchar: VISIT, BLOCKED, OTP_VIEW, CONFIRM_VIEW, SUBSCRIBE_CLICK, SUBSCRIBE_SUCCESS, SUBSCRIBE_FAILED)
 - `metadata` (json, Nullable)
+
+### OTP Requests
+- `id` (int, Primary Key)
+- `visit_id` (int, Nullable)
+- `campaign_id` (int, Nullable)
+- `phone` (varchar(32))
+- `otp_hash` (varchar(255))
+- `otp_salt` (varchar(64), Nullable)
+- `provider` (varchar(32), Nullable)
+- `provider_request_id` (varchar(255), Nullable)
+- `status` (varchar(32))
+- `attempts` (int, default 0)
+- `verified_at` (datetime, Nullable)
+- `expires_at` (datetime)
 
 ---
 
 ## 4. Routing Flow
 
-Incoming request to `GET /p/:slug` follows this routing path:
+Incoming request to `GET /flow/page` follows this routing path:
 
 ```
 [ Incoming Request ]
@@ -122,38 +139,40 @@ Incoming request to `GET /p/:slug` follows this routing path:
 [ Subscription Check] ──► (Is Active?) ───────► [Yes] ─────► Route to THANKYOU Page
          │
          ▼ [No]
-Route to PLAN Page
+ (Is MSISDN Detected?) ──► [Yes] ──► Route to CONFIRM Page
+         │
+         ▼ [No]
+Route to OTP Page
 ```
 
 ---
 
 ## 5. Publish Flow
 
-1. Client opens `https://domain.com/p/:slug?msisdn=XXX&country=YY&operator=ZZ`.
-2. Controller matches project by `slug`.
+1. Client opens `https://domain.com/subscription?country=XX&operator=YY&msisdn=ZZ`.
+2. Server matches campaign by `country` and `operator`.
 3. Create `Visit` record in database (status `VISIT`).
-4. Execute `RoutingService.resolvePage()`.
-5. Update `Visit` status according to routing results.
-6. Return JSON payload containing pageType, pageId, templateId, visitId and replacement variables.
+4. Execute page compilation, replace placeholders, and return page details.
 
 ---
 
-## 6. Subscription Flow
+## 6. Subscription & OTP Flow
 
-1. User clicks "Subscribe" on the Plan Page.
-2. App sends `POST /public/subscribe` containing `{ visitId, projectId, phone, planId }`.
-3. Log event `SUBSCRIBE_CLICK`.
-4. Load project's `ApiConfig`.
-5. Call Partner Billing URL with headers configured in `headersJson`.
-6. **On Success**:
+1. User lands on HOME page, clicks subscribe.
+2. If phone is detected:
+   - Transition to `CONFIRM` page.
+3. If phone is NOT detected:
+   - Transition to `OTP` page.
+   - User requests OTP (calls `POST /otp/send`). SMS is sent via dynamic campaign provider (Twilio, MSG91, Kaleyra, Custom HTTP, or Partner).
+   - User inputs code (calls `POST /otp/verify`).
+   - If verified, frontend requests transition to `CONFIRM`.
+4. User selects a pack on the `CONFIRM` page and clicks to buy (calls `POST /flow/transition`).
+5. Calls Partner Billing URL with headers configured in `headersJson`.
+6. On success:
    - Update `Visit` to `SUCCESS`.
    - Log `SUBSCRIBE_SUCCESS` event.
-   - Insert/Update `Subscription` record with status `ACTIVE`.
-   - Return Redirection/Thank You page details.
-7. **On Failure**:
-   - Update `Visit` to `FAILED`.
-   - Log `SUBSCRIBE_FAILED` event.
-   - Return Error page details.
+   - Insert `Subscription` with status `ACTIVE`.
+   - Route to `THANKYOU` page.
 
 ---
 
@@ -162,15 +181,15 @@ Route to PLAN Page
 Analytics data is updated real-time using events:
 - Total unique traffic counts.
 - Step-by-step conversion tracking:
-  `Visits` → `Plan Views` → `Subscribe Clicks` → `Success Subscriptions`.
+  `Visits` → `OTP Views` → `Confirm Views` → `Subscribe Clicks` → `Success Subscriptions`.
 - Conversion Rate Calculation: `(successfulSubscriptions / totalVisits) * 100`.
 
 ---
 
 ## 8. Security Model
 
-- **Admin APIs**: Secured via standard `JwtAuthGuard` (Authorization header `Bearer <token>`). Endpoints verify that the logged-in user owns the resource being manipulated (Project-scoped ownership).
-- **Public APIs**: Endpoints `/p/:slug` and `/public/subscribe` are completely public (unauthenticated) to allow traffic from end-users, but they are read-only regarding configs and enforce tracking constraints.
+- **Admin APIs**: Secured via standard `JwtAuthGuard` (Authorization header `Bearer <token>`). Endpoints verify that the logged-in user owns the resource being manipulated (Campaign-scoped ownership).
+- **Public APIs**: Endpoints `/flow/*` and `/otp/*` are completely public (unauthenticated) to allow traffic from end-users, but they enforce rate-limiting, resend delays, brute-force lockout, and transition validations.
 
 ---
 

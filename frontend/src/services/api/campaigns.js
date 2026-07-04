@@ -119,3 +119,22 @@ export function getCampaignPreviewUrl(campaign) {
   })
   return `/subscription?${params.toString()}`
 }
+
+export async function testSendOtp(payload) {
+  return apiClient('/otp/test-send', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function checkOtpProviderHealth(payload) {
+  return apiClient('/otp/health-check', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function getOtpAnalytics(campaignId) {
+  const url = campaignId ? `/analytics/otp?campaignId=${campaignId}` : '/analytics/otp'
+  return apiClient(url)
+}

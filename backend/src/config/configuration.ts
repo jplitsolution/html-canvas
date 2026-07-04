@@ -36,6 +36,7 @@ export interface UploadsConfig {
 export interface AppConfig {
   port: number;
   environment: string;
+  otpExposeTest: boolean;
   database: DatabaseConfig;
   jwt: JwtConfig;
   cloudinary: CloudinaryConfig;
@@ -46,10 +47,15 @@ export interface AppConfig {
 export default (): AppConfig => ({
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
+  otpExposeTest: process.env.OTP_EXPOSE_TEST === 'true',
   database: {
     type: process.env.DB_TYPE || 'mysql',
     host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || (process.env.DB_TYPE === 'postgres' ? '5432' : '3306'), 10),
+    port: parseInt(
+      process.env.DB_PORT ||
+        (process.env.DB_TYPE === 'postgres' ? '5432' : '3306'),
+      10,
+    ),
     username: process.env.DB_USERNAME || 'root',
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE || 'templatecraft',

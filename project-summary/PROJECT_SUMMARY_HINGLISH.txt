@@ -1,0 +1,127 @@
+========================================================================
+PROJECT SUMMARY - DYNAMIC SUBSCRIPTION FLOW BUILDER (TEMPLATECRAFT)
+========================================================================
+
+------------------------------------------------------------------------
+YE PROJECT KISLIYE BANA HAI?
+------------------------------------------------------------------------
+TemplateCraft ek Dynamic Subscription Flow Builder hai. Ye platform marketers aur campaign managers ke liye bana hai jo mobile advertising campaigns chalate hain. Alag-alag countries aur operators (jaise Airtel, Jio, Zain) ke liye unique subscription pages aur funnels (landing pages) banane padte hain. 
+
+TemplateCraft unhe ye freedom deta hai ki wo ek visual drag-and-drop editor (GrapesJS) ka use karke custom pages (Home, Confirm, OTP, Thank You, Blocked, aur Error pages) design kar sakein. Jab koi user ad link par click karta hai, to system dynamic routing ke zariye us user ka mobile network aur country detect karta hai, check karta hai ki user pehle se subscribed to nahi hai ya blocklist me to nahi hai, aur uske baad correct page render karta hai.
+
+------------------------------------------------------------------------
+PROJECT ME KYA KYA COMPLETE HO GAYA HAI?
+------------------------------------------------------------------------
+1. Admin Authentication: Email aur password ke sath login/register complete hai. JWT token local storage me store hota hai.
+2. Campaigns Management: Campaigns banana, update karna, delete karna aur templates details link karna fully complete hai.
+3. Canvas Template Editor: GrapesJS visual editor integrated hai. Admin templates me components drag, style, and save kar sakta hai.
+4. Media Upload Module: Admin assets (images) canvas me drop karke upload kar sakta hai. Amazon S3 aur Cloudinary integration supported hain.
+5. Dynamic Page Compiler: Backend templates ko compile karke dynamic values (jaise {{operator}}, {{phone}}) ko customer context se replace kar deta hai.
+6. Real-Time Analytics: Visits aur user events telemetry tables me track hote hain aur campaign analytics summary metrics load hoti hai.
+7. OTP Subsystem backend: OTP generation aur hash verification functions completely taiyar hain.
+
+------------------------------------------------------------------------
+ABHI KYA PENDING HAI?
+------------------------------------------------------------------------
+1. OTP Funnel State Wiring: OTP module alag se to kaam kar raha hai par use main routing flow router ke sath poori tarah wire nahi kiya gaya hai. User agar OTP page par jata hai to frontend me OTP verify button click handle karne aur user flow ko Confirm page par forward karne ka logic pending hai.
+2. OTP plain-text API security cleanup: /otp/send API testing ke liye response me seedhe plaintext OTP code return kar deti hai. Production me ise band karna hoga aur real SMS gateway lagana hoga.
+3. Rate Limiting: OTP aur Flow public routes par throttling (rate limiting) implementation pending hai.
+
+------------------------------------------------------------------------
+BACKEND ME KYA HUA HAI?
+------------------------------------------------------------------------
+Backend ko NestJS framework ka use karke banaya gaya hai jo ek modular Node.js backend structure provide karta hai. API standard response structure use karti hai jise 'TransformInterceptor' compile karta hai. Database connections 'TypeORM' ORM ke throw handle hote hain. Global exception filter error details format karta hai. Outbound partner calls 'Axios' library se execute hoti hain.
+
+------------------------------------------------------------------------
+FRONTEND ME KYA HUA HAI?
+------------------------------------------------------------------------
+Frontend React 19 aur Vite compiler par chalta hai. Design layout ko Tailwind CSS v4 ka use karke design kiya gaya hai jo dynamic dark/light mode toggle support karta hai. State management ke liye 'Zustand' ka store use kiya gaya hai jo dynamic slices me divided hai. Public customer funnel runtime ko 'Shadow DOM' ke andar isolated tarike se render kiya jata hai taaki custom page design core admin dashboard ke styles ko pollute na kare.
+
+------------------------------------------------------------------------
+DATABASE ME KYA HUA HAI?
+------------------------------------------------------------------------
+Database MySQL adapter use kar raha hai (jiski configurations backend/.env me define hain). TypeORM dynamically compatible database adapters manage karta hai.
+Database tables structure niche diye gaye hain:
+- users: Admin metadata fields.
+- templates: GrapesJS layout details.
+- campaigns: Operator aur country maps (compound unique index ke sath).
+- campaign_pages: Page slots references.
+- api_configs: Outbound verification APIs configurations.
+- visits / visit_events: Customer tracking impressions.
+- otp_requests: Hashed codes parameters.
+
+------------------------------------------------------------------------
+AUTHENTICATION STATUS
+------------------------------------------------------------------------
+- Dashboard side authentication secure hai aur standard JWT Bearer guard verify karta hai.
+- Client funnel public routes (/flow/* aur /otp/*) open hain aur unhe dashboard authentication ki jarurat nahi hoti.
+
+------------------------------------------------------------------------
+API STATUS
+------------------------------------------------------------------------
+Admin side APIs (Campaigns CRUD, pages configuration, api-configs saving, templates directory, media uploads) fully complete hain aur security guards se bounded hain. Public APIs (Page fetch resolutions aur transition checks) and OTP verification REST endpoints completely active hain par transition logic wiring pending hai.
+
+------------------------------------------------------------------------
+EDITOR & CAMPAIGN MODULE STATUS
+------------------------------------------------------------------------
+- Editor: GrapesJS module customize styling configuration panels aur custom components registry ke sath completely taiyar hai. Saving actions database templates sync karti hain.
+- Campaign Module: Dashboard campaign details lists fully complete hain aur default templates load/apply features handle karte hain.
+
+------------------------------------------------------------------------
+OTP MODULE, TEMPLATE SYSTEM & SUBSCRIPTION SYSTEM STATUS
+------------------------------------------------------------------------
+- OTP Module: OTP requests generate aur verify karne ka backend service logic stable hai. Par use main transition chain me include karna pending hai.
+- Template System: Admin campaigns ke default designs layout database seed files (default-funnel-pages.ts) se load hote hain.
+- Subscription System: Platforms me directly internal payment collections table nahi hai. System campaign integrations (api_configs) URLs par outbound call match karke success/failure events track karta hai.
+
+------------------------------------------------------------------------
+FUTURE IMPROVEMENTS ROADMAP
+------------------------------------------------------------------------
+1. RabbitMQ or BullMQ processing lagana taaki visits/events write operations database ko high volumes me crash na karein.
+2. Redis connection configured karna taaki campaign configs ko memory cache me store karke latency sub-10ms kiya ja sake.
+3. Edge workers setup karna taaki pages render variables static CDN templates me inject ho sakein.
+4. Telemetry database cleanup cron scripts banana.
+
+------------------------------------------------------------------------
+KNOWN BUGS
+------------------------------------------------------------------------
+1. OTP flow wiring incomplete hai jiski wajah se SMS verification window me user transitions process lock ho jata hai.
+2. Dev mode me OTP parameter value validation response me open-text share hoti hai jo production leak security risk hai.
+3. Obsolete database models documents root paths par likhe hain (architecture.md me subscriptions aur blocklists tables listed hain jo reality me nahi hain).
+
+------------------------------------------------------------------------
+ARCHITECTURE & FOLDER STRUCTURE IN SIMPLE LANGUAGE
+------------------------------------------------------------------------
+- Architecture: Frontend visual actions request dispatches handle karta hai, backend Express port JWT validates checks karta hai, aur campaigns context read/write queries TypeORM mysql drivers throw execute hoti hain. User clicks impressions Visits database trace lines store karte hain.
+- Folder Structure:
+  - backend/src/modules/ me saare main modules alag folders me organized hain.
+  - frontend/src/editor/ me GrapesJS customization codes aur React binding components load hote hain.
+  - frontend/src/pages/ me dashboard views, builder visualizer, aur shadow root loader codes aligned hain.
+
+------------------------------------------------------------------------
+MAJOR MODULES DETAILED EXPLANATION (2-3 Paragraphs Each)
+------------------------------------------------------------------------
+
+1. Campaign & Pages Module:
+Ye module campaigns create karne, unke status ko track karne aur funnel layout pages manage karne ka kaam karta hai. Jab koi admin campaign banata hai, to use name, country, operator aur service id specify karna hota hai. System database table me unique constraint enforce karta hai taaki ek operator/country combination ke liye do campaign na ban sakein. Campaign banne par system automatically system templates folder se 6 standard pages (Home, Confirm, OTP, Thank You, Blocked, Error) clone kar leta hai.
+
+Admin har page slot ko dynamic visual canvas me open karke templates edit kar sakta hai aur edit details templates DB table me block save hoti hain. Ye settings campaigns status ko activate karne ke liye validated hoti hain.
+
+2. Flow Routing & Partner API Proxy Module:
+Ye public module traffic routing aur partner integrations manage karta hai. Jab koi subscriber links open karta hai to GET /flow/page call backend system execute karti hai. System check karta hai ki user mobile header verification (MSISDN) pass kar chuka hai ya nahi. Saath hi ye external integration config URLs par request throw karke validation parameters check karta hai.
+
+Dynamic Variable resolver HTML code me placeholders replace karta hai (jaise {{phone}} ki jagah user mobile number aur {{plan}} ki jagah target rates) taaki customized layout render ho sake. Transition APIs transitions progress logic verify karti hain.
+
+3. Analytics & Telemetry Tracker Module:
+Ye module click tracking aur real-time conversion rates processing ko handle karta hai. Har traffic visit event system visits database logs me store karta hai aur visual status changes events log parameters (VisitEvents) me save karti hain.
+
+Dashboard analytics tab aggregates metrics call queries compile karta hai taaki count check updates calculations real-time load ho sakein (jaise conversions percentage compute karna).
+
+------------------------------------------------------------------------
+PROJECT HEALTH INDEX
+------------------------------------------------------------------------
+- Current Project Progress (%): 92%
+- Estimated Remaining Work (%): 8%
+- Overall Health: Good (Core admin functions and layouts are complete and robust)
+- Risk Level: Medium (Due to unthrottled public endpoints and plaintext OTP transmission in development configurations)
+========================================================================

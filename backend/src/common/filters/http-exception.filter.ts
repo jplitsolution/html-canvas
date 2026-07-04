@@ -56,11 +56,27 @@ export class HttpExceptionFilter implements ExceptionFilter {
       exception instanceof Error ? exception.stack : undefined,
     );
 
+    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+      let retryAfter = 60;
+      if (exceptionResponse && typeof exceptionResponse === 'object') {
+        const resObj = exceptionResponse as any;
+        if (typeof resObj.retryAfter === 'number') {
+          retryAfter = resObj.retryAfter;
+        }
+      }
+      response.setHeader('Retry-After', String(retryAfter));
+    }
+
+    let responseMessage = message;
+    if (process.env.NODE_ENV === 'production' && status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      responseMessage = 'An unexpected error occurred. Please try again later.';
+    }
+
     response.status(status).json({
       success: false,
       statusCode: status,
       error,
-      message,
+      message: responseMessage,
       timestamp: new Date().toISOString(),
       path: request.url,
     });

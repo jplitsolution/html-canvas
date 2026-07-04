@@ -17,7 +17,12 @@ export class PartnerApiService {
 
   async checkSubscription(
     config: ApiConfig | null,
-    input: { phone: string; serviceId: string; country: string; operator: string },
+    input: {
+      phone: string;
+      serviceId: string;
+      country: string;
+      operator: string;
+    },
   ): Promise<boolean> {
     if (!config?.subscriptionApi || !input.phone) {
       this.logger.debug(
@@ -34,7 +39,9 @@ export class PartnerApiService {
         timeout: 5000,
       });
       const data = response.data as Record<string, unknown>;
-      const subscribed = Boolean(data?.subscribed ?? data?.isSubscribed ?? data?.active);
+      const subscribed = Boolean(
+        data?.subscribed ?? data?.isSubscribed ?? data?.active,
+      );
       this.logger.log(`checkSubscription ← subscribed=${subscribed}`);
       return subscribed;
     } catch (err) {
@@ -88,8 +95,13 @@ export class PartnerApiService {
       subscriptionUrl?: string;
     },
   ): Promise<boolean> {
-    if (input.phone.startsWith('999') || input.phone.toLowerCase().includes('fail')) {
-      this.logger.log(`subscribe ← failed (test pattern on phone=${input.phone})`);
+    if (
+      input.phone.startsWith('999') ||
+      input.phone.toLowerCase().includes('fail')
+    ) {
+      this.logger.log(
+        `subscribe ← failed (test pattern on phone=${input.phone})`,
+      );
       return false;
     }
 
@@ -101,7 +113,9 @@ export class PartnerApiService {
     }
 
     if (!input.phone) {
-      this.logger.warn('subscribe ← failed: phone/msisdn missing but subscribe API is configured');
+      this.logger.warn(
+        'subscribe ← failed: phone/msisdn missing but subscribe API is configured',
+      );
       return false;
     }
 

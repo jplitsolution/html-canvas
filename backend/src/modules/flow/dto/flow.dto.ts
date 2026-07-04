@@ -27,7 +27,9 @@ export class GetFlowPageQueryDto {
   @IsInt()
   visitId?: number;
 
-  @ApiPropertyOptional({ description: 'Subscription pack: daily | weekly | monthly' })
+  @ApiPropertyOptional({
+    description: 'Subscription pack: daily | weekly | monthly',
+  })
   @IsOptional()
   @IsString()
   pack?: string;

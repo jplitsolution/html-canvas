@@ -8,10 +8,10 @@ export async function sendOtp({ phone, visitId }) {
   })
 }
 
-export async function verifyOtp({ phone, otp }) {
+export async function verifyOtp({ phone, otp, visitId }) {
   return apiClient('/otp/verify', {
     method: 'POST',
-    body: { phone, otp },
+    body: { phone, otp, ...(visitId ? { visitId: String(visitId) } : {}) },
     dedupe: false,
   })
 }

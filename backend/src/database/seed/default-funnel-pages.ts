@@ -145,7 +145,12 @@ function packPicker(): string {
     </div>`;
 }
 
-function infoCard(label: string, value: string, accent = false, hint = ''): string {
+function infoCard(
+  label: string,
+  value: string,
+  accent = false,
+  hint = '',
+): string {
   return `
     <div class="flow-info-card${accent ? ' flow-info-card--accent' : ''}">
       <p class="flow-info-label">${label}</p>

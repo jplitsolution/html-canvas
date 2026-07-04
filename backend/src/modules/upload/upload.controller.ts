@@ -28,7 +28,9 @@ export class UploadController {
   @ApiBearerAuth()
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Upload an image to CloudFront (S3) or Cloudinary fallback' })
+  @ApiOperation({
+    summary: 'Upload an image to CloudFront (S3) or Cloudinary fallback',
+  })
   @ApiBody({
     schema: {
       type: 'object',

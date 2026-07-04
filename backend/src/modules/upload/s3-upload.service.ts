@@ -20,11 +20,17 @@ export class S3UploadService {
   constructor(private readonly configService: ConfigService) {
     const region = this.configService.get<string>('aws.region') || 'ap-south-1';
     const accessKeyId = this.configService.get<string>('aws.accessKeyId');
-    const secretAccessKey = this.configService.get<string>('aws.secretAccessKey');
+    const secretAccessKey = this.configService.get<string>(
+      'aws.secretAccessKey',
+    );
 
     this.bucket = this.configService.get<string>('aws.s3Bucket') || '';
-    this.cloudfrontUrl = (this.configService.get<string>('aws.cloudfrontUrl') || '').replace(/\/$/, '');
-    this.prefix = (this.configService.get<string>('aws.s3Prefix') || 'templatecraft').replace(/^\/+|\/+$/g, '');
+    this.cloudfrontUrl = (
+      this.configService.get<string>('aws.cloudfrontUrl') || ''
+    ).replace(/\/$/, '');
+    this.prefix = (
+      this.configService.get<string>('aws.s3Prefix') || 'templatecraft'
+    ).replace(/^\/+|\/+$/g, '');
 
     this.client =
       this.bucket && accessKeyId && secretAccessKey
@@ -50,7 +56,10 @@ export class S3UploadService {
       throw new BadRequestException('No file provided');
     }
 
-    const ext = this.extensionFromMime(file.mimetype) || this.extensionFromName(file.originalname) || 'jpg';
+    const ext =
+      this.extensionFromMime(file.mimetype) ||
+      this.extensionFromName(file.originalname) ||
+      'jpg';
     const key = `${this.prefix}/${Date.now()}-${randomUUID()}.${ext}`;
 
     await this.client.send(

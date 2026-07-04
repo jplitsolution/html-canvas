@@ -31,6 +31,12 @@ export class ApiConfig {
   @Column({ name: 'headers_json', type: 'text', nullable: true })
   headersJson?: string;
 
+  @Column({ name: 'otp_provider', type: 'varchar', length: 32, nullable: true })
+  otpProvider?: string;
+
+  @Column({ name: 'otp_config_json', type: 'text', nullable: true })
+  otpConfigJson?: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

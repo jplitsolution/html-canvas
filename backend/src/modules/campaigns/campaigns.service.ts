@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,7 +15,10 @@ import {
   CampaignPageType,
   REQUIRED_CAMPAIGN_PAGE_TYPES,
 } from './entities/campaign-page.entity';
-import { CreateCampaignDto, UpdateCampaignDto } from './dto/create-campaign.dto';
+import {
+  CreateCampaignDto,
+  UpdateCampaignDto,
+} from './dto/create-campaign.dto';
 import { UpdateCampaignPageDto } from './dto/update-campaign-page.dto';
 import { Template } from '../templates/entities/template.entity';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
@@ -22,6 +26,8 @@ import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pag
 
 @Injectable()
 export class CampaignsService {
+  private readonly logger = new Logger(CampaignsService.name);
+
   constructor(
     @InjectRepository(Campaign)
     private readonly campaignRepository: Repository<Campaign>,
@@ -55,22 +61,91 @@ export class CampaignsService {
       throw new NotFoundException(`Campaign with ID ${id} not found`);
     }
     if (campaign.userId !== userId) {
-      throw new ForbiddenException('You do not have permission to access this campaign');
+      throw new ForbiddenException(
+        'You do not have permission to access this campaign',
+      );
+    }
+    await this.ensureCampaignPages(campaign);
+    return campaign;
+  }
+
+  async findByCountryOperator(
+    country: string,
+    operator: string,
+  ): Promise<Campaign | null> {
+    const normalizedCountry = this.normalize(country);
+    const normalizedOperator = this.normalize(operator);
+
+    const campaign = await this.campaignRepository
+      .createQueryBuilder('campaign')
+      .leftJoinAndSelect('campaign.pages', 'pages')
+      .leftJoinAndSelect('pages.template', 'template')
+      .where('LOWER(campaign.country) = LOWER(:country)', {
+        country: normalizedCountry,
+      })
+      .andWhere('LOWER(campaign.operator) = LOWER(:operator)', {
+        operator: normalizedOperator,
+      })
+      .getOne();
+
+    if (campaign) {
+      await this.ensureCampaignPages(campaign);
     }
     return campaign;
   }
 
-  async findByCountryOperator(country: string, operator: string): Promise<Campaign | null> {
-    const normalizedCountry = this.normalize(country);
-    const normalizedOperator = this.normalize(operator);
+  private async ensureCampaignPages(campaign: Campaign): Promise<void> {
+    const existingPageTypes = new Set(
+      (campaign.pages || []).map((p) => p.pageType),
+    );
 
-    return this.campaignRepository
-      .createQueryBuilder('campaign')
-      .leftJoinAndSelect('campaign.pages', 'pages')
-      .leftJoinAndSelect('pages.template', 'template')
-      .where('LOWER(campaign.country) = LOWER(:country)', { country: normalizedCountry })
-      .andWhere('LOWER(campaign.operator) = LOWER(:operator)', { operator: normalizedOperator })
-      .getOne();
+    for (const pageType of ALL_CAMPAIGN_PAGE_TYPES) {
+      if (!existingPageTypes.has(pageType)) {
+        try {
+          const template = await this.templateRepository.save(
+            this.templateRepository.create({
+              name: `${campaign.name} - ${pageType}`,
+              data: getDefaultFunnelPageData(pageType),
+              userId: campaign.userId,
+              isPrebuilt: false,
+            }),
+          );
+
+          const newPage = await this.campaignPageRepository.save(
+            this.campaignPageRepository.create({
+              campaignId: campaign.id,
+              pageType,
+              templateId: template.id,
+            }),
+          );
+
+          newPage.template = template;
+          if (!campaign.pages) {
+            campaign.pages = [];
+          }
+          campaign.pages.push(newPage);
+          this.logger.log(
+            `Auto-created missing page type ${pageType} for campaign ${campaign.id}`,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Failed to auto-create page type ${pageType} for campaign ${campaign.id}: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+          const dbPage = await this.campaignPageRepository.findOne({
+            where: { campaignId: campaign.id, pageType },
+            relations: { template: true },
+          });
+          if (dbPage) {
+            if (!campaign.pages) {
+              campaign.pages = [];
+            }
+            campaign.pages.push(dbPage);
+          }
+        }
+      }
+    }
   }
 
   async create(dto: CreateCampaignDto, userId: number): Promise<Campaign> {
@@ -139,7 +214,11 @@ export class CampaignsService {
     return this.findOne(campaign.id, userId);
   }
 
-  async update(id: number, dto: UpdateCampaignDto, userId: number): Promise<Campaign> {
+  async update(
+    id: number,
+    dto: UpdateCampaignDto,
+    userId: number,
+  ): Promise<Campaign> {
     const campaign = await this.findOne(id, userId);
 
     if (dto.active === true) {
@@ -199,7 +278,9 @@ export class CampaignsService {
     const campaign = await this.findOne(campaignId, userId);
     const page = campaign.pages.find((p) => p.pageType === pageType);
     if (!page) {
-      throw new NotFoundException(`Page type ${pageType} not found for campaign`);
+      throw new NotFoundException(
+        `Page type ${pageType} not found for campaign`,
+      );
     }
     return page;
   }
@@ -234,7 +315,10 @@ export class CampaignsService {
     return this.getPage(campaignId, pageType, userId);
   }
 
-  async getApiConfig(campaignId: number, userId: number): Promise<ApiConfig | null> {
+  async getApiConfig(
+    campaignId: number,
+    userId: number,
+  ): Promise<ApiConfig | null> {
     await this.findOne(campaignId, userId);
     return this.apiConfigRepository.findOne({ where: { campaignId } });
   }
@@ -246,7 +330,9 @@ export class CampaignsService {
   ): Promise<ApiConfig> {
     await this.findOne(campaignId, userId);
 
-    let config = await this.apiConfigRepository.findOne({ where: { campaignId } });
+    let config = await this.apiConfigRepository.findOne({
+      where: { campaignId },
+    });
     if (!config) {
       config = this.apiConfigRepository.create({ campaignId, ...payload });
     } else {

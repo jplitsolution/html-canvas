@@ -2,6 +2,8 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
 import { resolvePhoneFromUrl, resolvePhoneNumber } from '../services/flow/resolvePhoneNumber'
+import { getApiBase } from '../services/api/client'
+import { sendOtp, verifyOtp } from '../services/api/otp'
 
 const FLOW_FONT =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
@@ -70,6 +72,220 @@ function syncPackPicker(shadow, selectedPack) {
 function getSelectedPackFromShadow(shadow) {
   const selected = shadow.querySelector('[data-pack].flow-pack-selected')
   return normalizePack(selected?.getAttribute('data-pack'))
+}
+
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, setPhone, setTransitioning, setError }) {
+  const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
+  const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
+  const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
+  const otpInput = shadow.querySelector('[data-otp-field="otp"], [data-field="otp"]')
+  const errorSlot = shadow.querySelector('[data-otp-slot="error"], [data-slot="error"]')
+  const statusSlot = shadow.querySelector('[data-otp-slot="status"], [data-slot="status"]')
+
+  let timer = null
+
+  const setSlotText = (slot, text, isError = false) => {
+    if (!slot) return
+    slot.textContent = text || ''
+    slot.style.color = isError ? '#dc2626' : '#4b5563'
+  }
+
+  // Inject Country Code selector dynamically if not present in shadow DOM
+  let countryCodeSelect = shadow.querySelector('[data-otp-field="country-code"], select.country-code-select')
+  if (phoneInput && !countryCodeSelect) {
+    const container = document.createElement('div')
+    container.className = 'country-code-container'
+    container.style.display = 'inline-flex'
+    container.style.alignItems = 'center'
+    container.style.gap = '8px'
+    container.style.width = '100%'
+    container.style.marginBottom = '12px'
+
+    countryCodeSelect = document.createElement('select')
+    countryCodeSelect.className = 'country-code-select'
+    countryCodeSelect.style.padding = '8px 8px'
+    countryCodeSelect.style.width = '95px'
+    countryCodeSelect.style.borderRadius = '8px'
+    countryCodeSelect.style.border = '1px solid var(--border, #d1d5db)'
+    countryCodeSelect.style.backgroundColor = 'var(--bg-elevated, #ffffff)'
+    countryCodeSelect.style.color = 'var(--fg, #1f2937)'
+    countryCodeSelect.style.fontSize = '14px'
+    countryCodeSelect.style.fontWeight = '500'
+    countryCodeSelect.style.cursor = 'pointer'
+
+    const codes = [
+      { code: '91', country: '🇮🇳 +91' },
+      { code: '966', country: '🇸🇦 +966' },
+      { code: '971', country: '🇦🇪 +971' },
+      { code: '965', country: '🇰🇼 +965' },
+      { code: '973', country: '🇧🇭 +973' },
+      { code: '968', country: '🇴🇲 +968' },
+    ]
+    codes.forEach(c => {
+      const opt = document.createElement('option')
+      opt.value = c.code
+      opt.textContent = c.country
+      countryCodeSelect.appendChild(opt)
+    })
+
+    phoneInput.parentNode.insertBefore(container, phoneInput)
+    container.appendChild(countryCodeSelect)
+    container.appendChild(phoneInput)
+    
+    phoneInput.style.flex = '1'
+    phoneInput.style.marginBottom = '0'
+  }
+
+  if (phoneInput && phoneRef.current) {
+    const val = phoneRef.current
+    if (val.length > 10) {
+      const cc = val.substring(0, val.length - 10)
+      const number = val.substring(val.length - 10)
+      phoneInput.value = number
+      if (countryCodeSelect) {
+        countryCodeSelect.value = cc
+      }
+    } else {
+      phoneInput.value = val
+    }
+  }
+
+  const handleSendClick = async (e) => {
+    e.preventDefault()
+    
+    const basePhone = phoneInput ? phoneInput.value.trim() : ''
+    const cleanBasePhone = basePhone.replace(/\D/g, '')
+    
+    if (cleanBasePhone.length !== 10) {
+      setSlotText(errorSlot, 'Please enter a valid 10-digit mobile number', true)
+      return
+    }
+
+    const countryCode = countryCodeSelect ? countryCodeSelect.value : ''
+    const msisdn = countryCode + cleanBasePhone
+    
+    setSlotText(errorSlot, '')
+    setSlotText(statusSlot, 'Sending verification code...')
+    
+    if (sendBtn) {
+      sendBtn.disabled = true
+      sendBtn.style.opacity = '0.5'
+    }
+
+    try {
+      const data = await sendOtp({ phone: msisdn, visitId: visitIdRef.current })
+      phoneRef.current = msisdn
+      setPhone(msisdn)
+      
+      if (otpInput) {
+        otpInput.value = ''
+      }
+      
+      let successText = 'Verification code sent!'
+      if (data.otp) {
+        successText += ` (Dev OTP: ${data.otp})`
+      }
+      setSlotText(statusSlot, successText)
+
+      // Start Resend countdown timer (30s)
+      let seconds = 30
+      if (sendBtn) {
+        const originalText = sendBtn.textContent
+        sendBtn.disabled = true
+        timer = setInterval(() => {
+          seconds -= 1
+          if (seconds <= 0) {
+            clearInterval(timer)
+            sendBtn.disabled = false
+            sendBtn.style.opacity = '1'
+            sendBtn.textContent = originalText
+            setSlotText(statusSlot, '')
+          } else {
+            sendBtn.textContent = `Resend in ${seconds}s`
+          }
+        }, 1000)
+      }
+    } catch (err) {
+      setSlotText(statusSlot, '')
+      setSlotText(errorSlot, err.message, true)
+      if (sendBtn) {
+        sendBtn.disabled = false
+        sendBtn.style.opacity = '1'
+      }
+    }
+  }
+
+  const handleVerifyClick = async (e) => {
+    e.preventDefault()
+
+    const basePhone = phoneInput ? phoneInput.value.trim() : ''
+    const cleanBasePhone = basePhone.replace(/\D/g, '')
+    const countryCode = countryCodeSelect ? countryCodeSelect.value : ''
+    const msisdn = cleanBasePhone ? (countryCode + cleanBasePhone) : phoneRef.current
+    const code = otpInput ? otpInput.value.trim() : ''
+
+    if (!msisdn) {
+      setSlotText(errorSlot, 'Mobile number is missing', true)
+      return
+    }
+    if (!code) {
+      setSlotText(errorSlot, 'Please enter the verification code', true)
+      return
+    }
+
+    const originalStatusText = statusSlot ? statusSlot.textContent : ''
+
+    setSlotText(errorSlot, '')
+    setSlotText(statusSlot, 'Verifying code...')
+    
+    if (verifyBtn) {
+      verifyBtn.disabled = true
+      verifyBtn.style.opacity = '0.5'
+    }
+
+    try {
+      await verifyOtp({ phone: msisdn, otp: code, visitId: visitIdRef.current })
+
+      setSlotText(statusSlot, 'Verified! Continuing...')
+      setTransitioning(true)
+      
+      try {
+        const next = await transitionFlow({
+          visitId: visitIdRef.current,
+          country,
+          operator,
+          fromPage: 'OTP',
+          action: 'CONTINUE',
+          phone: msisdn,
+        })
+        cachePage(next)
+      } catch (err) {
+        setSlotText(errorSlot, err.message || 'Funnel transition failed', true)
+        if (statusSlot) statusSlot.textContent = originalStatusText
+        if (verifyBtn) {
+          verifyBtn.disabled = false
+          verifyBtn.style.opacity = '1'
+        }
+        setTransitioning(false)
+      }
+    } catch (err) {
+      if (statusSlot) statusSlot.textContent = originalStatusText
+      setSlotText(errorSlot, err.message, true)
+      if (verifyBtn) {
+        verifyBtn.disabled = false
+        verifyBtn.style.opacity = '1'
+      }
+    }
+  }
+
+  if (sendBtn) sendBtn.addEventListener('click', handleSendClick)
+  if (verifyBtn) verifyBtn.addEventListener('click', handleVerifyClick)
+
+  return () => {
+    if (timer) clearInterval(timer)
+    if (sendBtn) sendBtn.removeEventListener('click', handleSendClick)
+    if (verifyBtn) verifyBtn.removeEventListener('click', handleVerifyClick)
+  }
 }
 
 function SubscriptionPage() {
@@ -204,7 +420,7 @@ function SubscriptionPage() {
     setPageData(null)
     setBooting(true)
     loadPage('HOME')
-  }, [queryKey, loadPage, phoneResolving])
+  }, [country, operator, phoneResolving, loadPage])
 
   useEffect(() => {
     if (!pageData?.pageType || !visitIdRef.current) return
@@ -246,6 +462,9 @@ function SubscriptionPage() {
 
       const currentPage = pageDataRef.current
       const fromPage = currentPage?.pageType
+      if (fromPage === 'OTP') {
+        return
+      }
       if (
         (fromPage === 'HOME' && action !== 'SUBSCRIBE') ||
         (fromPage === 'CONFIRM' && action !== 'CONFIRM')
@@ -285,11 +504,27 @@ function SubscriptionPage() {
       }
     }
 
+    let otpCleanup = null
+    if (pageData.pageType === 'OTP') {
+      otpCleanup = setupOtpBindings(shadow, {
+        transitionFlow,
+        cachePage,
+        country,
+        operator,
+        visitIdRef,
+        phoneRef,
+        setPhone,
+        setTransitioning,
+        setError,
+      })
+    }
+
     shadow.addEventListener('click', handlePackClick)
     shadow.addEventListener('click', handleClick)
     return () => {
       shadow.removeEventListener('click', handlePackClick)
       shadow.removeEventListener('click', handleClick)
+      if (otpCleanup) otpCleanup()
     }
   }, [pageData, country, operator, cachePage])
 

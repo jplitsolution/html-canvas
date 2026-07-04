@@ -10,13 +10,18 @@ describe('AnalyticsService', () => {
 
   const mockVisitRepository = {
     create: jest.fn().mockImplementation((dto) => dto),
-    save: jest.fn().mockImplementation((visit) => Promise.resolve({ id: 1, ...visit })),
+    save: jest
+      .fn()
+      .mockImplementation((visit) => Promise.resolve({ id: 1, ...visit })),
     count: jest.fn(),
   };
 
   const mockVisitEventRepository = {
     create: jest.fn().mockImplementation((dto) => dto),
-    save: jest.fn().mockImplementation((event) => Promise.resolve({ id: 1, ...event })),
+    save: jest
+      .fn()
+      .mockImplementation((event) => Promise.resolve({ id: 1, ...event })),
+    count: jest.fn().mockResolvedValue(0),
   };
 
   const mockCampaignsService = {
@@ -28,7 +33,10 @@ describe('AnalyticsService', () => {
       providers: [
         AnalyticsService,
         { provide: getRepositoryToken(Visit), useValue: mockVisitRepository },
-        { provide: getRepositoryToken(VisitEvent), useValue: mockVisitEventRepository },
+        {
+          provide: getRepositoryToken(VisitEvent),
+          useValue: mockVisitEventRepository,
+        },
         { provide: CampaignsService, useValue: mockCampaignsService },
       ],
     }).compile();
@@ -57,6 +65,9 @@ describe('AnalyticsService', () => {
         successfulSubscriptions: 30,
         failedSubscriptions: 5,
         conversionRate: 30,
+        blockedRequests: 0,
+        rateLimitHits: 0,
+        bruteForceAttempts: 0,
       });
     });
   });

@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, Length, Matches } from 'class-validator';
+import { IsOptional, IsString, IsInt, Length, Matches } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class OtpSendDto {
   @ApiProperty({ description: 'Digits only MSISDN', example: '919876543210' })
@@ -9,8 +10,9 @@ export class OtpSendDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
-  @IsString()
-  visitId?: string;
+  @Type(() => Number)
+  @IsInt()
+  visitId?: number;
 }
 
 export class OtpVerifyDto {
@@ -23,5 +25,10 @@ export class OtpVerifyDto {
   @IsString()
   @Length(4, 8)
   otp: string;
-}
 
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  visitId?: number;
+}

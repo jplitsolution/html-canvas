@@ -16,6 +16,8 @@ import { VisitEventType } from '../analytics/entities/visit-event.entity';
 import { VariableResolverService } from '../../common/services/variable-resolver.service';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
 
+import { OtpRequest } from '../otp/entities/otp-request.entity';
+
 @Injectable()
 export class FlowService {
   private readonly logger = new Logger(FlowService.name);
@@ -27,6 +29,8 @@ export class FlowService {
     private readonly variableResolver: VariableResolverService,
     @InjectRepository(ApiConfig)
     private readonly apiConfigRepository: Repository<ApiConfig>,
+    @InjectRepository(OtpRequest)
+    private readonly otpRepository: Repository<OtpRequest>,
   ) {}
 
   async getPage(input: {
@@ -49,13 +53,17 @@ export class FlowService {
       input.operator,
     );
     if (!campaign) {
-      this.logger.warn(`Campaign not found: ${input.country} / ${input.operator}`);
+      this.logger.warn(
+        `Campaign not found: ${input.country} / ${input.operator}`,
+      );
       throw new NotFoundException(
         `No campaign found for ${input.country} / ${input.operator}`,
       );
     }
     if (!campaign.active) {
-      this.logger.warn(`Campaign inactive: id=${campaign.id} ${campaign.country}/${campaign.operator}`);
+      this.logger.warn(
+        `Campaign inactive: id=${campaign.id} ${campaign.country}/${campaign.operator}`,
+      );
       throw new ForbiddenException('Campaign is not active');
     }
 
@@ -94,12 +102,15 @@ export class FlowService {
       visitId = visit.id;
       await this.analyticsService.logEvent(visitId, VisitEventType.HOME_VIEW);
 
-      const subscribed = await this.partnerApiService.checkSubscription(apiConfig, {
-        phone,
-        serviceId,
-        country: campaign.country,
-        operator: campaign.operator,
-      });
+      const subscribed = await this.partnerApiService.checkSubscription(
+        apiConfig,
+        {
+          phone,
+          serviceId,
+          country: campaign.country,
+          operator: campaign.operator,
+        },
+      );
       if (subscribed) {
         resolvedPageType = CampaignPageType.THANKYOU;
         await this.analyticsService.updateVisit(
@@ -107,9 +118,13 @@ export class FlowService {
           VisitStatus.SUBSCRIBED,
           CampaignPageType.THANKYOU,
         );
-        await this.analyticsService.logEvent(visitId, VisitEventType.SUBSCRIBE_SUCCESS, {
-          info: 'Already subscribed',
-        });
+        await this.analyticsService.logEvent(
+          visitId,
+          VisitEventType.SUBSCRIBE_SUCCESS,
+          {
+            info: 'Already subscribed',
+          },
+        );
       } else {
         await this.analyticsService.updateVisit(
           visitId,
@@ -130,7 +145,9 @@ export class FlowService {
       variables,
     );
 
-    this.logger.log(`GET page ← ${resolvedPageType} visitId=${visitId ?? 'n/a'}`);
+    this.logger.log(
+      `GET page ← ${resolvedPageType} visitId=${visitId ?? 'n/a'}`,
+    );
 
     return {
       campaignId: campaign.id,
@@ -172,16 +189,51 @@ export class FlowService {
     const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
 
-    if (input.fromPage === CampaignPageType.HOME && input.action === 'SUBSCRIBE') {
-      await this.analyticsService.logEvent(input.visitId, VisitEventType.SUBSCRIBE_CLICK);
-      const nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
+    if (
+      input.fromPage === CampaignPageType.HOME &&
+      input.action === 'SUBSCRIBE'
+    ) {
+      await this.analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.SUBSCRIBE_CLICK,
+      );
+
+      let headerPhoneDetected = false;
+      try {
+        const visit = await this.analyticsService['visitRepository'].findOne({
+          where: { id: input.visitId },
+        });
+        if (visit && visit.phone && visit.phone.trim() !== '') {
+          headerPhoneDetected = true;
+        }
+      } catch (err) {
+        this.logger.error(`Error resolving visit in transition: ${(err as Error).message}`);
+      }
+
+      let isOtpEnabled = false;
+      if (apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '') {
+        isOtpEnabled = true;
+      }
+
+      let nextPage: CampaignPageType;
+      if (isOtpEnabled) {
+        nextPage = headerPhoneDetected ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
+      } else {
+        nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
+      }
+
       await this.analyticsService.updateVisit(
         input.visitId,
-        nextPage === CampaignPageType.CONFIRM ? VisitStatus.CONFIRM_SHOWN : VisitStatus.HOME_SHOWN,
+        nextPage === CampaignPageType.CONFIRM
+          ? VisitStatus.CONFIRM_SHOWN
+          : VisitStatus.HOME_SHOWN,
         nextPage,
       );
       if (nextPage === CampaignPageType.CONFIRM) {
-        await this.analyticsService.logEvent(input.visitId, VisitEventType.CONFIRM_VIEW);
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.CONFIRM_VIEW,
+        );
       }
       const variables = {
         phone,
@@ -190,10 +242,18 @@ export class FlowService {
         service_id: serviceId,
         plan: '',
       };
-      return this.buildPageResponse(campaign, nextPage, variables, input.visitId);
+      return this.buildPageResponse(
+        campaign,
+        nextPage,
+        variables,
+        input.visitId,
+      );
     }
 
-    if (input.fromPage === CampaignPageType.CONFIRM && input.action === 'CONFIRM') {
+    if (
+      input.fromPage === CampaignPageType.CONFIRM &&
+      input.action === 'CONFIRM'
+    ) {
       if (!input.planId) {
         throw new BadRequestException('Please select a subscription pack');
       }
@@ -218,9 +278,13 @@ export class FlowService {
           VisitStatus.BLOCKED,
           CampaignPageType.BLOCKED,
         );
-        await this.analyticsService.logEvent(input.visitId, VisitEventType.BLOCKED, {
-          reason: blockResult.reason,
-        });
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.BLOCKED,
+          {
+            reason: blockResult.reason,
+          },
+        );
         return this.buildPageResponse(
           campaign,
           CampaignPageType.BLOCKED,
@@ -232,21 +296,28 @@ export class FlowService {
         );
       }
 
-      const subscribed = await this.partnerApiService.checkSubscription(apiConfig, {
-        phone,
-        serviceId,
-        country: campaign.country,
-        operator: campaign.operator,
-      });
+      const subscribed = await this.partnerApiService.checkSubscription(
+        apiConfig,
+        {
+          phone,
+          serviceId,
+          country: campaign.country,
+          operator: campaign.operator,
+        },
+      );
       if (subscribed) {
         await this.analyticsService.updateVisit(
           input.visitId,
           VisitStatus.SUBSCRIBED,
           CampaignPageType.THANKYOU,
         );
-        await this.analyticsService.logEvent(input.visitId, VisitEventType.SUBSCRIBE_SUCCESS, {
-          info: 'Already subscribed at confirm',
-        });
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.SUBSCRIBE_SUCCESS,
+          {
+            info: 'Already subscribed at confirm',
+          },
+        );
         return this.buildPageResponse(
           campaign,
           CampaignPageType.THANKYOU,
@@ -277,10 +348,14 @@ export class FlowService {
           VisitStatus.SUCCESS,
           CampaignPageType.THANKYOU,
         );
-        await this.analyticsService.logEvent(input.visitId, VisitEventType.SUBSCRIBE_SUCCESS, {
-          pack: selectedPack,
-          subscriptionUrl,
-        });
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.SUBSCRIBE_SUCCESS,
+          {
+            pack: selectedPack,
+            subscriptionUrl,
+          },
+        );
         return this.buildPageResponse(
           campaign,
           CampaignPageType.THANKYOU,
@@ -292,15 +367,21 @@ export class FlowService {
         );
       }
 
-      this.logger.warn(`transition result: FAILED → ERROR visitId=${input.visitId}`);
+      this.logger.warn(
+        `transition result: FAILED → ERROR visitId=${input.visitId}`,
+      );
       await this.analyticsService.updateVisit(
         input.visitId,
         VisitStatus.FAILED,
         CampaignPageType.ERROR,
       );
-      await this.analyticsService.logEvent(input.visitId, VisitEventType.SUBSCRIBE_FAILED, {
-        pack: selectedPack,
-      });
+      await this.analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.SUBSCRIBE_FAILED,
+        {
+          pack: selectedPack,
+        },
+      );
       return this.buildPageResponse(
         campaign,
         CampaignPageType.ERROR,
@@ -309,6 +390,56 @@ export class FlowService {
         'FAILED',
         selectedPack,
         subscriptionUrl,
+      );
+    }
+
+    if (
+      input.fromPage === CampaignPageType.OTP &&
+      input.action === 'CONTINUE'
+    ) {
+      if (!phone) {
+        throw new BadRequestException('Phone number is required to transition from OTP page');
+      }
+
+      const verifiedOtp = await this.otpRepository.findOne({
+        where: {
+          phone,
+          visitId: input.visitId,
+          status: 'verified',
+        },
+      });
+
+      if (!verifiedOtp) {
+        throw new ForbiddenException('Phone number has not been verified with OTP');
+      }
+
+      this.logger.log(`OTP transition verified for visitId=${input.visitId} phone=${phone}`);
+
+      await this.analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.CONFIRM_VIEW,
+        { info: 'Transition from OTP verified successfully' }
+      );
+
+      await this.analyticsService.updateVisit(
+        input.visitId,
+        VisitStatus.CONFIRM_SHOWN,
+        CampaignPageType.CONFIRM,
+      );
+
+      const variables = {
+        phone,
+        country: campaign.country,
+        operator: campaign.operator,
+        service_id: serviceId,
+        plan: '',
+      };
+
+      return this.buildPageResponse(
+        campaign,
+        CampaignPageType.CONFIRM,
+        variables,
+        input.visitId,
       );
     }
 
@@ -373,7 +504,10 @@ export class FlowService {
       pageType,
       status: status || pageType,
       templateId: page.templateId,
-      html: this.variableResolver.replaceVariables(templateData.html || '', variables),
+      html: this.variableResolver.replaceVariables(
+        templateData.html || '',
+        variables,
+      ),
       css: templateData.css || '',
       variables,
       actions: this.getActions(pageType),

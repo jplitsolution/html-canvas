@@ -1,4 +1,10 @@
-import { IsBoolean, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCampaignDto {
@@ -22,7 +28,9 @@ export class CreateCampaignDto {
   @IsString()
   serviceId?: string;
 
-  @ApiPropertyOptional({ description: 'Clone page templates from another campaign' })
+  @ApiPropertyOptional({
+    description: 'Clone page templates from another campaign',
+  })
   @IsOptional()
   @IsInt()
   copyFromCampaignId?: number;

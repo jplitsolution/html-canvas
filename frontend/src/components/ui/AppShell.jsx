@@ -7,7 +7,10 @@ import ThemeToggle from '../common/ThemeToggle'
 import Button from './Button'
 import IconButton from './IconButton'
 
-const navLinks = [{ to: '/campaigns', label: 'Campaigns' }]
+const navLinks = [
+  { to: '/campaigns', label: 'Campaigns' },
+  { to: '/analytics', label: 'OTP Analytics' },
+]
 
 function AppShell({ title, children, actions, immersive = false }) {
   const location = useLocation()

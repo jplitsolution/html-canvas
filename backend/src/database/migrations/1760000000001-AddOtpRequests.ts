@@ -52,4 +52,3 @@ export class AddOtpRequests1760000000001 implements MigrationInterface {
     }
   }
 }
-
