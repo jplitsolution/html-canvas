@@ -71,23 +71,37 @@ export async function apiClient(path, options = {}) {
 
   if (dedupeKey && inflight.has(dedupeKey)) return inflight.get(dedupeKey)
 
+  const controller = new AbortController()
+  const timeoutMs = options.timeout !== undefined ? options.timeout : 15000
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
+
   const promise = (async () => {
-    const response = await fetch(url, {
-      ...options,
-      method,
-      headers,
-      body,
-    })
+    try {
+      const response = await fetch(url, {
+        ...options,
+        method,
+        headers,
+        body,
+        signal: controller.signal,
+      })
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: response.statusText }))
-      throw new Error(error.message || 'API request failed')
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: response.statusText }))
+        throw new Error(error.message || 'API request failed')
+      }
+
+      if (response.status === 204) return null
+
+      const json = await response.json()
+      return unwrapResponse(json)
+    } catch (err) {
+      if (err.name === 'AbortError') {
+        throw new Error('Network timeout. Please check your connection and try again.')
+      }
+      throw err
+    } finally {
+      clearTimeout(timeoutId)
     }
-
-    if (response.status === 204) return null
-
-    const json = await response.json()
-    return unwrapResponse(json)
   })()
 
   if (dedupeKey) inflight.set(dedupeKey, promise)

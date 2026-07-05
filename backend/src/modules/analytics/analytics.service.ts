@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan } from 'typeorm';
+import { Repository, MoreThan, Like } from 'typeorm';
 import { Visit, VisitStatus } from './entities/visit.entity';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
 import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
@@ -362,4 +362,52 @@ export class AnalyticsService {
       funnel,
     };
   }
+
+  async getCampaignActivityLogs(
+    campaignId: number,
+    userId: number,
+    query: { page?: number; limit?: number; phone?: string; status?: string },
+  ) {
+    await this.campaignsService.findOne(campaignId, userId);
+
+    const page = Number(query.page) || 1;
+    const limit = Number(query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = { campaignId };
+
+    if (query.phone && query.phone.trim() !== '') {
+      where.phone = Like(`%${query.phone.trim()}%`);
+    }
+
+    if (query.status && query.status.trim() !== '' && query.status !== 'all') {
+      where.visitStatus = query.status;
+    }
+
+    const [data, total] = await this.visitRepository.findAndCount({
+      where,
+      relations: { events: true },
+      order: {
+        createdAt: 'DESC',
+      },
+      take: limit,
+      skip,
+    });
+
+    // Sort events for each visit chronologically by createdAt (ASC)
+    data.forEach((visit) => {
+      if (visit.events) {
+        visit.events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+      }
+    });
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
 }
+

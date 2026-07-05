@@ -4,6 +4,8 @@ import { fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api
 import { resolvePhoneFromUrl, resolvePhoneNumber } from '../services/flow/resolvePhoneNumber'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
+import { trackEvent } from '../utils/analytics'
+
 
 const FLOW_FONT =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
@@ -83,12 +85,27 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
   const statusSlot = shadow.querySelector('[data-otp-slot="status"], [data-slot="status"]')
 
   let timer = null
+  let isSending = false
+  let isVerifying = false
 
   const setSlotText = (slot, text, isError = false) => {
     if (!slot) return
     slot.textContent = text || ''
     slot.style.color = isError ? '#dc2626' : '#4b5563'
   }
+
+  // Load resendAttempts from sessionStorage
+  let initialResendAttempts = 0
+  try {
+    const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (typeof parsed.resendAttempts === 'number') {
+        initialResendAttempts = parsed.resendAttempts
+      }
+    }
+  } catch (e) {}
+  let resendAttempts = initialResendAttempts
 
   // Inject Country Code selector dynamically if not present in shadow DOM
   let countryCodeSelect = shadow.querySelector('[data-otp-field="country-code"], select.country-code-select')
@@ -150,8 +167,24 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     }
   }
 
+  // Check if limit already exceeded on mount
+  if (resendAttempts >= 5) {
+    if (sendBtn) {
+      sendBtn.disabled = true
+      sendBtn.style.opacity = '0.5'
+      sendBtn.textContent = 'Limit Exceeded'
+    }
+    setSlotText(errorSlot, 'Maximum resend attempts reached. Please try again later.', true)
+  }
+
   const handleSendClick = async (e) => {
-    e.preventDefault()
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
+    if (isSending) return
+
+    if (resendAttempts >= 5) {
+      setSlotText(errorSlot, 'Maximum resend attempts reached. Please try again later.', true)
+      return
+    }
     
     const basePhone = phoneInput ? phoneInput.value.trim() : ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
@@ -170,12 +203,16 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     if (sendBtn) {
       sendBtn.disabled = true
       sendBtn.style.opacity = '0.5'
+      sendBtn.innerHTML = `Sending... <span class="otp-spinner"></span>`
     }
+
+    isSending = true
 
     try {
       const data = await sendOtp({ phone: msisdn, visitId: visitIdRef.current })
       phoneRef.current = msisdn
       setPhone(msisdn)
+      trackEvent('otp_sent')
       
       if (otpInput) {
         otpInput.value = ''
@@ -187,18 +224,38 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
       }
       setSlotText(statusSlot, successText)
 
+      // Increment resend attempts
+      resendAttempts += 1
+      try {
+        const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+        const sessionObj = saved ? JSON.parse(saved) : {}
+        sessionObj.resendAttempts = resendAttempts
+        sessionStorage.setItem(`tc_session_${country}_${operator}`, JSON.stringify(sessionObj))
+      } catch (err) {}
+
+      if (resendAttempts >= 5) {
+        if (sendBtn) {
+          sendBtn.disabled = true
+          sendBtn.style.opacity = '0.5'
+          sendBtn.textContent = 'Limit Exceeded'
+        }
+        setSlotText(errorSlot, 'Maximum resend attempts reached. Please try again later.', true)
+        return
+      }
+
       // Start Resend countdown timer (30s)
       let seconds = 30
       if (sendBtn) {
-        const originalText = sendBtn.textContent
         sendBtn.disabled = true
         timer = setInterval(() => {
           seconds -= 1
           if (seconds <= 0) {
             clearInterval(timer)
-            sendBtn.disabled = false
-            sendBtn.style.opacity = '1'
-            sendBtn.textContent = originalText
+            if (resendAttempts < 5) {
+              sendBtn.disabled = false
+              sendBtn.style.opacity = '1'
+              sendBtn.textContent = 'Get OTP'
+            }
             setSlotText(statusSlot, '')
           } else {
             sendBtn.textContent = `Resend in ${seconds}s`
@@ -208,15 +265,19 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     } catch (err) {
       setSlotText(statusSlot, '')
       setSlotText(errorSlot, err.message, true)
-      if (sendBtn) {
+      if (sendBtn && resendAttempts < 5) {
         sendBtn.disabled = false
         sendBtn.style.opacity = '1'
+        sendBtn.textContent = 'Get OTP'
       }
+    } finally {
+      isSending = false
     }
   }
 
   const handleVerifyClick = async (e) => {
-    e.preventDefault()
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
+    if (isVerifying) return
 
     const basePhone = phoneInput ? phoneInput.value.trim() : ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
@@ -241,10 +302,18 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     if (verifyBtn) {
       verifyBtn.disabled = true
       verifyBtn.style.opacity = '0.5'
+      verifyBtn.innerHTML = `Verifying... <span class="otp-spinner"></span>`
     }
+
+    isVerifying = true
 
     try {
       await verifyOtp({ phone: msisdn, otp: code, visitId: visitIdRef.current })
+      trackEvent('otp_verified')
+
+      // Sync phone state and ref immediately upon successful verification
+      phoneRef.current = msisdn
+      setPhone(msisdn)
 
       setSlotText(statusSlot, 'Verified! Continuing...')
       setTransitioning(true)
@@ -265,26 +334,63 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
         if (verifyBtn) {
           verifyBtn.disabled = false
           verifyBtn.style.opacity = '1'
+          verifyBtn.textContent = 'Verify & Continue'
         }
         setTransitioning(false)
       }
     } catch (err) {
+      trackEvent('otp_failed')
       if (statusSlot) statusSlot.textContent = originalStatusText
       setSlotText(errorSlot, err.message, true)
       if (verifyBtn) {
         verifyBtn.disabled = false
         verifyBtn.style.opacity = '1'
+        verifyBtn.textContent = 'Verify & Continue'
       }
+    } finally {
+      isVerifying = false
     }
+  }
+
+  const handleOtpInput = (e) => {
+    const val = e.target.value.trim()
+    if (val.length === 6) {
+      handleVerifyClick({ preventDefault: () => {} })
+    }
+  }
+
+  // Inject spinner animation styles
+  if (!shadow.querySelector('#otp-spinner-styles')) {
+    const styleEl = document.createElement('style')
+    styleEl.id = 'otp-spinner-styles'
+    styleEl.textContent = `
+      .otp-spinner {
+        display: inline-block;
+        width: 14px;
+        height: 14px;
+        border: 2px solid rgba(255,255,255,0.3);
+        border-radius: 50%;
+        border-top-color: currentColor;
+        animation: otpSpin 0.8s linear infinite;
+        vertical-align: middle;
+        margin-left: 6px;
+      }
+      @keyframes otpSpin {
+        to { transform: rotate(360deg); }
+      }
+    `
+    shadow.appendChild(styleEl)
   }
 
   if (sendBtn) sendBtn.addEventListener('click', handleSendClick)
   if (verifyBtn) verifyBtn.addEventListener('click', handleVerifyClick)
+  if (otpInput) otpInput.addEventListener('input', handleOtpInput)
 
   return () => {
     if (timer) clearInterval(timer)
     if (sendBtn) sendBtn.removeEventListener('click', handleSendClick)
     if (verifyBtn) verifyBtn.removeEventListener('click', handleVerifyClick)
+    if (otpInput) otpInput.removeEventListener('input', handleOtpInput)
   }
 }
 
@@ -315,6 +421,27 @@ function SubscriptionPage() {
   )
 
   phoneRef.current = phone
+
+  // Helper to load session
+  const getSavedSession = useCallback(() => {
+    try {
+      const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+      return saved ? JSON.parse(saved) : null
+    } catch {
+      return null
+    }
+  }, [country, operator])
+
+  // Helper to save session
+  const saveSession = useCallback((data) => {
+    try {
+      const current = getSavedSession() || {}
+      const updated = { ...current, ...data }
+      sessionStorage.setItem(`tc_session_${country}_${operator}`, JSON.stringify(updated))
+    } catch (e) {
+      console.warn('Failed to save session:', e)
+    }
+  }, [country, operator, getSavedSession])
 
   useEffect(() => {
     if (!country || !operator) {
@@ -349,7 +476,27 @@ function SubscriptionPage() {
     if (data.visitId) visitIdRef.current = data.visitId
     pageDataRef.current = data
     setPageData(data)
-  }, [])
+
+    // Save session in sessionStorage
+    const isVerified = (data.pageType === 'CONFIRM' || data.pageType === 'THANKYOU' || data.verified === true)
+    saveSession({
+      verificationStatus: isVerified ? 'verified' : 'unverified',
+      flowId: data.campaignId,
+      campaignId: data.campaignId,
+      visitId: data.visitId || visitIdRef.current,
+      phone: phoneRef.current,
+      step: data.pageType,
+    })
+
+    // Sync URL step parameter without breaking history
+    setSearchParams((prev) => {
+      const nextParams = new URLSearchParams(prev)
+      if (nextParams.get('step') !== data.pageType) {
+        nextParams.set('step', data.pageType)
+      }
+      return nextParams
+    }, { replace: false })
+  }, [saveSession, setSearchParams])
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {
@@ -381,6 +528,14 @@ function SubscriptionPage() {
         return
       }
       setError('')
+
+      if (pageCacheRef.current.has(page)) {
+        const cachedData = pageCacheRef.current.get(page)
+        setPageData(cachedData)
+        setBooting(false)
+        return
+      }
+
       try {
         const data = await fetchFlowPage({
           country,
@@ -410,17 +565,54 @@ function SubscriptionPage() {
     }
   }, [])
 
+  // Restore step/session on load/refresh (Refresh Safe)
   useEffect(() => {
     if (phoneResolving) return
-    selectedPackRef.current = 'daily'
-    pageCacheRef.current.clear()
-    prefetchingRef.current.clear()
-    visitIdRef.current = null
-    pageDataRef.current = null
-    setPageData(null)
-    setBooting(true)
-    loadPage('HOME')
-  }, [country, operator, phoneResolving, loadPage])
+    
+    const savedSession = getSavedSession()
+    if (savedSession && savedSession.visitId) {
+      visitIdRef.current = savedSession.visitId
+      phoneRef.current = savedSession.phone || ''
+      setPhone(savedSession.phone || '')
+      
+      const targetStep = searchParams.get('step') || savedSession.step || 'HOME'
+      setBooting(true)
+      loadPage(targetStep)
+    } else {
+      selectedPackRef.current = 'daily'
+      pageCacheRef.current.clear()
+      prefetchingRef.current.clear()
+      visitIdRef.current = null
+      pageDataRef.current = null
+      setPageData(null)
+      setBooting(true)
+      
+      const targetStep = searchParams.get('step') || 'HOME'
+      loadPage(targetStep)
+    }
+  }, [country, operator, phoneResolving, loadPage, getSavedSession])
+
+  // Sync step changes from browser history back/forward buttons
+  useEffect(() => {
+    if (phoneResolving || booting || !pageData) return
+    const currentStep = pageData.pageType
+    const urlStep = searchParams.get('step') || 'HOME'
+
+    if (currentStep !== urlStep) {
+      setBooting(true)
+      loadPage(urlStep)
+    }
+  }, [searchParams, phoneResolving, booting, pageData, loadPage])
+
+  // Track Page Views
+  useEffect(() => {
+    if (!pageData?.pageType) return
+    if (pageData.pageType === 'CONFIRM') {
+      trackEvent('confirm_loaded')
+    } else if (pageData.pageType === 'THANKYOU') {
+      trackEvent('success_loaded')
+    }
+  }, [pageData?.pageType])
 
   useEffect(() => {
     if (!pageData?.pageType || !visitIdRef.current) return
@@ -495,6 +687,9 @@ function SubscriptionPage() {
         cachePage(next)
         if (next.pageType === 'CONFIRM') {
           selectedPackRef.current = 'daily'
+        }
+        if (fromPage === 'CONFIRM' && action === 'CONFIRM' && next.pageType === 'THANKYOU') {
+          trackEvent('confirm_completed')
         }
       } catch (err) {
         setError(err.message || 'Action failed')

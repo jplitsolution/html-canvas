@@ -9,6 +9,12 @@ const defaultMetrics = {
   saveCount: 0,
   sessionTime: 0,
   sessions: 0,
+  otp_sent: 0,
+  otp_verified: 0,
+  otp_failed: 0,
+  confirm_loaded: 0,
+  confirm_completed: 0,
+  success_loaded: 0,
 }
 
 let sessionStart = Date.now()

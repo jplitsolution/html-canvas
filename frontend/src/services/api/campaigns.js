@@ -138,3 +138,16 @@ export async function getOtpAnalytics(campaignId) {
   const url = campaignId ? `/analytics/otp?campaignId=${campaignId}` : '/analytics/otp'
   return apiClient(url)
 }
+
+export async function getCampaignActivityLogs(campaignId, params = {}) {
+  const query = new URLSearchParams()
+  if (params.page) query.append('page', params.page)
+  if (params.limit) query.append('limit', params.limit)
+  if (params.phone) query.append('phone', params.phone)
+  if (params.status) query.append('status', params.status)
+
+  const queryString = query.toString()
+  const url = `/analytics/campaign/${campaignId}/logs${queryString ? `?${queryString}` : ''}`
+  return apiClient(url)
+}
+

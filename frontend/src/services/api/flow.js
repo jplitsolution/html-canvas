@@ -8,6 +8,7 @@ export async function fetchFlowPage({ country, operator, page, msisdn, visitId, 
   })
   if (visitId) params.set('visitId', String(visitId))
   if (pack) params.set('pack', pack)
+  if (msisdn) params.set('msisdn', String(msisdn))
 
   return apiClient(`/flow/page?${params.toString()}`, {
     method: 'GET',

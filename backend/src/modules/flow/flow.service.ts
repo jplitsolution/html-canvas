@@ -87,7 +87,65 @@ export class FlowService {
     let visitId = input.visitId;
     let resolvedPageType = input.pageType;
 
-    if (!visitId && input.pageType === CampaignPageType.HOME) {
+    // Enforce Route Guards for page access
+    const isOtpEnabled = apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '';
+    if (isOtpEnabled) {
+      if (resolvedPageType === CampaignPageType.CONFIRM || resolvedPageType === CampaignPageType.THANKYOU) {
+        let isVerified = false;
+        if (visitId && phone) {
+          const verifiedOtp = await this.otpRepository.findOne({
+            where: {
+              phone,
+              visitId,
+              status: 'verified',
+            },
+          });
+          if (verifiedOtp) {
+            isVerified = true;
+          }
+        }
+
+        if (!isVerified) {
+          // If already subscribed according to partner API, we can still show THANKYOU
+          const subscribed = await this.partnerApiService.checkSubscription(
+            apiConfig,
+            {
+              phone,
+              serviceId,
+              country: campaign.country,
+              operator: campaign.operator,
+            },
+          ).catch(() => false);
+
+          if (subscribed) {
+            resolvedPageType = CampaignPageType.THANKYOU;
+          } else {
+            resolvedPageType = phone ? CampaignPageType.OTP : CampaignPageType.HOME;
+            this.logger.warn(`Route Guard: Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to ${resolvedPageType}`);
+          }
+        }
+      }
+    } else {
+      if (resolvedPageType === CampaignPageType.CONFIRM && !phone) {
+        resolvedPageType = CampaignPageType.HOME;
+      }
+      if (resolvedPageType === CampaignPageType.THANKYOU) {
+        const subscribed = await this.partnerApiService.checkSubscription(
+          apiConfig,
+          {
+            phone,
+            serviceId,
+            country: campaign.country,
+            operator: campaign.operator,
+          },
+        ).catch(() => false);
+        if (!subscribed) {
+          resolvedPageType = phone ? CampaignPageType.CONFIRM : CampaignPageType.HOME;
+        }
+      }
+    }
+
+    if (!visitId && resolvedPageType === CampaignPageType.HOME) {
       const visit = await this.analyticsService.createVisit({
         campaignId: campaign.id,
         phone,
