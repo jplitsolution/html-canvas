@@ -390,7 +390,12 @@ export class OtpService {
       throw new BadRequestException('All configured OTP gateways failed to deliver message');
     }
 
-    // Save request record
+    // Save request record — always persist campaign from visit when available
+    const resolvedCampaignId =
+      campaignId != null && Number(campaignId) > 0
+        ? Number(campaignId)
+        : null;
+
     const row = this.otpRepository.create({
       phone: cleanPhone,
       otpSalt: salt,
@@ -398,13 +403,23 @@ export class OtpService {
       createdAt: new Date(),
       expiresAt,
       visitId: visitId ? Number(visitId) : null,
-      campaignId,
+      campaignId: resolvedCampaignId,
       provider: chosenProvider,
       providerRequestId: sendResult?.providerRequestId || null,
       status: 'sent',
       attempts: 0,
     });
     await this.otpRepository.save(row);
+
+    if (visitId) {
+      await this.visitRepository.update(
+        { id: Number(visitId) },
+        { phone: cleanPhone },
+      );
+      await this.logVisitEvent(Number(visitId), VisitEventType.OTP_SEND, {
+        phone: cleanPhone,
+      });
+    }
 
     return {
       otp, // Exposed to caller; controller handles masking/exposing depending on env/provider
@@ -595,6 +610,17 @@ export class OtpService {
     active.verifiedAt = now;
     active.usedAt = now; // backward compatibility
     await this.otpRepository.save(active);
+
+    const resolvedVisitId = visitId ? Number(visitId) : active.visitId;
+    if (resolvedVisitId) {
+      await this.visitRepository.update(
+        { id: resolvedVisitId },
+        { phone: cleanPhone },
+      );
+      await this.logVisitEvent(resolvedVisitId, VisitEventType.OTP_VERIFY, {
+        phone: cleanPhone,
+      });
+    }
 
     return { ok: true };
   }

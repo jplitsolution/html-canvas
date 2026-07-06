@@ -17,13 +17,16 @@ import {
   User,
   Globe,
   Terminal,
-  Activity
+  Activity,
+  Phone,
+  KeyRound,
 } from 'lucide-react'
 import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
 import Badge from '../ui/Badge'
 import { getCampaignActivityLogs } from '../../services/api/campaigns'
+import { getVisitPagePath } from '../../utils/visitPagePath'
 
 // Map visitStatus to Badge variants
 const STATUS_BADGE_VARIANTS = {
@@ -31,6 +34,7 @@ const STATUS_BADGE_VARIANTS = {
   BLOCKED: 'warning',
   SUBSCRIBED: 'primary',
   HOME_SHOWN: 'default',
+  OTP_SHOWN: 'default',
   PLAN_SHOWN: 'default',
   CONFIRM_SHOWN: 'default',
   SUCCESS: 'success',
@@ -54,6 +58,12 @@ function getEventIcon(eventType) {
     case 'PLAN_VIEW':
     case 'CONFIRM_VIEW':
       return <Eye className="w-4 h-4 text-fg-muted" />
+    case 'OTP_VIEW':
+      return <Phone className="w-4 h-4 text-sky-500" />
+    case 'OTP_SEND':
+      return <Phone className="w-4 h-4 text-blue-500" />
+    case 'OTP_VERIFY':
+      return <KeyRound className="w-4 h-4 text-emerald-500" />
     case 'SUBSCRIBE_CLICK':
       return <MousePointerClick className="w-4 h-4 text-amber-500" />
     case 'SUBSCRIBE_SUCCESS':
@@ -274,9 +284,18 @@ function ActivityLogsModal({ isOpen, onClose, campaignId, campaignName }) {
                             )}
                           </td>
                           <td className="px-4 py-3">
-                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-bg-subtle text-fg-muted font-mono font-medium">
-                              /{visit.pageType || 'HOME'}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-1 max-w-xs">
+                              {getVisitPagePath(visit).map((page, idx, pages) => (
+                                <Fragment key={`${visit.id}-${page}-${idx}`}>
+                                  <span className="inline-flex items-center text-xs px-2 py-0.5 rounded bg-bg-subtle text-fg-muted font-mono font-medium">
+                                    /{page}
+                                  </span>
+                                  {idx < pages.length - 1 && (
+                                    <span className="text-fg-subtle text-[10px]">→</span>
+                                  )}
+                                </Fragment>
+                              ))}
+                            </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
                             <Badge variant={STATUS_BADGE_VARIANTS[visit.visitStatus] || 'default'}>

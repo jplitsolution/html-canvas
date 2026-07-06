@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, Globe, LogIn } from 'lucide-react'
+import { Search, Plus, LogIn, ChevronRight } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
@@ -8,7 +8,6 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import EmptyState from '../components/ui/EmptyState'
 import CreateCampaignModal from '../components/dashboard/CreateCampaignModal'
-import Card from '../components/ui/Card'
 
 function CampaignsPage() {
   const navigate = useNavigate()
@@ -34,12 +33,19 @@ function CampaignsPage() {
     )
   }, [campaigns, search])
 
+  const pageActions = isAuthenticated ? (
+    <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>
+      <Plus className="w-4 h-4" />
+      New campaign
+    </Button>
+  ) : null
+
   if (authLoading) {
     return (
       <AppShell>
-        <main className="page-container flex items-center justify-center min-h-[50vh]">
-          <p className="text-fg-muted">Loading...</p>
-        </main>
+        <div className="page-container flex items-center justify-center min-h-[50vh]">
+          <p className="text-fg-muted text-sm">Loading...</p>
+        </div>
       </AppShell>
     )
   }
@@ -47,11 +53,11 @@ function CampaignsPage() {
   if (!isAuthenticated) {
     return (
       <AppShell>
-        <main className="page-container">
+        <div className="page-container">
           <EmptyState
             icon={LogIn}
             title="Sign in to manage campaigns"
-            description="Create operator and country specific subscription funnels"
+            description="Create and manage subscription funnels by country and operator"
             action={
               <Button variant="primary" onClick={() => navigate('/login')}>
                 <LogIn className="w-4 h-4" />
@@ -59,44 +65,41 @@ function CampaignsPage() {
               </Button>
             }
           />
-        </main>
+        </div>
       </AppShell>
     )
   }
 
   return (
-    <AppShell>
-      <main className="page-container">
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-xl sm:text-2xl font-bold text-fg font-display tracking-tight">Campaigns</h1>
-          <p className="text-sm text-fg-muted mt-1">
+    <AppShell actions={pageActions}>
+      <div className="page-container">
+        <div className="page-header">
+          <h1 className="page-header-title">Campaigns</h1>
+          <p className="page-header-description">
             Manage subscription funnels by country and operator
           </p>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-          <div className="relative w-full sm:w-72">
+        <div className="mb-4">
+          <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
             <Input
               type="text"
-              placeholder="Search country or operator..."
+              placeholder="Search by country, operator, or name..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
             />
           </div>
-          <Button variant="primary" onClick={() => setShowCreate(true)}>
-            <Plus className="w-4 h-4" />
-            New campaign
-          </Button>
         </div>
 
         {campaignsLoading ? (
-          <div className="surface-card p-12 text-center text-fg-muted">Loading campaigns...</div>
+          <div className="surface-card p-12 text-center text-fg-muted text-sm">
+            Loading campaigns...
+          </div>
         ) : filtered.length === 0 ? (
           <div className="surface-card">
             <EmptyState
-              icon={Globe}
               title={search ? 'No campaigns found' : 'No campaigns yet'}
               description="Create a campaign for each country and operator pair"
               action={
@@ -110,40 +113,48 @@ function CampaignsPage() {
             />
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {filtered.map((campaign) => (
-              <Card
-                key={campaign.id}
-                interactive
-                className="p-4"
-                onClick={() => navigate(`/campaigns/${campaign.id}`)}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2.5 rounded-lg bg-gradient-to-br from-emerald-500 to-cyan-500 text-white">
-                    <Globe className="w-5 h-5" />
-                  </div>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full ${
-                      campaign.active
-                        ? 'bg-success-muted text-success'
-                        : 'bg-bg-muted text-fg-muted'
-                    }`}
+          <div className="surface-card overflow-hidden">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th className="col-text">Campaign</th>
+                  <th className="col-text">Country</th>
+                  <th className="col-text">Operator</th>
+                  <th className="col-text">Status</th>
+                  <th className="col-text">Pages</th>
+                  <th className="col-num w-10" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((campaign) => (
+                  <tr
+                    key={campaign.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/campaigns/${campaign.id}`)}
                   >
-                    {campaign.active ? 'Active' : 'Draft'}
-                  </span>
-                </div>
-                <h3 className="font-semibold text-sm text-fg font-display mb-1">
-                  {campaign.country} / {campaign.operator}
-                </h3>
-                <p className="text-xs text-fg-muted truncate">{campaign.name}</p>
-                <p className="text-xs text-fg-muted mt-2">
-                  {campaign.requiredComplete ? 'Ready to activate' : 'Pages incomplete'}
-                </p>
-              </Card>
-            ))}
+                    <td className="col-text font-medium">{campaign.name}</td>
+                    <td className="col-text text-fg-muted">{campaign.country}</td>
+                    <td className="col-text text-fg-muted">{campaign.operator}</td>
+                    <td className="col-text">
+                      <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
+                        {campaign.active ? 'Active' : 'Draft'}
+                      </span>
+                    </td>
+                    <td className="col-text">
+                      <span className={`badge ${campaign.requiredComplete ? 'badge-success' : 'badge-warning'}`}>
+                        {campaign.requiredComplete ? 'Complete' : 'Incomplete'}
+                      </span>
+                    </td>
+                    <td className="col-num">
+                      <ChevronRight className="w-4 h-4 text-fg-subtle inline-block" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-      </main>
+      </div>
 
       <CreateCampaignModal
         isOpen={showCreate}

@@ -1,6 +1,17 @@
 import { memo, useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, ExternalLink, Pencil, Settings, Power, Sparkles, FileText, User } from 'lucide-react'
+import {
+  ArrowLeft,
+  ExternalLink,
+  Pencil,
+  Settings,
+  Power,
+  Sparkles,
+  FileText,
+  User,
+  CheckCircle2,
+  Circle,
+} from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -13,6 +24,7 @@ import {
 } from '../services/api/campaigns'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import ActivityLogsModal from '../components/dashboard/ActivityLogsModal'
+import { getVisitPagePath } from '../utils/visitPagePath'
 
 function CampaignDetailPage() {
   const { id } = useParams()
@@ -40,9 +52,7 @@ function CampaignDetailPage() {
   }, [id])
 
   useEffect(() => {
-    if (id) {
-      fetchRecentLogs()
-    }
+    if (id) fetchRecentLogs()
   }, [id, fetchRecentLogs])
 
   useEffect(() => {
@@ -72,7 +82,9 @@ function CampaignDetailPage() {
   if (loading) {
     return (
       <AppShell>
-        <main className="page-container py-12 text-center text-fg-muted">Loading campaign...</main>
+        <div className="page-container flex items-center justify-center min-h-[50vh]">
+          <p className="text-fg-muted text-sm">Loading campaign...</p>
+        </div>
       </AppShell>
     )
   }
@@ -80,12 +92,12 @@ function CampaignDetailPage() {
   if (error || !campaign) {
     return (
       <AppShell>
-        <main className="page-container py-12 text-center">
+        <div className="page-container text-center py-12">
           <p className="text-fg-muted mb-4">{error || 'Campaign not found'}</p>
           <Button variant="outline" onClick={() => navigate('/campaigns')}>
             Back to campaigns
           </Button>
-        </main>
+        </div>
       </AppShell>
     )
   }
@@ -95,174 +107,230 @@ function CampaignDetailPage() {
   )
   const previewUrl = getCampaignPreviewUrl(campaign)
 
+  const pageActions = (
+    <>
+      {hasEmptyPages && (
+        <Button variant="outline" size="sm" onClick={handleApplyDefaults} disabled={applyingDefaults}>
+          <Sparkles className="w-4 h-4" />
+          {applyingDefaults ? 'Applying...' : 'Use defaults'}
+        </Button>
+      )}
+      <Button variant="outline" size="sm" onClick={() => setShowApiConfig(true)}>
+        <Settings className="w-4 h-4" />
+        API settings
+      </Button>
+      <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, '_blank')}>
+        <ExternalLink className="w-4 h-4" />
+        Preview
+      </Button>
+      <Button
+        variant={campaign.active ? 'outline' : 'primary'}
+        size="sm"
+        onClick={handleToggleActive}
+        disabled={activating || (!campaign.active && !campaign.requiredComplete)}
+        title={
+          !campaign.active && !campaign.requiredComplete
+            ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
+            : undefined
+        }
+      >
+        <Power className="w-4 h-4" />
+        {campaign.active ? 'Deactivate' : 'Activate'}
+      </Button>
+    </>
+  )
+
   return (
-    <AppShell>
-      <main className="page-container max-w-4xl">
+    <AppShell actions={pageActions}>
+      <div className="page-container">
         <button
           type="button"
           onClick={() => navigate('/campaigns')}
-          className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-4"
+          className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
           Back to campaigns
         </button>
 
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-8">
+        <div className="page-header flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-fg font-display">
-              {campaign.country} / {campaign.operator}
-            </h1>
-            <p className="text-sm text-fg-muted mt-1">{campaign.name}</p>
+            <div className="flex items-center gap-3 mb-1">
+              <h1 className="page-header-title">
+                {campaign.country} / {campaign.operator}
+              </h1>
+              <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
+                {campaign.active ? 'Active' : 'Draft'}
+              </span>
+            </div>
+            <p className="page-header-description">{campaign.name}</p>
             {campaign.serviceId && (
               <p className="text-xs text-fg-subtle mt-1">Service ID: {campaign.serviceId}</p>
             )}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {hasEmptyPages && (
-              <Button variant="outline" size="sm" onClick={handleApplyDefaults} disabled={applyingDefaults}>
-                <Sparkles className="w-4 h-4" />
-                {applyingDefaults ? 'Applying...' : 'Use default templates'}
-              </Button>
-            )}
-            <Button variant="outline" size="sm" onClick={() => setShowApiConfig(true)}>
-              <Settings className="w-4 h-4" />
-              API settings
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowActivityLogs(true)}>
-              <FileText className="w-4 h-4" />
-              Activity logs
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, '_blank')}>
-              <ExternalLink className="w-4 h-4" />
-              Preview
-            </Button>
-            <Button
-              variant={campaign.active ? 'outline' : 'primary'}
-              size="sm"
-              onClick={handleToggleActive}
-              disabled={activating || (!campaign.active && !campaign.requiredComplete)}
-              title={
-                !campaign.active && !campaign.requiredComplete
-                  ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
-                  : undefined
-              }
-            >
-              <Power className="w-4 h-4" />
-              {campaign.active ? 'Deactivate' : 'Activate'}
-            </Button>
-          </div>
         </div>
 
-        <div className="surface-card overflow-hidden">
-          <div className="px-4 py-3 border-b border-border bg-bg-subtle">
-            <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
-            <p className="text-xs text-fg-muted mt-0.5">
-              Edit each step for this operator. Required: Home, Confirm, Thank you.
-            </p>
-          </div>
-          <div className="divide-y divide-border">
-            {PAGE_TYPES.map((pageType) => {
-              const page = campaign.pages.find((p) => p.pageType === pageType)
-              const required = REQUIRED_PAGE_TYPES.includes(pageType)
-              return (
-                <div key={pageType} className="flex items-center justify-between px-4 py-3 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-fg">
-                      {PAGE_TYPE_LABELS[pageType]}
-                      {required && <span className="text-danger ml-1">*</span>}
-                    </p>
-                    <p className="text-xs text-fg-muted">
-                      {page?.hasContent ? 'Content saved' : 'Not configured yet'}
-                    </p>
-                  </div>
-                  <Link to={`/campaigns/${campaign.id}/edit/${pageType}`}>
-                    <Button variant="outline" size="sm">
-                      <Pencil className="w-4 h-4" />
-                      Edit in canvas
-                    </Button>
-                  </Link>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Funnel pages */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
+                <p className="text-xs text-fg-muted mt-0.5">
+                  Required: Home, Confirm, Thank you
+                </p>
+              </div>
+              <div className="divide-y divide-border">
+                {PAGE_TYPES.map((pageType) => {
+                  const page = campaign.pages.find((p) => p.pageType === pageType)
+                  const required = REQUIRED_PAGE_TYPES.includes(pageType)
+                  const hasContent = page?.hasContent
+                  return (
+                    <div key={pageType} className="flex items-center justify-between px-5 py-3.5 gap-4">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {hasContent ? (
+                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                        ) : (
+                          <Circle className="w-4 h-4 text-fg-subtle shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-fg">
+                            {PAGE_TYPE_LABELS[pageType]}
+                            {required && <span className="text-danger ml-0.5">*</span>}
+                          </p>
+                          <p className="text-xs text-fg-muted">
+                            {hasContent ? 'Content saved' : 'Not configured'}
+                          </p>
+                        </div>
+                      </div>
+                      <Link to={`/campaigns/${campaign.id}/edit/${pageType}`}>
+                        <Button variant="outline" size="sm">
+                          <Pencil className="w-3.5 h-3.5" />
+                          Edit
+                        </Button>
+                      </Link>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Recent activity */}
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-fg">Recent activity</h2>
+                  <p className="text-xs text-fg-muted mt-0.5">Latest visitor interactions</p>
                 </div>
-              )
-            })}
+                <Button variant="outline" size="sm" onClick={() => setShowActivityLogs(true)}>
+                  <FileText className="w-3.5 h-3.5" />
+                  View all
+                </Button>
+              </div>
+              {recentLogsLoading ? (
+                <div className="p-6 text-center text-xs text-fg-muted">Loading...</div>
+              ) : recentLogs.length === 0 ? (
+                <div className="p-6 text-center text-xs text-fg-muted">No activity yet</div>
+              ) : (
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Phone</th>
+                      <th>Time</th>
+                      <th>Path</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentLogs.map((log) => (
+                      <tr key={log.id}>
+                        <td className="font-medium">
+                          {log.phone ? (
+                            <span className="inline-flex items-center gap-1">
+                              <User className="w-3.5 h-3.5 text-fg-subtle" />
+                              {log.phone}
+                            </span>
+                          ) : (
+                            <span className="text-fg-subtle italic">Anonymous</span>
+                          )}
+                        </td>
+                        <td className="text-fg-muted text-xs font-mono">
+                          {new Date(log.createdAt).toLocaleString('en-US', {
+                            month: 'short',
+                            day: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </td>
+                        <td>
+                          <div className="flex flex-wrap items-center gap-1">
+                            {getVisitPagePath(log).map((page, idx, pages) => (
+                              <span key={`${log.id}-${page}-${idx}`} className="inline-flex items-center gap-1">
+                                <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted">
+                                  /{page}
+                                </span>
+                                {idx < pages.length - 1 && (
+                                  <span className="text-fg-subtle text-[10px]">→</span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                        <td>
+                          <span
+                            className={`badge ${
+                              log.visitStatus === 'SUCCESS' || log.visitStatus === 'SUBSCRIBED'
+                                ? 'badge-success'
+                                : log.visitStatus === 'BLOCKED' || log.visitStatus === 'FAILED'
+                                ? 'badge-warning'
+                                : log.visitStatus === 'OTP_SHOWN' || log.visitStatus === 'CONFIRM_SHOWN'
+                                ? 'badge-accent'
+                                : 'badge-muted'
+                            }`}
+                          >
+                            {log.visitStatus}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
 
-        <div className="mt-6 p-4 rounded-lg border border-border bg-bg-subtle">
-          <p className="text-xs font-medium text-fg-muted mb-1">Test URL</p>
-          <code className="text-xs text-fg break-all block">{previewUrl}</code>
-          <p className="text-xs text-fg-subtle mt-2">
-            User selects Daily / Weekly / Monthly pack on the Confirm page. Backend sends{' '}
-            <code className="text-fg-muted">planId</code> to the partner subscribe API.
-          </p>
-        </div>
-
-        {/* Recent Activity Logs card */}
-        <div className="surface-card overflow-hidden mt-6">
-          <div className="px-4 py-3 border-b border-border bg-bg-subtle flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold text-fg flex items-center gap-1.5 font-display">
-                <FileText className="w-4 h-4 text-accent" />
-                Recent Activity Logs
-              </h2>
-              <p className="text-xs text-fg-muted mt-0.5">
-                Real-time tracking of visitor entry and subscription outcomes
+          {/* Sidebar info */}
+          <div className="space-y-4">
+            <div className="surface-card p-5">
+              <h3 className="text-sm font-semibold text-fg mb-3">Test URL</h3>
+              <code className="text-xs text-fg-muted break-all block bg-bg-muted p-3 rounded-md border border-border">
+                {previewUrl}
+              </code>
+              <p className="text-xs text-fg-subtle mt-3 leading-relaxed">
+                Users select Daily / Weekly / Monthly pack on the Confirm page. Backend sends{' '}
+                <code className="text-fg-muted">planId</code> to the partner subscribe API.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowActivityLogs(true)}>
-              View all logs
-            </Button>
-          </div>
-          <div className="divide-y divide-border">
-            {recentLogsLoading ? (
-              <div className="p-6 text-center text-xs text-fg-muted">Loading logs...</div>
-            ) : recentLogs.length === 0 ? (
-              <div className="p-6 text-center text-xs text-fg-muted">No interactions logged yet for this campaign.</div>
-            ) : (
-              recentLogs.map((log) => (
-                <div key={log.id} className="flex items-center justify-between px-4 py-2.5 gap-4 hover:bg-bg-subtle/20 transition-colors">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-semibold text-fg">
-                      {log.phone ? (
-                        <span className="inline-flex items-center gap-1">
-                          <User className="w-3.5 h-3.5 text-fg-subtle" />
-                          {log.phone}
-                        </span>
-                      ) : (
-                        <span className="text-fg-subtle italic font-normal text-xs">Anonymous</span>
-                      )}
-                    </span>
-                    <span className="text-[10px] text-fg-subtle font-mono mt-0.5">
-                      {new Date(log.createdAt).toLocaleString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                      })}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-mono px-2 py-0.5 rounded bg-bg-subtle text-fg-muted">
-                      /{log.pageType || 'HOME'}
-                    </span>
-                    <span
-                      className={`text-[10px] px-2 py-0.5 rounded font-semibold tracking-wider ${
-                        log.visitStatus === 'SUCCESS' || log.visitStatus === 'SUBSCRIBED'
-                          ? 'bg-success-muted text-success'
-                          : log.visitStatus === 'BLOCKED' || log.visitStatus === 'FAILED'
-                          ? 'bg-warning-muted text-warning'
-                          : 'bg-bg-muted text-fg-muted'
-                      }`}
-                    >
-                      {log.visitStatus}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
+
+            <div className="surface-card p-5">
+              <h3 className="text-sm font-semibold text-fg mb-3">Quick actions</h3>
+              <div className="space-y-2">
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowActivityLogs(true)}>
+                  <FileText className="w-4 h-4" />
+                  Activity logs
+                </Button>
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowApiConfig(true)}>
+                  <Settings className="w-4 h-4" />
+                  API configuration
+                </Button>
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => window.open(previewUrl, '_blank')}>
+                  <ExternalLink className="w-4 h-4" />
+                  Open preview
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
-      </main>
+      </div>
 
       <CampaignApiConfigModal
         isOpen={showApiConfig}

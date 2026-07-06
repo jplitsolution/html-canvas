@@ -148,7 +148,7 @@ export class FlowService {
     if (!visitId && resolvedPageType === CampaignPageType.HOME) {
       const visit = await this.analyticsService.createVisit({
         campaignId: campaign.id,
-        phone,
+        phone: phone || undefined,
         country: campaign.country,
         operator: campaign.operator,
         ipAddress: input.ipAddress,
@@ -175,6 +175,7 @@ export class FlowService {
           visitId,
           VisitStatus.SUBSCRIBED,
           CampaignPageType.THANKYOU,
+          phone,
         );
         await this.analyticsService.logEvent(
           visitId,
@@ -188,8 +189,11 @@ export class FlowService {
           visitId,
           VisitStatus.HOME_SHOWN,
           CampaignPageType.HOME,
+          phone,
         );
       }
+    } else if (visitId && phone) {
+      await this.analyticsService.setVisitPhone(visitId, phone);
     }
 
     const page = campaign.pages.find((p) => p.pageType === resolvedPageType);
@@ -280,17 +284,28 @@ export class FlowService {
         nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
       }
 
-      await this.analyticsService.updateVisit(
-        input.visitId,
+      const nextStatus =
         nextPage === CampaignPageType.CONFIRM
           ? VisitStatus.CONFIRM_SHOWN
-          : VisitStatus.HOME_SHOWN,
+          : nextPage === CampaignPageType.OTP
+            ? VisitStatus.OTP_SHOWN
+            : VisitStatus.HOME_SHOWN;
+
+      await this.analyticsService.updateVisit(
+        input.visitId,
+        nextStatus,
         nextPage,
+        phone,
       );
       if (nextPage === CampaignPageType.CONFIRM) {
         await this.analyticsService.logEvent(
           input.visitId,
           VisitEventType.CONFIRM_VIEW,
+        );
+      } else if (nextPage === CampaignPageType.OTP) {
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.OTP_VIEW,
         );
       }
       const variables = {
@@ -335,6 +350,7 @@ export class FlowService {
           input.visitId,
           VisitStatus.BLOCKED,
           CampaignPageType.BLOCKED,
+          phone,
         );
         await this.analyticsService.logEvent(
           input.visitId,
@@ -368,6 +384,7 @@ export class FlowService {
           input.visitId,
           VisitStatus.SUBSCRIBED,
           CampaignPageType.THANKYOU,
+          phone,
         );
         await this.analyticsService.logEvent(
           input.visitId,
@@ -405,6 +422,7 @@ export class FlowService {
           input.visitId,
           VisitStatus.SUCCESS,
           CampaignPageType.THANKYOU,
+          phone,
         );
         await this.analyticsService.logEvent(
           input.visitId,
@@ -432,6 +450,7 @@ export class FlowService {
         input.visitId,
         VisitStatus.FAILED,
         CampaignPageType.ERROR,
+        phone,
       );
       await this.analyticsService.logEvent(
         input.visitId,
@@ -483,6 +502,7 @@ export class FlowService {
         input.visitId,
         VisitStatus.CONFIRM_SHOWN,
         CampaignPageType.CONFIRM,
+        phone,
       );
 
       const variables = {

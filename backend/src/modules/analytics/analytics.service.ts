@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, Like } from 'typeorm';
+import { Repository, MoreThan, Like, In } from 'typeorm';
 import { Visit, VisitStatus } from './entities/visit.entity';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
 import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
@@ -30,6 +30,7 @@ export class AnalyticsService {
     id: number,
     status: VisitStatus,
     pageType?: string,
+    phone?: string,
   ): Promise<Visit> {
     const visit = await this.visitRepository.findOne({ where: { id } });
     if (!visit) return null as any;
@@ -38,8 +39,17 @@ export class AnalyticsService {
     if (pageType) {
       visit.pageType = pageType;
     }
+    if (phone && phone.trim() !== '') {
+      visit.phone = phone.trim();
+    }
 
     return this.visitRepository.save(visit);
+  }
+
+  async setVisitPhone(id: number, phone?: string): Promise<void> {
+    const cleanPhone = phone?.trim();
+    if (!cleanPhone) return;
+    await this.visitRepository.update({ id }, { phone: cleanPhone });
   }
 
   async logEvent(
@@ -119,19 +129,64 @@ export class AnalyticsService {
     };
   }
 
-  async getOtpAnalytics(campaignId?: number) {
+  async getOtpAnalytics(userId: number, campaignId?: number) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-    const baseWhere: any = {
-      createdAt: MoreThan(thirtyDaysAgo),
-    };
-    if (campaignId !== undefined) {
-      baseWhere.campaignId = campaignId;
+    const userCampaigns = await this.visitRepository.manager.getRepository(Campaign).find({
+      where: { userId },
+      select: { id: true, country: true, operator: true, name: true },
+    });
+
+    if (campaignId !== undefined && !userCampaigns.some((c) => c.id === campaignId)) {
+      throw new ForbiddenException(
+        'You do not have permission to access this campaign',
+      );
     }
 
-    const requests = await this.visitRepository.manager.getRepository(OtpRequest).find({
-      where: baseWhere,
+    const campaignMap = new Map(userCampaigns.map((c) => [c.id, c]));
+    const userCampaignIds = userCampaigns.map((c) => c.id);
+
+    const emptyAnalytics = () => ({
+      summary: {
+        totalRequests: 0,
+        sentRequests: 0,
+        verifiedRequests: 0,
+        failedRequests: 0,
+        verificationRate: 0,
+        failureRate: 0,
+        successRate: 0,
+        avgVerificationTime: 0,
+        avgResendCount: 0,
+      },
+      providerPerformance: [],
+      countryPerformance: [],
+      operatorPerformance: [],
+      campaignPerformance: [],
+      dailyTrends: [],
+      hourlyTrends: [],
+      topFailedCampaigns: [],
+      funnel: { requested: 0, sent: 0, verified: 0, subscribed: 0 },
+      period: {
+        days: 30,
+        from: thirtyDaysAgo.toISOString(),
+        to: new Date().toISOString(),
+      },
+      generatedAt: new Date().toISOString(),
+    });
+
+    if (userCampaignIds.length === 0) {
+      return emptyAnalytics();
+    }
+
+    const scopedCampaignFilter =
+      campaignId !== undefined ? campaignId : In(userCampaignIds);
+
+    const userCampaignIdSet = new Set(userCampaignIds.map((id) => Number(id)));
+    const otpRepo = this.visitRepository.manager.getRepository(OtpRequest);
+
+    const allRequests = await otpRepo.find({
+      where: { createdAt: MoreThan(thirtyDaysAgo) },
       select: {
         id: true,
         status: true,
@@ -145,16 +200,53 @@ export class AnalyticsService {
       },
     });
 
-    const campaigns = await this.visitRepository.manager.getRepository(Campaign).find({
-      select: {
-        id: true,
-        country: true,
-        operator: true,
-        name: true,
-      },
-    });
-    const campaignMap = new Map<number, typeof campaigns[0]>();
-    campaigns.forEach(c => campaignMap.set(c.id, c));
+    const visitIds = [
+      ...new Set(
+        allRequests
+          .map((r) => (r.visitId != null ? Number(r.visitId) : null))
+          .filter((id): id is number => id != null && !Number.isNaN(id)),
+      ),
+    ];
+
+    const visits = visitIds.length
+      ? await this.visitRepository.find({
+          where: { id: In(visitIds) },
+          select: { id: true, campaignId: true, country: true, operator: true },
+        })
+      : [];
+    const visitMap = new Map(visits.map((v) => [Number(v.id), v]));
+
+    const resolveCampaignId = (r: OtpRequest): number | null => {
+      const fromOtp =
+        r.campaignId != null && Number(r.campaignId) > 0
+          ? Number(r.campaignId)
+          : null;
+      const visit = r.visitId != null ? visitMap.get(Number(r.visitId)) : undefined;
+      const fromVisit =
+        visit?.campaignId != null && Number(visit.campaignId) > 0
+          ? Number(visit.campaignId)
+          : null;
+      const resolved = fromOtp ?? fromVisit ?? null;
+      if (resolved == null || Number.isNaN(resolved) || !userCampaignIdSet.has(resolved)) {
+        return null;
+      }
+      return resolved;
+    };
+
+    const resolveMeta = (resolvedCampaignId: number, visitId?: number | null) => {
+      const camp = campaignMap.get(resolvedCampaignId);
+      const visit = visitId != null ? visitMap.get(Number(visitId)) : undefined;
+      return {
+        country: camp?.country || visit?.country || '—',
+        operator: camp?.operator || visit?.operator || '—',
+        name: camp?.name || `Campaign #${resolvedCampaignId}`,
+      };
+    };
+
+    let requests = allRequests.filter((r) => resolveCampaignId(r) !== null);
+    if (campaignId !== undefined) {
+      requests = requests.filter((r) => resolveCampaignId(r) === campaignId);
+    }
 
     // Summary stats
     const totalRequests = requests.length;
@@ -243,39 +335,119 @@ export class AnalyticsService {
       }
     });
 
-    // Country/Operator performance
-    const countryMap = new Map<string, { total: number; verified: number }>();
-    const operatorMap = new Map<string, { total: number; verified: number }>();
-    requests.forEach(r => {
-      const camp = r.campaignId ? campaignMap.get(r.campaignId) : null;
-      const country = camp?.country || 'Unknown';
-      const operator = camp?.operator || 'Unknown';
+    // Country/Operator/Campaign performance
+    const countryMap = new Map<string, { total: number; verified: number; failed: number; sent: number }>();
+    const operatorMap = new Map<string, { total: number; verified: number; failed: number; sent: number; countries: Set<string> }>();
+    const campaignStatsMap = new Map<number, { total: number; verified: number; failed: number; sent: number }>();
 
-      if (!countryMap.has(country)) countryMap.set(country, { total: 0, verified: 0 });
-      if (!operatorMap.has(operator)) operatorMap.set(operator, { total: 0, verified: 0 });
+    const campaignsToShow =
+      campaignId !== undefined
+        ? userCampaigns.filter((c) => c.id === campaignId)
+        : userCampaigns;
+    for (const c of campaignsToShow) {
+      campaignStatsMap.set(Number(c.id), { total: 0, verified: 0, failed: 0, sent: 0 });
+    }
+
+    requests.forEach((r) => {
+      const resolvedCampaignId = resolveCampaignId(r)!;
+      const meta = resolveMeta(resolvedCampaignId, r.visitId);
+      const country = meta.country;
+      const operator = meta.operator;
+      const isVerified = r.status === 'verified' || r.verifiedAt !== null;
+      const isFailed = r.status === 'failed';
+      const isSent = ['sent', 'verified', 'used'].includes(r.status || '');
+
+      if (!countryMap.has(country)) countryMap.set(country, { total: 0, verified: 0, failed: 0, sent: 0 });
+      if (!operatorMap.has(operator)) {
+        operatorMap.set(operator, { total: 0, verified: 0, failed: 0, sent: 0, countries: new Set() });
+      }
+      if (!campaignStatsMap.has(resolvedCampaignId)) {
+        campaignStatsMap.set(resolvedCampaignId, { total: 0, verified: 0, failed: 0, sent: 0 });
+      }
 
       const cStats = countryMap.get(country)!;
       cStats.total++;
-      if (r.status === 'verified' || r.verifiedAt) cStats.verified++;
+      if (isVerified) cStats.verified++;
+      if (isFailed) cStats.failed++;
+      if (isSent) cStats.sent++;
 
       const oStats = operatorMap.get(operator)!;
       oStats.total++;
-      if (r.status === 'verified' || r.verifiedAt) oStats.verified++;
+      if (isVerified) oStats.verified++;
+      if (isFailed) oStats.failed++;
+      if (isSent) oStats.sent++;
+      if (country !== '—' && country !== 'Unknown') oStats.countries.add(country);
+
+      const campStats = campaignStatsMap.get(resolvedCampaignId)!;
+      campStats.total++;
+      if (isVerified) campStats.verified++;
+      if (isFailed) campStats.failed++;
+      if (isSent) campStats.sent++;
     });
 
-    const countryPerformance = Array.from(countryMap.entries()).map(([country, stats]) => ({
-      country,
-      total: stats.total,
-      verified: stats.verified,
-      successRate: stats.total > 0 ? parseFloat(((stats.verified / stats.total) * 100).toFixed(2)) : 0,
-    }));
+    const subscribedVisits = await this.visitRepository.find({
+      where: {
+        visitStatus: VisitStatus.SUCCESS,
+        createdAt: MoreThan(thirtyDaysAgo),
+        campaignId: scopedCampaignFilter,
+      },
+      select: { campaignId: true },
+    });
+    const subscribedByCampaign = new Map<number, number>();
+    subscribedVisits.forEach(v => {
+      const id = Number(v.campaignId);
+      subscribedByCampaign.set(id, (subscribedByCampaign.get(id) || 0) + 1);
+    });
 
-    const operatorPerformance = Array.from(operatorMap.entries()).map(([operator, stats]) => ({
-      operator,
-      total: stats.total,
-      verified: stats.verified,
-      successRate: stats.total > 0 ? parseFloat(((stats.verified / stats.total) * 100).toFixed(2)) : 0,
-    }));
+    const pct = (num: number, den: number) =>
+      den > 0 ? parseFloat(((num / den) * 100).toFixed(2)) : 0;
+
+    const countryPerformance = Array.from(countryMap.entries())
+      .map(([country, stats]) => ({
+        country,
+        total: stats.total,
+        verified: stats.verified,
+        failed: stats.failed,
+        sent: stats.sent,
+        successRate: pct(stats.verified, stats.total),
+        failureRate: pct(stats.failed, stats.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const operatorPerformance = Array.from(operatorMap.entries())
+      .map(([operator, stats]) => ({
+        operator,
+        countries: Array.from(stats.countries).sort(),
+        total: stats.total,
+        verified: stats.verified,
+        failed: stats.failed,
+        sent: stats.sent,
+        successRate: pct(stats.verified, stats.total),
+        failureRate: pct(stats.failed, stats.total),
+      }))
+      .sort((a, b) => b.total - a.total);
+
+    const campaignPerformance = Array.from(campaignStatsMap.entries())
+      .map(([id, stats]) => {
+        const camp = campaignMap.get(Number(id));
+        const meta = resolveMeta(Number(id));
+        const subscribed = subscribedByCampaign.get(Number(id)) || 0;
+        return {
+          campaignId: Number(id),
+          campaignName: camp?.name || meta.name,
+          country: camp?.country || meta.country,
+          operator: camp?.operator || meta.operator,
+          total: stats.total,
+          sent: stats.sent,
+          verified: stats.verified,
+          failed: stats.failed,
+          subscribed,
+          successRate: pct(stats.verified, stats.total),
+          failureRate: pct(stats.failed, stats.total),
+          conversionRate: pct(subscribed, stats.verified),
+        };
+      })
+      .sort((a, b) => b.total - a.total || a.campaignName.localeCompare(b.campaignName));
 
     // Trends (Hourly and Daily)
     const dailyMap = new Map<string, number>();
@@ -304,21 +476,25 @@ export class AnalyticsService {
 
     // Top Failed Campaigns
     const failedCampMap = new Map<number, { total: number; failed: number }>();
-    requests.forEach(r => {
-      if (!r.campaignId) return;
-      if (!failedCampMap.has(r.campaignId)) {
-        failedCampMap.set(r.campaignId, { total: 0, failed: 0 });
+    requests.forEach((r) => {
+      const resolvedCampaignId = resolveCampaignId(r);
+      if (resolvedCampaignId == null) return;
+      if (!failedCampMap.has(resolvedCampaignId)) {
+        failedCampMap.set(resolvedCampaignId, { total: 0, failed: 0 });
       }
-      const stats = failedCampMap.get(r.campaignId)!;
+      const stats = failedCampMap.get(resolvedCampaignId)!;
       stats.total++;
       if (r.status === 'failed') stats.failed++;
     });
     const topFailedCampaigns = Array.from(failedCampMap.entries())
-      .map(([campaignId, stats]) => {
-        const camp = campaignMap.get(campaignId);
+      .map(([cid, stats]) => {
+        const camp = campaignMap.get(Number(cid));
+        const meta = resolveMeta(Number(cid));
         return {
-          campaignId,
-          campaignName: camp ? `${camp.country} / ${camp.operator}` : `Campaign #${campaignId}`,
+          campaignId: Number(cid),
+          campaignName: camp
+            ? `${camp.country} / ${camp.operator}`
+            : `${meta.country} / ${meta.operator}`,
           total: stats.total,
           failed: stats.failed,
           failureRate: stats.total > 0 ? parseFloat(((stats.failed / stats.total) * 100).toFixed(2)) : 0,
@@ -328,11 +504,13 @@ export class AnalyticsService {
       .slice(0, 5);
 
     // Funnel: Requested -> Sent -> Verified -> Subscribed
-    const subscribedQuery: any = { visitStatus: VisitStatus.SUCCESS };
-    if (campaignId !== undefined) {
-      subscribedQuery.campaignId = campaignId;
-    }
-    const subscribedCount = await this.visitRepository.count({ where: subscribedQuery });
+    const subscribedCount = await this.visitRepository.count({
+      where: {
+        visitStatus: VisitStatus.SUCCESS,
+        createdAt: MoreThan(thirtyDaysAgo),
+        campaignId: scopedCampaignFilter,
+      },
+    });
 
     const funnel = {
       requested: totalRequests,
@@ -356,10 +534,17 @@ export class AnalyticsService {
       providerPerformance,
       countryPerformance,
       operatorPerformance,
+      campaignPerformance,
       dailyTrends,
       hourlyTrends,
       topFailedCampaigns,
       funnel,
+      period: {
+        days: 30,
+        from: thirtyDaysAgo.toISOString(),
+        to: new Date().toISOString(),
+      },
+      generatedAt: new Date().toISOString(),
     };
   }
 
@@ -401,13 +586,78 @@ export class AnalyticsService {
       }
     });
 
+    const visitsMissingPhone = data.filter((visit) => !visit.phone);
+    if (visitsMissingPhone.length > 0) {
+      const visitIds = visitsMissingPhone.map((visit) => visit.id);
+      const otpRequests = await this.visitRepository.manager
+        .getRepository(OtpRequest)
+        .find({
+          where: { visitId: In(visitIds) },
+          select: { visitId: true, phone: true, createdAt: true },
+          order: { createdAt: 'DESC' },
+        });
+
+      const phoneByVisitId = new Map<number, string>();
+      otpRequests.forEach((request) => {
+        if (
+          request.visitId &&
+          request.phone &&
+          !phoneByVisitId.has(request.visitId)
+        ) {
+          phoneByVisitId.set(request.visitId, request.phone);
+        }
+      });
+
+      visitsMissingPhone.forEach((visit) => {
+        const resolvedPhone = phoneByVisitId.get(visit.id);
+        if (resolvedPhone) {
+          visit.phone = resolvedPhone;
+        }
+      });
+    }
+
+    const enrichedData = data.map((visit) => ({
+      ...visit,
+      pagePath: this.derivePagePath(visit),
+    }));
+
     return {
-      data,
+      data: enrichedData,
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  private derivePagePath(visit: Visit): string[] {
+    const eventToPage: Partial<Record<VisitEventType, string>> = {
+      [VisitEventType.VISIT]: 'HOME',
+      [VisitEventType.HOME_VIEW]: 'HOME',
+      [VisitEventType.OTP_VIEW]: 'OTP',
+      [VisitEventType.OTP_SEND]: 'OTP',
+      [VisitEventType.OTP_VERIFY]: 'OTP',
+      [VisitEventType.CONFIRM_VIEW]: 'CONFIRM',
+      [VisitEventType.PLAN_VIEW]: 'CONFIRM',
+      [VisitEventType.SUBSCRIBE_SUCCESS]: 'THANKYOU',
+      [VisitEventType.SUBSCRIBE_FAILED]: 'ERROR',
+      [VisitEventType.BLOCKED]: 'BLOCKED',
+    };
+
+    const pages: string[] = [];
+    for (const event of visit.events || []) {
+      const page = eventToPage[event.eventType];
+      if (page && pages[pages.length - 1] !== page) {
+        pages.push(page);
+      }
+    }
+
+    const finalPage = visit.pageType || 'HOME';
+    if (pages.length === 0 || pages[pages.length - 1] !== finalPage) {
+      pages.push(finalPage);
+    }
+
+    return pages;
   }
 }
 

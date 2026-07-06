@@ -18,11 +18,11 @@ export function transformReactComponentsInHtml(html: string): string {
     const existingClass = el.getAttribute('class') || '';
 
     const variants: Record<string, string> = {
-      primary: 'bg-gradient-to-r from-[#7C4DFF] to-[#00E5FF] text-white hover:-translate-y-[4px] hover:shadow-[0_0_20px_rgba(0,229,255,0.4)] disabled:opacity-50',
-      secondary: 'bg-bg-subtle text-fg hover:-translate-y-[4px] border border-border hover:border-border-strong hover:shadow-md',
-      ghost: 'text-fg-muted hover:text-fg hover:bg-bg-subtle hover:-translate-y-[2px]',
-      danger: 'bg-danger text-danger-fg hover:-translate-y-[4px] hover:bg-danger-hover hover:shadow-[0_0_20px_rgba(220,38,38,0.3)]',
-      outline: 'border border-border text-fg hover:-translate-y-[4px] hover:bg-bg-subtle hover:border-border-strong hover:shadow-sm',
+      primary: 'bg-accent text-accent-fg hover:bg-accent-hover disabled:opacity-50',
+      secondary: 'bg-bg-muted text-fg hover:bg-bg-subtle border border-border',
+      ghost: 'text-fg-muted hover:text-fg hover:bg-bg-muted',
+      danger: 'bg-danger text-danger-fg hover:bg-danger-hover disabled:opacity-50',
+      outline: 'border border-border text-fg hover:bg-bg-subtle hover:border-border-strong bg-bg-elevated',
     };
 
     const sizes: Record<string, string> = {

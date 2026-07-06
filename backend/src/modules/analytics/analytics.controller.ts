@@ -31,10 +31,11 @@ export class AnalyticsController {
     summary: 'Get detailed OTP analytics, trends, and provider comparison',
   })
   async getOtpAnalytics(
-    @Query('campaignId') campaignId?: string,
+    @Query('campaignId') campaignId: string | undefined,
+    @CurrentUser() user: User,
   ) {
     const parsedId = campaignId && campaignId !== 'all' ? Number(campaignId) : undefined;
-    return this.analyticsService.getOtpAnalytics(parsedId);
+    return this.analyticsService.getOtpAnalytics(user.id, parsedId);
   }
 
   @Get('campaign/:campaignId')
