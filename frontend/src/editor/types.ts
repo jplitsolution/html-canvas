@@ -25,6 +25,9 @@ export interface SaveTemplateMeta {
 export interface TemplateEditorProps {
   projectId: string
   projectTitle: string
+  breadcrumbLabel?: string
+  breadcrumbHref?: string
+  funnelPageType?: string
   projectCreatedAt?: string
   projectMetadata?: { tags: string[]; description: string }
   initialData: GrapesEditorData

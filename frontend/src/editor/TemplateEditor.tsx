@@ -6,7 +6,7 @@ import { createGrapesConfig } from './grapesConfig'
 import { registerAllBlocks } from './blocks'
 import { setupAssetUpload, restoreAssetsFromProjectData } from './plugins/assetUpload'
 import { setupAssetCanvasDrop } from './plugins/assetDrag'
-import { setupCanvasEnhancements, setCanvasZoom, applyDeviceViewport } from './plugins/canvasEnhancements'
+import { setupCanvasEnhancements, setCanvasZoom, applyDeviceViewport, syncCanvasFrameHeight } from './plugins/canvasEnhancements'
 import { setupEditorExperience } from './plugins/editorExperience'
 import { setupTextEditing } from './plugins/textEditing'
 import { ensureAllTextEditable } from './utils/textContent'
@@ -27,10 +27,14 @@ import useStore from '../store/useStore'
 import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
+import { safeGetWrapper } from './utils/editorUtils'
 
 export default function TemplateEditor({
   projectId,
   projectTitle,
+  breadcrumbLabel,
+  breadcrumbHref,
+  funnelPageType,
   projectCreatedAt,
   projectMetadata,
   initialData,
@@ -100,8 +104,18 @@ export default function TemplateEditor({
     const ed = editorRef.current
     if (!ed) return
     const { projectTitle: name, onPreview: previewCb } = callbacksRef.current
+    if (isDirty && previewCb) {
+      useStore.getState().addToast(
+        'Preview shows the last saved version. Use Save & preview to save your changes first.',
+        'info',
+      )
+    }
+    if (previewCb) {
+      previewCb()
+      return
+    }
     previewCb?.(getTemplatePayload(ed, name))
-  }, [])
+  }, [isDirty])
 
   const handlePublish = useCallback(async () => {
     await handleSave()
@@ -167,13 +181,13 @@ export default function TemplateEditor({
     setupAssetUpload(ed)
     setupAssetCanvasDrop(ed)
     const cleanupDragAndDrop = setupDragAndDrop(ed, setDragDebug)
-    setupCanvasEnhancements(ed, (empty) => mounted && setIsEmpty(empty))
-    setupTextEditing(ed, refreshSelection)
+    const cleanupCanvasEnhancements = setupCanvasEnhancements(ed, (empty) => mounted && setIsEmpty(empty))
+    const cleanupTextEditing = setupTextEditing(ed, refreshSelection)
 
     // Register section ID auto-generation and nav link validation hooks
     ed.on('component:add', (component) => {
       const parent = component.parent()
-      const isTopLevel = parent && (parent.get('type') === 'wrapper' || parent === ed.getWrapper())
+      const isTopLevel = parent && (parent.get('type') === 'wrapper' || parent === safeGetWrapper(ed))
       if (!isTopLevel) return
 
       const tag = (component.get('tagName') || '').toLowerCase()
@@ -242,7 +256,7 @@ export default function TemplateEditor({
 
       // Defer modifications to prevent layout conflicts during the initial add/render lifecycle
       setTimeout(() => {
-        if (!ed.getWrapper()) return
+        if (!mounted || editorRef.current !== ed || !safeGetWrapper(ed)) return
         component.setId(finalId)
         component.set('sectionId', finalId)
 
@@ -263,7 +277,7 @@ export default function TemplateEditor({
       const id = removedComponent.getAttributes()?.id || removedComponent.getId()
       if (!id) return
 
-      const root = ed.getWrapper()
+      const root = safeGetWrapper(ed)
       if (!root) return
 
       const walk = (cmp: any) => {
@@ -318,7 +332,7 @@ export default function TemplateEditor({
     ed.on('load', () => {
       injectStylesheetsIntoCanvas(ed)
 
-      const iframeDoc = ed.Canvas.getDocument()
+      const iframeDoc = ed.Canvas?.getDocument?.()
       if (iframeDoc) {
         runDevModeStylesValidation(iframeDoc)
       }
@@ -358,10 +372,10 @@ export default function TemplateEditor({
     const intervals = [0, 50, 150, 300, 600, 1200]
     intervals.forEach((delay) => {
       setTimeout(() => {
-        if (mounted && ed) {
-          ensureAllTextEditable(ed)
-          injectStylesheetsIntoCanvas(ed)
-        }
+        if (!mounted || editorRef.current !== ed) return
+        ensureAllTextEditable(ed)
+        injectStylesheetsIntoCanvas(ed)
+        syncCanvasFrameHeight(ed)
       }, delay)
     })
 
@@ -375,6 +389,8 @@ export default function TemplateEditor({
       initializedRef.current = false
       cleanupExperienceRef.current?.()
       cleanupDragAndDrop?.()
+      cleanupCanvasEnhancements?.()
+      cleanupTextEditing?.()
       ed.destroy()
       editorRef.current = null
       setEditor(null)
@@ -393,6 +409,7 @@ export default function TemplateEditor({
     device,
     zoom,
     advancedMode,
+    funnelPageType,
     setAdvancedMode,
     setZoom,
     setDevice,
@@ -405,6 +422,9 @@ export default function TemplateEditor({
     <EditorProvider value={contextValue}>
       <EditorShell
         projectTitle={projectTitle}
+        breadcrumbLabel={breadcrumbLabel}
+        breadcrumbHref={breadcrumbHref}
+        funnelPageType={funnelPageType}
         isDirty={isDirty}
         saving={saving}
         canvasRef={containerRef}

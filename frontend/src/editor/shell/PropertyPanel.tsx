@@ -1,9 +1,22 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
+import { getFlowElementInfo } from '../utils/funnelGuide';
 import { getLinkText, getTextContent, setLinkText, setTextContent } from '../utils/textContent';
 import { getSectionAnchorId, setSectionAnchorId, listSectionAnchorsOnPage, ANCHOR_PRESETS } from '../utils/sectionAnchor';
 import { mountAdvancedPanels, ensureComponentStylable } from '../utils/mountAdvancedPanels';
+import { MoveArrows, InnerSpaceArrows, StepArrows } from '../components/SpacingArrows';
+import {
+  parseSpacing,
+  formatSpacing,
+  parseCornerIndex,
+  cornerIndexToCss,
+  cornerLabel,
+  parseTextSizeIndex,
+  textSizeIndexToCss,
+  CORNER_STEPS,
+  TEXT_SIZE_STEPS,
+} from '../utils/spacingUtils';
 import type { Component } from 'grapesjs';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -18,6 +31,54 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const inputClass =
   'w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-subtle text-fg focus:outline-none focus:ring-2 focus:ring-accent/30';
 
+const KIND_LABELS: Record<string, string> = {
+  text: 'Text',
+  button: 'Button',
+  image: 'Photo',
+  section: 'Section',
+  generic: 'Block',
+  link: 'Link',
+  none: 'Element',
+};
+
+function getButtonSize(padding: string | undefined): string {
+  if (padding === '8px 16px') return 'sm';
+  if (padding === '16px 32px') return 'lg';
+  return 'md';
+}
+
+function PositionControls({
+  selected,
+  update,
+}: {
+  selected: Component;
+  update: () => void;
+}) {
+  const margin = parseSpacing(getStyleProp(selected, 'margin'));
+  const padding = parseSpacing(getStyleProp(selected, 'padding'));
+
+  return (
+    <div className="space-y-4 pt-2 border-t border-border">
+      <MoveArrows
+        label="Move on page"
+        value={margin}
+        onChange={(v) => {
+          setStyleProp(selected, 'margin', formatSpacing(v));
+          update();
+        }}
+      />
+      <InnerSpaceArrows
+        label="Space inside"
+        value={padding}
+        onChange={(v) => {
+          setStyleProp(selected, 'padding', formatSpacing(v));
+          update();
+        }}
+      />
+    </div>
+  );
+}
+
 export function PropertyPanel() {
   const { editor, selectionVersion, advancedMode, setAdvancedMode, refreshSelection } = useEditor();
   const styleHostRef = useRef<HTMLDivElement>(null);
@@ -26,7 +87,7 @@ export function PropertyPanel() {
 
   const selected = editor?.getSelected() as Component | null;
   const kind = editor && selected ? getComponentKind(selected) : 'none';
-  const pageAnchors = editor && selected ? listSectionAnchorsOnPage(editor, selected) : [];
+  const flowInfo = selected ? getFlowElementInfo((selected.getAttributes?.() || {}) as Record<string, string>) : null;
 
   useLayoutEffect(() => {
     setAnchorError(null);
@@ -61,10 +122,12 @@ export function PropertyPanel() {
     return (
       <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated flex flex-col">
         <div className="p-4 border-b border-border">
-          <h2 className="text-sm font-semibold text-fg">Properties</h2>
+          <h2 className="text-sm font-semibold text-fg">Edit selection</h2>
         </div>
         <div className="flex-1 flex items-center justify-center p-6 text-center">
-          <p className="text-sm text-fg-muted">Select an element on the canvas to edit its properties.</p>
+          <p className="text-sm text-fg-muted">
+            Click any text, button, or image on the page to change it here.
+          </p>
         </div>
       </aside>
     );
@@ -74,8 +137,8 @@ export function PropertyPanel() {
     <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated flex flex-col overflow-hidden">
       <div className="p-4 border-b border-border flex items-center justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-fg capitalize">{kind} properties</h2>
-          <p className="text-xs text-fg-muted mt-0.5 truncate">{selected.get('tagName') || kind}</p>
+          <h2 className="text-sm font-semibold text-fg">{KIND_LABELS[kind] || 'Element'}</h2>
+          <p className="text-xs text-fg-muted mt-0.5">Change how this looks on your page</p>
         </div>
         <div className="flex gap-1">
           <button
@@ -98,9 +161,19 @@ export function PropertyPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {flowInfo && (
+          <div className="rounded-lg border border-warning/40 bg-warning-muted/40 p-3 space-y-1">
+            <p className="text-xs font-semibold text-fg flex items-center gap-1.5">
+              <span className="inline-block w-2 h-2 rounded-full bg-warning" />
+              {flowInfo.label}
+            </p>
+            <p className="text-[11px] text-fg-muted leading-relaxed">{flowInfo.description}</p>
+          </div>
+        )}
+
         {kind === 'text' && (
           <>
-            <Field label="Content">
+            <Field label="What it says">
               <textarea
                 className={`${inputClass} min-h-[80px] resize-y`}
                 value={getTextContent(selected)}
@@ -109,22 +182,24 @@ export function PropertyPanel() {
                   update();
                 }}
               />
-              <p className="text-xs text-fg-muted pt-0.5">Double-click text on the canvas to edit inline.</p>
+              <p className="text-xs text-fg-muted pt-0.5">Tip: double-click text on the page to edit it directly.</p>
             </Field>
-            <Field label="Font size">
-              <select
-                className={inputClass}
-                value={getStyleProp(selected, 'font-size') || '16px'}
-                onChange={(e) => {
-                  setStyleProp(selected, 'font-size', e.target.value);
-                  update();
-                }}
-              >
-                {['14px', '16px', '18px', '24px', '32px', '48px'].map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
-            </Field>
+            <StepArrows
+              label="Text size"
+              valueLabel={['Small', 'Normal', 'Medium', 'Large', 'XL', '2XL', '3XL', '4XL', 'Huge'][parseTextSizeIndex(getStyleProp(selected, 'font-size'))] || 'Normal'}
+              decreaseTitle="Smaller text"
+              increaseTitle="Larger text"
+              onDecrease={() => {
+                const idx = Math.max(0, parseTextSizeIndex(getStyleProp(selected, 'font-size')) - 1);
+                setStyleProp(selected, 'font-size', textSizeIndexToCss(idx));
+                update();
+              }}
+              onIncrease={() => {
+                const idx = Math.min(TEXT_SIZE_STEPS.length - 1, parseTextSizeIndex(getStyleProp(selected, 'font-size')) + 1);
+                setStyleProp(selected, 'font-size', textSizeIndexToCss(idx));
+                update();
+              }}
+            />
             <Field label="Font weight">
               <select
                 className={inputClass}
@@ -140,7 +215,7 @@ export function PropertyPanel() {
                 <option value="700">Bold</option>
               </select>
             </Field>
-            <Field label="Color">
+            <Field label="Text color">
               <input
                 type="color"
                 className="w-full h-9 rounded-lg border border-border cursor-pointer"
@@ -165,12 +240,13 @@ export function PropertyPanel() {
                 <option value="right">Right</option>
               </select>
             </Field>
+            <PositionControls selected={selected} update={update} />
           </>
         )}
 
         {kind === 'button' && (
           <>
-            <Field label="Button text">
+            <Field label="Button label">
               <input
                 className={inputClass}
                 value={getLinkText(selected)}
@@ -180,123 +256,114 @@ export function PropertyPanel() {
                 }}
               />
             </Field>
-            <Field label="Link type">
-              <select
-                className={inputClass}
-                value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
-                onChange={(e) => {
-                  if (e.target.value === 'anchor') {
-                    const anchors = listSectionAnchorsOnPage(editor, selected);
-                    selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
-                  } else {
-                    selected.addAttributes({ href: 'https://' });
-                  }
-                  update();
-                }}
-              >
-                <option value="anchor">Internal Section</option>
-                <option value="external">External URL</option>
-              </select>
-            </Field>
+            {!flowInfo && (
+              <>
+                <Field label="When clicked, go to">
+                  <select
+                    className={inputClass}
+                    value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
+                    onChange={(e) => {
+                      if (e.target.value === 'anchor') {
+                        const anchors = listSectionAnchorsOnPage(editor, selected);
+                        selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
+                      } else {
+                        selected.addAttributes({ href: 'https://' });
+                      }
+                      update();
+                    }}
+                  >
+                    <option value="anchor">Another part of this page</option>
+                    <option value="external">Another website</option>
+                  </select>
+                </Field>
 
-            {(selected.getAttributes()?.href || '').startsWith('#') ? (
-              <Field label="Target section">
-                <select
-                  className={inputClass}
-                  value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
-                  onChange={(e) => {
-                    selected.addAttributes({ href: `#${e.target.value}` });
-                    update();
-                  }}
-                >
-                  <option value="">Select a section...</option>
-                  {(() => {
-                    const sections: { id: string; label: string }[] = [];
-                    const wrapper = editor.getWrapper();
-                    if (wrapper) {
-                      const walk = (cmp: any) => {
-                        const tag = (cmp.get('tagName') || '').toLowerCase();
-                        const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
-                        const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
-                        if (isSection && tag !== 'header' && tag !== 'footer') {
-                          const id = cmp.getAttributes()?.id || cmp.getId();
-                          const label = cmp.get('sectionLabel') || id || 'Untitled Section';
-                          sections.push({ id, label });
+                {(selected.getAttributes()?.href || '').startsWith('#') ? (
+                  <Field label="Scroll to section">
+                    <select
+                      className={inputClass}
+                      value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
+                      onChange={(e) => {
+                        selected.addAttributes({ href: `#${e.target.value}` });
+                        update();
+                      }}
+                    >
+                      <option value="">Select a section...</option>
+                      {(() => {
+                        const sections: { id: string; label: string }[] = [];
+                        const wrapper = editor.getWrapper();
+                        if (wrapper) {
+                          const walk = (cmp: any) => {
+                            const tag = (cmp.get('tagName') || '').toLowerCase();
+                            const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
+                            const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
+                            if (isSection && tag !== 'header' && tag !== 'footer') {
+                              const id = cmp.getAttributes()?.id || cmp.getId();
+                              const label = cmp.get('sectionLabel') || id || 'Untitled Section';
+                              sections.push({ id, label });
+                            }
+                            cmp.components().forEach(walk);
+                          };
+                          walk(wrapper);
                         }
-                        cmp.components().forEach(walk);
-                      };
-                      walk(wrapper);
-                    }
-                    const seen = new Set();
-                    const uniqueSections = sections.filter((s) => {
-                      if (seen.has(s.id)) return false;
-                      seen.add(s.id);
-                      return true;
-                    });
-                    return uniqueSections.map((sec) => (
-                      <option key={sec.id} value={sec.id}>
-                        {sec.label} (#{sec.id})
-                      </option>
-                    ));
-                  })()}
-                </select>
-                <p className="text-[11px] text-fg-muted pt-1">
-                  List of top-level sections auto-detected on this page.
-                </p>
-                {(() => {
-                  const currentHref = selected.getAttributes()?.href || '';
-                  const targetId = currentHref.replace(/^#/, '');
-                  const isBroken = currentHref.startsWith('#') && currentHref !== '#' && currentHref !== '' && !pageAnchors.includes(targetId);
-                  if (isBroken) {
-                    return (
-                      <p className="text-xs text-danger font-medium mt-1 flex items-center gap-1">
-                        ⚠️ Broken Link: The section "#{targetId}" does not exist on this page.
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
-              </Field>
-            ) : (
-              <Field label="Link URL">
-                <input
-                  className={inputClass}
-                  value={selected.getAttributes()?.href || ''}
-                  onChange={(e) => {
-                    selected.addAttributes({ href: e.target.value });
-                    update();
-                  }}
-                />
-              </Field>
+                        const seen = new Set();
+                        const uniqueSections = sections.filter((s) => {
+                          if (seen.has(s.id)) return false;
+                          seen.add(s.id);
+                          return true;
+                        });
+                        return uniqueSections.map((sec) => (
+                          <option key={sec.id} value={sec.id}>
+                            {sec.label} (#{sec.id})
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                  </Field>
+                ) : (
+                  <Field label="Website address">
+                    <input
+                      className={inputClass}
+                      value={selected.getAttributes()?.href || ''}
+                      onChange={(e) => {
+                        selected.addAttributes({ href: e.target.value });
+                        update();
+                      }}
+                    />
+                  </Field>
+                )}
+              </>
             )}
-            <Field label="Background color">
+            <Field label="Button color">
               <input
                 type="color"
                 className="w-full h-9 rounded-lg border border-border"
-                value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#4f46e5')}
+                value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#2563eb')}
                 onChange={(e) => {
                   setStyleProp(selected, 'background-color', e.target.value);
                   update();
                 }}
               />
             </Field>
-            <Field label="Border radius">
+            <StepArrows
+              label="Corner roundness"
+              valueLabel={cornerLabel(parseCornerIndex(getStyleProp(selected, 'border-radius')))}
+              decreaseTitle="Less rounded"
+              increaseTitle="More rounded"
+              onDecrease={() => {
+                const idx = Math.max(0, parseCornerIndex(getStyleProp(selected, 'border-radius')) - 1);
+                setStyleProp(selected, 'border-radius', cornerIndexToCss(idx));
+                update();
+              }}
+              onIncrease={() => {
+                const idx = Math.min(CORNER_STEPS.length - 1, parseCornerIndex(getStyleProp(selected, 'border-radius')) + 1);
+                setStyleProp(selected, 'border-radius', cornerIndexToCss(idx));
+                update();
+              }}
+            />
+            <Field label="Button size">
               <select
                 className={inputClass}
-                value={getStyleProp(selected, 'border-radius') || '8px'}
-                onChange={(e) => {
-                  setStyleProp(selected, 'border-radius', e.target.value);
-                  update();
-                }}
-              >
-                {['0', '4px', '8px', '12px', '999px'].map((v) => (
-                  <option key={v} value={v}>{v === '999px' ? 'Pill' : v}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Size">
-              <select
-                className={inputClass}
+                value={getButtonSize(getStyleProp(selected, 'padding'))}
                 onChange={(e) => {
                   const map: Record<string, string> = {
                     sm: '8px 16px',
@@ -312,31 +379,23 @@ export function PropertyPanel() {
                 <option value="lg">Large</option>
               </select>
             </Field>
+            <PositionControls selected={selected} update={update} />
           </>
         )}
 
         {kind === 'image' && (
           <>
-            <Field label="Image URL">
-              <input
-                className={inputClass}
-                value={selected.getAttributes()?.src || ''}
-                onChange={(e) => {
-                  selected.addAttributes({ src: e.target.value });
-                  update();
-                }}
-              />
-            </Field>
             <button
               type="button"
               onClick={() => editor.runCommand('tc-image-replace')}
-              className="w-full py-2 text-sm font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg"
+              className="w-full py-2.5 text-sm font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg transition-colors"
             >
-              Replace image
+              Change photo
             </button>
-            <Field label="Alt text">
+            <Field label="Description for accessibility">
               <input
                 className={inputClass}
+                placeholder="Describe this image (optional)"
                 value={selected.getAttributes()?.alt || ''}
                 onChange={(e) => {
                   selected.addAttributes({ alt: e.target.value });
@@ -344,26 +403,32 @@ export function PropertyPanel() {
                 }}
               />
             </Field>
-            <Field label="Width">
-              <input
+            <Field label="Photo size">
+              <select
                 className={inputClass}
-                value={getStyleProp(selected, 'width') || '100%'}
+                value={
+                  getStyleProp(selected, 'width') === '50%' ? 'half'
+                  : getStyleProp(selected, 'width') === '320px' ? 'small'
+                  : 'full'
+                }
                 onChange={(e) => {
-                  setStyleProp(selected, 'width', e.target.value);
+                  const map: Record<string, { width: string; height: string }> = {
+                    full: { width: '100%', height: 'auto' },
+                    half: { width: '50%', height: 'auto' },
+                    small: { width: '320px', height: 'auto' },
+                  };
+                  const next = map[e.target.value] || map.full;
+                  setStyleProp(selected, 'width', next.width);
+                  setStyleProp(selected, 'height', next.height);
                   update();
                 }}
-              />
+              >
+                <option value="full">Full width</option>
+                <option value="half">Half width</option>
+                <option value="small">Small</option>
+              </select>
             </Field>
-            <Field label="Height">
-              <input
-                className={inputClass}
-                value={getStyleProp(selected, 'height') || 'auto'}
-                onChange={(e) => {
-                  setStyleProp(selected, 'height', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
+            <PositionControls selected={selected} update={update} />
           </>
         )}
 
@@ -448,39 +513,6 @@ export function PropertyPanel() {
               </Field>
             )}
 
-            <Field label="Width">
-              <input
-                className={inputClass}
-                placeholder="e.g. 100%, 960px"
-                value={getStyleProp(selected, 'width') || ''}
-                onChange={(e) => {
-                  setStyleProp(selected, 'width', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
-            <Field label="Height">
-              <input
-                className={inputClass}
-                placeholder="e.g. auto, 400px"
-                value={getStyleProp(selected, 'height') || ''}
-                onChange={(e) => {
-                  setStyleProp(selected, 'height', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
-            <Field label="Min height">
-              <input
-                className={inputClass}
-                placeholder="e.g. 400px"
-                value={getStyleProp(selected, 'min-height') || ''}
-                onChange={(e) => {
-                  setStyleProp(selected, 'min-height', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
             <Field label="Background">
               <input
                 type="color"
@@ -492,28 +524,7 @@ export function PropertyPanel() {
                 }}
               />
             </Field>
-            <Field label="Padding">
-              <input
-                className={inputClass}
-                placeholder="e.g. 64px 32px"
-                value={getStyleProp(selected, 'padding') || ''}
-                onChange={(e) => {
-                  setStyleProp(selected, 'padding', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
-            <Field label="Margin">
-              <input
-                className={inputClass}
-                placeholder="e.g. 0 auto"
-                value={getStyleProp(selected, 'margin') || ''}
-                onChange={(e) => {
-                  setStyleProp(selected, 'margin', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
+            <PositionControls selected={selected} update={update} />
             <Field label="Layout">
               <select
                 className={inputClass}
@@ -597,10 +608,10 @@ export function PropertyPanel() {
               onChange={(e) => setAdvancedMode(e.target.checked)}
               className="rounded border-border"
             />
-            Advanced CSS mode
+            Advanced styling options
           </label>
           <p className="text-[11px] text-fg-subtle mt-1.5 leading-relaxed">
-            Full CSS controls: size, flex, typography, borders. Click inner elements on canvas or use Layers tab.
+            Extra controls for spacing, layout, and fine-tuning. Most users can skip this.
           </p>
         </div>
 

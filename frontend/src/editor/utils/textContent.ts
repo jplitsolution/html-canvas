@@ -1,4 +1,5 @@
 import type { Component, Editor } from 'grapesjs';
+import { safeGetWrapper } from './editorUtils';
 
 const INLINE_TEXT_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span', 'label', 'li', 'strong', 'em', 'small']);
 const CONTAINER_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article', 'form', 'ul', 'ol', 'table', 'tbody', 'thead', 'tr', 'td', 'th']);
@@ -153,25 +154,20 @@ const MAX_TEXT_SETUP_RETRIES = 5;
 
 export function ensureAllTextEditable(editor: Editor) {
   if (!editor) return;
-  
-  try {
-    const wrapper = editor.getWrapper();
-    if (!wrapper) {
-      // Wrapper not ready yet, retry with limit
-      if (textSetupRetryCount < MAX_TEXT_SETUP_RETRIES) {
-        textSetupRetryCount++;
-        console.log(`[TextSetup] Retry ${textSetupRetryCount}/${MAX_TEXT_SETUP_RETRIES}...`);
-        setTimeout(() => ensureAllTextEditable(editor), 200);
-      } else {
-        console.warn('[TextSetup] Max retries reached, skipping text setup');
-        textSetupRetryCount = 0;
-      }
-      return;
+
+  const wrapper = safeGetWrapper(editor);
+  if (!wrapper) {
+    if (textSetupRetryCount < MAX_TEXT_SETUP_RETRIES) {
+      textSetupRetryCount++;
+      setTimeout(() => ensureAllTextEditable(editor), 200);
+    } else {
+      textSetupRetryCount = 0;
     }
-    
-    // Reset retry count on success
+    return;
+  }
+
+  try {
     textSetupRetryCount = 0;
-    
     wrapper.components().forEach((root: Component) => {
       walkComponents(root, configureAsTextComponent);
     });
@@ -181,7 +177,6 @@ export function ensureAllTextEditable(editor: Editor) {
       textSetupRetryCount++;
       setTimeout(() => ensureAllTextEditable(editor), 300);
     } else {
-      console.warn('[TextSetup] Max retries reached after error');
       textSetupRetryCount = 0;
     }
   }

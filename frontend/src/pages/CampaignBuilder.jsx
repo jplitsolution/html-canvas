@@ -1,10 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo } from 'react'
-import { useNavigate, useParams, Link } from 'react-router-dom'
-import { ArrowLeft } from 'lucide-react'
+import { useNavigate, useParams } from 'react-router-dom'
 import useStore from '../store/useStore'
-import { PAGE_TYPE_LABELS } from '../services/api/campaigns'
+import { PAGE_TYPE_LABELS, getCampaignPagePreviewUrl } from '../services/api/campaigns'
 import Button from '../components/ui/Button'
 import { saveCampaignPage } from '../editor/services/saveCampaignPage'
+import { validateFunnelPage } from '../editor/utils/funnelGuide'
 
 const TemplateEditor = lazy(() => import('../editor/TemplateEditor'))
 
@@ -39,6 +39,15 @@ export default function CampaignBuilder() {
   const saveHandler = useCallback(
     async (editor) => {
       if (!id || !pageType) return null
+
+      const { ok, missing } = validateFunnelPage(editor, pageType)
+      if (!ok) {
+        useStore.getState().addToast(
+          `Warning: missing ${missing.map((m) => m.label).join(', ')}. Save anyway — subscription may not work until you restore them.`,
+          'warning',
+        )
+      }
+
       await saveCampaignPage(editor, id, pageType)
       return { id, pageType }
     },
@@ -49,6 +58,12 @@ export default function CampaignBuilder() {
     useStore.getState().addToast('Page saved successfully', 'success')
     if (id) loadCampaign(id)
   }, [id, loadCampaign])
+
+  const handlePreview = useCallback(() => {
+    if (!campaign) return
+    const url = getCampaignPagePreviewUrl(campaign, pageType)
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }, [campaign, pageType])
 
   const initialData = useMemo(
     () => ({
@@ -80,23 +95,16 @@ export default function CampaignBuilder() {
 
   return (
     <div className="h-screen flex flex-col bg-bg-canvas safe-top overflow-hidden">
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-border bg-bg-elevated shrink-0">
-        <Link
-          to={`/campaigns/${id}`}
-          className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          {campaign.country} / {campaign.operator}
-        </Link>
-        <span className="text-fg-subtle">/</span>
-        <span className="text-sm font-medium text-fg">{pageLabel}</span>
-      </div>
       <Suspense fallback={<BuilderFallback />}>
         <TemplateEditor
           projectId={`${id}-${pageType}`}
-          projectTitle={`${campaign.name} - ${pageLabel}`}
+          projectTitle={pageLabel}
+          breadcrumbLabel={`${campaign.country} / ${campaign.operator}`}
+          breadcrumbHref={`/campaigns/${id}`}
           initialData={initialData}
+          funnelPageType={pageType}
           onSave={handleEditorSave}
+          onPreview={handlePreview}
           saveHandler={saveHandler}
         />
       </Suspense>

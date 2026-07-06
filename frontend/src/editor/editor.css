@@ -9,14 +9,14 @@
 .tc-builder .gjs-editor-host {
   position: absolute;
   inset: 0;
-  min-height: 600px;
+  min-height: 900px;
   pointer-events: auto;
   z-index: 1;
 }
 
 .tc-builder .gjs-editor-host .gjs-editor {
   height: 100% !important;
-  min-height: 600px;
+  min-height: 900px;
 }
 
 .tc-builder .gjs-editor-host .gjs-cv-canvas,
@@ -54,15 +54,18 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   top: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  min-height: 900px;
   background: transparent !important;
 }
 
 .tc-builder .gjs-cv-canvas__frames {
   height: 100% !important;
+  min-height: 900px;
 }
 
 .tc-builder .gjs-editor-cont {
   height: 100% !important;
+  min-height: 900px;
 }
 
 .tc-builder .gjs-frame-wrapper {
@@ -70,15 +73,14 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   border-radius: 0;
   box-shadow: none;
   margin: 0 auto;
+  min-height: 900px;
+  top: 0 !important;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.tc-builder .gjs-cv-canvas__frames {
-  height: 100% !important;
-}
-
-.tc-builder .gjs-editor-cont {
-  height: 100% !important;
+.tc-page-frame {
+  min-height: 900px;
+  overflow: visible !important;
 }
 
 /* Hide default GrapesJS panels & badges */

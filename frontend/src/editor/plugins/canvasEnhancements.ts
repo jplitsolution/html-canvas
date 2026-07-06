@@ -1,5 +1,6 @@
 import type { Editor } from 'grapesjs'
 import { RESPONSIVE_STYLE_RULES } from '../services/exportSite'
+import { safeGetWrapper } from '../utils/editorUtils'
 
 /**
  * Returns the pixel width for a device name.
@@ -11,39 +12,28 @@ function getDeviceViewportWidth(deviceName: string): string {
   return '' // Desktop — unconstrained
 }
 
+function getCanvasFrameEl(editor: Editor): HTMLIFrameElement | null {
+  if (!editor?.Canvas?.getFrameEl) return null
+  return editor.Canvas.getFrameEl() as HTMLIFrameElement | null
+}
+
 /**
  * Applies device-specific responsive behavior to the GrapesJS canvas iframe.
- *
- * CSS media queries inside an iframe respond to the iframe's own viewport width
- * (contentWindow.innerWidth), which equals the iframe element's rendered width.
- * GrapesJS constrains the frame via the .gjs-frame-wrapper CSS, but the actual
- * <iframe> element may remain at the full parent width.
- *
- * This function:
- * 1. Forces the iframe element's width to match the selected device.
- * 2. Updates the <meta name="viewport"> inside the iframe.
- * 3. Re-injects a device-specific @media override style for maximum compatibility.
  */
 export function applyDeviceViewport(editor: Editor, deviceName: string) {
-  const vpWidth = getDeviceViewportWidth(deviceName)
+  const frameEl = getCanvasFrameEl(editor)
+  if (!frameEl) return
 
-  // ── Step 1: Force the GrapesJS frame element to the correct pixel width ──
-  // This makes contentWindow.innerWidth === device width, triggering media queries.
-  const canvasBody = editor.Canvas.getBody()
-  const frameEl = editor.Canvas.getFrameEl() as HTMLIFrameElement | null
+  const vpWidth = getDeviceViewportWidth(deviceName)
 
   if (frameEl) {
     if (vpWidth) {
-      // For mobile/tablet: set explicit pixel width on the iframe so its
-      // own viewport matches the device, triggering CSS media queries correctly.
       frameEl.style.width = `${vpWidth}px`
     } else {
-      // For desktop: restore auto/100% width
       frameEl.style.width = ''
     }
   }
 
-  // ── Step 2: Inject/update the meta viewport inside the iframe ──
   const frameDoc = frameEl?.contentDocument
   if (frameDoc) {
     let metaVP = frameDoc.getElementById('tc-viewport-meta') as HTMLMetaElement | null
@@ -59,10 +49,6 @@ export function applyDeviceViewport(editor: Editor, deviceName: string) {
       ? `width=${vpWidth}, initial-scale=1.0`
       : 'width=device-width, initial-scale=1.0'
 
-    // ── Step 3: Inject device-specific style overrides ──
-    // These styles enforce the same breakpoints as RESPONSIVE_STYLE_RULES but
-    // as absolute rules (without @media) when on mobile, ensuring compatibility
-    // even if the iframe viewport meta doesn't work in all GrapesJS versions.
     let deviceOverride = frameDoc.getElementById('tc-device-override') as HTMLStyleElement | null
     if (!deviceOverride) {
       deviceOverride = frameDoc.createElement('style') as HTMLStyleElement
@@ -72,7 +58,6 @@ export function applyDeviceViewport(editor: Editor, deviceName: string) {
 
     if (deviceName === 'Mobile') {
       deviceOverride.textContent = `
-        /* Mobile device override — applied directly (no @media needed) */
         html, body {
           width: 100% !important;
           max-width: 100% !important;
@@ -147,7 +132,6 @@ export function applyDeviceViewport(editor: Editor, deviceName: string) {
       `
     } else if (deviceName === 'Tablet') {
       deviceOverride.textContent = `
-        /* Tablet device override */
         html, body {
           width: 100% !important;
           max-width: 100% !important;
@@ -164,14 +148,11 @@ export function applyDeviceViewport(editor: Editor, deviceName: string) {
         }
       `
     } else {
-      // Desktop: clear device overrides
       deviceOverride.textContent = `
-        /* Desktop — no device-specific overrides */
         html, body { overflow-x: hidden; max-width: 100%; }
       `
     }
 
-    // Force layout recalculation by briefly toggling a class on body
     const frameBody = frameDoc.body
     if (frameBody) {
       frameBody.classList.add('tc-device-repaint')
@@ -180,15 +161,58 @@ export function applyDeviceViewport(editor: Editor, deviceName: string) {
   }
 }
 
+let heightSyncTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Grow the preview iframe to fit page content without inflating scroll height. */
+export function syncCanvasFrameHeight(editor: Editor) {
+  if (heightSyncTimer) clearTimeout(heightSyncTimer)
+  heightSyncTimer = setTimeout(() => {
+    heightSyncTimer = null
+    requestAnimationFrame(() => {
+      const frameEl = getCanvasFrameEl(editor)
+      const doc = frameEl?.contentDocument
+      if (!frameEl || !doc?.body) return
+
+      const wrapper = doc.querySelector('[data-gjs-type="wrapper"]') as HTMLElement | null
+
+      // Read natural content height — do NOT temporarily set iframe to 9999px (breaks 100vh math).
+      const contentHeight = Math.max(
+        wrapper?.scrollHeight ?? 0,
+        doc.body.scrollHeight,
+        doc.documentElement.scrollHeight,
+        720,
+      )
+
+      const height = Math.ceil(contentHeight) + 2
+      frameEl.style.height = `${height}px`
+      frameEl.style.minHeight = `${height}px`
+
+      const frameWrapper = frameEl.closest('.gjs-frame-wrapper') as HTMLElement | null
+      if (frameWrapper) {
+        frameWrapper.style.top = '0px'
+      }
+
+      const canvasEl = frameEl.closest('.gjs-cv-canvas') as HTMLElement | null
+      if (canvasEl) {
+        canvasEl.style.top = '0px'
+      }
+
+      const pageFrame = document.querySelector('.tc-page-frame') as HTMLElement | null
+      if (pageFrame) {
+        pageFrame.style.minHeight = `${Math.max(height, 900)}px`
+      }
+    })
+  }, 80)
+}
 
 export function setupCanvasEnhancements(editor: Editor, onEmptyChange?: (empty: boolean) => void) {
+  let alive = true
+
   const checkEmpty = () => {
-    // Defer check to prevent React state update from clashing with the browser paint event
     setTimeout(() => {
-      if (!editor || !editor.Pages || !editor.Pages.getSelected()) return
-      const wrapper = editor.getWrapper()
+      if (!alive || !editor?.Pages?.getSelected()) return
+      const wrapper = safeGetWrapper(editor)
       const count = wrapper?.components().length || 0
-      console.log('[TC Canvas] checkEmpty - component count:', count)
       onEmptyChange?.(count === 0)
     }, 0)
   }
@@ -202,40 +226,57 @@ export function setupCanvasEnhancements(editor: Editor, onEmptyChange?: (empty: 
   editor.on('canvas:frame:load', ({ window: frameWin }) => {
     if (!frameWin) return
     const doc = frameWin.document
-    if (!doc.getElementById('tc-canvas-styles')) {
-      const style = doc.createElement('style')
-      style.id = 'tc-canvas-styles'
-      style.textContent = `
+    let canvasStyles = doc.getElementById('tc-canvas-styles') as HTMLStyleElement | null
+    if (!canvasStyles) {
+      canvasStyles = doc.createElement('style')
+      canvasStyles.id = 'tc-canvas-styles'
+      doc.head.appendChild(canvasStyles)
+    }
+    canvasStyles.textContent = `
         body { margin: 0; background: #f4f6fb; }
-        [data-gjs-type="wrapper"] { min-height: 100vh; }
+        [data-gjs-type="wrapper"] { min-height: 0; }
         *:hover { outline: 1px dashed rgba(79, 70, 229, 0.35); outline-offset: 2px; }
-        .gjs-selected { outline: 2px solid #4f46e5 !important; outline-offset: 2px; }
+        .gjs-selected { outline: 2px solid #2563eb !important; outline-offset: 2px; }
         ${RESPONSIVE_STYLE_RULES}
       `
-      doc.head.appendChild(style)
-    }
 
-    // Apply device viewport on frame load (in case device was already selected)
     const currentDevice = editor.Devices.getSelected()
-    if (currentDevice) {
-      setTimeout(() => applyDeviceViewport(editor, String(currentDevice.get('name'))), 50)
+    const afterLoad = () => {
+      if (!alive) return
+      if (currentDevice) {
+        applyDeviceViewport(editor, String(currentDevice.get('name')))
+      }
+      syncCanvasFrameHeight(editor)
     }
+    setTimeout(afterLoad, 50)
+    setTimeout(afterLoad, 300)
   })
 
-  // Listen for device changes and update the iframe viewport meta immediately
+  editor.on('component:add', () => syncCanvasFrameHeight(editor))
+  editor.on('component:remove', () => syncCanvasFrameHeight(editor))
+  editor.on('component:update', () => syncCanvasFrameHeight(editor))
+
   editor.on('device:select', (device) => {
+    if (!device) return
     const deviceName = String(device.get('name'))
-    // Slight delay to let GrapesJS resize the frame first
-    setTimeout(() => applyDeviceViewport(editor, deviceName), 50)
+    setTimeout(() => {
+      if (!alive) return
+      applyDeviceViewport(editor, deviceName)
+      syncCanvasFrameHeight(editor)
+    }, 50)
   })
 
-  editor.Canvas.getFrameEl()?.classList.add('tc-canvas-frame')
+  getCanvasFrameEl(editor)?.classList.add('tc-canvas-frame')
+
+  return () => {
+    alive = false
+  }
 }
 
 export function setCanvasZoom(editor: Editor, zoom: number) {
-  editor.Canvas.setZoom(zoom)
+  editor.Canvas?.setZoom(zoom)
 }
 
 export function getCanvasZoom(editor: Editor) {
-  return editor.Canvas.getZoom()
+  return editor.Canvas?.getZoom() ?? 100
 }

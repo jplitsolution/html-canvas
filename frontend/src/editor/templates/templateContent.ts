@@ -18,16 +18,16 @@ export const landingHtml = `
   <nav style="display:flex;align-items:center;gap:24px;">
     <a href="#features" style="color:#64748b;text-decoration:none;">Features</a>
     <a href="#testimonials" style="color:#64748b;text-decoration:none;">Reviews</a>
-    <a href="#signup" style="background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;">Get Started</a>
+    <a href="#signup" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-weight:600;">Get Started</a>
   </nav>
 </header>
 <section style="display:flex;align-items:center;gap:48px;padding:72px 32px;max-width:1100px;margin:0 auto;flex-wrap:wrap;">
   <div style="flex:1;min-width:280px;">
-    <p style="color:#4f46e5;font-weight:600;font-size:14px;margin:0 0 12px;">NEW · Product launch kit</p>
+    <p style="color:#2563eb;font-weight:600;font-size:14px;margin:0 0 12px;">NEW · Product launch kit</p>
     <h1 style="font-size:clamp(32px, 8vw, 44px);font-weight:800;line-height:1.1;margin:0 0 16px;">Launch your next big idea faster</h1>
     <p style="font-size:clamp(16px, 3vw, 18px);color:#64748b;line-height:1.6;margin:0 0 28px;">Everything you need to ship a polished landing page — hero, features, social proof, and CTAs.</p>
     <div style="display:flex;gap:12px;flex-wrap:wrap;">
-      <a href="#signup" style="background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Start Free</a>
+      <a href="#signup" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">Start Free</a>
       <a href="#demo" style="border:1px solid #cbd5e1;color:#0f172a;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;">See demo</a>
     </div>
   </div>
@@ -74,10 +74,10 @@ export const landingHtml = `
     </div>
   </div>
 </section>
-<section id="signup" style="padding:56px 32px;background:#4f46e5;text-align:center;">
+<section id="signup" style="padding:56px 32px;background:#2563eb;text-align:center;">
   <h2 style="color:#fff;font-size:clamp(20px, 4vw, 28px);margin:0 0 12px;">Ready to launch?</h2>
   <p style="color:rgba(255,255,255,0.85);margin:0 0 24px;">Join 2,000+ teams building with LaunchPad.</p>
-  <a href="#" style="background:#fff;color:#4f46e5;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Get started today</a>
+  <a href="#" style="background:#fff;color:#2563eb;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;">Get started today</a>
 </section>
 <footer style="padding:32px;text-align:center;background:#0f172a;color:#94a3b8;font-size:14px;">
   <p style="margin:0;">© 2026 LaunchPad · hello@launchpad.io</p>
@@ -92,7 +92,7 @@ export const saasHtml = `
   <nav style="display:flex;gap:20px;align-items:center;">
     <a href="#features" style="color:#64748b;text-decoration:none;">Features</a>
     <a href="#pricing" style="color:#64748b;text-decoration:none;">Pricing</a>
-    <a href="#" style="background:#4f46e5;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Sign up</a>
+    <a href="#" style="background:#2563eb;color:#fff;padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Sign up</a>
   </nav>
 </header>
 <section style="padding:72px 32px;text-align:center;background:linear-gradient(180deg,#eef2ff,#fff);">
@@ -121,11 +121,11 @@ export const saasHtml = `
       <p style="color:#64748b;margin:0 0 20px;">Up to 3 team members</p>
       <a href="#" style="display:block;text-align:center;background:#f1f5f9;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;color:#0f172a;">Choose plan</a>
     </div>
-    <div style="background:#4f46e5;color:#fff;padding:32px;border-radius:12px;min-width:240px;text-align:left;">
+    <div style="background:#2563eb;color:#fff;padding:32px;border-radius:12px;min-width:240px;text-align:left;">
       <h3 style="margin:0 0 8px;">Pro</h3>
       <p style="font-size:36px;font-weight:700;margin:0 0 16px;">$49<span style="font-size:16px;opacity:0.8;">/mo</span></p>
       <p style="opacity:0.85;margin:0 0 20px;">Unlimited seats + API</p>
-      <a href="#" style="display:block;text-align:center;background:#fff;color:#4f46e5;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;">Choose plan</a>
+      <a href="#" style="display:block;text-align:center;background:#fff;color:#2563eb;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;">Choose plan</a>
     </div>
   </div>
 </section>
@@ -155,7 +155,7 @@ export const portfolioHtml = `
 <section style="padding:64px 32px;text-align:center;">
   <h2 style="margin:0 0 12px;font-size:clamp(24px, 5vw, 32px);">Let's collaborate</h2>
   <p style="color:#64748b;margin:0 0 20px;">Available for freelance & full-time roles</p>
-  <a href="mailto:jane@design.studio" style="color:#4f46e5;font-weight:600;text-decoration:none;">jane@design.studio</a>
+  <a href="mailto:jane@design.studio" style="color:#2563eb;font-weight:600;text-decoration:none;">jane@design.studio</a>
 </section>
 `
 
@@ -191,7 +191,7 @@ export const agencyHtml = `
 <section id="contact" style="padding:64px 32px;text-align:center;">
   <h2 style="font-size:clamp(24px, 5vw, 32px);">Let's work together</h2>
   <p style="color:#64748b;margin:0 0 16px;">Tell us about your project</p>
-  <a href="mailto:hello@studioapex.com" style="color:#4f46e5;font-weight:600;font-size:18px;text-decoration:none;">hello@studioapex.com</a>
+  <a href="mailto:hello@studioapex.com" style="color:#2563eb;font-weight:600;font-size:18px;text-decoration:none;">hello@studioapex.com</a>
 </section>
 `
 
@@ -242,7 +242,7 @@ export const blogHtml = `
 </header>
 <section style="padding:48px 32px;max-width:900px;margin:0 auto;">
   <img src="${IMG.blogFeatured}" alt="Featured article" style="width:100%;border-radius:12px;margin-bottom:24px;aspect-ratio:16/9;object-fit:cover;"/>
-  <p style="color:#4f46e5;font-size:13px;font-weight:600;margin:0 0 8px;">FEATURED</p>
+  <p style="color:#2563eb;font-size:13px;font-weight:600;margin:0 0 8px;">FEATURED</p>
   <h1 style="font-size:clamp(28px, 6vw, 36px);margin:0 0 12px;line-height:1.2;">Stories worth reading every morning</h1>
   <p style="color:#64748b;line-height:1.7;margin:0;">Insights on design, technology, and creative work from builders around the world.</p>
 </section>
@@ -293,25 +293,25 @@ export const ecommerceHtml = `
       <img src="${IMG.product1}" alt="Watch" style="width:100%;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
       <h3 style="margin:12px 0 4px;">Classic Watch</h3>
       <p style="margin:0;color:#64748b;font-size:14px;">Minimal leather strap</p>
-      <p style="margin:8px 0 0;color:#4f46e5;font-weight:600;">₹4,299</p>
+      <p style="margin:8px 0 0;color:#2563eb;font-weight:600;">₹4,299</p>
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
       <img src="${IMG.product2}" alt="Headphones" style="width:100%;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
       <h3 style="margin:12px 0 4px;">Wireless Headphones</h3>
       <p style="margin:0;color:#64748b;font-size:14px;">Noise cancelling · 30hr battery</p>
-      <p style="margin:8px 0 0;color:#4f46e5;font-weight:600;">₹2,899</p>
+      <p style="margin:8px 0 0;color:#2563eb;font-weight:600;">₹2,899</p>
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
       <img src="${IMG.product3}" alt="Sunglasses" style="width:100%;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
       <h3 style="margin:12px 0 4px;">Polarized Sunglasses</h3>
       <p style="margin:0;color:#64748b;font-size:14px;">UV400 protection</p>
-      <p style="margin:8px 0 0;color:#4f46e5;font-weight:600;">₹1,599</p>
+      <p style="margin:8px 0 0;color:#2563eb;font-weight:600;">₹1,599</p>
     </div>
     <div style="border:1px solid #e2e8f0;border-radius:12px;padding:16px;">
       <img src="${IMG.product4}" alt="Sneakers" style="width:100%;border-radius:8px;aspect-ratio:4/3;object-fit:cover;"/>
       <h3 style="margin:12px 0 4px;">Running Sneakers</h3>
       <p style="margin:0;color:#64748b;font-size:14px;">Lightweight mesh upper</p>
-      <p style="margin:8px 0 0;color:#4f46e5;font-weight:600;">₹3,499</p>
+      <p style="margin:8px 0 0;color:#2563eb;font-weight:600;">₹3,499</p>
     </div>
   </div>
 </section>

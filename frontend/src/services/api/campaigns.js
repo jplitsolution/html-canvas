@@ -120,6 +120,16 @@ export function getCampaignPreviewUrl(campaign) {
   return `/subscription?${params.toString()}`
 }
 
+/** Open live funnel preview for a specific campaign page (HOME, OTP, CONFIRM, …) */
+export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
+  const params = new URLSearchParams({
+    country: campaign.country,
+    operator: campaign.operator,
+    step: pageType || 'HOME',
+  })
+  return `/subscription?${params.toString()}`
+}
+
 export async function testSendOtp(payload) {
   return apiClient('/otp/test-send', {
     method: 'POST',

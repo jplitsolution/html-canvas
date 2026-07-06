@@ -1,5 +1,6 @@
 import type { Editor } from 'grapesjs'
 import { setupDragPreview } from './dragPreview'
+import { safeGetWrapper } from '../utils/editorUtils'
 
 export interface DragDebugState {
   draggedItem: string | null
@@ -42,7 +43,7 @@ function patchDebug(patch: Partial<DragDebugState>) {
 }
 
 function getComponentCount(editor: Editor): number {
-  return editor.getWrapper()?.components().length ?? 0
+  return safeGetWrapper(editor)?.components().length ?? 0
 }
 
 function getSelectedLabel(editor: Editor): string | null {
@@ -67,7 +68,7 @@ export function refreshBlockSorter(editor: Editor) {
 }
 
 function ensureDroppableTargets(editor: Editor) {
-  const wrapper = editor.getWrapper()
+  const wrapper = safeGetWrapper(editor)
   if (!wrapper) return
 
   wrapper.set({
@@ -105,6 +106,7 @@ function onActivePageFrameReady(editor: Editor) {
 
 /** Ensure canvas accepts drops and components can be moved */
 export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
+  let alive = true
   debugListener = onDebug ?? null
   debugState = { ...defaultDebug, componentCount: getComponentCount(editor) }
   patchDebug({})
@@ -128,7 +130,7 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
 
     // Defer modifications to prevent layout conflicts during the initial add/render lifecycle
     setTimeout(() => {
-      if (!editor.getWrapper()) return
+      if (!alive || !safeGetWrapper(editor)) return
       component.set({
         draggable: true,
         droppable: ['section', 'header', 'footer', 'nav', 'main', 'div'].includes(tag),
@@ -240,6 +242,7 @@ export function setupDragAndDrop(editor: Editor, onDebug?: DebugListener) {
   editor.on('canvas:frame:load', () => onActivePageFrameReady(editor))
 
   return () => {
+    alive = false
     cleanupPreview?.()
   }
 }
