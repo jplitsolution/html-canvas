@@ -13,6 +13,15 @@ export class OtpSendDto {
   @Type(() => Number)
   @IsInt()
   visitId?: number;
+
+  @ApiProperty({
+    required: false,
+    description: 'Selected subscription pack (daily | weekly | monthly)',
+    example: 'daily',
+  })
+  @IsOptional()
+  @IsString()
+  pack?: string;
 }
 
 export class OtpVerifyDto {

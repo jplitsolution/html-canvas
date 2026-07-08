@@ -1,10 +1,10 @@
 import { memo, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutTemplate } from 'lucide-react'
 import { login, register } from '../services/api/auth'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
+import BrandLogo, { PartnerBadge } from '../components/ui/BrandLogo'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -39,14 +39,13 @@ function LoginPage() {
     <AppShell minimal>
       <div className="flex-1 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-sm animate-slide-up">
-          <div className="text-center mb-8">
-            <div className="inline-flex p-3 rounded-lg bg-accent text-accent-fg mb-4">
-              <LayoutTemplate className="w-6 h-6" />
-            </div>
+          <div className="flex flex-col items-center text-center mb-8">
+            <BrandLogo size="lg" showWordmark={false} className="mb-4" />
             <h1 className="text-2xl font-semibold text-fg">TemplateCraft</h1>
             <p className="text-sm text-fg-muted mt-1">
               Campaign management platform
             </p>
+            <PartnerBadge className="mt-4" />
           </div>
 
           <div className="surface-card p-6">

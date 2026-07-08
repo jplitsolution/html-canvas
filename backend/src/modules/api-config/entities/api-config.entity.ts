@@ -37,6 +37,10 @@ export class ApiConfig {
   @Column({ name: 'otp_config_json', type: 'text', nullable: true })
   otpConfigJson?: string;
 
+  /** ISP/partner API URL template to resolve an MSISDN (supports {{msisdn}}). */
+  @Column({ name: 'resolve_msisdn_url', type: 'varchar', length: 1024, nullable: true })
+  resolveMsisdnUrl?: string;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

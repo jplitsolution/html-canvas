@@ -10,7 +10,9 @@ import CampaignsPage from '../pages/CampaignsPage'
 import CampaignDetailPage from '../pages/CampaignDetailPage'
 import CampaignBuilder from '../pages/CampaignBuilder'
 import SubscriptionPage from '../pages/SubscriptionPage'
-import OtpAnalyticsPage from '../pages/OtpAnalyticsPage'
+import CampaignLogsPage from '../pages/CampaignLogsPage'
+import VendorsPage from '../pages/VendorsPage'
+import FlowBuilderPage from '../pages/FlowBuilderPage'
 
 function App() {
   return (
@@ -28,7 +30,15 @@ function App() {
                 path="/analytics"
                 element={
                   <RequireAuth>
-                    <OtpAnalyticsPage />
+                    <CampaignLogsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/vendors"
+                element={
+                  <RequireAuth>
+                    <VendorsPage />
                   </RequireAuth>
                 }
               />
@@ -37,6 +47,14 @@ function App() {
                 element={
                   <RequireAuth>
                     <CampaignDetailPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/campaigns/:id/flow"
+                element={
+                  <RequireAuth>
+                    <FlowBuilderPage />
                   </RequireAuth>
                 }
               />

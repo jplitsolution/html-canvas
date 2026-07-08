@@ -272,7 +272,7 @@ export function ensureLayerManagerMounted(editor: Editor) {
 
 export function filterBlockElements(
   editor: Editor | null,
-  tab: 'sections' | 'components',
+  tab: 'sections' | 'components' | 'flow',
   query: string
 ) {
   if (!editor) return
@@ -282,7 +282,8 @@ export function filterBlockElements(
   const mount = document.getElementById('tc-blocks-mount')
   if (!mount) return
 
-  const catClass = tab === 'sections' ? 'tc-cat-section' : 'tc-cat-component'
+  const catClass =
+    tab === 'sections' ? 'tc-cat-section' : tab === 'flow' ? 'tc-cat-flow' : 'tc-cat-component'
   const q = query.trim().toLowerCase()
 
   mount.querySelectorAll('.gjs-block').forEach((el) => {

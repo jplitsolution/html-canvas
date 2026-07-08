@@ -18,11 +18,28 @@ This is the backend API for the Visual Builder and Dynamic Subscription Flow Eng
 - **Auth**: JWT register / login and profile authentication.
 - **Users**: User account entities.
 - **Campaigns**: Country + operator campaigns with per-page canvas templates (HOME, CONFIRM, THANKYOU, BLOCKED, ERROR) and partner API config.
-- **Flow**: Public runtime API — resolves campaign by country/operator, calls partner blocklist/subscribe APIs, and serves rendered HTML.
+- **Flow**: Public runtime API — resolves campaign by country/operator (or `campid`), applies the per-campaign verification mode + flow graph, calls partner blocklist/subscribe/MSISDN-resolve APIs, and serves rendered HTML.
+- **Flow Engine**: Interprets a campaign's `flowConfig` (page graph) and `verificationMode` (`MSISDN_ONLY` | `OTP_ONLY` | `BOTH`) to decide page transitions.
+- **Partners**: Vendors and their Affiliates. Assign a vendor to a campaign, generate affiliate tracking URLs, and attribute clicks.
 - **Templates**: Reusable canvas layouts and system seeds.
 - **Variable Engine**: Renders placeholders like `{{phone}}`, `{{country}}`, `{{operator}}` dynamically inside HTML.
-- **Analytics**: Captures visits and visit events per campaign to calculate conversion rates.
+- **Analytics**: Captures visits and visit events per campaign (with vendor/affiliate/click attribution) to calculate conversion rates.
+- **Search / Logs**: Optional Elasticsearch mirror of funnel events for the in-app Campaign Logs viewer (`GET /api/logs/campaign/:id` + `/aggregations`).
 - **Upload**: Image upload for canvas assets.
+
+### Verification modes
+- `MSISDN_ONLY`: resolve the number (header / ISP API via `ApiConfig.resolveMsisdnUrl`). On success go to CONFIRM, otherwise ERROR.
+- `OTP_ONLY`: always send the user through the OTP page.
+- `BOTH`: attempt to resolve the number to prefill, but still require OTP.
+
+### Click attribution / tracking URL
+Shared campaign URLs look like:
+
+```
+/subscription?country=sa&operator=zain&campid=12&vid=acme&aff_id=aff01&click_id={}
+```
+
+`vid` and `aff_id` resolve to a vendor/affiliate; `click_id` (macro `{}` filled by the network) and the raw params are stored on the visit.
 
 ---
 
@@ -46,7 +63,15 @@ DB_DATABASE=builder_db
 # Security
 JWT_SECRET=super_secret_session_token_key
 JWT_EXPIRATION=24h
+
+# Elasticsearch (optional — powers the in-app Campaign Logs viewer).
+# Leave unset to disable; the app runs fine without it.
+ELASTICSEARCH_NODE=http://localhost:9200
+ELASTICSEARCH_INDEX=campaign_events
 ```
+
+Start Elasticsearch (and MySQL) with `docker compose up -d`. Backfill historical
+events into ES with `node scripts/reindex-logs.mjs`.
 
 ---
 

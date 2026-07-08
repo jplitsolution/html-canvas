@@ -11,6 +11,9 @@ import {
   User,
   CheckCircle2,
   Circle,
+  Workflow,
+  Copy,
+  Store,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -22,6 +25,7 @@ import {
   getCampaignPreviewUrl,
   getCampaignActivityLogs,
 } from '../services/api/campaigns'
+import { listVendors, buildTrackingUrl } from '../services/api/partners'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import ActivityLogsModal from '../components/dashboard/ActivityLogsModal'
 import { getVisitPagePath } from '../utils/visitPagePath'
@@ -41,6 +45,31 @@ function CampaignDetailPage() {
   const [showActivityLogs, setShowActivityLogs] = useState(false)
   const [recentLogs, setRecentLogs] = useState([])
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
+  const [vendors, setVendors] = useState([])
+  const [assigningVendor, setAssigningVendor] = useState(false)
+
+  useEffect(() => {
+    listVendors()
+      .then((res) => setVendors(res || []))
+      .catch(() => setVendors([]))
+  }, [])
+
+  const handleAssignVendor = async (vendorId) => {
+    if (!campaign) return
+    setAssigningVendor(true)
+    try {
+      await updateCampaign(campaign.id, { vendorId: vendorId ? Number(vendorId) : null })
+    } finally {
+      setAssigningVendor(false)
+    }
+  }
+
+  const copyTracking = (url) => {
+    navigator.clipboard?.writeText(url).then(
+      () => useStore.getState().addToast('Tracking URL copied', 'success'),
+      () => useStore.getState().addToast('Copy failed', 'error'),
+    )
+  }
 
   const fetchRecentLogs = useCallback(() => {
     if (!id) return
@@ -173,11 +202,19 @@ function CampaignDetailPage() {
           {/* Funnel pages */}
           <div className="lg:col-span-2 space-y-6">
             <div className="surface-card overflow-hidden">
-              <div className="px-5 py-4 border-b border-border">
-                <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
-                <p className="text-xs text-fg-muted mt-0.5">
-                  Required: Home, Confirm, Thank you
-                </p>
+              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
+                  <p className="text-xs text-fg-muted mt-0.5">
+                    Required: Home, Confirm, Thank you
+                  </p>
+                </div>
+                <Link to={`/campaigns/${campaign.id}/flow`}>
+                  <Button variant="outline" size="sm">
+                    <Workflow className="w-3.5 h-3.5" />
+                    Flow builder
+                  </Button>
+                </Link>
               </div>
               <div className="divide-y divide-border">
                 {PAGE_TYPES.map((pageType) => {
@@ -309,6 +346,80 @@ function CampaignDetailPage() {
                 Users select Daily / Weekly / Monthly pack on the Confirm page. Backend sends{' '}
                 <code className="text-fg-muted">planId</code> to the partner subscribe API.
               </p>
+            </div>
+
+            <div className="surface-card p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <Store className="w-4 h-4 text-fg-subtle" />
+                <h3 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h3>
+              </div>
+              <label className="block text-xs text-fg-muted mb-1">Assigned vendor</label>
+              <select
+                className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base mb-3"
+                value={campaign.vendorId || ''}
+                onChange={(e) => handleAssignVendor(e.target.value)}
+                disabled={assigningVendor}
+              >
+                <option value="">— No vendor —</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.code})
+                  </option>
+                ))}
+              </select>
+
+              {(() => {
+                const vendor = vendors.find((v) => v.id === Number(campaign.vendorId))
+                if (!vendor) {
+                  return (
+                    <p className="text-xs text-fg-subtle">
+                      Assign a vendor to generate affiliate tracking links.{' '}
+                      <Link to="/vendors" className="text-accent">
+                        Manage vendors
+                      </Link>
+                    </p>
+                  )
+                }
+                const affiliates = vendor.affiliates || []
+                if (affiliates.length === 0) {
+                  return (
+                    <p className="text-xs text-fg-subtle">
+                      No affiliates for this vendor.{' '}
+                      <Link to="/vendors" className="text-accent">
+                        Add affiliates
+                      </Link>
+                    </p>
+                  )
+                }
+                return (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-fg-muted">Tracking links</p>
+                    {affiliates.map((aff) => {
+                      const url = buildTrackingUrl({
+                        campaign,
+                        vendorCode: vendor.code,
+                        affiliateCode: aff.code,
+                      })
+                      return (
+                        <div key={aff.id} className="rounded-md border border-border p-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium text-fg">{aff.name}</span>
+                            <button
+                              type="button"
+                              onClick={() => copyTracking(url)}
+                              className="text-fg-muted hover:text-fg"
+                              title="Copy tracking URL"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <code className="text-[10px] text-fg-subtle break-all block">{url}</code>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
 
             <div className="surface-card p-5">

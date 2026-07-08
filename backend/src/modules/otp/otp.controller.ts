@@ -32,6 +32,8 @@ export class OtpController {
     const { otp, expiresInSec } = await this.otpService.generate(
       phone,
       body.visitId,
+      undefined,
+      body.pack,
     );
 
     // 1. Check if the campaign requires a real provider to determine masking

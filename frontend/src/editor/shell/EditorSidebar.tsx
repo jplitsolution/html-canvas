@@ -10,6 +10,7 @@ import {
   ChevronDown,
   ChevronUp,
   Puzzle,
+  ShieldCheck,
 } from 'lucide-react'
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
@@ -22,10 +23,12 @@ import { insertImageComponent } from '../utils/insertImage'
 import { insertBackgroundWithText } from '../utils/insertBackground'
 import { uploadImage } from '../../services/api/upload'
 import { PlacementModal } from '../components/PlacementModal'
+import { FUNNEL_PAGE_GUIDES, type FunnelPageType } from '../utils/funnelGuide'
 
-type SidebarTab = 'layouts' | 'sections' | 'parts' | 'photos' | 'structure'
+type SidebarTab = 'flow' | 'layouts' | 'sections' | 'parts' | 'photos' | 'structure'
 
 const TABS: { id: SidebarTab; label: string; hint: string; icon: typeof Boxes }[] = [
+  { id: 'flow', label: 'Required parts', hint: 'Re-add flow buttons & fields the page needs', icon: ShieldCheck },
   { id: 'layouts', label: 'Ready layouts', hint: 'Start with a full page design', icon: LayoutTemplate },
   { id: 'sections', label: 'Sections', hint: 'Drag big blocks onto the page', icon: Layers },
   { id: 'parts', label: 'Parts', hint: 'Buttons, text, images & more', icon: Puzzle },
@@ -59,7 +62,11 @@ function updateBackgroundText(editor: any, text: string): void {
 export function EditorSidebar() {
   const { editor, funnelPageType } = useEditor()
   const isFunnelPage = Boolean(funnelPageType)
-  const [tab, setTab] = useState<SidebarTab>(isFunnelPage ? 'sections' : 'layouts')
+  const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType as FunnelPageType] : undefined
+  const hasFlowParts = Boolean(flowGuide && flowGuide.required.length > 0)
+  const [tab, setTab] = useState<SidebarTab>(
+    hasFlowParts ? 'flow' : isFunnelPage ? 'sections' : 'layouts',
+  )
   const [search, setSearch] = useState('')
   const [assetSearch, setAssetSearch] = useState('')
   const [assets, setAssets] = useState<Array<{ src: string }>>([])
@@ -108,6 +115,7 @@ export function EditorSidebar() {
 
   useEffect(() => {
     if (!editor) return
+    if (tab === 'flow') filterBlockElements(editor, 'flow', search)
     if (tab === 'sections') filterBlockElements(editor, 'sections', search)
     if (tab === 'parts') filterBlockElements(editor, 'components', search)
     if (tab === 'structure') ensureLayerManagerMounted(editor)
@@ -143,7 +151,7 @@ export function EditorSidebar() {
     }
   }
 
-  const showBlocks = tab === 'sections' || tab === 'parts'
+  const showBlocks = tab === 'flow' || tab === 'sections' || tab === 'parts'
   const activeTab = TABS.find((t) => t.id === tab)
   const filteredAssets = assets.filter((a) =>
     assetSearch ? a.src.toLowerCase().includes(assetSearch.toLowerCase()) : true,
@@ -154,7 +162,9 @@ export function EditorSidebar() {
       <aside className="tc-sidebar shrink-0 flex border-r border-border bg-bg-elevated min-h-0">
         {/* Icon rail */}
         <nav className="w-14 shrink-0 flex flex-col items-center py-3 gap-1 border-r border-border bg-bg-subtle/50">
-          {TABS.filter((t) => !(isFunnelPage && t.id === 'layouts')).map(({ id, label, icon: Icon }) => (
+          {TABS.filter(
+            (t) => !(isFunnelPage && t.id === 'layouts') && !(t.id === 'flow' && !hasFlowParts),
+          ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"

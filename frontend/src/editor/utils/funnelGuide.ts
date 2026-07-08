@@ -9,7 +9,43 @@ export interface FunnelRequirement {
   why: string
   /** Substring that must appear in page HTML */
   match: string
+  /** HTML inserted when the client re-adds this element (from banner or sidebar) */
+  snippet: string
+  /** Thumbnail key used for the sidebar block card */
+  thumb: string
 }
+
+// Reusable snippet fragments (kept in sync with backend/src/database/seed/default-funnel-pages.ts)
+const phoneFieldSnippet = `
+    <div style="text-align:left;margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
+      <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+    </div>`
+
+const otpFieldSnippet = `
+    <div style="text-align:left;margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">OTP</label>
+      <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP" style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+    </div>`
+
+const packPickerSnippet = `
+    <div data-flow-pack-picker class="flow-pack-picker">
+      <p class="flow-pack-title">Choose your pack</p>
+      <div class="flow-pack-list">
+        <button type="button" data-pack="daily" class="flow-pack-option flow-pack-selected">
+          <span class="flow-pack-name">Daily Pack</span>
+          <span class="flow-pack-desc">Billed every day · Best for short trials</span>
+        </button>
+        <button type="button" data-pack="weekly" class="flow-pack-option">
+          <span class="flow-pack-name">Weekly Pack</span>
+          <span class="flow-pack-desc">Billed every week · Most popular</span>
+        </button>
+        <button type="button" data-pack="monthly" class="flow-pack-option">
+          <span class="flow-pack-name">Monthly Pack</span>
+          <span class="flow-pack-desc">Billed every month · Best value</span>
+        </button>
+      </div>
+    </div>`
 
 export interface FunnelPageGuide {
   title: string
@@ -30,6 +66,8 @@ export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>
         label: 'Subscribe button',
         why: 'Starts the subscription — without it nothing happens when user taps.',
         match: 'data-action="SUBSCRIBE"',
+        thumb: 'button',
+        snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
       },
     ],
   },
@@ -44,36 +82,48 @@ export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>
         label: 'Phone number box',
         why: 'User types their mobile number here.',
         match: 'data-otp-field="phone"',
+        thumb: 'contact',
+        snippet: phoneFieldSnippet,
       },
       {
         id: 'send-otp',
         label: 'Get OTP button',
         why: 'Sends SMS code to the server.',
         match: 'data-otp-action="send"',
+        thumb: 'button',
+        snippet: `<button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Get OTP</button>`,
       },
       {
         id: 'otp-field',
         label: 'OTP code box',
         why: 'User enters the SMS code here.',
         match: 'data-otp-field="otp"',
+        thumb: 'contact',
+        snippet: otpFieldSnippet,
       },
       {
         id: 'verify-otp',
         label: 'Verify button',
         why: 'Checks the code with the server and continues the flow.',
         match: 'data-otp-action="verify"',
+        thumb: 'button',
+        snippet: `<button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>`,
       },
       {
         id: 'error-slot',
         label: 'Error message area',
         why: 'Shows errors like wrong OTP (can be empty but must exist).',
         match: 'data-otp-slot="error"',
+        thumb: 'text',
+        snippet: `<div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>`,
       },
       {
         id: 'status-slot',
         label: 'Status message area',
         why: 'Shows “code sent” messages (can be empty but must exist).',
         match: 'data-otp-slot="status"',
+        thumb: 'text',
+        snippet: `<div data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>`,
       },
     ],
   },
@@ -88,12 +138,16 @@ export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>
         label: 'Pack options',
         why: 'User must pick daily, weekly, or monthly before confirming.',
         match: 'data-pack=',
+        thumb: 'pricing',
+        snippet: packPickerSnippet,
       },
       {
         id: 'confirm-btn',
         label: 'Confirm button',
         why: 'Completes subscription and charges the user — do not remove.',
         match: 'data-action="CONFIRM"',
+        thumb: 'button',
+        snippet: `<button type="button" data-action="CONFIRM" class="flow-btn">Confirm Subscription</button>`,
       },
     ],
   },
@@ -136,6 +190,64 @@ export function validateFunnelPage(
   const html = getPageHtml(editor)
   const missing = guide.required.filter((req) => !html.includes(req.match))
   return { ok: missing.length === 0, missing, guide }
+}
+
+const FLOW_MARKER_ATTRS = ['data-otp-field', 'data-otp-action', 'data-otp-slot', 'data-action', 'data-pack', 'data-flow-pack-picker']
+
+function hasFlowMarker(component: any): boolean {
+  const attrs = component?.getAttributes?.() || {}
+  return FLOW_MARKER_ATTRS.some((key) => key in attrs)
+}
+
+/** Find the container that holds the page's flow elements, so re-added parts land inside the card. */
+function findFlowContainer(editor: Editor): any | null {
+  const wrapper = editor.getWrapper?.()
+  if (!wrapper) return null
+  let container: any = null
+  const walk = (cmp: any) => {
+    if (container) return
+    cmp.components?.().forEach((child: any) => {
+      if (hasFlowMarker(child)) {
+        container = child.parent?.() || null
+        return
+      }
+      walk(child)
+    })
+  }
+  walk(wrapper)
+  return container
+}
+
+/**
+ * Insert a required flow element back onto the page.
+ * Places it next to the current selection when possible, otherwise inside the
+ * card that holds the other flow elements, falling back to the page wrapper.
+ */
+export function insertFunnelPart(editor: Editor | null, snippet: string): void {
+  if (!editor || !snippet) return
+  const wrapper = editor.getWrapper?.()
+  if (!wrapper) return
+
+  const selected = editor.getSelected?.()
+  const selectedParent = selected?.parent?.()
+  let added: any
+
+  if (selected && selectedParent && !selected.is?.('wrapper')) {
+    added = selectedParent.append(snippet, { at: selected.index() + 1 })
+  } else {
+    const container = findFlowContainer(editor) || wrapper
+    added = container.append(snippet)
+  }
+
+  const node = Array.isArray(added) ? added[added.length - 1] : added
+  if (node) {
+    editor.select(node)
+    try {
+      node.view?.el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+    } catch {
+      /* scroll is best-effort */
+    }
+  }
 }
 
 export function getFlowElementInfo(attrs: Record<string, string>): {

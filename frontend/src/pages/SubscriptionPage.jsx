@@ -76,7 +76,7 @@ function getSelectedPackFromShadow(shadow) {
   return normalizePack(selected?.getAttribute('data-pack'))
 }
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, setPhone, setTransitioning, setError }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -209,7 +209,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     isSending = true
 
     try {
-      const data = await sendOtp({ phone: msisdn, visitId: visitIdRef.current })
+      const data = await sendOtp({ phone: msisdn, visitId: visitIdRef.current, pack: packRef?.current })
       phoneRef.current = msisdn
       setPhone(msisdn)
       trackEvent('otp_sent')
@@ -398,6 +398,11 @@ function SubscriptionPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const country = searchParams.get('country') || ''
   const operator = searchParams.get('operator') || ''
+  // Affiliate / vendor click attribution (from the shared tracking URL).
+  const campid = searchParams.get('campid') || ''
+  const vid = searchParams.get('vid') || ''
+  const affId = searchParams.get('aff_id') || ''
+  const clickId = searchParams.get('click_id') || ''
 
   const [phone, setPhone] = useState('')
   const [phoneResolving, setPhoneResolving] = useState(true)
@@ -543,6 +548,10 @@ function SubscriptionPage() {
           page,
           msisdn: phoneRef.current,
           visitId: visitIdRef.current,
+          campid,
+          vid,
+          affId,
+          clickId,
         })
         cachePage(data)
       } catch (err) {
@@ -551,7 +560,7 @@ function SubscriptionPage() {
         setBooting(false)
       }
     },
-    [country, operator, cachePage],
+    [country, operator, cachePage, campid, vid, affId, clickId],
   )
 
   useEffect(() => {
@@ -708,6 +717,7 @@ function SubscriptionPage() {
         operator,
         visitIdRef,
         phoneRef,
+        packRef: selectedPackRef,
         setPhone,
         setTransitioning,
         setError,

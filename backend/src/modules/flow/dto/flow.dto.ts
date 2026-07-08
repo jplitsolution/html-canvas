@@ -33,6 +33,26 @@ export class GetFlowPageQueryDto {
   @IsOptional()
   @IsString()
   pack?: string;
+
+  @ApiPropertyOptional({ description: 'Campaign id (campid tracking param)' })
+  @IsOptional()
+  @IsString()
+  campid?: string;
+
+  @ApiPropertyOptional({ description: 'Vendor tracking code (vid)' })
+  @IsOptional()
+  @IsString()
+  vid?: string;
+
+  @ApiPropertyOptional({ description: 'Affiliate tracking code (aff_id)' })
+  @IsOptional()
+  @IsString()
+  aff_id?: string;
+
+  @ApiPropertyOptional({ description: 'Click id supplied by affiliate/network' })
+  @IsOptional()
+  @IsString()
+  click_id?: string;
 }
 
 export class FlowTransitionDto {

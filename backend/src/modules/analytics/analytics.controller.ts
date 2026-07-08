@@ -26,18 +26,6 @@ import { User } from '../users/entities/user.entity';
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
-  @Get('otp')
-  @ApiOperation({
-    summary: 'Get detailed OTP analytics, trends, and provider comparison',
-  })
-  async getOtpAnalytics(
-    @Query('campaignId') campaignId: string | undefined,
-    @CurrentUser() user: User,
-  ) {
-    const parsedId = campaignId && campaignId !== 'all' ? Number(campaignId) : undefined;
-    return this.analyticsService.getOtpAnalytics(user.id, parsedId);
-  }
-
   @Get('campaign/:campaignId')
   @ApiOperation({
     summary: 'Get analytics metrics for a campaign (owner only)',

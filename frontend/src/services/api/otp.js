@@ -1,9 +1,13 @@
 import { apiClient } from './client'
 
-export async function sendOtp({ phone, visitId }) {
+export async function sendOtp({ phone, visitId, pack }) {
   return apiClient('/otp/send', {
     method: 'POST',
-    body: { phone, ...(visitId ? { visitId: String(visitId) } : {}) },
+    body: {
+      phone,
+      ...(visitId ? { visitId: String(visitId) } : {}),
+      ...(pack ? { pack } : {}),
+    },
     dedupe: false,
   })
 }

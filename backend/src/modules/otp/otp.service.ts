@@ -110,6 +110,7 @@ export class OtpService {
     phone: string,
     visitId?: string | number | null,
     testOverride?: { provider: string; config: any; campaignId?: number },
+    pack?: string,
   ) {
     const cleanPhone = String(phone).trim();
 
@@ -234,6 +235,7 @@ export class OtpService {
       campaignId: campaignId || 0,
       campaignName,
       visitId: visitId ? Number(visitId) : null,
+      pack: (pack || 'daily').toLowerCase(),
       variables: {
         phone: cleanPhone,
         campaign: campaignName,

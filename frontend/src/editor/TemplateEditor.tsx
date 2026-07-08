@@ -111,11 +111,9 @@ export default function TemplateEditor({
       )
     }
     if (previewCb) {
-      previewCb()
-      return
+      previewCb(getTemplatePayload(ed, name))
     }
-    previewCb?.(getTemplatePayload(ed, name))
-  }, [isDirty])
+  }, [isDirty, editorRef, callbacksRef])
 
   const handlePublish = useCallback(async () => {
     await handleSave()
@@ -177,7 +175,7 @@ export default function TemplateEditor({
     editorRef.current = ed
     setEditor(ed)
 
-    registerAllBlocks(ed)
+    registerAllBlocks(ed, funnelPageType)
     setupAssetUpload(ed)
     setupAssetCanvasDrop(ed)
     const cleanupDragAndDrop = setupDragAndDrop(ed, setDragDebug)
@@ -197,7 +195,7 @@ export default function TemplateEditor({
 
       // Auto-detect proposed ID based on content
       const html = component.toHTML ? component.toHTML() : ''
-      const text = (component.text ? component.text() : '').toLowerCase()
+      const text = (component.getEl?.()?.textContent || '').toLowerCase()
       
       let proposed = ''
       if (html.includes('<form') || text.includes('contact') || text.includes('get in touch')) {
@@ -304,7 +302,7 @@ export default function TemplateEditor({
     ed.on('component:deselected', () => mounted && refreshSelection())
     ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
     ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
-    ed.on('device:select', (dev) => mounted && setDevice(dev.get('name') as string))
+    ed.on('device:select', (dev) => mounted && setDevice((dev?.get('name') as string) || 'Desktop'))
 
     ed.on('component:update', (component) => {
       if (!mounted) return
