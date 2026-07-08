@@ -33,6 +33,12 @@ export interface UploadsConfig {
   prefix: string;
 }
 
+export interface SearchConfig {
+  node: string;
+  enabled: boolean;
+  index: string;
+}
+
 export interface AppConfig {
   port: number;
   environment: string;
@@ -42,6 +48,7 @@ export interface AppConfig {
   cloudinary: CloudinaryConfig;
   aws: AwsConfig;
   uploads: UploadsConfig;
+  search: SearchConfig;
 }
 
 export default (): AppConfig => ({
@@ -81,5 +88,11 @@ export default (): AppConfig => ({
     localDir: process.env.UPLOAD_LOCAL_DIR || '',
     publicPath: process.env.UPLOAD_PUBLIC_PATH || '/api/media',
     prefix: process.env.UPLOAD_PREFIX || 'templatecraft',
+  },
+  search: {
+    node: process.env.ELASTICSEARCH_NODE || '',
+    // ES is optional: only enabled when a node URL is configured.
+    enabled: Boolean(process.env.ELASTICSEARCH_NODE),
+    index: process.env.ELASTICSEARCH_INDEX || 'campaign_events',
   },
 });

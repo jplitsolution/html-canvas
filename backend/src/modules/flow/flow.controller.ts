@@ -29,6 +29,10 @@ export class FlowController {
       phone: headerMsisdn || query.msisdn,
       visitId: query.visitId ? Number(query.visitId) : undefined,
       pack: query.pack,
+      campid: query.campid,
+      vid: query.vid,
+      affId: query.aff_id,
+      clickId: query.click_id,
       ipAddress:
         (req.headers['x-forwarded-for'] as string) ||
         req.socket?.remoteAddress ||

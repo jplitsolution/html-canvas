@@ -134,7 +134,7 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
             setApplyError(null)
           }}
           spellCheck={false}
-          className="absolute inset-0 w-full h-full resize-none rounded-lg border border-border bg-[#0d1117] text-[#e6edf3] font-mono text-[11px] leading-relaxed p-3 focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="absolute inset-0 w-full h-full resize-none rounded-lg border border-border bg-bg-subtle text-fg font-mono text-[11px] leading-relaxed p-3 focus:outline-none focus:ring-2 focus:ring-accent/30"
           placeholder={view === 'html' ? '<!-- Page HTML -->' : '/* Page CSS */'}
         />
       </div>

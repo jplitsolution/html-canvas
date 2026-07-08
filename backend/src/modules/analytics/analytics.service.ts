@@ -6,8 +6,7 @@ import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
 import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { OtpRequest } from '../otp/entities/otp-request.entity';
-import { Campaign } from '../campaigns/entities/campaign.entity';
-import { OtpService } from '../otp/otp.service';
+import { SearchService } from '../search/search.service';
 
 @Injectable()
 export class AnalyticsService {
@@ -17,7 +16,50 @@ export class AnalyticsService {
     @InjectRepository(VisitEvent)
     private readonly visitEventRepository: Repository<VisitEvent>,
     private readonly campaignsService: CampaignsService,
+    private readonly searchService: SearchService,
   ) {}
+
+  private maskPhone(phone?: string): string | undefined {
+    if (!phone) return undefined;
+    const trimmed = phone.trim();
+    if (trimmed.length <= 4) return '****';
+    return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+  }
+
+  /** Best-effort: index a funnel event into Elasticsearch. Never throws. */
+  private async indexVisitEvent(
+    visitId: number,
+    eventType: VisitEventType | string,
+    status?: string,
+  ): Promise<void> {
+    if (!this.searchService.isEnabled()) return;
+    try {
+      const visit = await this.visitRepository.findOne({
+        where: { id: visitId },
+      });
+      if (!visit) return;
+      await this.searchService.indexEvent({
+        campaignId: visit.campaignId,
+        visitId: visit.id,
+        vendorId: visit.vendorId,
+        affiliateId: visit.affiliateId,
+        clickId: visit.clickId,
+        vidRaw: visit.vidRaw,
+        affRaw: visit.affRaw,
+        phoneMasked: this.maskPhone(visit.phone),
+        country: visit.country,
+        operator: visit.operator,
+        pageType: visit.pageType,
+        eventType: String(eventType),
+        status: status || visit.visitStatus,
+        ip: visit.ipAddress,
+        userAgent: visit.userAgent,
+        timestamp: new Date().toISOString(),
+      });
+    } catch {
+      // swallow — indexing must never affect the funnel
+    }
+  }
 
   async createVisit(data: Partial<Visit>): Promise<Visit> {
     const visit = this.visitRepository.create(data);
@@ -62,7 +104,10 @@ export class AnalyticsService {
       eventType,
       metadata,
     });
-    return this.visitEventRepository.save(event);
+    const saved = await this.visitEventRepository.save(event);
+    // Best-effort mirror into Elasticsearch for fast log search/analytics.
+    void this.indexVisitEvent(visitId, eventType);
+    return saved;
   }
 
   async getCampaignAnalytics(
@@ -126,425 +171,6 @@ export class AnalyticsService {
       blockedRequests,
       rateLimitHits,
       bruteForceAttempts,
-    };
-  }
-
-  async getOtpAnalytics(userId: number, campaignId?: number) {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const userCampaigns = await this.visitRepository.manager.getRepository(Campaign).find({
-      where: { userId },
-      select: { id: true, country: true, operator: true, name: true },
-    });
-
-    if (campaignId !== undefined && !userCampaigns.some((c) => c.id === campaignId)) {
-      throw new ForbiddenException(
-        'You do not have permission to access this campaign',
-      );
-    }
-
-    const campaignMap = new Map(userCampaigns.map((c) => [c.id, c]));
-    const userCampaignIds = userCampaigns.map((c) => c.id);
-
-    const emptyAnalytics = () => ({
-      summary: {
-        totalRequests: 0,
-        sentRequests: 0,
-        verifiedRequests: 0,
-        failedRequests: 0,
-        verificationRate: 0,
-        failureRate: 0,
-        successRate: 0,
-        avgVerificationTime: 0,
-        avgResendCount: 0,
-      },
-      providerPerformance: [],
-      countryPerformance: [],
-      operatorPerformance: [],
-      campaignPerformance: [],
-      dailyTrends: [],
-      hourlyTrends: [],
-      topFailedCampaigns: [],
-      funnel: { requested: 0, sent: 0, verified: 0, subscribed: 0 },
-      period: {
-        days: 30,
-        from: thirtyDaysAgo.toISOString(),
-        to: new Date().toISOString(),
-      },
-      generatedAt: new Date().toISOString(),
-    });
-
-    if (userCampaignIds.length === 0) {
-      return emptyAnalytics();
-    }
-
-    const scopedCampaignFilter =
-      campaignId !== undefined ? campaignId : In(userCampaignIds);
-
-    const userCampaignIdSet = new Set(userCampaignIds.map((id) => Number(id)));
-    const otpRepo = this.visitRepository.manager.getRepository(OtpRequest);
-
-    const allRequests = await otpRepo.find({
-      where: { createdAt: MoreThan(thirtyDaysAgo) },
-      select: {
-        id: true,
-        status: true,
-        provider: true,
-        attempts: true,
-        createdAt: true,
-        verifiedAt: true,
-        campaignId: true,
-        phone: true,
-        visitId: true,
-      },
-    });
-
-    const visitIds = [
-      ...new Set(
-        allRequests
-          .map((r) => (r.visitId != null ? Number(r.visitId) : null))
-          .filter((id): id is number => id != null && !Number.isNaN(id)),
-      ),
-    ];
-
-    const visits = visitIds.length
-      ? await this.visitRepository.find({
-          where: { id: In(visitIds) },
-          select: { id: true, campaignId: true, country: true, operator: true },
-        })
-      : [];
-    const visitMap = new Map(visits.map((v) => [Number(v.id), v]));
-
-    const resolveCampaignId = (r: OtpRequest): number | null => {
-      const fromOtp =
-        r.campaignId != null && Number(r.campaignId) > 0
-          ? Number(r.campaignId)
-          : null;
-      const visit = r.visitId != null ? visitMap.get(Number(r.visitId)) : undefined;
-      const fromVisit =
-        visit?.campaignId != null && Number(visit.campaignId) > 0
-          ? Number(visit.campaignId)
-          : null;
-      const resolved = fromOtp ?? fromVisit ?? null;
-      if (resolved == null || Number.isNaN(resolved) || !userCampaignIdSet.has(resolved)) {
-        return null;
-      }
-      return resolved;
-    };
-
-    const resolveMeta = (resolvedCampaignId: number, visitId?: number | null) => {
-      const camp = campaignMap.get(resolvedCampaignId);
-      const visit = visitId != null ? visitMap.get(Number(visitId)) : undefined;
-      return {
-        country: camp?.country || visit?.country || '—',
-        operator: camp?.operator || visit?.operator || '—',
-        name: camp?.name || `Campaign #${resolvedCampaignId}`,
-      };
-    };
-
-    let requests = allRequests.filter((r) => resolveCampaignId(r) !== null);
-    if (campaignId !== undefined) {
-      requests = requests.filter((r) => resolveCampaignId(r) === campaignId);
-    }
-
-    // Summary stats
-    const totalRequests = requests.length;
-    const sentRequests = requests.filter(r => ['sent', 'verified', 'used'].includes(r.status || '')).length;
-    const verifiedRequests = requests.filter(r => r.status === 'verified' || r.verifiedAt !== null).length;
-    const failedRequests = requests.filter(r => r.status === 'failed').length;
-
-    const verificationRate = totalRequests > 0 ? parseFloat(((verifiedRequests / totalRequests) * 100).toFixed(2)) : 0;
-    const failureRate = totalRequests > 0 ? parseFloat(((failedRequests / totalRequests) * 100).toFixed(2)) : 0;
-    const successRate = sentRequests > 0 ? parseFloat(((verifiedRequests / sentRequests) * 100).toFixed(2)) : 0;
-
-    // Average verification time
-    let totalVerifTime = 0;
-    let verifCount = 0;
-    requests.forEach(r => {
-      if (r.verifiedAt && r.createdAt) {
-        const diff = (r.verifiedAt.getTime() - r.createdAt.getTime()) / 1000;
-        if (diff >= 0) {
-          totalVerifTime += diff;
-          verifCount++;
-        }
-      }
-    });
-    const avgVerificationTime = verifCount > 0 ? parseFloat((totalVerifTime / verifCount).toFixed(1)) : 0;
-
-    // Average resend count
-    const phoneGroups = new Map<string, number>();
-    requests.forEach(r => {
-      if (r.phone) {
-        phoneGroups.set(r.phone, (phoneGroups.get(r.phone) || 0) + 1);
-      }
-    });
-    let totalResends = 0;
-    phoneGroups.forEach(count => {
-      totalResends += (count - 1);
-    });
-    const avgResendCount = phoneGroups.size > 0 ? parseFloat((totalResends / phoneGroups.size).toFixed(2)) : 0;
-
-    // Provider performance
-    const providerMap = new Map<string, { total: number; verified: number; failed: number }>();
-    requests.forEach(r => {
-      const prov = r.provider || 'local';
-      if (!providerMap.has(prov)) {
-        providerMap.set(prov, { total: 0, verified: 0, failed: 0 });
-      }
-      const stats = providerMap.get(prov)!;
-      stats.total++;
-      if (r.status === 'verified' || r.verifiedAt) stats.verified++;
-      if (r.status === 'failed') stats.failed++;
-    });
-
-    const liveHealth = OtpService.getProviderHealthStatus();
-    const liveHealthMap = new Map<string, typeof liveHealth[0]>();
-    liveHealth.forEach(lh => liveHealthMap.set(lh.provider, lh));
-
-    const providerPerformance = Array.from(providerMap.entries()).map(([provider, stats]) => {
-      const live = liveHealthMap.get(provider);
-      return {
-        provider,
-        total: stats.total,
-        verified: stats.verified,
-        failed: stats.failed,
-        successRate: stats.total > 0 ? parseFloat(((stats.verified / stats.total) * 100).toFixed(2)) : 0,
-        tripped: live ? live.tripped : false,
-        trippedUntil: live ? live.trippedUntil : null,
-        avgLatencyMs: live ? live.avgLatencyMs : 0,
-        liveSuccessRate: live ? live.successRate : 100,
-        liveTotalRequests: live ? live.totalRequests : 0,
-      };
-    });
-
-    liveHealth.forEach(lh => {
-      if (!providerMap.has(lh.provider)) {
-        providerPerformance.push({
-          provider: lh.provider,
-          total: 0,
-          verified: 0,
-          failed: 0,
-          successRate: 100,
-          tripped: lh.tripped,
-          trippedUntil: lh.trippedUntil,
-          avgLatencyMs: lh.avgLatencyMs,
-          liveSuccessRate: lh.successRate,
-          liveTotalRequests: lh.totalRequests,
-        });
-      }
-    });
-
-    // Country/Operator/Campaign performance
-    const countryMap = new Map<string, { total: number; verified: number; failed: number; sent: number }>();
-    const operatorMap = new Map<string, { total: number; verified: number; failed: number; sent: number; countries: Set<string> }>();
-    const campaignStatsMap = new Map<number, { total: number; verified: number; failed: number; sent: number }>();
-
-    const campaignsToShow =
-      campaignId !== undefined
-        ? userCampaigns.filter((c) => c.id === campaignId)
-        : userCampaigns;
-    for (const c of campaignsToShow) {
-      campaignStatsMap.set(Number(c.id), { total: 0, verified: 0, failed: 0, sent: 0 });
-    }
-
-    requests.forEach((r) => {
-      const resolvedCampaignId = resolveCampaignId(r)!;
-      const meta = resolveMeta(resolvedCampaignId, r.visitId);
-      const country = meta.country;
-      const operator = meta.operator;
-      const isVerified = r.status === 'verified' || r.verifiedAt !== null;
-      const isFailed = r.status === 'failed';
-      const isSent = ['sent', 'verified', 'used'].includes(r.status || '');
-
-      if (!countryMap.has(country)) countryMap.set(country, { total: 0, verified: 0, failed: 0, sent: 0 });
-      if (!operatorMap.has(operator)) {
-        operatorMap.set(operator, { total: 0, verified: 0, failed: 0, sent: 0, countries: new Set() });
-      }
-      if (!campaignStatsMap.has(resolvedCampaignId)) {
-        campaignStatsMap.set(resolvedCampaignId, { total: 0, verified: 0, failed: 0, sent: 0 });
-      }
-
-      const cStats = countryMap.get(country)!;
-      cStats.total++;
-      if (isVerified) cStats.verified++;
-      if (isFailed) cStats.failed++;
-      if (isSent) cStats.sent++;
-
-      const oStats = operatorMap.get(operator)!;
-      oStats.total++;
-      if (isVerified) oStats.verified++;
-      if (isFailed) oStats.failed++;
-      if (isSent) oStats.sent++;
-      if (country !== '—' && country !== 'Unknown') oStats.countries.add(country);
-
-      const campStats = campaignStatsMap.get(resolvedCampaignId)!;
-      campStats.total++;
-      if (isVerified) campStats.verified++;
-      if (isFailed) campStats.failed++;
-      if (isSent) campStats.sent++;
-    });
-
-    const subscribedVisits = await this.visitRepository.find({
-      where: {
-        visitStatus: VisitStatus.SUCCESS,
-        createdAt: MoreThan(thirtyDaysAgo),
-        campaignId: scopedCampaignFilter,
-      },
-      select: { campaignId: true },
-    });
-    const subscribedByCampaign = new Map<number, number>();
-    subscribedVisits.forEach(v => {
-      const id = Number(v.campaignId);
-      subscribedByCampaign.set(id, (subscribedByCampaign.get(id) || 0) + 1);
-    });
-
-    const pct = (num: number, den: number) =>
-      den > 0 ? parseFloat(((num / den) * 100).toFixed(2)) : 0;
-
-    const countryPerformance = Array.from(countryMap.entries())
-      .map(([country, stats]) => ({
-        country,
-        total: stats.total,
-        verified: stats.verified,
-        failed: stats.failed,
-        sent: stats.sent,
-        successRate: pct(stats.verified, stats.total),
-        failureRate: pct(stats.failed, stats.total),
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const operatorPerformance = Array.from(operatorMap.entries())
-      .map(([operator, stats]) => ({
-        operator,
-        countries: Array.from(stats.countries).sort(),
-        total: stats.total,
-        verified: stats.verified,
-        failed: stats.failed,
-        sent: stats.sent,
-        successRate: pct(stats.verified, stats.total),
-        failureRate: pct(stats.failed, stats.total),
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    const campaignPerformance = Array.from(campaignStatsMap.entries())
-      .map(([id, stats]) => {
-        const camp = campaignMap.get(Number(id));
-        const meta = resolveMeta(Number(id));
-        const subscribed = subscribedByCampaign.get(Number(id)) || 0;
-        return {
-          campaignId: Number(id),
-          campaignName: camp?.name || meta.name,
-          country: camp?.country || meta.country,
-          operator: camp?.operator || meta.operator,
-          total: stats.total,
-          sent: stats.sent,
-          verified: stats.verified,
-          failed: stats.failed,
-          subscribed,
-          successRate: pct(stats.verified, stats.total),
-          failureRate: pct(stats.failed, stats.total),
-          conversionRate: pct(subscribed, stats.verified),
-        };
-      })
-      .sort((a, b) => b.total - a.total || a.campaignName.localeCompare(b.campaignName));
-
-    // Trends (Hourly and Daily)
-    const dailyMap = new Map<string, number>();
-    const hourlyMap = new Map<string, number>();
-    const now = new Date();
-    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-
-    requests.forEach(r => {
-      if (!r.createdAt) return;
-      const dateStr = r.createdAt.toISOString().split('T')[0];
-      dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
-
-      if (r.createdAt >= oneDayAgo) {
-        const hourStr = `${r.createdAt.toISOString().split('T')[0]} ${String(r.createdAt.getHours()).padStart(2, '0')}:00`;
-        hourlyMap.set(hourStr, (hourlyMap.get(hourStr) || 0) + 1);
-      }
-    });
-
-    const dailyTrends = Array.from(dailyMap.entries())
-      .map(([date, count]) => ({ date, count }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-
-    const hourlyTrends = Array.from(hourlyMap.entries())
-      .map(([hour, count]) => ({ hour, count }))
-      .sort((a, b) => a.hour.localeCompare(b.hour));
-
-    // Top Failed Campaigns
-    const failedCampMap = new Map<number, { total: number; failed: number }>();
-    requests.forEach((r) => {
-      const resolvedCampaignId = resolveCampaignId(r);
-      if (resolvedCampaignId == null) return;
-      if (!failedCampMap.has(resolvedCampaignId)) {
-        failedCampMap.set(resolvedCampaignId, { total: 0, failed: 0 });
-      }
-      const stats = failedCampMap.get(resolvedCampaignId)!;
-      stats.total++;
-      if (r.status === 'failed') stats.failed++;
-    });
-    const topFailedCampaigns = Array.from(failedCampMap.entries())
-      .map(([cid, stats]) => {
-        const camp = campaignMap.get(Number(cid));
-        const meta = resolveMeta(Number(cid));
-        return {
-          campaignId: Number(cid),
-          campaignName: camp
-            ? `${camp.country} / ${camp.operator}`
-            : `${meta.country} / ${meta.operator}`,
-          total: stats.total,
-          failed: stats.failed,
-          failureRate: stats.total > 0 ? parseFloat(((stats.failed / stats.total) * 100).toFixed(2)) : 0,
-        };
-      })
-      .sort((a, b) => b.failed - a.failed)
-      .slice(0, 5);
-
-    // Funnel: Requested -> Sent -> Verified -> Subscribed
-    const subscribedCount = await this.visitRepository.count({
-      where: {
-        visitStatus: VisitStatus.SUCCESS,
-        createdAt: MoreThan(thirtyDaysAgo),
-        campaignId: scopedCampaignFilter,
-      },
-    });
-
-    const funnel = {
-      requested: totalRequests,
-      sent: sentRequests,
-      verified: verifiedRequests,
-      subscribed: subscribedCount,
-    };
-
-    return {
-      summary: {
-        totalRequests,
-        sentRequests,
-        verifiedRequests,
-        failedRequests,
-        verificationRate,
-        failureRate,
-        successRate,
-        avgVerificationTime,
-        avgResendCount,
-      },
-      providerPerformance,
-      countryPerformance,
-      operatorPerformance,
-      campaignPerformance,
-      dailyTrends,
-      hourlyTrends,
-      topFailedCampaigns,
-      funnel,
-      period: {
-        days: 30,
-        from: thirtyDaysAgo.toISOString(),
-        to: new Date().toISOString(),
-      },
-      generatedAt: new Date().toISOString(),
     };
   }
 

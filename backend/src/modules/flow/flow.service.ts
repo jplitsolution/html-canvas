@@ -10,10 +10,15 @@ import { Repository } from 'typeorm';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity';
 import { PartnerApiService } from './partner-api.service';
+import { PartnersService } from '../partners/partners.service';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { VisitStatus } from '../analytics/entities/visit.entity';
 import { VisitEventType } from '../analytics/entities/visit-event.entity';
 import { VariableResolverService } from '../../common/services/variable-resolver.service';
+import {
+  FlowEngineService,
+  VerificationMode,
+} from './flow-engine.service';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
 
 import { OtpRequest } from '../otp/entities/otp-request.entity';
@@ -25,13 +30,90 @@ export class FlowService {
   constructor(
     private readonly campaignsService: CampaignsService,
     private readonly partnerApiService: PartnerApiService,
+    private readonly partnersService: PartnersService,
     private readonly analyticsService: AnalyticsService,
     private readonly variableResolver: VariableResolverService,
+    private readonly flowEngine: FlowEngineService,
     @InjectRepository(ApiConfig)
     private readonly apiConfigRepository: Repository<ApiConfig>,
     @InjectRepository(OtpRequest)
     private readonly otpRepository: Repository<OtpRequest>,
   ) {}
+
+  /**
+   * Resolve the campaign for a public flow request. Prefers the explicit
+   * `campid` tracking param, falling back to the legacy country/operator lookup.
+   */
+  private async resolveCampaign(input: {
+    country: string;
+    operator: string;
+    campid?: string;
+  }) {
+    if (input.campid) {
+      const byId = await this.campaignsService.findByIdForFlow(
+        Number(input.campid),
+      );
+      if (byId) return byId;
+    }
+    return this.campaignsService.findByCountryOperator(
+      input.country,
+      input.operator,
+    );
+  }
+
+  /**
+   * Verification-mode-aware routing for HOME + SUBSCRIBE.
+   * - MSISDN_ONLY: resolve number (header or ISP API); resolved -> CONFIRM edge, else -> ERROR.
+   * - OTP_ONLY: always route to OTP.
+   * - BOTH: resolve to prefill if possible, but always require OTP.
+   */
+  private async resolveHomeSubscribeNext(
+    mode: VerificationMode,
+    flowConfig: ReturnType<FlowEngineService['parseFlowConfig']>,
+    campaign: { country: string; operator: string },
+    apiConfig: ApiConfig | null,
+    ctx: { phone: string; headerPhoneDetected: boolean; visitId: number },
+  ): Promise<CampaignPageType> {
+    const fromGraph = (
+      condition: Parameters<FlowEngineService['nextPage']>[2],
+      fallback: CampaignPageType,
+    ): CampaignPageType =>
+      this.flowEngine.nextPage(flowConfig, CampaignPageType.HOME, condition) ||
+      fallback;
+
+    if (mode === 'MSISDN_ONLY') {
+      let resolved = ctx.headerPhoneDetected || Boolean(ctx.phone);
+      if (!resolved) {
+        const isp = await this.partnerApiService.resolveMsisdn(apiConfig, {
+          country: campaign.country,
+          operator: campaign.operator,
+          hint: ctx.phone,
+        });
+        if (isp) {
+          resolved = true;
+          await this.analyticsService.setVisitPhone(ctx.visitId, isp);
+        }
+      }
+      return resolved
+        ? fromGraph('MSISDN_RESOLVED', CampaignPageType.CONFIRM)
+        : fromGraph('MSISDN_UNRESOLVED', CampaignPageType.ERROR);
+    }
+
+    if (mode === 'BOTH' && !ctx.headerPhoneDetected && !ctx.phone) {
+      // Attempt to prefill the number, but OTP is still required.
+      const isp = await this.partnerApiService.resolveMsisdn(apiConfig, {
+        country: campaign.country,
+        operator: campaign.operator,
+        hint: ctx.phone,
+      });
+      if (isp) {
+        await this.analyticsService.setVisitPhone(ctx.visitId, isp);
+      }
+    }
+
+    // OTP_ONLY and BOTH both require OTP.
+    return fromGraph('DEFAULT', CampaignPageType.OTP);
+  }
 
   async getPage(input: {
     country: string;
@@ -40,6 +122,10 @@ export class FlowService {
     phone?: string;
     visitId?: number;
     pack?: string;
+    campid?: string;
+    vid?: string;
+    affId?: string;
+    clickId?: string;
     ipAddress?: string;
     userAgent?: string;
     landingUrl?: string;
@@ -48,13 +134,10 @@ export class FlowService {
       `GET page | country=${input.country} operator=${input.operator} page=${input.pageType} phone=${input.phone || '(empty)'}`,
     );
 
-    const campaign = await this.campaignsService.findByCountryOperator(
-      input.country,
-      input.operator,
-    );
+    const campaign = await this.resolveCampaign(input);
     if (!campaign) {
       this.logger.warn(
-        `Campaign not found: ${input.country} / ${input.operator}`,
+        `Campaign not found: campid=${input.campid || 'n/a'} ${input.country} / ${input.operator}`,
       );
       throw new NotFoundException(
         `No campaign found for ${input.country} / ${input.operator}`,
@@ -88,7 +171,14 @@ export class FlowService {
     let resolvedPageType = input.pageType;
 
     // Enforce Route Guards for page access
-    const isOtpEnabled = apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '';
+    const providerConfigured =
+      apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '';
+    const guardMode = this.flowEngine.normalizeMode(campaign.verificationMode);
+    // OTP verification is required for legacy provider setups and for the
+    // OTP_ONLY / BOTH verification modes. MSISDN_ONLY never gates on OTP.
+    const isOtpEnabled = guardMode
+      ? guardMode === 'OTP_ONLY' || guardMode === 'BOTH'
+      : providerConfigured;
     if (isOtpEnabled) {
       if (resolvedPageType === CampaignPageType.CONFIRM || resolvedPageType === CampaignPageType.THANKYOU) {
         let isVerified = false;
@@ -146,6 +236,18 @@ export class FlowService {
     }
 
     if (!visitId && resolvedPageType === CampaignPageType.HOME) {
+      const attribution = await this.partnersService
+        .resolveAttribution(input.vid, input.affId)
+        .catch(() => ({
+          vendorId: undefined,
+          affiliateId: undefined,
+          mismatch: false,
+        }));
+      if (attribution.mismatch) {
+        this.logger.warn(
+          `Attribution mismatch: aff_id=${input.affId} does not belong to vid=${input.vid}`,
+        );
+      }
       const visit = await this.analyticsService.createVisit({
         campaignId: campaign.id,
         phone: phone || undefined,
@@ -156,6 +258,11 @@ export class FlowService {
         landingUrl: input.landingUrl,
         visitStatus: VisitStatus.VISIT,
         pageType: CampaignPageType.HOME,
+        vendorId: attribution.vendorId,
+        affiliateId: attribution.affiliateId,
+        clickId: input.clickId,
+        vidRaw: input.vid,
+        affRaw: input.affId,
       });
       visitId = visit.id;
       await this.analyticsService.logEvent(visitId, VisitEventType.HOME_VIEW);
@@ -277,8 +384,20 @@ export class FlowService {
         isOtpEnabled = true;
       }
 
+      const mode = this.flowEngine.normalizeMode(campaign.verificationMode);
+      const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+
       let nextPage: CampaignPageType;
-      if (isOtpEnabled) {
+      if (mode) {
+        // New engine: verification-mode driven routing (graph-aware).
+        nextPage = await this.resolveHomeSubscribeNext(
+          mode,
+          flowConfig,
+          campaign,
+          apiConfig,
+          { phone, headerPhoneDetected, visitId: input.visitId },
+        );
+      } else if (isOtpEnabled) {
         nextPage = headerPhoneDetected ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
       } else {
         nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;

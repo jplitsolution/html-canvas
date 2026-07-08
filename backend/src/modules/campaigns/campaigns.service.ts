@@ -18,15 +18,22 @@ import {
 import {
   CreateCampaignDto,
   UpdateCampaignDto,
+  UpdateFlowDto,
 } from './dto/create-campaign.dto';
 import { UpdateCampaignPageDto } from './dto/update-campaign-page.dto';
 import { Template } from '../templates/entities/template.entity';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages';
+import {
+  FlowConfig,
+  FlowEngineService,
+  VerificationMode,
+} from '../flow/flow-engine.service';
 
 @Injectable()
 export class CampaignsService {
   private readonly logger = new Logger(CampaignsService.name);
+  private readonly flowEngine = new FlowEngineService();
 
   constructor(
     @InjectRepository(Campaign)
@@ -88,6 +95,22 @@ export class CampaignsService {
       })
       .getOne();
 
+    if (campaign) {
+      await this.ensureCampaignPages(campaign);
+    }
+    return campaign;
+  }
+
+  /**
+   * Public (unauthenticated) campaign lookup by id, used by the flow runtime
+   * when the tracking URL carries a `campid` param. Returns null if not found.
+   */
+  async findByIdForFlow(id: number): Promise<Campaign | null> {
+    if (!id || Number.isNaN(id)) return null;
+    const campaign = await this.campaignRepository.findOne({
+      where: { id },
+      relations: { pages: { template: true } },
+    });
     if (campaign) {
       await this.ensureCampaignPages(campaign);
     }
@@ -167,6 +190,7 @@ export class CampaignsService {
       sourcePages = source.pages || [];
     }
 
+    const defaultMode: VerificationMode = 'BOTH';
     const campaign = await this.campaignRepository.save(
       this.campaignRepository.create({
         name: dto.name.trim(),
@@ -175,6 +199,10 @@ export class CampaignsService {
         serviceId: dto.serviceId,
         userId,
         active: false,
+        verificationMode: defaultMode,
+        flowConfig: JSON.stringify(
+          this.flowEngine.getDefaultFlowConfig(defaultMode),
+        ),
       }),
     );
 
@@ -236,9 +264,56 @@ export class CampaignsService {
     if (dto.name !== undefined) campaign.name = dto.name.trim();
     if (dto.serviceId !== undefined) campaign.serviceId = dto.serviceId;
     if (dto.active !== undefined) campaign.active = dto.active;
+    if (dto.vendorId !== undefined) campaign.vendorId = dto.vendorId ?? undefined;
 
     await this.campaignRepository.save(campaign);
     return this.findOne(id, userId);
+  }
+
+  async getFlow(
+    id: number,
+    userId: number,
+  ): Promise<{ verificationMode: VerificationMode; flowConfig: FlowConfig }> {
+    const campaign = await this.findOne(id, userId);
+    const mode =
+      this.flowEngine.normalizeMode(campaign.verificationMode) || 'BOTH';
+    const flowConfig =
+      this.flowEngine.parseFlowConfig(campaign.flowConfig) ||
+      this.flowEngine.getDefaultFlowConfig(mode);
+    return { verificationMode: mode, flowConfig };
+  }
+
+  async updateFlow(
+    id: number,
+    dto: UpdateFlowDto,
+    userId: number,
+  ): Promise<{ verificationMode: VerificationMode; flowConfig: FlowConfig }> {
+    const campaign = await this.findOne(id, userId);
+
+    const mode =
+      this.flowEngine.normalizeMode(dto.verificationMode) ||
+      this.flowEngine.normalizeMode(campaign.verificationMode) ||
+      'BOTH';
+
+    let flowConfig: FlowConfig;
+    if (dto.flowConfig) {
+      flowConfig = dto.flowConfig as unknown as FlowConfig;
+      const { ok, errors } = this.flowEngine.validate(flowConfig, mode);
+      if (!ok) {
+        throw new BadRequestException(
+          `Invalid flow: ${errors.join(' ')}`,
+        );
+      }
+    } else {
+      flowConfig =
+        this.flowEngine.parseFlowConfig(campaign.flowConfig) ||
+        this.flowEngine.getDefaultFlowConfig(mode);
+    }
+
+    campaign.verificationMode = mode;
+    campaign.flowConfig = JSON.stringify(flowConfig);
+    await this.campaignRepository.save(campaign);
+    return { verificationMode: mode, flowConfig };
   }
 
   async remove(id: number, userId: number): Promise<void> {

@@ -175,17 +175,35 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
 
           {activeTab === 'billing' ? (
             <div className="space-y-4">
+              <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
+                Placeholders supported: <code>{'{{msisdn}}'}</code>, <code>{'{{serviceId}}'}</code>, <code>{'{{country}}'}</code>, <code>{'{{operator}}'}</code>, <code>{'{{subServiceId}}'}</code> (pack). URL me <code>?query</code> ho to <strong>GET</strong>, warna JSON body ke saath <strong>POST</strong> jaata hai.
+              </p>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Subscription check URL</label>
-                <Input value={form.subscriptionApi} onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })} />
+                <Input
+                  value={form.subscriptionApi}
+                  onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
+                  placeholder="https://wbilzss.tickhighs.com/sub/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
+                />
+                <p className="mt-1 text-xs text-fg-subtle">GET. Success = <code>responseCode:"0"</code> aur <code>data.subscriptionStatus:"active"</code> ho to already subscribed.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Blocklist / DND URL</label>
-                <Input value={form.blocklistApi} onChange={(e) => setForm({ ...form, blocklistApi: e.target.value })} />
+                <Input
+                  value={form.blocklistApi}
+                  onChange={(e) => setForm({ ...form, blocklistApi: e.target.value })}
+                  placeholder="(optional) https://your-partner.com/dnd/check?msisdn={{msisdn}}"
+                />
+                <p className="mt-1 text-xs text-fg-subtle">Optional. Response me <code>blocked</code> / <code>dnd</code> = true ho to user block ho jaata hai.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Subscribe URL</label>
-                <Input value={form.subscribeApi} onChange={(e) => setForm({ ...form, subscribeApi: e.target.value })} />
+                <Input
+                  value={form.subscribeApi}
+                  onChange={(e) => setForm({ ...form, subscribeApi: e.target.value })}
+                  placeholder="(SubOTP me khaali chhodo — subscription OTP verify par auto ho jaati hai)"
+                />
+                <p className="mt-1 text-xs text-fg-subtle">Alag POST/GET subscribe API ho tabhi bharo. Success = <code>success:true</code> ya <code>responseCode:"0"</code>.</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Headers (JSON)</label>
@@ -301,15 +319,16 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               {otpProvider === 'partner' && (
                 <div className="p-3 border border-border rounded-lg bg-bg-subtle/50 space-y-3">
                   <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">Telecom Partner URLs (Remote OTP)</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-fg mb-1">Send URL</label>
-                      <Input value={partnerConfig.sendUrl} onChange={(e) => setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })} placeholder="https://..." />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-fg mb-1">Verify URL</label>
-                      <Input value={partnerConfig.verifyUrl} onChange={(e) => setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })} placeholder="https://..." />
-                    </div>
+                  <p className="text-xs text-fg-subtle">
+                    Method <strong>GET</strong>. Placeholders: <code>{'{{msisdn}}'}</code>, <code>{'{{subServiceId}}'}</code> (pack: daily→HDaily), <code>{'{{otp}}'}</code>, <code>{'{{transactionId}}'}</code>. Success jab response me <code>responseCode:"0"</code>.
+                  </p>
+                  <div>
+                    <label className="block text-xs font-medium text-fg mb-1">Send URL (Generate OTP)</label>
+                    <Input value={partnerConfig.sendUrl} onChange={(e) => setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })} placeholder="https://wbilzss.tickhighs.com/otp/subscribe?msisdn={{msisdn}}&subServiceId={{subServiceId}}&serviceId=WELLNESS&cpId=100&channel=wap&country=SS&operator=ZAIN&reqType=1&language=_E" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-fg mb-1">Verify URL (Validate OTP)</label>
+                    <Input value={partnerConfig.verifyUrl} onChange={(e) => setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })} placeholder="https://wbilzss.tickhighs.com/otp/validate_otp?msisdn={{msisdn}}&otp={{otp}}" />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
@@ -385,7 +404,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-fg mb-1">Body Template (Placeholders: {{phone}}, {{otp}}, {{campaign}})</label>
+                    <label className="block text-xs font-medium text-fg mb-1">Body Template (Placeholders: <code>{'{{phone}}'}</code>, <code>{'{{otp}}'}</code>, <code>{'{{campaign}}'}</code>)</label>
                     <textarea
                       className="w-full min-h-[60px] rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-xs text-fg font-mono"
                       value={customConfig.bodyJson}

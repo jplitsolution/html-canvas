@@ -1,6 +1,17 @@
 import { apiClient } from './client'
 
-export async function fetchFlowPage({ country, operator, page, msisdn, visitId, pack }) {
+export async function fetchFlowPage({
+  country,
+  operator,
+  page,
+  msisdn,
+  visitId,
+  pack,
+  campid,
+  vid,
+  affId,
+  clickId,
+}) {
   const params = new URLSearchParams({
     country,
     operator,
@@ -9,6 +20,11 @@ export async function fetchFlowPage({ country, operator, page, msisdn, visitId, 
   if (visitId) params.set('visitId', String(visitId))
   if (pack) params.set('pack', pack)
   if (msisdn) params.set('msisdn', String(msisdn))
+  // Affiliate / vendor click attribution (tracking-URL params).
+  if (campid) params.set('campid', String(campid))
+  if (vid) params.set('vid', String(vid))
+  if (affId) params.set('aff_id', String(affId))
+  if (clickId) params.set('click_id', String(clickId))
 
   return apiClient(`/flow/page?${params.toString()}`, {
     method: 'GET',

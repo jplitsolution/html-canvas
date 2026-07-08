@@ -291,6 +291,12 @@ input:focus, textarea:focus, select:focus {
   background-size: 8px 8px;
 }
 
+.bg-dot-grid {
+  background-color: var(--bg-canvas);
+  background-image: radial-gradient(var(--border) 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
 .safe-bottom {
   padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
 }

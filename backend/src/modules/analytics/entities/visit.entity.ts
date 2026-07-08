@@ -48,6 +48,29 @@ export class Visit {
   @Column({ name: 'landing_url', type: 'text', nullable: true })
   landingUrl?: string;
 
+  // ---- Affiliate / vendor click attribution ----
+
+  @Index()
+  @Column({ name: 'vendor_id', nullable: true })
+  vendorId?: number;
+
+  @Index()
+  @Column({ name: 'affiliate_id', nullable: true })
+  affiliateId?: number;
+
+  /** click_id value from the tracking URL (macro filled by the affiliate/network). */
+  @Index()
+  @Column({ name: 'click_id', nullable: true })
+  clickId?: string;
+
+  /** Raw vid param as received (for audit even when the code is unknown). */
+  @Column({ name: 'vid_raw', nullable: true })
+  vidRaw?: string;
+
+  /** Raw aff_id param as received. */
+  @Column({ name: 'aff_raw', nullable: true })
+  affRaw?: string;
+
   @Column({
     type: 'varchar',
     name: 'visit_status',

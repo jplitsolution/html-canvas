@@ -36,6 +36,18 @@ export class Campaign {
   @Column({ name: 'user_id' })
   userId: number;
 
+  /** Optional vendor assigned to this campaign (drives affiliate tracking links). */
+  @Column({ name: 'vendor_id', nullable: true })
+  vendorId?: number;
+
+  /** Per-campaign verification policy: MSISDN_ONLY | OTP_ONLY | BOTH (null = legacy). */
+  @Column({ name: 'verification_mode', type: 'varchar', length: 16, nullable: true })
+  verificationMode?: string;
+
+  /** JSON-encoded page-flow graph (null = legacy hardcoded flow). */
+  @Column({ name: 'flow_config', type: 'text', nullable: true })
+  flowConfig?: string;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })
   user: User;

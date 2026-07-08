@@ -27,7 +27,7 @@ export function registerSectionBlocks(editor: Editor) {
         <a href="#features" style="color:#475569;text-decoration:none;font-size:15px;">Features</a>
         <a href="#pricing" style="color:#475569;text-decoration:none;font-size:15px;">Pricing</a>
         <a href="#contact" style="color:#475569;text-decoration:none;font-size:15px;">Contact</a>
-        <a data-tc-type="button" href="#signup" style="background:#4f46e5;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Get Started</a>
+        <a data-tc-type="button" href="#signup" style="background:#2563eb;color:#fff;padding:10px 20px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Get Started</a>
       </nav>
     </header>
   `)
@@ -37,8 +37,8 @@ export function registerSectionBlocks(editor: Editor) {
       <h1 data-gjs-type="text" style="font-size:clamp(32px, 8vw, 48px);font-weight:700;color:#0f172a;margin:0 0 16px;line-height:1.1;">Build beautiful websites faster</h1>
       <p data-gjs-type="text" style="font-size:clamp(16px, 3vw, 18px);color:#64748b;max-width:560px;margin:0 auto 32px;line-height:1.6;">Create stunning landing pages with drag and drop. No code required.</p>
       <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-        <a data-tc-type="button" href="#signup" style="background:#4f46e5;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Start Free Trial</a>
-        <a data-tc-type="button" href="#demo" style="background:#fff;color:#4f46e5;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;border:1px solid #4f46e5;">Watch Demo</a>
+        <a data-tc-type="button" href="#signup" style="background:#2563eb;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Start Free Trial</a>
+        <a data-tc-type="button" href="#demo" style="background:#fff;color:#2563eb;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;border:1px solid #2563eb;">Watch Demo</a>
       </div>
     </section>
   `)
@@ -75,10 +75,10 @@ export function registerSectionBlocks(editor: Editor) {
           <div data-gjs-type="text" style="font-size:36px;font-weight:700;color:#0f172a;margin-bottom:16px;">$9/mo</div>
           <a data-tc-type="button" href="#" style="display:block;text-align:center;background:#f1f5f9;color:#0f172a;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;">Choose Plan</a>
         </div>
-        <div style="flex:1;min-width:260px;max-width:300px;padding:32px;background:#4f46e5;border-radius:12px;color:#fff;">
+        <div style="flex:1;min-width:260px;max-width:300px;padding:32px;background:#2563eb;border-radius:12px;color:#fff;">
           <h3 data-gjs-type="text" style="font-size:18px;font-weight:600;margin:0 0 8px;">Pro</h3>
           <div data-gjs-type="text" style="font-size:36px;font-weight:700;margin-bottom:16px;">$29/mo</div>
-          <a data-tc-type="button" href="#" style="display:block;text-align:center;background:#fff;color:#4f46e5;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;">Choose Plan</a>
+          <a data-tc-type="button" href="#" style="display:block;text-align:center;background:#fff;color:#2563eb;padding:12px;border-radius:8px;text-decoration:none;font-weight:600;">Choose Plan</a>
         </div>
       </div>
     </section>
@@ -117,10 +117,10 @@ export function registerSectionBlocks(editor: Editor) {
   `)
 
   addSection(editor, 'cta-block', 'CTA Section', 'cta', `
-    <section data-tc-type="section" style="padding:64px 32px;background:#4f46e5;text-align:center;font-family:Inter,sans-serif;">
+    <section data-tc-type="section" style="padding:64px 32px;background:#2563eb;text-align:center;font-family:Inter,sans-serif;">
       <h2 data-gjs-type="text" style="font-size:clamp(24px, 5vw, 32px);font-weight:700;color:#fff;margin:0 0 12px;">Ready to get started?</h2>
       <p data-gjs-type="text" style="color:rgba(255,255,255,0.85);font-size:16px;margin:0 0 28px;">Join thousands of creators building with our platform.</p>
-      <a data-tc-type="button" href="#signup" style="display:inline-block;background:#fff;color:#4f46e5;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Start Building Free</a>
+      <a data-tc-type="button" href="#signup" style="display:inline-block;background:#fff;color:#2563eb;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:16px;">Start Building Free</a>
     </section>
   `)
 
@@ -132,7 +132,7 @@ export function registerSectionBlocks(editor: Editor) {
           <input type="text" placeholder="Your name" style="padding:12px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:15px;font-family:inherit;"/>
           <input type="email" placeholder="Email address" style="padding:12px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:15px;font-family:inherit;"/>
           <textarea placeholder="Your message" rows="4" style="padding:12px 16px;border:1px solid #e2e8f0;border-radius:8px;font-size:15px;font-family:inherit;resize:vertical;"></textarea>
-          <button data-tc-type="button" type="submit" style="background:#4f46e5;color:#fff;padding:14px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">Send Message</button>
+          <button data-tc-type="button" type="submit" style="background:#2563eb;color:#fff;padding:14px;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;font-family:inherit;">Send Message</button>
         </form>
       </div>
     </section>

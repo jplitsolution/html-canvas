@@ -7,6 +7,7 @@ interface EditorContextValue {
   device: string
   zoom: number
   advancedMode: boolean
+  funnelPageType?: string
   setAdvancedMode: (v: boolean) => void
   setZoom: (z: number) => void
   setDevice: (d: string) => void

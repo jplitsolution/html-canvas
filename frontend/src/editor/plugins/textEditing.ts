@@ -1,19 +1,22 @@
 import type { Editor } from 'grapesjs';
 import { configureAsTextComponent, ensureAllTextEditable } from '../utils/textContent';
+import { isEditorAlive } from '../utils/editorUtils';
 
 /** Sync sidebar with canvas edits; enable double-click inline text editing */
 export function setupTextEditing(editor: Editor, onContentChange?: () => void) {
+  let alive = true
   const notify = () => onContentChange?.();
 
   // ✅ Use a single delayed call with a flag to prevent multiple calls
   let textSetupCalled = false;
   
   const setupText = () => {
-    if (textSetupCalled) return;
+    if (textSetupCalled || !alive) return;
     textSetupCalled = true;
     
     // Wait for editor to be fully ready
     setTimeout(() => {
+      if (!alive || !isEditorAlive(editor)) return
       try {
         ensureAllTextEditable(editor);
       } catch (error) {
@@ -37,7 +40,7 @@ export function setupTextEditing(editor: Editor, onContentChange?: () => void) {
   });
 
   editor.on('component:selected', () => {
-    const placer = editor.Canvas.getPlacerEl();
+    const placer = editor.Canvas?.getPlacerEl?.();
     placer?.classList.remove('tc-placer-active');
   });
 
@@ -46,4 +49,8 @@ export function setupTextEditing(editor: Editor, onContentChange?: () => void) {
   editor.on('component:update', (component) => {
     if (editor.getSelected() === component) notify();
   });
+
+  return () => {
+    alive = false
+  }
 }

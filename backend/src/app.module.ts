@@ -14,6 +14,9 @@ import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { FlowModule } from './modules/flow/flow.module';
 import { OtpModule } from './modules/otp/otp.module';
+import { PartnersModule } from './modules/partners/partners.module';
+import { SearchModule } from './modules/search/search.module';
+import { LogsModule } from './modules/logs/logs.module';
 
 @Module({
   imports: [
@@ -48,6 +51,9 @@ import { OtpModule } from './modules/otp/otp.module';
     CampaignsModule,
     FlowModule,
     OtpModule,
+    PartnersModule,
+    SearchModule,
+    LogsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

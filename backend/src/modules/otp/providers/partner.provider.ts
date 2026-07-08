@@ -23,6 +23,28 @@ export class PartnerProvider implements SmsProvider {
     return result;
   }
 
+  /**
+   * Maps the funnel pack (daily | weekly | monthly) to the operator's
+   * subServiceId code. Follows the H-prefix convention (daily -> HDaily).
+   */
+  private mapSubServiceId(pack?: string): string {
+    const p = (pack || 'daily').toLowerCase();
+    if (p === 'weekly') return 'HWeekly';
+    if (p === 'monthly') return 'HMonthly';
+    return 'HDaily';
+  }
+
+  /**
+   * Partner APIs commonly signal outcome via a `responseCode` field where
+   * "0" means success. When that field is present it is authoritative;
+   * otherwise we fall back to boolean/status/HTTP-based heuristics.
+   */
+  private isResponseCodeSuccess(data: any): boolean | null {
+    const code = data?.responseCode ?? data?.response_code ?? data?.resultCode;
+    if (code === undefined || code === null) return null;
+    return String(code) === '0';
+  }
+
   async sendOtp(
     phone: string,
     otp: string, // Ignored in partner-generated mode
@@ -40,8 +62,12 @@ export class PartnerProvider implements SmsProvider {
       return { success: false, error: errorMsg };
     }
 
+    const pack = (context.pack || 'daily').toLowerCase();
     const templateVariables = {
       phone,
+      msisdn: phone,
+      pack,
+      subServiceId: this.mapSubServiceId(pack),
       campaign: context.campaignName,
       campaignId: String(context.campaignId),
       visitId: context.visitId ? String(context.visitId) : '',
@@ -63,8 +89,23 @@ export class PartnerProvider implements SmsProvider {
       }
 
       const data = response.data as Record<string, any>;
+
+      // When the partner returns a responseCode, it is authoritative:
+      // anything other than "0" is a rejection even on HTTP 200.
+      const codeSuccess = this.isResponseCodeSuccess(data);
+      if (codeSuccess === false) {
+        const msg =
+          data?.responseMessage ||
+          data?.response_message ||
+          `responseCode=${data?.responseCode ?? data?.response_code}`;
+        this.logger.warn(`Partner send rejected: ${msg}`);
+        return { success: false, error: `Partner API Error: ${msg}` };
+      }
+
       // Look for common request ID fields in responses
       const providerRequestId = String(
+        data?.transactionId ??
+        data?.transaction_id ??
         data?.referenceId ??
         data?.reference_id ??
         data?.requestId ??
@@ -107,9 +148,11 @@ export class PartnerProvider implements SmsProvider {
 
     const templateVariables = {
       phone,
+      msisdn: phone,
       otp,
       providerRequestId,
       referenceId: providerRequestId,
+      transactionId: providerRequestId,
     };
 
     const resolvedUrl = this.resolveTemplate(verifyUrl, templateVariables);
@@ -133,12 +176,17 @@ export class PartnerProvider implements SmsProvider {
       }
 
       const data = response.data;
-      // Success check: if partner returns success = true, or valid = true, or status = success, or simply HTTP 200
-      const isSuccess = data?.success === true || 
-                        data?.valid === true || 
-                        data?.status === 'success' ||
-                        data?.status === 'OK' ||
-                        response.status === 200;
+      // When the partner returns a responseCode it is authoritative ("0" = verified);
+      // otherwise fall back to boolean/status/HTTP heuristics.
+      const codeSuccess = this.isResponseCodeSuccess(data);
+      const isSuccess =
+        codeSuccess !== null
+          ? codeSuccess
+          : data?.success === true ||
+            data?.valid === true ||
+            data?.status === 'success' ||
+            data?.status === 'OK' ||
+            response.status === 200;
 
       if (isSuccess) {
         return { success: true };

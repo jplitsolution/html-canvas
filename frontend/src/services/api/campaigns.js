@@ -35,6 +35,8 @@ function mapCampaign(campaign) {
     operator: campaign.operator,
     serviceId: campaign.serviceId || '',
     active: Boolean(campaign.active),
+    vendorId: campaign.vendorId ?? null,
+    verificationMode: campaign.verificationMode || null,
     pages,
     requiredComplete,
     createdAt: campaign.createdAt,
@@ -120,6 +122,16 @@ export function getCampaignPreviewUrl(campaign) {
   return `/subscription?${params.toString()}`
 }
 
+/** Open live funnel preview for a specific campaign page (HOME, OTP, CONFIRM, …) */
+export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
+  const params = new URLSearchParams({
+    country: campaign.country,
+    operator: campaign.operator,
+    step: pageType || 'HOME',
+  })
+  return `/subscription?${params.toString()}`
+}
+
 export async function testSendOtp(payload) {
   return apiClient('/otp/test-send', {
     method: 'POST',
@@ -134,9 +146,15 @@ export async function checkOtpProviderHealth(payload) {
   })
 }
 
-export async function getOtpAnalytics(campaignId) {
-  const url = campaignId ? `/analytics/otp?campaignId=${campaignId}` : '/analytics/otp'
-  return apiClient(url)
+export async function getCampaignFlow(campaignId) {
+  return apiClient(`/campaigns/${campaignId}/flow`)
+}
+
+export async function saveCampaignFlow(campaignId, payload) {
+  return apiClient(`/campaigns/${campaignId}/flow`, {
+    method: 'PUT',
+    body: payload,
+  })
 }
 
 export async function getCampaignActivityLogs(campaignId, params = {}) {

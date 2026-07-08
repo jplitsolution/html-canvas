@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
@@ -19,6 +20,7 @@ import { CampaignsService } from './campaigns.service';
 import {
   CreateCampaignDto,
   UpdateCampaignDto,
+  UpdateFlowDto,
 } from './dto/create-campaign.dto';
 import { UpdateCampaignPageDto } from './dto/update-campaign-page.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -102,6 +104,25 @@ export class CampaignsController {
     @CurrentUser() user: User,
   ) {
     return this.campaignsService.updatePageContent(id, pageType, dto, user.id);
+  }
+
+  @Get(':id/flow')
+  @ApiOperation({ summary: 'Get the page-flow graph + verification mode' })
+  async getFlow(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: User,
+  ) {
+    return this.campaignsService.getFlow(id, user.id);
+  }
+
+  @Put(':id/flow')
+  @ApiOperation({ summary: 'Save the page-flow graph + verification mode' })
+  async updateFlow(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFlowDto,
+    @CurrentUser() user: User,
+  ) {
+    return this.campaignsService.updateFlow(id, dto, user.id);
   }
 
   @Get(':id/api-config')

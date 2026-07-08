@@ -1,6 +1,8 @@
 import {
   IsBoolean,
+  IsIn,
   IsInt,
+  IsObject,
   IsOptional,
   IsString,
   MinLength,
@@ -52,4 +54,40 @@ export class UpdateCampaignDto {
   @IsOptional()
   @IsBoolean()
   active?: boolean;
+
+  @ApiPropertyOptional({ description: 'Assign a vendor to this campaign' })
+  @IsOptional()
+  @IsInt()
+  vendorId?: number;
+}
+
+export class UpdateFlowDto {
+  @ApiPropertyOptional({
+    description: 'Verification mode',
+    enum: ['MSISDN_ONLY', 'OTP_ONLY', 'BOTH'],
+  })
+  @IsOptional()
+  @IsString()
+  @IsIn(['MSISDN_ONLY', 'OTP_ONLY', 'BOTH'])
+  verificationMode?: 'MSISDN_ONLY' | 'OTP_ONLY' | 'BOTH';
+
+  @ApiPropertyOptional({
+    description: 'Flow graph: { version, nodes[], edges[] }',
+  })
+  @IsOptional()
+  @IsObject()
+  flowConfig?: {
+    version: number;
+    nodes: Array<{
+      id: string;
+      pageType: string;
+      position?: { x: number; y: number };
+    }>;
+    edges: Array<{
+      id: string;
+      source: string;
+      target: string;
+      condition?: string;
+    }>;
+  };
 }

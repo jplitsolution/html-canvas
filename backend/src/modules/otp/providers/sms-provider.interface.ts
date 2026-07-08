@@ -13,6 +13,8 @@ export interface SmsProviderContext {
   campaignId: number;
   campaignName: string;
   visitId?: number | null;
+  /** Selected subscription pack (daily | weekly | monthly). Defaults to daily. */
+  pack?: string;
   variables?: Record<string, string | undefined>;
 }
 
