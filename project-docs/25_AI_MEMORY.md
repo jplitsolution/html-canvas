@@ -43,5 +43,5 @@ Ensure that you do not query tables that do not exist:
 1. [x] **OTP Funnel Integration**: Wire up the OTP code verification flow. Update `FlowService.transition()` to handle `fromPage === OTP` transitions, and add event listeners in the frontend runtime (`SubscriptionPage.jsx`) to handle OTP send/verify button clicks inside the shadow DOM.
 2. [x] **API Response Security**: Remove the plaintext `otp` parameter returned by the `/otp/send` controller.
 3. [x] **Public API Throttling**: Configure guards on public routes (`/flow/*`, `/otp/*`) to prevent spamming and brute-force attempts.
-4. **Obsolete Documentation Cleanup**: Review the project root directory and update references to direct `Subscriptions` and `Blocklist` tables.
+4. [x] **Obsolete Documentation Cleanup**: Review the project root directory and update references to direct `Subscriptions` and `Blocklist` tables.
 5. **Database Archiving**: Add a cron job to archive or clean up old telemetry records from the `visits` and `visit_events` tables.

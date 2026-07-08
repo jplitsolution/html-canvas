@@ -19,13 +19,15 @@ PROJECT ME KYA KYA COMPLETE HO GAYA HAI?
 5. Dynamic Page Compiler: Backend templates ko compile karke dynamic values (jaise {{operator}}, {{phone}}) ko customer context se replace kar deta hai.
 6. Real-Time Analytics: Visits aur user events telemetry tables me track hote hain aur campaign analytics summary metrics load hoti hai.
 7. OTP Subsystem backend: OTP generation aur hash verification functions completely taiyar hain.
+8. OTP Funnel State Integration: OTP code verify hone par Confirm page transitions aur user event telemetry fully wire ho chuke hain.
+9. OTP plain-text API security cleanup: `/otp/send` API response se plaintext otp key ko hataya gaya hai.
+10. Throttling and Rate Limiting: Public endpoints (/flow/* aur /otp/*) ko `PublicRateLimitGuard` ke dynamic limits se secure kiya gaya hai.
 
 ------------------------------------------------------------------------
 ABHI KYA PENDING HAI?
 ------------------------------------------------------------------------
-1. OTP Funnel State Wiring: OTP module alag se to kaam kar raha hai par use main routing flow router ke sath poori tarah wire nahi kiya gaya hai. User agar OTP page par jata hai to frontend me OTP verify button click handle karne aur user flow ko Confirm page par forward karne ka logic pending hai.
-2. OTP plain-text API security cleanup: /otp/send API testing ke liye response me seedhe plaintext OTP code return kar deti hai. Production me ise band karna hoga aur real SMS gateway lagana hoga.
-3. Rate Limiting: OTP aur Flow public routes par throttling (rate limiting) implementation pending hai.
+1. Database Archiving: Purane visits aur telemetry logs ko clear/archive karne ke liye cron scheduler/job banana pending hai.
+2. Production SMS Gateway Verification: Backend SMS providers managers setup ho chuke hain, par actual deployment ke time operators ke live delivery checks verify karna.
 
 ------------------------------------------------------------------------
 BACKEND ME KYA HUA HAI?
@@ -85,9 +87,7 @@ FUTURE IMPROVEMENTS ROADMAP
 ------------------------------------------------------------------------
 KNOWN BUGS
 ------------------------------------------------------------------------
-1. OTP flow wiring incomplete hai jiski wajah se SMS verification window me user transitions process lock ho jata hai.
-2. Dev mode me OTP parameter value validation response me open-text share hoti hai jo production leak security risk hai.
-3. Obsolete database models documents root paths par likhe hain (architecture.md me subscriptions aur blocklists tables listed hain jo reality me nahi hain).
+Saare major known bugs aur security gaps (OTP wiring, API security leak aur obsolete tables documentation references) successfully resolve kar diye gaye hain. Abhi koi active critical bugs identified nahi hain.
 
 ------------------------------------------------------------------------
 ARCHITECTURE & FOLDER STRUCTURE IN SIMPLE LANGUAGE
@@ -120,8 +120,8 @@ Dashboard analytics tab aggregates metrics call queries compile karta hai taaki 
 ------------------------------------------------------------------------
 PROJECT HEALTH INDEX
 ------------------------------------------------------------------------
-- Current Project Progress (%): 92%
-- Estimated Remaining Work (%): 8%
-- Overall Health: Good (Core admin functions and layouts are complete and robust)
-- Risk Level: Medium (Due to unthrottled public endpoints and plaintext OTP transmission in development configurations)
+- Current Project Progress (%): 98%
+- Estimated Remaining Work (%): 2%
+- Overall Health: Excellent (Core admin dashboard, canvas editor, and client routing are fully functional and secure)
+- Risk Level: Low (Public routes rate limits and secure OTP verification are implemented)
 ========================================================================

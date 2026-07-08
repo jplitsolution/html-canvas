@@ -19,23 +19,11 @@ The platform enables marketing campaigns to dynamically route traffic based on o
         ▼                     ▼                     ▼
  [ AuthModule ]        [ UsersModule ]       [ CampaignsModule ]
         │                                           │
-        │                                           ▼
-        │                                    [ TemplatesModule ]
-        │                                           │
-        │                                           ▼
-        │                                     [ PagesModule ]
-        │                                           │
         ▼                                           ▼
- [ UploadModule ]                            [ ApiConfigModule ]
+ [ UploadModule ]                            [ TemplatesModule ]
                                                     │
                                                     ▼
-                                             [ BlocklistModule ]
-                                                    │
-                                                    ▼
-                                           [ SubscriptionsModule ]
-                                                    │
-                                                    ▼
-                                             [ RoutingModule ]
+                                              [ FlowModule ]
                                                     │
                                                     ▼
                                             [ AnalyticsModule ]
@@ -50,64 +38,76 @@ The platform enables marketing campaigns to dynamically route traffic based on o
 
 All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 
+### Users
+- `id` (int, Primary Key)
+- `email` (varchar, Unique, Indexed)
+- `password` (varchar) — BCrypt hashed password
+- `name` (varchar)
+- `avatar` (varchar, Nullable)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
+### Templates
+- `id` (int, Primary Key)
+- `name` (varchar)
+- `data` (json) — Holds HTML, CSS, and editor state
+- `user_id` (int, Foreign Key to users, Nullable)
+- `is_prebuilt` (boolean, default false)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+
 ### Campaigns
 - `id` (int, Primary Key)
 - `name` (varchar)
 - `country` (varchar)
 - `operator` (varchar)
 - `service_id` (varchar, Nullable)
-- `data` (json, Nullable)
+- `active` (boolean, default false)
 - `user_id` (int, Foreign Key to users)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ### Campaign Pages
 - `id` (int, Primary Key)
 - `campaign_id` (int, Foreign Key to campaigns, Cascade Delete)
-- `template_id` (int, Foreign Key to templates, Set Null)
-- `name` (varchar)
-- `slug` (varchar)
 - `page_type` (varchar: HOME, CONFIRM, OTP, THANKYOU, BLOCKED, ERROR)
-
-### Blocklist Entries
-- `id` (int, Primary Key)
-- `phone` (varchar, Indexed)
-- `reason` (varchar, Nullable)
-- `active` (boolean, default true)
-
-### Subscriptions
-- `id` (int, Primary Key)
-- `phone` (varchar)
-- `service_id` (varchar)
-- `status` (varchar: ACTIVE, PENDING, CANCELLED)
-- Compound index on `(phone, service_id)`
+- `template_id` (int, Foreign Key to templates, Set Null)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ### API Configs
 - `id` (int, Primary Key)
 - `campaign_id` (int, Unique, Foreign Key to campaigns, Cascade Delete)
 - `user_api` (varchar, Nullable)
-- `blocklist_api` (varchar, Nullable)
-- `subscription_api` (varchar, Nullable)
-- `subscribe_api` (varchar, Nullable)
+- `blocklist_api` (varchar, Nullable) — External endpoint to check DND/blocklist
+- `subscription_api` (varchar, Nullable) — External endpoint to check active status
+- `subscribe_api` (varchar, Nullable) — External endpoint to request new billing setup
 - `headers_json` (text, Nullable)
-- `otp_provider` (varchar(32), Nullable)
+- `otp_provider` (varchar(32), Nullable) — twilio, msg91, kaleyra, partner, custom_http, local
 - `otp_config_json` (text, Nullable)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ### Visits
 - `id` (int, Primary Key)
-- `campaign_id` (int)
-- `phone` (varchar)
-- `country` (varchar)
-- `operator` (varchar)
-- `ip_address` (varchar)
-- `user_agent` (varchar)
-- `landing_url` (text)
-- `visit_status` (varchar: VISIT, BLOCKED, OTP_SHOWN, CONFIRM_SHOWN, SUCCESS, FAILED)
+- `campaign_id` (int, Foreign Key to campaigns, Nullable)
+- `phone` (varchar, Nullable)
+- `country` (varchar, Nullable)
+- `operator` (varchar, Nullable)
+- `ip_address` (varchar, Nullable)
+- `user_agent` (varchar, Nullable)
+- `landing_url` (text, Nullable)
+- `visit_status` (varchar: VISIT, BLOCKED, SUBSCRIBED, PLAN_SHOWN, HOME_SHOWN, CONFIRM_SHOWN, SUCCESS, FAILED)
 - `page_type` (varchar, Nullable)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ### Visit Events
 - `id` (int, Primary Key)
 - `visit_id` (int, Foreign Key to visits, Cascade Delete)
-- `event_type` (varchar: VISIT, BLOCKED, OTP_VIEW, CONFIRM_VIEW, SUBSCRIBE_CLICK, SUBSCRIBE_SUCCESS, SUBSCRIBE_FAILED)
+- `event_type` (varchar: VISIT, BLOCKED, PLAN_VIEW, HOME_VIEW, CONFIRM_VIEW, SUBSCRIBE_CLICK, SUBSCRIBE_SUCCESS, SUBSCRIBE_FAILED)
 - `metadata` (json, Nullable)
+- `created_at` (timestamp)
 
 ### OTP Requests
 - `id` (int, Primary Key)
@@ -118,32 +118,34 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 - `otp_salt` (varchar(64), Nullable)
 - `provider` (varchar(32), Nullable)
 - `provider_request_id` (varchar(255), Nullable)
-- `status` (varchar(32))
+- `status` (varchar(32)) — 'sent', 'verified', 'failed'
 - `attempts` (int, default 0)
-- `verified_at` (datetime, Nullable)
-- `expires_at` (datetime)
+- `verified_at` (timestamp, Nullable)
+- `expires_at` (timestamp)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
 
 ---
 
 ## 4. Routing Flow
 
-Incoming request to `GET /flow/page` follows this routing path:
+Incoming request to `GET /flow/page` and subsequent steps follow this routing path:
 
 ```
 [ Incoming Request ]
          │
          ▼
-[ Blocklist Check ] ─────► (Is Blocked?) ─────► [Yes] ─────► Route to BLOCKED Page
+[ Active Subscription Check ] ──► (Already Subscribed via Partner API?) ──► [Yes] ──► Route to THANKYOU Page
          │
          ▼ [No]
-[ Subscription Check] ──► (Is Active?) ───────► [Yes] ─────► Route to THANKYOU Page
+[ MSISDN Detection ] ───────────► (Is MSISDN Phone Detected?) ───────────► [Yes] ──► Route to CONFIRM Page
          │
          ▼ [No]
- (Is MSISDN Detected?) ──► [Yes] ──► Route to CONFIRM Page
-         │
-         ▼ [No]
-Route to OTP Page
+Route to OTP Page (and verify phone number)
 ```
+
+> [!NOTE]
+> The dynamic **Blocklist Check** is performed via partner APIs during the subscription confirmation transition. If the phone number is blocked, the user is redirected to the **BLOCKED** page.
 
 ---
 
@@ -167,11 +169,12 @@ Route to OTP Page
    - User inputs code (calls `POST /otp/verify`).
    - If verified, frontend requests transition to `CONFIRM`.
 4. User selects a pack on the `CONFIRM` page and clicks to buy (calls `POST /flow/transition`).
-5. Calls Partner Billing URL with headers configured in `headersJson`.
-6. On success:
-   - Update `Visit` to `SUCCESS`.
+5. Backend performs blocklist validation (calls partner `blocklist_api`). If blocked, routes to `BLOCKED`.
+6. Backend processes billing validation (calls partner `subscription_api`). If already subscribed, routes to `THANKYOU`.
+7. Backend requests new subscription charging (calls partner `subscribe_api`).
+8. On success:
+   - Update `Visit` status to `SUCCESS` (or `SUBSCRIBED`).
    - Log `SUBSCRIBE_SUCCESS` event.
-   - Insert `Subscription` with status `ACTIVE`.
    - Route to `THANKYOU` page.
 
 ---
