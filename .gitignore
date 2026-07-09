@@ -9,3 +9,8 @@ Frontend/dist
 backend/node_modules
 backend/dist
 backend/*.tsbuildinfo
+backend/uploads
+
+# deploy secrets
+deploy.env
+frontend/.env.production

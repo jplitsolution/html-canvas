@@ -42,6 +42,7 @@ export interface SearchConfig {
 export interface AppConfig {
   port: number;
   environment: string;
+  corsOrigins: string[];
   otpExposeTest: boolean;
   database: DatabaseConfig;
   jwt: JwtConfig;
@@ -54,6 +55,10 @@ export interface AppConfig {
 export default (): AppConfig => ({
   port: parseInt(process.env.PORT || '3000', 10),
   environment: process.env.NODE_ENV || 'development',
+  corsOrigins: (process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
   otpExposeTest: process.env.OTP_EXPOSE_TEST === 'true',
   database: {
     type: process.env.DB_TYPE || 'mysql',

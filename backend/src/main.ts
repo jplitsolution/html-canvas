@@ -32,14 +32,24 @@ async function bootstrap() {
     prefix: '/api/media/',
   });
 
-  // Enable CORS
+  const corsOrigins = configService.get<string[]>('corsOrigins') || [];
+
+  // Enable CORS (localhost in dev; set CORS_ORIGIN for production)
   app.enableCors({
     origin: (origin, callback) => {
-      if (!origin || origin.startsWith('http://localhost:')) {
+      if (!origin) {
         callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+        return;
       }
+      if (origin.startsWith('http://localhost:')) {
+        callback(null, true);
+        return;
+      }
+      if (corsOrigins.some((allowed) => origin === allowed)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error('Not allowed by CORS'));
     },
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
