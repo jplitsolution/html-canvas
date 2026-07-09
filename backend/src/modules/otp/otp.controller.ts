@@ -63,10 +63,9 @@ export class OtpController {
     const isProduction = env === 'production';
     const isTesting = env === 'test' || env === 'testing';
 
-    // In Production mode, never return the OTP code
-    // In Testing mode, only return if explicitly enabled via config
-    // In Development/other modes, return it if it is a local/mock provider
-    const showOtp = (isLocal && !isProduction && !isTesting) || (isTesting && otpExposeTest);
+    // OTP_EXPOSE_TEST=true overrides all environment checks
+    // Otherwise: production=never, testing=only if enabled, dev=only local/mock providers
+    const showOtp = otpExposeTest || (isLocal && !isProduction && !isTesting);
 
     this.logger.log(
       `OTP generation requested phone=${phone} visitId=${body.visitId || 'n/a'} isLocal=${isLocal} showOtp=${showOtp}`,
