@@ -41,9 +41,13 @@ export async function prefetchFlowPage(params) {
 }
 
 export async function transitionFlow(body) {
+  const payload = {
+    ...body,
+    visitId: body.visitId ? Number(body.visitId) : undefined,
+  }
   return apiClient('/flow/transition', {
     method: 'POST',
-    body,
+    body: payload,
     dedupe: false,
   })
 }

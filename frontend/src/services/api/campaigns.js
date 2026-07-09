@@ -118,6 +118,7 @@ export function getCampaignPreviewUrl(campaign) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
+    step: 'OTP',
   })
   return `/subscription?${params.toString()}`
 }

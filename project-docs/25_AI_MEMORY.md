@@ -11,7 +11,7 @@ This document is designed to quickly onboard future AI models onto the TemplateC
 - **Header Phone Detection**: Phone number detection prioritizes operator headers (e.g. `X-MSISDN`) over query parameters.
 - **OTP Production Masking**: Plaintext OTP codes are never sent in API responses or logged when `NODE_ENV === 'production'`.
 - **IP & Phone Rate Limiting**: The public routes `/otp/*` and `/flow/transition` are protected by a custom `PublicRateLimitGuard` (setting `Retry-After` headers) and application-layer cooldowns and lockout rules.
-- **Real-time OTP Analytics**: Provides database-agnostic aggregates of OTP events (Funnel, trends, geo performance) via `GET /api/analytics/otp`.
+- **Elasticsearch Logging**: Telemetry clicks and funnel events are pushed to an Elasticsearch index (`campaign_events`) for fast audit log querying, replacing relational DB queries for charts.
 
 ---
 
@@ -20,10 +20,12 @@ This document is designed to quickly onboard future AI models onto the TemplateC
 Ensure that you do not query tables that do not exist:
 - **`users`**: Admin user credentials.
 - **`templates`**: JSON representations of GrapesJS pages.
-- **`campaigns`**: Target campaign identifiers (Country + Operator must be unique).
+- **`campaigns`**: Target campaign identifiers (Country + Operator must be unique; supports `vendorId`, `verificationMode`, and `flowConfig`).
 - **`campaign_pages`**: Links campaigns to templates by page slot type.
+- **`vendors`**: Advertiser/vendor short codes (for `vid` tracking parameter).
+- **`affiliates`**: Advertiser affiliates short codes (for `aff_id` tracking parameter).
 - **`api_configs`**: External integrations endpoints (Blocklist, Subscription Validation, and Charging).
-- **`visits`** / **`visit_events`**: High-frequency telemetry tracking.
+- **`visits`** / **`visit_events`**: High-frequency telemetry tracking (extended with affiliate attribution fields).
 - **`otp_requests`**: Hashed (SHA-256) validation codes.
 
 ---
@@ -31,6 +33,9 @@ Ensure that you do not query tables that do not exist:
 ## 3. Critical Codebase Behaviors
 
 - **Campaign Copying**: Creating a campaign can copy page layouts from an existing campaign. If `copyFromCampaignId` is omitted, the backend seeds default templates (`default-funnel-pages.ts`).
+- **Configurable Page Flows**: Campaigns use `flow_config` graphs (nodes and edges) to dynamically determine the next page type on action outcome transitions.
+- **Affiliate Click Attribution**: Traffic URL parameters (`vid`, `aff_id`, `click_id`) are resolved against database vendors/affiliates to attribute incoming visits.
+- **Elasticsearch Auditing**: Audit logging queries are routed to Elasticsearch via the `SearchService` (falls back silently to empty results if `ELASTICSEARCH_NODE` is missing).
 - **GrapesJS Configuration**:
   - `nativeDnD` must remain `false`. Native browser drag-and-drop behaves erratically within iframes.
   - Style manager rules are defined in `styleManagerConfig.ts`.

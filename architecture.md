@@ -13,23 +13,26 @@ The platform enables marketing campaigns to dynamically route traffic based on o
 ## 2. Module Architecture
 
 ```
-                        [ AppModule ]
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        ▼                     ▼                     ▼
- [ AuthModule ]        [ UsersModule ]       [ CampaignsModule ]
-        │                                           │
-        ▼                                           ▼
- [ UploadModule ]                            [ TemplatesModule ]
-                                                    │
-                                                    ▼
-                                              [ FlowModule ]
-                                                    │
-                                                    ▼
-                                            [ AnalyticsModule ]
-                                                    │
-                                                    ▼
-                                              [ OtpModule ]
+                                  [ AppModule ]
+                                        │
+        ┌───────────────────────┬───────┴───────┬───────────────────────┐
+        ▼                       ▼               ▼                       ▼
+ [ AuthModule ]          [ UsersModule ]  [ CampaignsModule ]     [ LogsModule ]
+        │                                       │                       │
+        ▼                                       ▼                       ▼
+ [ UploadModule ]                        [ TemplatesModule ]     [ SearchModule ]
+                                                │                       ▲
+                                                ▼                       │
+                                          [ FlowModule ] ───────────────┘
+                                                │
+                                                ▼
+                                        [ PartnersModule ]
+                                                │
+                                                ▼
+                                        [ AnalyticsModule ]
+                                                │
+                                                ▼
+                                          [ OtpModule ]
 ```
 
 ---
@@ -64,6 +67,9 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 - `service_id` (varchar, Nullable)
 - `active` (boolean, default false)
 - `user_id` (int, Foreign Key to users)
+- `vendor_id` (int, Foreign Key to vendors, Nullable) — Assigned advertiser/vendor
+- `verification_mode` (varchar: MSISDN_ONLY, OTP_ONLY, BOTH, Nullable) — Mode of verification
+- `flow_config` (text, Nullable) — JSON layout for flow config graphs
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
 
@@ -74,6 +80,27 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 - `template_id` (int, Foreign Key to templates, Set Null)
 - `created_at` (timestamp)
 - `updated_at` (timestamp)
+
+### Vendors
+- `id` (int, Primary Key)
+- `name` (varchar)
+- `code` (varchar) — Tracking key used in `vid` URL parameter
+- `user_id` (int)
+- `active` (boolean, default true)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+- Unique index on `(user_id, code)`
+
+### Affiliates
+- `id` (int, Primary Key)
+- `vendor_id` (int, Foreign Key to vendors, Cascade Delete)
+- `name` (varchar)
+- `code` (varchar) — Tracking key used in `aff_id` URL parameter
+- `user_id` (int)
+- `active` (boolean, default true)
+- `created_at` (timestamp)
+- `updated_at` (timestamp)
+- Unique index on `(user_id, code)`
 
 ### API Configs
 - `id` (int, Primary Key)
@@ -97,6 +124,11 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 - `ip_address` (varchar, Nullable)
 - `user_agent` (varchar, Nullable)
 - `landing_url` (text, Nullable)
+- `vendor_id` (int, Foreign Key to vendors, Nullable) — Click attribution vendor
+- `affiliate_id` (int, Foreign Key to affiliates, Nullable) — Click attribution affiliate
+- `click_id` (varchar, Nullable) — Affiliate network unique click identifier
+- `vid_raw` (varchar, Nullable) — Raw vendor parameter value from URL
+- `aff_raw` (varchar, Nullable) — Raw affiliate parameter value from URL
 - `visit_status` (varchar: VISIT, BLOCKED, SUBSCRIBED, PLAN_SHOWN, HOME_SHOWN, CONFIRM_SHOWN, SUCCESS, FAILED)
 - `page_type` (varchar, Nullable)
 - `created_at` (timestamp)
@@ -127,55 +159,69 @@ All entities are configured using TypeORM and support both MySQL and PostgreSQL.
 
 ---
 
-## 4. Routing Flow
+## 4. Routing & Page-Flow Engine
 
-Incoming request to `GET /flow/page` and subsequent steps follow this routing path:
+Incoming requests to `GET /flow/page` are processed dynamically using the campaign's `flow_config` (graph structure mapping nodes and conditional edges):
 
 ```
-[ Incoming Request ]
-         │
-         ▼
-[ Active Subscription Check ] ──► (Already Subscribed via Partner API?) ──► [Yes] ──► Route to THANKYOU Page
-         │
-         ▼ [No]
-[ MSISDN Detection ] ───────────► (Is MSISDN Phone Detected?) ───────────► [Yes] ──► Route to CONFIRM Page
-         │
-         ▼ [No]
-Route to OTP Page (and verify phone number)
+                        [ Incoming Request ]
+                                 │
+                                 ▼
+                     [ Active Subscription Check ]
+                                 │ (If already subscribed)
+                                 ├──► Route to THANKYOU Page
+                                 │
+                                 ▼ (Otherwise)
+                     [ Page Flow Graph Engine ]
+                                 │
+                   (Resolves next page by condition)
+                                 │
+        ┌────────────────────────┼────────────────────────┐
+        ▼ (MSISDN Resolved)      ▼ (OTP Required)         ▼ (Verification Verified)
+ [ Route to CONFIRM ]       [ Route to OTP ]         [ Route to CONFIRM ]
 ```
 
-> [!NOTE]
-> The dynamic **Blocklist Check** is performed via partner APIs during the subscription confirmation transition. If the phone number is blocked, the user is redirected to the **BLOCKED** page.
+### Verification Modes & Routing Logic:
+- **`MSISDN_ONLY`**: Resolves phone number via network headers or partner ISP API. If successful, transitions to `CONFIRM`, otherwise to `ERROR`.
+- **`OTP_ONLY`**: Bypasses header checks and routes directly to `OTP` verification page, advancing to `CONFIRM` only after code validation.
+- **`BOTH`**: Attempts pre-filling the phone number using MSISDN headers/APIs if possible, but always routes through the `OTP` verification screen before confirmation.
 
 ---
 
-## 5. Publish Flow
+## 5. Affiliate Tracking & Click Attribution Flow
 
-1. Client opens `https://domain.com/subscription?country=XX&operator=YY&msisdn=ZZ`.
-2. Server matches campaign by `country` and `operator`.
-3. Create `Visit` record in database (status `VISIT`).
-4. Execute page compilation, replace placeholders, and return page details.
+1. Subscriber lands via campaign marketing link containing query params:
+   `https://domain.com/subscription?country=XX&operator=YY&vid=VENDOR_CODE&aff_id=AFFILIATE_CODE&click_id=CLICK_ID`
+2. Routing matches campaign and parses the tracking parameters:
+   - Queries `vendors` and `affiliates` tables to validate vendor/affiliate codes.
+   - Saves click attribution details (`vendor_id`, `affiliate_id`, `click_id`, `vid_raw`, `aff_raw`) to the `Visit` record in database.
+3. Telemetry events log impressions and conversions back-referenced to the attributed affiliate IDs.
 
 ---
 
 ## 6. Subscription & OTP Flow
 
-1. User lands on HOME page, clicks subscribe.
-2. If phone is detected:
-   - Transition to `CONFIRM` page.
-3. If phone is NOT detected:
-   - Transition to `OTP` page.
-   - User requests OTP (calls `POST /otp/send`). SMS is sent via dynamic campaign provider (Twilio, MSG91, Kaleyra, Custom HTTP, or Partner).
-   - User inputs code (calls `POST /otp/verify`).
-   - If verified, frontend requests transition to `CONFIRM`.
-4. User selects a pack on the `CONFIRM` page and clicks to buy (calls `POST /flow/transition`).
-5. Backend performs blocklist validation (calls partner `blocklist_api`). If blocked, routes to `BLOCKED`.
-6. Backend processes billing validation (calls partner `subscription_api`). If already subscribed, routes to `THANKYOU`.
-7. Backend requests new subscription charging (calls partner `subscribe_api`).
-8. On success:
-   - Update `Visit` status to `SUCCESS` (or `SUBSCRIBED`).
-   - Log `SUBSCRIBE_SUCCESS` event.
-   - Route to `THANKYOU` page.
+1. User lands on HOME page and triggers the transition.
+2. Flow Engine resolves the next node based on the campaign's verification mode:
+   - If MSISDN resolved: transition to `CONFIRM` page.
+   - If OTP required: transition to `OTP` page.
+3. On `OTP` page, user requests OTP code (calls `POST /otp/send`). System hashes code and triggers SMS dispatch.
+4. User inputs code (calls `POST /otp/verify`). Upon verification, Flow Engine moves the user to the `CONFIRM` page.
+5. On `CONFIRM` page, user selects a billing pack and purchases (calls `POST /flow/transition`).
+6. System performs blocklist and subscription checks dynamically via external configured partner APIs.
+7. System calls partner charging API (`subscribe_api`). On success:
+   - Updates `Visit` status to `SUCCESS` (or `SUBSCRIBED`).
+   - Logs `SUBSCRIBE_SUCCESS` event (indexed in Elasticsearch/DB).
+   - Routes to `THANKYOU` page.
+
+---
+
+## 7. Telemetry & Elasticsearch Logs
+
+To handle high volumes without performance degradation:
+- Visits and funnel telemetry events are recorded in relational DB and sent best-effort to **Elasticsearch** (when enabled via `ELASTICSEARCH_NODE`).
+- A dedicated **Campaign Logs UI** replaces heavy SQL charts, querying Elasticsearch using search index parameters (`clickId`, `vendorId`, `affiliateId`, `phoneMasked`, `timestamp`) to audit user actions, errors, and conversions.
+- Aggregated conversions compute the final Conversion Rate: `(successfulSubscriptions / totalVisits) * 100`..
 
 ---
 

@@ -235,7 +235,7 @@ export class FlowService {
       }
     }
 
-    if (!visitId && resolvedPageType === CampaignPageType.HOME) {
+    if (!visitId) {
       const attribution = await this.partnersService
         .resolveAttribution(input.vid, input.affId)
         .catch(() => ({
@@ -257,7 +257,7 @@ export class FlowService {
         userAgent: input.userAgent,
         landingUrl: input.landingUrl,
         visitStatus: VisitStatus.VISIT,
-        pageType: CampaignPageType.HOME,
+        pageType: resolvedPageType,
         vendorId: attribution.vendorId,
         affiliateId: attribution.affiliateId,
         clickId: input.clickId,
@@ -265,7 +265,14 @@ export class FlowService {
         affRaw: input.affId,
       });
       visitId = visit.id;
-      await this.analyticsService.logEvent(visitId, VisitEventType.HOME_VIEW);
+
+      let eventType = VisitEventType.HOME_VIEW;
+      if (resolvedPageType === CampaignPageType.OTP) {
+        eventType = VisitEventType.OTP_VIEW;
+      } else if (resolvedPageType === CampaignPageType.CONFIRM) {
+        eventType = VisitEventType.CONFIRM_VIEW;
+      }
+      await this.analyticsService.logEvent(visitId, eventType);
 
       const subscribed = await this.partnerApiService.checkSubscription(
         apiConfig,
@@ -292,10 +299,16 @@ export class FlowService {
           },
         );
       } else {
+        let visitStatus = VisitStatus.HOME_SHOWN;
+        if (resolvedPageType === CampaignPageType.OTP) {
+          visitStatus = VisitStatus.OTP_SHOWN;
+        } else if (resolvedPageType === CampaignPageType.CONFIRM) {
+          visitStatus = VisitStatus.CONFIRM_SHOWN;
+        }
         await this.analyticsService.updateVisit(
           visitId,
-          VisitStatus.HOME_SHOWN,
-          CampaignPageType.HOME,
+          visitStatus,
+          resolvedPageType,
           phone,
         );
       }

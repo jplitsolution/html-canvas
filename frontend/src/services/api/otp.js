@@ -5,7 +5,7 @@ export async function sendOtp({ phone, visitId, pack }) {
     method: 'POST',
     body: {
       phone,
-      ...(visitId ? { visitId: String(visitId) } : {}),
+      ...(visitId ? { visitId: Number(visitId) } : {}),
       ...(pack ? { pack } : {}),
     },
     dedupe: false,
@@ -15,7 +15,7 @@ export async function sendOtp({ phone, visitId, pack }) {
 export async function verifyOtp({ phone, otp, visitId }) {
   return apiClient('/otp/verify', {
     method: 'POST',
-    body: { phone, otp, ...(visitId ? { visitId: String(visitId) } : {}) },
+    body: { phone, otp, ...(visitId ? { visitId: Number(visitId) } : {}) },
     dedupe: false,
   })
 }

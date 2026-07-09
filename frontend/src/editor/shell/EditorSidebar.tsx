@@ -15,7 +15,7 @@ import {
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
-import { STARTER_TEMPLATES } from '../templates/starterTemplates'
+import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES } from '../templates/starterTemplates'
 import { applyStarterHtml } from '../utils/blockActions'
 import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragAndDrop'
 import { startAssetDrag } from '../plugins/assetDrag'
@@ -163,7 +163,7 @@ export function EditorSidebar() {
         {/* Icon rail */}
         <nav className="w-14 shrink-0 flex flex-col items-center py-3 gap-1 border-r border-border bg-bg-subtle/50">
           {TABS.filter(
-            (t) => !(isFunnelPage && t.id === 'layouts') && !(t.id === 'flow' && !hasFlowParts),
+            (t) => !(isFunnelPage && t.id === 'layouts' && funnelPageType !== 'OTP' && funnelPageType !== 'CONFIRM') && !(t.id === 'flow' && !hasFlowParts),
           ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -212,16 +212,24 @@ export function EditorSidebar() {
           <div className={`flex-1 min-h-0 overflow-y-auto ${showBlocks ? 'hidden' : 'flex flex-col'}`}>
             {tab === 'layouts' && (
               <div className="p-3 grid grid-cols-1 gap-3">
-                {STARTER_TEMPLATES.map((t) => (
-                  <TemplateCard
-                    key={t.id}
-                    name={t.name}
-                    description={t.description}
-                    thumb={t.thumb}
-                    previewImage={t.previewImage}
-                    onApply={() => editor && applyStarterHtml(editor, t.html, t.css)}
-                  />
-                ))}
+                {(() => {
+                  let list = STARTER_TEMPLATES;
+                  if (funnelPageType === 'OTP') {
+                    list = OTP_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'CONFIRM') {
+                    list = CONFIRM_STARTER_TEMPLATES;
+                  }
+                  return list.map((t) => (
+                    <TemplateCard
+                      key={t.id}
+                      name={t.name}
+                      description={t.description}
+                      thumb={t.thumb}
+                      previewImage={t.previewImage}
+                      onApply={() => editor && applyStarterHtml(editor, t.html, t.css)}
+                    />
+                  ));
+                })()}
               </div>
             )}
 
