@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useCallback } from 'react'
+import { memo, useEffect, useState, useCallback, useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -85,8 +85,62 @@ function CampaignDetailPage() {
   }, [id, fetchRecentLogs])
 
   useEffect(() => {
-    if (id) loadCampaign(id)
+    if (id) loadCampaign(id, true)
   }, [id, loadCampaign])
+
+  // useMemo MUST be before any early returns (React rules of hooks)
+  const orderedPageTypes = useMemo(() => {
+    const defaultOrder = PAGE_TYPES
+    if (!campaign || !campaign.flowConfig) return defaultOrder
+
+    const order = []
+    const visited = new Set()
+
+    const addPage = (type) => {
+      if (defaultOrder.includes(type) && !visited.has(type)) {
+        visited.add(type)
+        order.push(type)
+      }
+    }
+
+    const nodes = campaign.flowConfig.nodes || []
+    const edges = campaign.flowConfig.edges || []
+
+    const homeNode = nodes.find((n) => n.pageType === 'HOME')
+    if (homeNode) {
+      addPage('HOME')
+      const queue = [homeNode.id]
+      while (queue.length > 0) {
+        const currentId = queue.shift()
+        const outgoing = edges.filter((e) => e.source === currentId)
+        for (const edge of outgoing) {
+          const targetNode = nodes.find((n) => n.id === edge.target)
+          if (targetNode) {
+            const type = targetNode.pageType
+            if (!visited.has(type)) {
+              addPage(type)
+              queue.push(edge.target)
+            }
+          }
+        }
+      }
+    }
+
+    // Add remaining nodes from flowConfig
+    for (const n of nodes) {
+      addPage(n.pageType)
+    }
+
+    return order
+  }, [campaign])
+
+  const hasEmptyPages = useMemo(() => {
+    if (!campaign) return false
+    const activePageTypes = campaign.flowConfig?.nodes?.map((n) => n.pageType) || REQUIRED_PAGE_TYPES
+    return campaign.pages.some(
+      (p) => activePageTypes.includes(p.pageType) && !p.hasContent,
+    )
+  }, [campaign])
 
   const handleToggleActive = async () => {
     if (!campaign) return
@@ -131,9 +185,6 @@ function CampaignDetailPage() {
     )
   }
 
-  const hasEmptyPages = campaign.pages.some(
-    (p) => REQUIRED_PAGE_TYPES.includes(p.pageType) && !p.hasContent,
-  )
   const previewUrl = getCampaignPreviewUrl(campaign)
 
   const pageActions = (
@@ -217,7 +268,7 @@ function CampaignDetailPage() {
                 </Link>
               </div>
               <div className="divide-y divide-border">
-                {PAGE_TYPES.map((pageType) => {
+                {orderedPageTypes.map((pageType) => {
                   const page = campaign.pages.find((p) => p.pageType === pageType)
                   const required = REQUIRED_PAGE_TYPES.includes(pageType)
                   const hasContent = page?.hasContent

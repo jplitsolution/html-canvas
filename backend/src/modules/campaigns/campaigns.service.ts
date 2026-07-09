@@ -250,7 +250,12 @@ export class CampaignsService {
     const campaign = await this.findOne(id, userId);
 
     if (dto.active === true) {
-      const missing = REQUIRED_CAMPAIGN_PAGE_TYPES.filter((type) => {
+      const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+      const requiredTypes = flowConfig && flowConfig.nodes
+        ? flowConfig.nodes.map((n) => n.pageType)
+        : REQUIRED_CAMPAIGN_PAGE_TYPES;
+
+      const missing = requiredTypes.filter((type) => {
         const page = campaign.pages.find((p) => p.pageType === type);
         return !page?.template?.data?.html;
       });
@@ -297,7 +302,13 @@ export class CampaignsService {
 
     let flowConfig: FlowConfig;
     if (dto.flowConfig) {
-      flowConfig = dto.flowConfig as unknown as FlowConfig;
+      // Strip optional nodes that are not connected to the graph before
+      // validation so that e.g. a floating BLOCKED or ERROR node that the
+      // user hasn't wired up yet doesn't block saving.
+      flowConfig = this.flowEngine.stripUnreachableNodes(
+        dto.flowConfig as unknown as FlowConfig,
+        mode,
+      );
       const { ok, errors } = this.flowEngine.validate(flowConfig, mode);
       if (!ok) {
         throw new BadRequestException(

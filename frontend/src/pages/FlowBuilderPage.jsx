@@ -63,6 +63,59 @@ function toRfEdges(flowConfig) {
   }))
 }
 
+const DEFAULT_FLOWS = {
+  MSISDN_ONLY: {
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+    ],
+    edges: [
+      { id: 'HOME-MSISDN_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'MSISDN_RESOLVED' },
+      { id: 'HOME-MSISDN_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'MSISDN_UNRESOLVED' },
+      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
+      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+    ]
+  },
+  OTP_ONLY: {
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+      { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+    ],
+    edges: [
+      { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
+      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
+      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
+      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+    ]
+  },
+  BOTH: {
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+      { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+    ],
+    edges: [
+      { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
+      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
+      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
+      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+    ]
+  }
+}
+
 function FlowBuilderPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -74,6 +127,23 @@ function FlowBuilderPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState([])
+
+  const handleResetFlow = useCallback((targetMode) => {
+    const currentMode = targetMode || mode
+    const def = DEFAULT_FLOWS[currentMode]
+    setNodes(toRfNodes(def))
+    setEdges(toRfEdges(def))
+    setErrors([])
+    addToast('Flow graph reset to default template', 'success')
+  }, [mode, setNodes, setEdges, addToast])
+
+  const handleModeChange = useCallback((newMode) => {
+    setMode(newMode)
+    const def = DEFAULT_FLOWS[newMode]
+    setNodes(toRfNodes(def))
+    setEdges(toRfEdges(def))
+    setErrors([])
+  }, [setNodes, setEdges])
 
   useEffect(() => {
     let cancelled = false
@@ -165,6 +235,46 @@ function FlowBuilderPage() {
   )
 
   const handleSave = useCallback(async () => {
+    // ---- Client-side validation ----
+    const clientErrors = []
+    const pageTypes = new Set(nodes.map((n) => n.data.pageType))
+
+    if (!pageTypes.has('HOME')) clientErrors.push('HOME page node is required.')
+    if (!pageTypes.has('CONFIRM')) clientErrors.push('CONFIRM page node is required.')
+    if ((mode === 'OTP_ONLY' || mode === 'BOTH') && !pageTypes.has('OTP')) {
+      clientErrors.push(`Verification mode "${mode}" requires an OTP page node.`)
+    }
+
+    // Warn about orphan nodes (not reachable from HOME) — backend will auto-strip them
+    const homeNode = nodes.find((n) => n.data.pageType === 'HOME')
+    if (homeNode) {
+      const reachable = new Set([homeNode.id])
+      let changed = true
+      while (changed) {
+        changed = false
+        for (const e of edges) {
+          if (reachable.has(e.source) && !reachable.has(e.target)) {
+            reachable.add(e.target)
+            changed = true
+          }
+        }
+      }
+      const orphans = nodes.filter((n) => !reachable.has(n.id))
+      if (orphans.length > 0) {
+        const labels = orphans.map((n) => n.data.label).join(', ')
+        clientErrors.push(
+          `Note: "${labels}" node(s) are not connected to the flow and will be removed on save.`,
+        )
+      }
+    }
+
+    // If there are hard errors (not just notes), block saving
+    const hardErrors = clientErrors.filter((e) => !e.startsWith('Note:'))
+    if (hardErrors.length > 0) {
+      setErrors(hardErrors)
+      return
+    }
+
     const flowConfig = {
       version: 1,
       nodes: nodes.map((n) => ({
@@ -180,7 +290,7 @@ function FlowBuilderPage() {
       })),
     }
     setSaving(true)
-    setErrors([])
+    setErrors(clientErrors) // show any "Note:" warnings during save
     try {
       await saveCampaignFlow(id, { verificationMode: mode, flowConfig })
       addToast('Flow saved', 'success')
@@ -225,10 +335,24 @@ function FlowBuilderPage() {
         </div>
 
         {errors.length > 0 && (
-          <div className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
-            {errors.map((e, i) => (
-              <p key={i}>{e}</p>
-            ))}
+          <div className="mb-4 space-y-2">
+            {errors.map((e, i) =>
+              e.startsWith('Note:') ? (
+                <div
+                  key={i}
+                  className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+                >
+                  ⚠️ {e.replace(/^Note:\s*/, '')}
+                </div>
+              ) : (
+                <div
+                  key={i}
+                  className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger"
+                >
+                  {e}
+                </div>
+              ),
+            )}
           </div>
         )}
 
@@ -270,7 +394,7 @@ function FlowBuilderPage() {
                         type="radio"
                         name="mode"
                         checked={mode === m.id}
-                        onChange={() => setMode(m.id)}
+                        onChange={() => handleModeChange(m.id)}
                       />
                       {m.label}
                     </span>
@@ -278,6 +402,13 @@ function FlowBuilderPage() {
                   </label>
                 ))}
               </div>
+              <button
+                type="button"
+                className="w-full mt-3 inline-flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-border hover:border-fg-muted rounded-md text-xs font-medium text-fg-muted hover:text-fg transition-colors"
+                onClick={() => handleResetFlow()}
+              >
+                Reset layout to default
+              </button>
             </div>
 
             <div className="surface-card p-4">

@@ -20,9 +20,9 @@ export function createCampaignSlice(set, get) {
       }
     },
 
-    loadCampaign: async (id) => {
+    loadCampaign: async (id, force = false) => {
       const current = get().campaign
-      if (current?.id === String(id) && !get().error) return current
+      if (!force && current?.id === String(id) && !get().error) return current
 
       if (get().campaignLoadingId === String(id) && get().loading) {
         return get().campaign

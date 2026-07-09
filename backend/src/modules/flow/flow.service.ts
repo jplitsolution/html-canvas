@@ -477,11 +477,19 @@ export class FlowService {
         operator: campaign.operator,
       });
 
+      const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+
       if (blockResult.blocked) {
+        const nextPage = this.flowEngine.nextPage(
+          flowConfig,
+          CampaignPageType.CONFIRM,
+          'BLOCKED',
+        ) || CampaignPageType.BLOCKED;
+
         await this.analyticsService.updateVisit(
           input.visitId,
           VisitStatus.BLOCKED,
-          CampaignPageType.BLOCKED,
+          nextPage,
           phone,
         );
         await this.analyticsService.logEvent(
@@ -493,7 +501,7 @@ export class FlowService {
         );
         return this.buildPageResponse(
           campaign,
-          CampaignPageType.BLOCKED,
+          nextPage,
           confirmVariables,
           input.visitId,
           'BLOCKED',
@@ -512,10 +520,16 @@ export class FlowService {
         },
       );
       if (subscribed) {
+        const nextPage = this.flowEngine.nextPage(
+          flowConfig,
+          CampaignPageType.CONFIRM,
+          'SUBSCRIBED',
+        ) || CampaignPageType.THANKYOU;
+
         await this.analyticsService.updateVisit(
           input.visitId,
           VisitStatus.SUBSCRIBED,
-          CampaignPageType.THANKYOU,
+          nextPage,
           phone,
         );
         await this.analyticsService.logEvent(
@@ -527,7 +541,7 @@ export class FlowService {
         );
         return this.buildPageResponse(
           campaign,
-          CampaignPageType.THANKYOU,
+          nextPage,
           confirmVariables,
           input.visitId,
           'ALREADY_SUBSCRIBED',
@@ -547,13 +561,19 @@ export class FlowService {
       });
 
       if (success) {
+        const nextPage = this.flowEngine.nextPage(
+          flowConfig,
+          CampaignPageType.CONFIRM,
+          'SUBSCRIBED',
+        ) || CampaignPageType.THANKYOU;
+
         this.logger.log(
-          `transition result: SUCCESS → THANKYOU visitId=${input.visitId} pack=${selectedPack}`,
+          `transition result: SUCCESS → ${nextPage} visitId=${input.visitId} pack=${selectedPack}`,
         );
         await this.analyticsService.updateVisit(
           input.visitId,
           VisitStatus.SUCCESS,
-          CampaignPageType.THANKYOU,
+          nextPage,
           phone,
         );
         await this.analyticsService.logEvent(
@@ -566,7 +586,7 @@ export class FlowService {
         );
         return this.buildPageResponse(
           campaign,
-          CampaignPageType.THANKYOU,
+          nextPage,
           confirmVariables,
           input.visitId,
           'SUCCESS',
@@ -575,13 +595,19 @@ export class FlowService {
         );
       }
 
+      const nextPage = this.flowEngine.nextPage(
+        flowConfig,
+        CampaignPageType.CONFIRM,
+        'ERROR',
+      ) || CampaignPageType.ERROR;
+
       this.logger.warn(
-        `transition result: FAILED → ERROR visitId=${input.visitId}`,
+        `transition result: FAILED → ${nextPage} visitId=${input.visitId}`,
       );
       await this.analyticsService.updateVisit(
         input.visitId,
         VisitStatus.FAILED,
-        CampaignPageType.ERROR,
+        nextPage,
         phone,
       );
       await this.analyticsService.logEvent(
@@ -593,7 +619,7 @@ export class FlowService {
       );
       return this.buildPageResponse(
         campaign,
-        CampaignPageType.ERROR,
+        nextPage,
         confirmVariables,
         input.visitId,
         'FAILED',
@@ -622,18 +648,32 @@ export class FlowService {
         throw new ForbiddenException('Phone number has not been verified with OTP');
       }
 
-      this.logger.log(`OTP transition verified for visitId=${input.visitId} phone=${phone}`);
+      const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+      const nextPage = this.flowEngine.nextPage(
+        flowConfig,
+        CampaignPageType.OTP,
+        'OTP_VERIFIED',
+      ) || CampaignPageType.CONFIRM;
+
+      this.logger.log(`OTP transition verified for visitId=${input.visitId} phone=${phone} → nextPage=${nextPage}`);
 
       await this.analyticsService.logEvent(
         input.visitId,
-        VisitEventType.CONFIRM_VIEW,
+        nextPage === CampaignPageType.CONFIRM ? VisitEventType.CONFIRM_VIEW : VisitEventType.HOME_VIEW,
         { info: 'Transition from OTP verified successfully' }
       );
 
+      const nextStatus =
+        nextPage === CampaignPageType.CONFIRM
+          ? VisitStatus.CONFIRM_SHOWN
+          : nextPage === CampaignPageType.THANKYOU
+            ? VisitStatus.SUCCESS
+            : VisitStatus.HOME_SHOWN;
+
       await this.analyticsService.updateVisit(
         input.visitId,
-        VisitStatus.CONFIRM_SHOWN,
-        CampaignPageType.CONFIRM,
+        nextStatus,
+        nextPage,
         phone,
       );
 
@@ -647,7 +687,7 @@ export class FlowService {
 
       return this.buildPageResponse(
         campaign,
-        CampaignPageType.CONFIRM,
+        nextPage,
         variables,
         input.visitId,
       );
