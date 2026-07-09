@@ -127,6 +127,11 @@ export class SearchService implements OnModuleInit {
     return docs.length;
   }
 
+  /** Escape wildcard metacharacters for keyword field searches. */
+  private escapeWildcard(value: string): string {
+    return value.replace(/([\\*?])/g, '\\$1');
+  }
+
   private buildQuery(params: LogSearchParams): Record<string, unknown> {
     const filter: Array<Record<string, unknown>> = [
       { term: { campaignId: params.campaignId } },
@@ -144,11 +149,28 @@ export class SearchService implements OnModuleInit {
     }
     const must: Array<Record<string, unknown>> = [];
     if (params.q) {
+      const escaped = this.escapeWildcard(params.q);
+      const keywordFields = [
+        'clickId',
+        'vidRaw',
+        'affRaw',
+        'phoneMasked',
+        'ip',
+      ] as const;
       must.push({
-        multi_match: {
-          query: params.q,
-          fields: ['clickId', 'vidRaw', 'affRaw', 'phoneMasked', 'userAgent', 'ip'],
-          type: 'phrase_prefix',
+        bool: {
+          should: [
+            { match_phrase_prefix: { userAgent: params.q } },
+            ...keywordFields.map((field) => ({
+              wildcard: {
+                [field]: {
+                  value: `*${escaped}*`,
+                  case_insensitive: true,
+                },
+              },
+            })),
+          ],
+          minimum_should_match: 1,
         },
       });
     }
