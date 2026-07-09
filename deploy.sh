@@ -145,22 +145,14 @@ start_elasticsearch() {
 build_backend() {
   log "Backend install + build..."
   cd "$BACKEND_DIR"
-  if [ -f package-lock.json ]; then
-    npm ci
-  else
-    npm install
-  fi
+  npm install
   npm run build
 }
 
 build_frontend() {
   log "Frontend install + build..."
   cd "$FRONTEND_DIR"
-  if [ -f package-lock.json ]; then
-    npm ci
-  else
-    npm install
-  fi
+  npm install
   # serve package — PM2 static files ke liye
   if ! npm ls serve >/dev/null 2>&1; then
     npm install --save-dev serve
