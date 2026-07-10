@@ -43,7 +43,7 @@ export function createCampaignSlice(set, get) {
     loadCampaignPage: async (campaignId, pageType) => {
       const key = `${String(campaignId)}|${String(pageType)}`
       const current = get().campaignPage
-      if (current?.pageType === pageType && !get().error) return current
+      if (current?.pageType === pageType && current?.campaignId === Number(campaignId) && !get().error) return current
 
       if (get().campaignPageLoadingKey === key && get().loading) {
         return get().campaignPage
@@ -104,6 +104,7 @@ export function createCampaignSlice(set, get) {
         set((s) => ({
           campaign: s.campaign?.id === id ? updated : s.campaign,
           campaigns: s.campaigns.map((c) => (c.id === id ? updated : c)),
+          campaignPage: null, // Clear cached template content to force a fresh re-fetch
         }))
         get().addToast('Default templates applied', 'success')
         return updated

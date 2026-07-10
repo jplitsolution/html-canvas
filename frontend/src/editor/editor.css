@@ -96,13 +96,19 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
 
 /* Keep selection & resize handles visible */
 .tc-builder .gjs-selected {
-  outline: 2px solid var(--accent) !important;
+  outline: 2px solid #6366f1 !important;
   outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15) !important;
+}
+
+.tc-builder .gjs-hovered {
+  outline: 1.5px dashed #818cf8 !important;
+  outline-offset: 1px;
 }
 
 .tc-builder .gjs-resizer-h {
   display: block !important;
-  border-color: var(--accent) !important;
+  border-color: #6366f1 !important;
 }
 
 /* Layer manager in sidebar */
@@ -132,75 +138,244 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   min-height: 48px;
 }
 
-.tc-advanced-styles-host .gjs-sm-sector,
-.tc-advanced-traits-host .gjs-trt-trait {
-  margin-bottom: 8px;
+/* FORCE HIGH CONTRAST DARK TEXT AND WHITE FIELD BACKGROUNDS (Fixes GrapesJS default white text on grey background issue) */
+.tc-advanced-styles-host .gjs-field,
+.tc-advanced-styles-host .gjs-sm-field,
+.tc-advanced-styles-host .gjs-sm-value,
+.tc-advanced-styles-host .gjs-sm-input,
+.tc-advanced-styles-host .gjs-sm-unit,
+.tc-advanced-styles-host input,
+.tc-advanced-styles-host select,
+.tc-advanced-styles-host select option,
+.tc-advanced-styles-host textarea,
+.tc-advanced-styles-host span,
+.tc-advanced-styles-host label,
+.tc-advanced-styles-host .gjs-sm-btn,
+.tc-advanced-traits-host .gjs-field,
+.tc-advanced-traits-host input,
+.tc-advanced-traits-host select,
+.tc-advanced-traits-host select option,
+.tc-advanced-traits-host textarea,
+.tc-advanced-traits-host .gjs-label,
+.tc-advanced-traits-host .gjs-value {
+  color: #0f172a !important; /* Force highly readable dark slate text */
 }
 
-.tc-advanced-styles-host .gjs-sm-sector-title,
-.tc-advanced-traits-host .gjs-trt-header {
-  background: var(--bg-subtle) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 8px !important;
-  font-size: 12px !important;
+/* Specific inputs/selects inside fields */
+.tc-advanced-styles-host .gjs-field input,
+.tc-advanced-styles-host .gjs-field select,
+.tc-advanced-styles-host .gjs-sm-field input,
+.tc-advanced-styles-host .gjs-sm-field select,
+.tc-advanced-traits-host .gjs-field input,
+.tc-advanced-traits-host .gjs-field select {
+  color: #0f172a !important;
+  background: transparent !important;
   font-weight: 600 !important;
-  color: var(--fg) !important;
-  padding: 8px 10px !important;
-  cursor: pointer;
-}
-
-.tc-advanced-styles-host .gjs-sm-properties,
-.tc-advanced-traits-host .gjs-trt-traits {
-  padding: 8px 4px !important;
-  font-size: 12px;
-}
-
-.tc-advanced-styles-host .gjs-sm-property,
-.tc-advanced-traits-host .gjs-field {
-  margin-bottom: 8px;
-}
-
-.tc-advanced-styles-host .gjs-sm-label,
-.tc-advanced-traits-host .gjs-label {
-  color: var(--fg-muted) !important;
   font-size: 11px !important;
 }
 
-.tc-advanced-styles-host .gjs-sm-sector-caret,
-.tc-advanced-styles-host .gjs-sm-clear {
-  color: var(--fg-muted) !important;
+/* Dropdown select options background */
+.tc-advanced-styles-host select option,
+.tc-advanced-traits-host select option {
+  background: #ffffff !important;
+  color: #0f172a !important;
 }
 
-.tc-advanced-styles-host .gjs-sm-input-holder input,
-.tc-advanced-styles-host .gjs-sm-input-holder select,
-.tc-advanced-traits-host input,
-.tc-advanced-traits-host select {
-  background: var(--bg-subtle) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 6px !important;
-  color: var(--fg) !important;
-  font-size: 12px !important;
-}
-
-.tc-advanced-styles-host .gjs-sm-sector .gjs-sm-sector-title.gjs-sm-open {
-  border-color: var(--accent) !important;
-}
-
-/* Advanced style manager (legacy host) */
+/* Sector Accordions */
 .tc-advanced-styles-host .gjs-sm-sector {
-  border: none !important;
-  background: transparent !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 12px !important;
+  background: #ffffff !important;
+  margin-bottom: 10px !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02) !important;
+  transition: all 0.2s ease !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-sector:hover {
+  border-color: #cbd5e1 !important;
 }
 
 .tc-advanced-styles-host .gjs-sm-sector-title {
-  background: var(--bg-subtle) !important;
-  border-radius: 8px;
-  font-size: 12px;
-  color: var(--fg) !important;
+  background: #f8fafc !important;
+  border: none !important;
+  border-bottom: 1px solid transparent !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: #475569 !important;
+  padding: 10px 12px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
 }
 
+.tc-advanced-styles-host .gjs-sm-sector-title.gjs-sm-open {
+  border-bottom: 1px solid #e2e8f0 !important;
+  color: #6366f1 !important;
+  border-left: 3px solid #6366f1 !important;
+}
+
+/* Caret indicator alignment */
+.tc-advanced-styles-host .gjs-sm-sector-caret {
+  margin-right: 0 !important;
+  font-size: 10px !important;
+  color: #475569 !important;
+  transition: transform 0.2s ease !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-clear {
+  color: #94a3b8 !important;
+}
+
+/* Fields & Properties Grid */
 .tc-advanced-styles-host .gjs-sm-properties {
-  font-size: 12px;
+  padding: 12px !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  background: #ffffff !important;
+}
+
+/* Property Item */
+.tc-advanced-styles-host .gjs-sm-property {
+  margin-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
+  grid-column: span 1 !important;
+}
+
+/* Make some properties full width for readability */
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__stack,
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__file,
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__text-shadow,
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__box-shadow,
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__transform,
+.tc-advanced-styles-host .gjs-sm-property.gjs-sm-property__transition {
+  grid-column: span 2 !important;
+}
+
+/* Labels */
+.tc-advanced-styles-host .gjs-sm-label,
+.tc-advanced-traits-host .gjs-label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+  color: #475569 !important;
+}
+
+/* Field Box Wrapper */
+.tc-advanced-styles-host .gjs-field,
+.tc-advanced-styles-host .gjs-sm-field,
+.tc-advanced-traits-host .gjs-field {
+  background: #ffffff !important; /* Pure white input background */
+  border: 1px solid #cbd5e1 !important; /* Clear grey border */
+  border-radius: 8px !important;
+  padding: 1px !important;
+  display: flex !important;
+  align-items: center !important;
+  transition: all 0.2s ease !important;
+  position: relative !important;
+}
+
+.tc-advanced-styles-host .gjs-field:focus-within,
+.tc-advanced-styles-host .gjs-sm-field:focus-within,
+.tc-advanced-traits-host .gjs-field:focus-within {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12) !important;
+  background: #ffffff !important;
+}
+
+/* Numeric units pill style (px, %, em, etc.) */
+.tc-advanced-styles-host .gjs-sm-unit {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  background: #f1f5f9 !important;
+  color: #475569 !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  margin-right: 4px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-unit:hover {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+/* Button groups (Segments) in Style Manager (e.g. align, display flex/block etc.) */
+.tc-advanced-styles-host .gjs-sm-btn-g {
+  display: flex !important;
+  width: 100% !important;
+  background: #f1f5f9 !important;
+  padding: 2px !important;
+  border-radius: 10px !important;
+  gap: 2px !important;
+  border: none !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-btn {
+  flex: 1 !important;
+  text-align: center !important;
+  padding: 5px 2px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: #475569 !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 8px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-btn:hover {
+  color: #1e293b !important;
+  background: rgba(255, 255, 255, 0.4) !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-btn.gjs-pn-active,
+.tc-advanced-styles-host .gjs-sm-btn.gjs-sm-active {
+  background: #ffffff !important;
+  color: #6366f1 !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+  font-weight: 700 !important;
+}
+
+/* Color fields customization */
+.tc-advanced-styles-host .gjs-field-color {
+  width: 100% !important;
+}
+
+.tc-advanced-styles-host .gjs-field-color-picker {
+  width: 18px !important;
+  height: 18px !important;
+  border-radius: 50% !important;
+  border: 1px solid #cbd5e1 !important;
+  margin-left: 6px !important;
+  cursor: pointer !important;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05) !important;
+}
+
+/* Custom GJS styles traits layout */
+.tc-advanced-traits-host .gjs-trt-traits {
+  padding: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.tc-advanced-traits-host .gjs-trt-trait {
+  margin-bottom: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 5px !important;
 }
 
 /* Modal (asset picker fallback) */
@@ -354,7 +529,7 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
 .tc-blocks-mount .gjs-blocks-c {
   display: grid !important;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 10px;
   padding: 0 !important;
 }
 
@@ -363,12 +538,12 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
   min-height: unset !important;
   margin: 0 !important;
   padding: 8px !important;
-  border-radius: 10px !important;
-  border: 1px solid var(--border) !important;
-  background: var(--bg-elevated) !important;
-  box-shadow: none !important;
+  border-radius: 12px !important;
+  border: 1px solid #f1f5f9 !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.02) !important;
   cursor: grab !important;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
   user-select: none;
 }
 
@@ -377,8 +552,9 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
 }
 
 .tc-blocks-mount .gjs-block:hover {
-  border-color: var(--accent) !important;
-  box-shadow: var(--shadow-sm) !important;
+  border-color: #6366f1 !important;
+  box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.08), 0 4px 6px -4px rgba(99, 102, 241, 0.08) !important;
+  transform: translateY(-2px);
 }
 
 .tc-blocks-mount .gjs-block__media {
@@ -388,10 +564,16 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
   aspect-ratio: 5 / 3;
   margin-bottom: 6px;
   padding: 6px;
-  border-radius: 8px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
   overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.tc-blocks-mount .gjs-block:hover .gjs-block__media {
+  background: #f1f5f9;
+  border-color: rgba(99, 102, 241, 0.12);
 }
 
 .tc-blocks-mount .gjs-block__media svg {
@@ -402,8 +584,8 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block:active {
 
 .tc-blocks-mount .gjs-block-label {
   font-size: 11px !important;
-  font-weight: 500;
-  color: var(--fg) !important;
+  font-weight: 600;
+  color: #475569 !important;
   padding: 0 2px 2px;
   line-height: 1.3;
 }

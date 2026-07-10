@@ -29,7 +29,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const inputClass =
-  'w-full px-3 py-2 text-sm rounded-lg border border-border bg-bg-subtle text-fg focus:outline-none focus:ring-2 focus:ring-accent/30';
+  'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200';
 
 const KIND_LABELS: Record<string, string> = {
   text: 'Text',

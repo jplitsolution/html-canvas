@@ -15,7 +15,7 @@ import {
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
-import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES } from '../templates/starterTemplates'
+import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, THANKYOU_STARTER_TEMPLATES, BLOCKED_STARTER_TEMPLATES, ERROR_STARTER_TEMPLATES } from '../templates/starterTemplates'
 import { applyStarterHtml } from '../utils/blockActions'
 import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragAndDrop'
 import { startAssetDrag } from '../plugins/assetDrag'
@@ -65,7 +65,7 @@ export function EditorSidebar() {
   const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType as FunnelPageType] : undefined
   const hasFlowParts = Boolean(flowGuide && flowGuide.required.length > 0)
   const [tab, setTab] = useState<SidebarTab>(
-    hasFlowParts ? 'flow' : isFunnelPage ? 'sections' : 'layouts',
+    hasFlowParts ? 'flow' : 'layouts',
   )
   const [search, setSearch] = useState('')
   const [assetSearch, setAssetSearch] = useState('')
@@ -159,21 +159,21 @@ export function EditorSidebar() {
 
   return (
     <>
-      <aside className="tc-sidebar shrink-0 flex border-r border-border bg-bg-elevated min-h-0">
+      <aside className="tc-sidebar shrink-0 flex border-r border-gray-100 bg-white min-h-0">
         {/* Icon rail */}
-        <nav className="w-14 shrink-0 flex flex-col items-center py-3 gap-1 border-r border-border bg-bg-subtle/50">
+        <nav className="w-14 shrink-0 flex flex-col items-center py-4 gap-2 border-r border-gray-100 bg-slate-50/50">
           {TABS.filter(
-            (t) => !(isFunnelPage && t.id === 'layouts' && funnelPageType !== 'OTP' && funnelPageType !== 'CONFIRM') && !(t.id === 'flow' && !hasFlowParts),
+            (t) => !(t.id === 'flow' && !hasFlowParts),
           ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
               onClick={() => setTab(id)}
               title={label}
-              className={`w-10 h-10 flex items-center justify-center rounded-md transition-colors ${
+              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 ${
                 tab === id
-                  ? 'bg-accent text-accent-fg shadow-sm'
-                  : 'text-fg-muted hover:text-fg hover:bg-bg-muted'
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 scale-[1.03]'
+                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100/80'
               }`}
             >
               <Icon className="w-4.5 h-4.5" />
@@ -182,25 +182,27 @@ export function EditorSidebar() {
         </nav>
 
         {/* Content panel */}
-        <div className="w-64 flex flex-col min-h-0 min-w-0">
-          <div className="px-4 py-3 border-b border-border shrink-0">
-            <h2 className="text-sm font-semibold text-fg">{activeTab?.label}</h2>
-            <p className="text-xs text-fg-muted mt-0.5">{activeTab?.hint}</p>
+        <div className="w-64 flex flex-col min-h-0 min-w-0 bg-white">
+          <div className="px-4 py-4 border-b border-gray-100 shrink-0">
+            <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">{activeTab?.label}</h2>
+            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{activeTab?.hint}</p>
           </div>
 
           {showBlocks && (
-            <div className="px-3 py-3 border-b border-border shrink-0">
+            <div className="px-3 py-3 border-b border-gray-100 shrink-0">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-muted" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   type="search"
-                  placeholder="Search..."
+                  placeholder="Search parts..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-8 pr-3 py-2 text-sm rounded-md border border-border bg-bg-subtle text-fg placeholder:text-fg-muted focus:outline-none focus:ring-2 focus:ring-accent/30"
+                  className="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-gray-200 bg-gray-50/30 text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                 />
               </div>
-              <p className="text-[11px] text-fg-muted mt-2">Drag onto the page in the center →</p>
+              <p className="text-[10px] font-semibold text-indigo-500 mt-2 flex items-center gap-1">
+                <span>Drag onto the page in the center →</span>
+              </p>
             </div>
           )}
 
@@ -214,10 +216,18 @@ export function EditorSidebar() {
               <div className="p-3 grid grid-cols-1 gap-3">
                 {(() => {
                   let list = STARTER_TEMPLATES;
-                  if (funnelPageType === 'OTP') {
+                  if (funnelPageType === 'HOME') {
+                    list = HOME_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'OTP') {
                     list = OTP_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'CONFIRM') {
                     list = CONFIRM_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'THANKYOU') {
+                    list = THANKYOU_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'BLOCKED') {
+                    list = BLOCKED_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'ERROR') {
+                    list = ERROR_STARTER_TEMPLATES;
                   }
                   return list.map((t) => (
                     <TemplateCard
