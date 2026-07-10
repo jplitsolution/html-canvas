@@ -1,12 +1,10 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
+import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
 import { resolvePhoneFromUrl, resolvePhoneNumber } from '../services/flow/resolvePhoneNumber'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
 import { trackEvent } from '../utils/analytics'
-import { saveCampaignPage } from '../services/api/campaigns'
-import { OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES } from '../editor/templates/starterTemplates'
 
 
 const FLOW_FONT =
@@ -413,47 +411,9 @@ function SubscriptionPage() {
   const [error, setError] = useState('')
   const [pageData, setPageData] = useState(null)
 
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [showLayoutSelector, setShowLayoutSelector] = useState(false)
-  const [applyingTemplate, setApplyingTemplate] = useState(false)
-
-  useEffect(() => {
-    const token = localStorage.getItem('templatecraft_auth_token')
-    if (token) {
-      setIsAdmin(true)
-    }
-  }, [])
-
-  const templates = useMemo(() => {
-    if (!pageData) return []
-    if (pageData.pageType === 'OTP') {
-      return OTP_STARTER_TEMPLATES
-    } else if (pageData.pageType === 'CONFIRM') {
-      return CONFIRM_STARTER_TEMPLATES
-    }
-    return []
-  }, [pageData])
-
-  const handleApplyTemplate = async (template) => {
-    if (!pageData?.campaignId || !pageData?.pageType) return
-    setApplyingTemplate(true)
-    try {
-      await saveCampaignPage(pageData.campaignId, pageData.pageType, {
-        html: template.html,
-        css: template.css || '',
-        projectData: {}
-      })
-      setShowLayoutSelector(false)
-      window.location.reload()
-    } catch (err) {
-      alert(err.message || 'Failed to apply template')
-    } finally {
-      setApplyingTemplate(false)
-    }
-  }
-
   const hostRef = useRef(null)
   const visitIdRef = useRef(null)
+  const entryPageRef = useRef('HOME')
   const pageCacheRef = useRef(new Map())
   const prefetchingRef = useRef(new Set())
   const transitionLockRef = useRef(false)
@@ -518,6 +478,7 @@ function SubscriptionPage() {
 
   const cachePage = useCallback((data) => {
     if (!data?.pageType) return
+    if (data.entryPage) entryPageRef.current = data.entryPage
     pageCacheRef.current.set(data.pageType, data)
     if (data.visitId) visitIdRef.current = data.visitId
     pageDataRef.current = data
@@ -618,17 +579,21 @@ function SubscriptionPage() {
   // Restore step/session on load/refresh (Refresh Safe)
   useEffect(() => {
     if (phoneResolving) return
-    
-    const savedSession = getSavedSession()
-    if (savedSession && savedSession.visitId) {
-      visitIdRef.current = savedSession.visitId
-      phoneRef.current = savedSession.phone || ''
-      setPhone(savedSession.phone || '')
-      
-      const targetStep = searchParams.get('step') || savedSession.step || 'HOME'
-      setBooting(true)
-      loadPage(targetStep)
-    } else {
+    let cancelled = false
+
+    async function boot() {
+      const savedSession = getSavedSession()
+      const urlStep = searchParams.get('step')
+
+      if (savedSession?.visitId) {
+        visitIdRef.current = savedSession.visitId
+        phoneRef.current = savedSession.phone || ''
+        setPhone(savedSession.phone || '')
+        setBooting(true)
+        await loadPage(urlStep || savedSession.step || entryPageRef.current || 'HOME')
+        return
+      }
+
       selectedPackRef.current = 'daily'
       pageCacheRef.current.clear()
       prefetchingRef.current.clear()
@@ -636,17 +601,33 @@ function SubscriptionPage() {
       pageDataRef.current = null
       setPageData(null)
       setBooting(true)
-      
-      const targetStep = searchParams.get('step') || 'HOME'
-      loadPage(targetStep)
+
+      if (urlStep) {
+        await loadPage(urlStep)
+        return
+      }
+
+      try {
+        const { entryPage } = await fetchFlowEntry({ country, operator, campid })
+        if (cancelled) return
+        entryPageRef.current = entryPage || 'HOME'
+        await loadPage(entryPageRef.current)
+      } catch {
+        if (!cancelled) await loadPage('HOME')
+      }
     }
-  }, [country, operator, phoneResolving, loadPage, getSavedSession])
+
+    boot()
+    return () => {
+      cancelled = true
+    }
+  }, [country, operator, campid, phoneResolving, loadPage, getSavedSession, searchParams])
 
   // Sync step changes from browser history back/forward buttons
   useEffect(() => {
     if (phoneResolving || booting || !pageData) return
     const currentStep = pageData.pageType
-    const urlStep = searchParams.get('step') || 'HOME'
+    const urlStep = searchParams.get('step') || pageData.entryPage || entryPageRef.current || 'HOME'
 
     if (currentStep !== urlStep) {
       setBooting(true)
@@ -823,76 +804,6 @@ function SubscriptionPage() {
         </div>
       )}
       <div ref={hostRef} className="flow-runtime-host is-visible" />
-
-      {/* Floating Button for Admin to choose template */}
-      {isAdmin && templates.length > 0 && (
-        <div className="fixed bottom-6 right-6 z-50">
-          <button
-            type="button"
-            onClick={() => setShowLayoutSelector(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-lg transition-all font-semibold text-sm border border-indigo-500/20 active:scale-95 cursor-pointer"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="7" x="3" y="3" rx="1"/><rect width="9" height="7" x="3" y="14" rx="1"/><rect width="5" height="7" x="16" y="14" rx="1"/></svg>
-            Choose Template
-          </button>
-        </div>
-      )}
-
-      {/* Template Selector Modal */}
-      {showLayoutSelector && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]">
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between shrink-0">
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Change Page Template</h3>
-                <p className="text-xs text-slate-500">Select a prebuilt style for {pageData?.pageType} page</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowLayoutSelector(false)}
-                className="text-slate-400 hover:text-slate-600 p-1.5 hover:bg-slate-50 rounded-lg transition-colors cursor-pointer"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
-              </button>
-            </div>
-            
-            <div className="p-6 overflow-y-auto space-y-4 flex-1">
-              {templates.map((tpl) => (
-                <button
-                  key={tpl.id}
-                  type="button"
-                  disabled={applyingTemplate}
-                  onClick={() => handleApplyTemplate(tpl)}
-                  className="w-full text-left p-4 rounded-xl border-2 border-slate-100 hover:border-indigo-600 hover:bg-indigo-50/20 active:bg-indigo-50/50 transition-all flex items-start gap-4 disabled:opacity-50 group cursor-pointer"
-                >
-                  <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center shrink-0 text-lg font-bold group-hover:bg-indigo-100 transition-colors">
-                    🎨
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-800 group-hover:text-indigo-900 transition-colors">
-                      {tpl.name}
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                      {tpl.description}
-                    </p>
-                  </div>
-                </button>
-              ))}
-            </div>
-            
-            <div className="px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end gap-2 shrink-0">
-              <button
-                type="button"
-                disabled={applyingTemplate}
-                onClick={() => setShowLayoutSelector(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 active:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -156,6 +156,9 @@ export class FlowService {
       where: { campaignId: campaign.id },
     });
 
+    const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+    const entryPage = this.flowEngine.getEntryPage(flowConfig);
+
     const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
     const pack = this.normalizePack(input.pack);
@@ -210,14 +213,14 @@ export class FlowService {
           if (subscribed) {
             resolvedPageType = CampaignPageType.THANKYOU;
           } else {
-            resolvedPageType = phone ? CampaignPageType.OTP : CampaignPageType.HOME;
+            resolvedPageType = phone ? CampaignPageType.OTP : entryPage;
             this.logger.warn(`Route Guard: Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to ${resolvedPageType}`);
           }
         }
       }
     } else {
       if (resolvedPageType === CampaignPageType.CONFIRM && !phone) {
-        resolvedPageType = CampaignPageType.HOME;
+        resolvedPageType = entryPage;
       }
       if (resolvedPageType === CampaignPageType.THANKYOU) {
         const subscribed = await this.partnerApiService.checkSubscription(
@@ -230,7 +233,7 @@ export class FlowService {
           },
         ).catch(() => false);
         if (!subscribed) {
-          resolvedPageType = phone ? CampaignPageType.CONFIRM : CampaignPageType.HOME;
+          resolvedPageType = phone ? CampaignPageType.CONFIRM : entryPage;
         }
       }
     }
@@ -335,6 +338,7 @@ export class FlowService {
       campaignId: campaign.id,
       visitId,
       pageType: resolvedPageType,
+      entryPage,
       templateId: page.templateId,
       html,
       css: templateData.css || '',
@@ -696,6 +700,24 @@ export class FlowService {
     throw new BadRequestException('Invalid page transition');
   }
 
+  async getFlowEntry(input: {
+    country: string;
+    operator: string;
+    campid?: string;
+  }) {
+    const campaign = await this.resolveCampaign(input);
+    if (!campaign) {
+      throw new NotFoundException(
+        `No campaign found for ${input.country} / ${input.operator}`,
+      );
+    }
+    const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+    return {
+      campaignId: campaign.id,
+      entryPage: this.flowEngine.getEntryPage(flowConfig),
+    };
+  }
+
   private getActions(pageType: CampaignPageType): string[] {
     if (pageType === CampaignPageType.HOME) return ['SUBSCRIBE'];
     if (pageType === CampaignPageType.OTP) return ['OTP_SEND', 'OTP_VERIFY'];
@@ -752,6 +774,9 @@ export class FlowService {
       campaignId: campaign!.id,
       visitId,
       pageType,
+      entryPage: this.flowEngine.getEntryPage(
+        this.flowEngine.parseFlowConfig(campaign!.flowConfig),
+      ),
       status: status || pageType,
       templateId: page.templateId,
       html: this.variableResolver.replaceVariables(

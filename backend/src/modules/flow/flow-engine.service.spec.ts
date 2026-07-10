@@ -112,13 +112,24 @@ describe('FlowEngineService', () => {
       expect(res.errors).toHaveLength(0);
     });
 
-    it('flags unreachable nodes', () => {
+    it('flags unreachable nodes from the start page', () => {
       const cfg = engine.getDefaultFlowConfig('BOTH');
-      // Drop all edges so only HOME is reachable.
+      // Drop all edges so only the start page is reachable.
       cfg.edges = [];
       const res = engine.validate(cfg, 'BOTH');
       expect(res.ok).toBe(false);
-      expect(res.errors.join(' ')).toContain('Unreachable');
+      expect(res.errors.join(' ')).toContain('Unreachable from start page');
+    });
+
+    it('allows OTP as the configured start page', () => {
+      const cfg = engine.getDefaultFlowConfig('OTP_ONLY');
+      cfg.entryPage = CampaignPageType.OTP;
+      cfg.edges = cfg.edges.filter(
+        (e) => e.source !== CampaignPageType.HOME && e.target !== CampaignPageType.HOME,
+      );
+      cfg.nodes = cfg.nodes.filter((n) => n.pageType !== CampaignPageType.HOME);
+      const res = engine.validate(cfg, 'OTP_ONLY');
+      expect(res.ok).toBe(true);
     });
   });
 });

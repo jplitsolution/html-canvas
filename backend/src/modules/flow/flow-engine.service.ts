@@ -33,6 +33,8 @@ export interface FlowEdge {
 
 export interface FlowConfig {
   version: number;
+  /** First page shown when a user opens the subscription URL */
+  entryPage?: CampaignPageType;
   nodes: FlowNode[];
   edges: FlowEdge[];
 }
@@ -112,7 +114,42 @@ export class FlowEngineService {
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'));
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
 
-    return { version: 1, nodes, edges };
+    return { version: 1, entryPage: CampaignPageType.HOME, nodes, edges };
+  }
+
+  /**
+   * Resolve which page type opens the funnel. Falls back to HOME, then the
+   * first node in the graph.
+   */
+  getEntryPage(config: FlowConfig | null): CampaignPageType {
+    if (!config || config.nodes.length === 0) {
+      return CampaignPageType.HOME;
+    }
+    if (
+      config.entryPage &&
+      config.nodes.some((n) => n.pageType === config.entryPage)
+    ) {
+      return config.entryPage;
+    }
+    if (config.nodes.some((n) => n.pageType === CampaignPageType.HOME)) {
+      return CampaignPageType.HOME;
+    }
+    return config.nodes[0].pageType;
+  }
+
+  private reachableNodeIds(config: FlowConfig, startNodeId: string): Set<string> {
+    const reachable = new Set<string>([startNodeId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const e of config.edges) {
+        if (reachable.has(e.source) && !reachable.has(e.target)) {
+          reachable.add(e.target);
+          changed = true;
+        }
+      }
+    }
+    return reachable;
   }
 
   /**
@@ -149,36 +186,15 @@ export class FlowEngineService {
     config: FlowConfig,
     mode: VerificationMode,
   ): FlowConfig {
-    const homeNode = config.nodes.find(
-      (n) => n.pageType === CampaignPageType.HOME,
-    );
-    if (!homeNode) return config; // no HOME → validate() will catch this
+    const entryPage = this.getEntryPage(config);
+    const entryNode = config.nodes.find((n) => n.pageType === entryPage);
+    if (!entryNode) return config;
 
-    // BFS / fixed-point to discover reachable node ids
-    const reachable = new Set<string>([homeNode.id]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const e of config.edges) {
-        if (reachable.has(e.source) && !reachable.has(e.target)) {
-          reachable.add(e.target);
-          changed = true;
-        }
-      }
-    }
-
-    // Nodes that MUST stay even if orphaned (required by mode)
-    const requiredPageTypes = new Set<CampaignPageType>([
-      CampaignPageType.HOME,
-      CampaignPageType.CONFIRM,
-    ]);
-    if (mode === 'OTP_ONLY' || mode === 'BOTH') {
-      requiredPageTypes.add(CampaignPageType.OTP);
-    }
+    const reachable = this.reachableNodeIds(config, entryNode.id);
 
     const keptNodeIds = new Set<string>();
     const filteredNodes = config.nodes.filter((n) => {
-      if (reachable.has(n.id) || requiredPageTypes.has(n.pageType)) {
+      if (reachable.has(n.id)) {
         keptNodeIds.add(n.id);
         return true;
       }
@@ -204,13 +220,15 @@ export class FlowEngineService {
   ): { ok: boolean; errors: string[] } {
     const errors: string[] = [];
     const pageTypes = new Set(config.nodes.map((n) => n.pageType));
+    const entryPage = this.getEntryPage(config);
+    const entryNode = config.nodes.find((n) => n.pageType === entryPage);
 
-    if (!pageTypes.has(CampaignPageType.HOME)) {
-      errors.push('A HOME page node is required.');
+    if (!entryNode) {
+      errors.push(
+        `Start page "${entryPage}" must exist as a node in the flow.`,
+      );
     }
-    if (!pageTypes.has(CampaignPageType.CONFIRM)) {
-      errors.push('A CONFIRM page node is required.');
-    }
+
     if (
       (mode === 'OTP_ONLY' || mode === 'BOTH') &&
       !pageTypes.has(CampaignPageType.OTP)
@@ -218,28 +236,15 @@ export class FlowEngineService {
       errors.push(`Verification mode ${mode} requires an OTP page node.`);
     }
 
-    // Every non-HOME node should be reachable from HOME.
-    const homeNode = config.nodes.find(
-      (n) => n.pageType === CampaignPageType.HOME,
-    );
-    if (homeNode) {
-      const reachable = new Set<string>([homeNode.id]);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        for (const e of config.edges) {
-          if (reachable.has(e.source) && !reachable.has(e.target)) {
-            reachable.add(e.target);
-            changed = true;
-          }
-        }
-      }
+    // Every node should be reachable from the configured start page.
+    if (entryNode) {
+      const reachable = this.reachableNodeIds(config, entryNode.id);
       const unreachable = config.nodes.filter((n) => !reachable.has(n.id));
       if (unreachable.length > 0) {
         errors.push(
-          `Unreachable page node(s): ${unreachable
+          `Unreachable from start page (${entryPage}): ${unreachable
             .map((n) => n.pageType)
-            .join(', ')}.`,
+            .join(', ')}. Connect them from "${entryPage}" or set a different start page.`,
         );
       }
     }

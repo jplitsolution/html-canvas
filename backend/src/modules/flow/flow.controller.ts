@@ -42,6 +42,16 @@ export class FlowController {
     });
   }
 
+  @Get('entry')
+  @ApiOperation({ summary: 'Resolve the configured start page for a campaign flow' })
+  async getEntry(@Query() query: GetFlowPageQueryDto) {
+    return this.flowService.getFlowEntry({
+      country: query.country,
+      operator: query.operator,
+      campid: query.campid,
+    });
+  }
+
   @Post('transition')
   @UseGuards(PublicRateLimitGuard)
   @ApiOperation({ summary: 'Advance funnel step with partner API checks' })
