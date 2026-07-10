@@ -140,6 +140,62 @@ export class FlowEngineService {
   }
 
   /**
+   * Strip nodes (and their edges) that are not reachable from the HOME node.
+   * Required nodes (HOME, CONFIRM, and OTP when mode requires it) are never
+   * removed — if they are unreachable the validate() call that follows will
+   * surface the real error.
+   */
+  stripUnreachableNodes(
+    config: FlowConfig,
+    mode: VerificationMode,
+  ): FlowConfig {
+    const homeNode = config.nodes.find(
+      (n) => n.pageType === CampaignPageType.HOME,
+    );
+    if (!homeNode) return config; // no HOME → validate() will catch this
+
+    // BFS / fixed-point to discover reachable node ids
+    const reachable = new Set<string>([homeNode.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const e of config.edges) {
+        if (reachable.has(e.source) && !reachable.has(e.target)) {
+          reachable.add(e.target);
+          changed = true;
+        }
+      }
+    }
+
+    // Nodes that MUST stay even if orphaned (required by mode)
+    const requiredPageTypes = new Set<CampaignPageType>([
+      CampaignPageType.HOME,
+      CampaignPageType.CONFIRM,
+    ]);
+    if (mode === 'OTP_ONLY' || mode === 'BOTH') {
+      requiredPageTypes.add(CampaignPageType.OTP);
+    }
+
+    const keptNodeIds = new Set<string>();
+    const filteredNodes = config.nodes.filter((n) => {
+      if (reachable.has(n.id) || requiredPageTypes.has(n.pageType)) {
+        keptNodeIds.add(n.id);
+        return true;
+      }
+      this.logger.debug(
+        `Stripping unreachable node: ${n.pageType} (id=${n.id})`,
+      );
+      return false;
+    });
+
+    const filteredEdges = config.edges.filter(
+      (e) => keptNodeIds.has(e.source) && keptNodeIds.has(e.target),
+    );
+
+    return { ...config, nodes: filteredNodes, edges: filteredEdges };
+  }
+
+  /**
    * Validate a graph against a verification mode. Returns human-readable errors.
    */
   validate(

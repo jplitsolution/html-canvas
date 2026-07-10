@@ -53,7 +53,14 @@ export class CampaignsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
   ) {
-    return this.campaignsService.findOne(id, user.id);
+    const campaign = await this.campaignsService.findOne(id, user.id);
+    const { flowConfig, verificationMode } = await this.campaignsService.getFlow(id, user.id);
+    // Attach resolved (never-null) flowConfig onto the campaign response
+    return {
+      ...campaign,
+      flowConfig: JSON.stringify(flowConfig),
+      verificationMode,
+    };
   }
 
   @Patch(':id')

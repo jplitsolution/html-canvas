@@ -25,9 +25,26 @@ function mapCampaign(campaign) {
     ),
     updatedAt: page.updatedAt,
   }))
-  const requiredComplete = REQUIRED_PAGE_TYPES.every((type) =>
+
+  let flowConfig = null
+  const rawFlowConfig = campaign.flowConfig || campaign.flow_config
+  if (rawFlowConfig) {
+    try {
+      flowConfig = typeof rawFlowConfig === 'string' ? JSON.parse(rawFlowConfig) : rawFlowConfig
+    } catch (e) {
+      console.error('Failed to parse flowConfig', e)
+    }
+  }
+
+  // Dynamic required complete validation based on flowConfig active page types
+  const activePageTypes = flowConfig && flowConfig.nodes
+    ? flowConfig.nodes.map((n) => n.pageType)
+    : REQUIRED_PAGE_TYPES;
+
+  const requiredComplete = activePageTypes.every((type) =>
     pages.find((p) => p.pageType === type)?.hasContent,
   )
+
   return {
     id: String(campaign.id),
     name: campaign.name,
@@ -39,6 +56,7 @@ function mapCampaign(campaign) {
     verificationMode: campaign.verificationMode || null,
     pages,
     requiredComplete,
+    flowConfig,
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
   }
@@ -118,7 +136,7 @@ export function getCampaignPreviewUrl(campaign) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
-    step: 'OTP',
+    step: 'HOME',
   })
   return `/subscription?${params.toString()}`
 }
