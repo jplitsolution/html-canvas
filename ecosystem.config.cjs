@@ -7,7 +7,7 @@ module.exports = {
     {
       name: 'templatecraft-api',
       cwd: './backend',
-      script: 'dist/main.js',
+      script: './start.sh',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -20,8 +20,7 @@ module.exports = {
     {
       name: 'templatecraft-web',
       cwd: './frontend',
-      script: 'node_modules/.bin/serve',
-      args: `-s dist -l ${process.env.FRONTEND_PORT || 8080}`,
+      script: './start.sh',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
