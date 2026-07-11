@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store } from 'lucide-react'
+import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logout } from '../../services/api/auth'
 import Button from './Button'
@@ -91,6 +91,10 @@ function AppShell({ children, actions, minimal = false }) {
               {user?.name && (
                 <p className="px-3 text-xs text-fg-muted truncate">{user.name}</p>
               )}
+              <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate('/profile')}>
+                <User className="w-4 h-4" />
+                Profile
+              </Button>
               <Button variant="outline" size="sm" className="w-full justify-start" onClick={handleLogout}>
                 <LogOut className="w-4 h-4" />
                 Sign out
@@ -142,10 +146,16 @@ function AppShell({ children, actions, minimal = false }) {
                     })}
                     <div className="mt-2 pt-2 border-t border-border px-4">
                       {isAuthenticated ? (
-                        <Button variant="outline" size="sm" className="w-full" onClick={handleLogout}>
-                          <LogOut className="w-4 h-4" />
-                          Sign out
-                        </Button>
+                        <div className="space-y-2">
+                          <Button variant="outline" size="sm" className="w-full" onClick={() => navigate('/profile')}>
+                            <User className="w-4 h-4" />
+                            Profile
+                          </Button>
+                          <Button variant="outline" size="sm" className="w-full" onClick={handleLogout}>
+                            <LogOut className="w-4 h-4" />
+                            Sign out
+                          </Button>
+                        </div>
                       ) : (
                         <Button variant="primary" size="sm" className="w-full" onClick={() => navigate('/login')}>
                           <LogIn className="w-4 h-4" />

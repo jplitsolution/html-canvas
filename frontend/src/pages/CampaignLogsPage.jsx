@@ -17,6 +17,7 @@ import { RefreshCw, Search, Database, AlertCircle } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import useStore from '../store/useStore'
+import { formatDate } from '../utils/date'
 import { listCampaigns } from '../services/api/campaigns'
 import {
   getLogsStatus,
@@ -60,6 +61,27 @@ function CampaignLogsPage() {
   const [aggs, setAggs] = useState(null)
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
+  const [datePreset, setDatePreset] = useState('custom')
+
+  useEffect(() => {
+    if (datePreset === 'custom') return
+    const now = new Date()
+    let from = ''
+    let to = now.toISOString().slice(0, 10)
+    if (datePreset === 'today') {
+      from = to
+    } else if (datePreset === 'week') {
+      const w = new Date(now)
+      w.setDate(now.getDate() - 7)
+      from = w.toISOString().slice(0, 10)
+    } else if (datePreset === 'month') {
+      const m = new Date(now)
+      m.setMonth(now.getMonth() - 1)
+      from = m.toISOString().slice(0, 10)
+    }
+    setFilters((f) => ({ ...f, from, to }))
+    setPage(1)
+  }, [datePreset])
 
   useEffect(() => {
     getLogsStatus()
@@ -68,7 +90,7 @@ function CampaignLogsPage() {
     listCampaigns()
       .then((res) => {
         setCampaigns(res || [])
-        if (res && res.length > 0) setSelectedId(res[0].id)
+        setSelectedId('all')
       })
       .catch((err) => addToast(err.message || 'Failed to load campaigns', 'error'))
   }, [addToast])
@@ -145,6 +167,7 @@ function CampaignLogsPage() {
                   setSelectedId(e.target.value)
                 }}
               >
+                <option value="all">All Campaigns</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.country} / {c.operator} — {c.name}
@@ -162,23 +185,40 @@ function CampaignLogsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs text-fg-muted mb-1">From</label>
-              <input
-                type="date"
+              <label className="block text-xs text-fg-muted mb-1">Date Range</label>
+              <select
                 className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base"
-                value={filters.from}
-                onChange={(e) => updateFilter('from', e.target.value)}
-              />
+                value={datePreset}
+                onChange={(e) => setDatePreset(e.target.value)}
+              >
+                <option value="today">Today</option>
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+                <option value="custom">Custom Range</option>
+              </select>
             </div>
-            <div>
-              <label className="block text-xs text-fg-muted mb-1">To</label>
-              <input
-                type="date"
-                className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base"
-                value={filters.to}
-                onChange={(e) => updateFilter('to', e.target.value)}
-              />
-            </div>
+            {datePreset === 'custom' && (
+              <>
+                <div>
+                  <label className="block text-xs text-fg-muted mb-1">From</label>
+                  <input
+                    type="date"
+                    className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base"
+                    value={filters.from}
+                    onChange={(e) => updateFilter('from', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-fg-muted mb-1">To</label>
+                  <input
+                    type="date"
+                    className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base"
+                    value={filters.to}
+                    onChange={(e) => updateFilter('to', e.target.value)}
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-xs text-fg-muted mb-1">Search</label>
               <div className="relative">
@@ -208,19 +248,25 @@ function CampaignLogsPage() {
             <div style={{ width: '100%', height: 240 }}>
               <ResponsiveContainer>
                 <AreaChart data={aggs?.timeSeries || []}>
-                  <defs>
-                    <linearGradient id="evGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#7c4dff" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#7c4dff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis dataKey="key" tick={{ fontSize: 11 }} tickFormatter={(v) => String(v).slice(0, 10)} />
-                  <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="count" stroke="#7c4dff" fill="url(#evGrad)" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                  <XAxis dataKey="key" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatDate(v, 'YYYY-MM-DD (Date only)')} />
+                  <YAxis tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip labelFormatter={(label) => formatDate(label, 'YYYY-MM-DD (Date only)')} />
+                  <Area type="monotone" dataKey="count" stroke="#3b82f6" strokeWidth={2} fill="#3b82f6" fillOpacity={0.1} isAnimationActive={true} />
                 </AreaChart>
               </ResponsiveContainer>
+            </div>
+            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border text-sm">
+              <div>
+                <p className="text-xs text-fg-muted">Total Events</p>
+                <p className="font-semibold text-fg">{totalEvents}</p>
+              </div>
+              <div>
+                <p className="text-xs text-fg-muted">Avg / Day</p>
+                <p className="font-semibold text-fg">
+                  {aggs?.timeSeries?.length > 0 ? Math.round(totalEvents / aggs.timeSeries.length) : 0}
+                </p>
+              </div>
             </div>
           </SectionCard>
 
@@ -235,6 +281,17 @@ function CampaignLogsPage() {
                   <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
+              <span className="text-xs text-fg-muted">Top Event Types</span>
+              <div className="flex items-center flex-wrap gap-4">
+                {(aggs?.byEventType || []).slice(0, 3).map((agg) => (
+                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
+                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
+                    <span className="text-xs text-fg-muted">{agg.count} events</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </SectionCard>
 
@@ -260,6 +317,17 @@ function CampaignLogsPage() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
+            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
+              <span className="text-xs text-fg-muted">Top Statuses</span>
+              <div className="flex items-center flex-wrap gap-4">
+                {(aggs?.byStatus || []).slice(0, 3).map((agg) => (
+                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
+                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
+                    <span className="text-xs text-fg-muted">{agg.count} events</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </SectionCard>
 
           <SectionCard title="By affiliate">
@@ -273,6 +341,17 @@ function CampaignLogsPage() {
                   <Bar dataKey="count" fill="#22c55e" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
+            </div>
+            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
+              <span className="text-xs text-fg-muted">Top Affiliates</span>
+              <div className="flex items-center flex-wrap gap-4">
+                {(aggs?.byAffiliate || []).slice(0, 3).map((agg) => (
+                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
+                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
+                    <span className="text-xs text-fg-muted">{agg.count} events</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </SectionCard>
         </div>
@@ -306,7 +385,7 @@ function CampaignLogsPage() {
                     {logs.items.map((row, idx) => (
                       <tr key={`${row.visitId}-${idx}`}>
                         <td className="text-xs font-mono text-fg-muted">
-                          {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
+                          {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
                         <td className="text-xs font-medium">{row.eventType || '—'}</td>
                         <td className="text-xs">{row.pageType || '—'}</td>

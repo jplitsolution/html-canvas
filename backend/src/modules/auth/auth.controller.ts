@@ -16,6 +16,7 @@ import {
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { User } from '../users/entities/user.entity';
@@ -52,5 +53,24 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized token' })
   getProfile(@CurrentUser() user: User) {
     return user;
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Change user password' })
+  @ApiResponse({ status: 200, description: 'Password changed successfully' })
+  @ApiResponse({ status: 401, description: 'Unauthorized or invalid current password' })
+  async changePassword(
+    @CurrentUser() user: User,
+    @Body() changePasswordDto: ChangePasswordDto,
+  ) {
+    await this.authService.changePassword(
+      user.id,
+      changePasswordDto.oldPassword,
+      changePasswordDto.newPassword,
+    );
+    return { message: 'Password changed successfully' };
   }
 }

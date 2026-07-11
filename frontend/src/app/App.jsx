@@ -13,6 +13,7 @@ import SubscriptionPage from '../pages/SubscriptionPage'
 import CampaignLogsPage from '../pages/CampaignLogsPage'
 import VendorsPage from '../pages/VendorsPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
+import ProfilePage from '../pages/ProfilePage'
 
 function App() {
   return (
@@ -39,6 +40,14 @@ function App() {
                 element={
                   <RequireAuth>
                     <VendorsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/profile"
+                element={
+                  <RequireAuth>
+                    <ProfilePage />
                   </RequireAuth>
                 }
               />

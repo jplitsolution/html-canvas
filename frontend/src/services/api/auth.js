@@ -23,6 +23,14 @@ export async function logout() {
   setAuthToken(null)
 }
 
+export const changePassword = async (data) => {
+  const result = await apiClient('/auth/change-password', {
+    method: 'POST',
+    body: data,
+  })
+  return result
+}
+
 export async function getCurrentUser() {
   if (!getAuthToken()) return null
   try {

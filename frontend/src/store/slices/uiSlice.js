@@ -1,6 +1,8 @@
 export function createUiSlice(set, get) {
   return {
     previewMode: 'desktop',
+    dateFormat: JSON.parse(localStorage.getItem('templatecraft_settings') || '{}').dateFormat || 'YYYY-MM-DD',
+    timezone: JSON.parse(localStorage.getItem('templatecraft_settings') || '{}').timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
     loading: false,
     saving: false,
     error: null,
@@ -8,6 +10,8 @@ export function createUiSlice(set, get) {
     srAnnouncement: '',
 
     setPreviewMode: (mode) => set({ previewMode: mode }),
+    setDateFormat: (format) => set({ dateFormat: format }),
+    setTimezone: (tz) => set({ timezone: tz }),
 
     addToast: (message, type = 'info') => {
       const id = crypto.randomUUID()

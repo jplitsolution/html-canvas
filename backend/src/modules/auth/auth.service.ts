@@ -46,6 +46,26 @@ export class AuthService {
     return result;
   }
 
+  async changePassword(userId: number, oldPassword: string, newPassword: string): Promise<void> {
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const userWithPassword = await this.usersService.findByEmailWithPassword(user.email);
+    if (!userWithPassword || !userWithPassword.password) {
+      throw new UnauthorizedException('Invalid current password');
+    }
+    const isMatch = await bcrypt.compare(oldPassword, userWithPassword.password);
+    if (!isMatch) {
+      throw new UnauthorizedException('Invalid current password');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    await this.usersService.updatePassword(userId, hashedPassword);
+  }
+
   login(user: Omit<User, 'password'>) {
     const payload = { email: user.email, sub: user.id };
     return {

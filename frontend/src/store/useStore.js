@@ -27,7 +27,18 @@ function getInitialMetrics() {
   }
 }
 
+const SETTINGS_KEY = 'templatecraft_settings'
+function getInitialSettings() {
+  try {
+    const data = localStorage.getItem(SETTINGS_KEY)
+    return data ? JSON.parse(data) : {}
+  } catch {
+    return {}
+  }
+}
+
 const initialMetrics = getInitialMetrics()
+const initialSettings = getInitialSettings()
 
 const useStore = create((set, get) => ({
   ...createCampaignSlice(set, get),
@@ -45,5 +56,14 @@ const useStore = create((set, get) => ({
     }
   },
 }))
+
+useStore.subscribe((state, prevState) => {
+  if (state.dateFormat !== prevState.dateFormat || state.timezone !== prevState.timezone) {
+    const settings = getInitialSettings()
+    settings.dateFormat = state.dateFormat
+    settings.timezone = state.timezone
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
+  }
+})
 
 export default useStore

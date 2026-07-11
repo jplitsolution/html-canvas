@@ -27,9 +27,11 @@ function buildQuery(params = {}) {
 }
 
 export async function searchCampaignLogs(campaignId, params = {}) {
-  return apiClient(`/logs/campaign/${campaignId}${buildQuery(params)}`)
+  const url = campaignId === 'all' ? `/logs/all` : `/logs/campaign/${campaignId}`
+  return apiClient(`${url}${buildQuery(params)}`)
 }
 
 export async function getCampaignLogAggregations(campaignId, params = {}) {
-  return apiClient(`/logs/campaign/${campaignId}/aggregations${buildQuery(params)}`)
+  const url = campaignId === 'all' ? `/logs/all/aggregations` : `/logs/campaign/${campaignId}/aggregations`
+  return apiClient(`${url}${buildQuery(params)}`)
 }

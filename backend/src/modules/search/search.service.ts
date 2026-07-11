@@ -22,7 +22,7 @@ export interface CampaignEventDoc {
 }
 
 export interface LogSearchParams {
-  campaignId: number;
+  campaignId: number | number[];
   from?: string;
   to?: string;
   eventType?: string;
@@ -133,9 +133,18 @@ export class SearchService implements OnModuleInit {
   }
 
   private buildQuery(params: LogSearchParams): Record<string, unknown> {
-    const filter: Array<Record<string, unknown>> = [
-      { term: { campaignId: params.campaignId } },
-    ];
+    const filter: Array<Record<string, unknown>> = [];
+    if (params.campaignId !== undefined) {
+      if (Array.isArray(params.campaignId)) {
+        if (params.campaignId.length > 0) {
+          filter.push({ terms: { campaignId: params.campaignId } });
+        } else {
+          filter.push({ terms: { campaignId: [-1] } }); // Match nothing if empty array
+        }
+      } else {
+        filter.push({ term: { campaignId: params.campaignId } });
+      }
+    }
     if (params.eventType) filter.push({ term: { eventType: params.eventType } });
     if (params.vendorId) filter.push({ term: { vendorId: params.vendorId } });
     if (params.affiliateId)
