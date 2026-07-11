@@ -1,13 +1,15 @@
 /**
  * PM2 process definitions for AlmaLinux production.
- * Started by ./deploy.sh — do not edit ports here; set DEPLOY_* in deploy.env.
+ * Each app runs start.sh which builds first — if build fails, PM2 won't start.
+ * Ports: set DEPLOY_* in deploy.env.
  */
 module.exports = {
   apps: [
     {
       name: 'templatecraft-api',
       cwd: './backend',
-      script: 'dist/main.js',
+      script: 'start.sh',
+      interpreter: '/bin/bash',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -20,8 +22,8 @@ module.exports = {
     {
       name: 'templatecraft-web',
       cwd: './frontend',
-      script: 'node_modules/.bin/serve',
-      args: `-s dist -l ${process.env.FRONTEND_PORT || 8080}`,
+      script: 'start.sh',
+      interpreter: '/bin/bash',
       instances: 1,
       exec_mode: 'fork',
       autorestart: true,
@@ -29,6 +31,7 @@ module.exports = {
       min_uptime: '10s',
       env: {
         NODE_ENV: 'production',
+        FRONTEND_PORT: process.env.FRONTEND_PORT || '8080',
       },
     },
   ],
