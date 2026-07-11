@@ -1,15 +1,18 @@
 import type { Editor } from 'grapesjs'
 import type { Component } from 'grapesjs'
-import { transformReactComponentsInHtml } from './styleUtils'
+import { transformReactComponentsInHtml, encodeNonAscii } from './styleUtils'
 
 export function insertBlock(editor: Editor, blockId: string) {
   const block = editor.BlockManager.get(blockId)
   if (!block) return
 
-  const content = block.get('content')
+  const rawContent = block.get('content')
+  const content = typeof rawContent === 'function' ? rawContent() : rawContent
   const wrapper = editor.getWrapper()
   const selected = editor.getSelected()
   const target = selected?.parent() || wrapper
+
+  if (!content) return
 
   if (target && selected && selected.parent() === target) {
     target.append(content, { at: selected.index() + 1 })
@@ -21,11 +24,18 @@ export function insertBlock(editor: Editor, blockId: string) {
 }
 
 export function applyStarterHtml(editor: Editor, html: string, css = '') {
+  // Encode non-ASCII characters (emoji ⚡ 🎨 ☰ etc.) to HTML numeric entities
+  // BEFORE passing to GrapesJS. Even though we skip our own DOMParser, GrapesJS
+  // internally re-parses the HTML string and can default to Latin-1, corrupting
+  // multi-byte chars (showing âšœ â¡ etc.). Entity-encoding keeps them ASCII-safe
+  // so they survive the internal parse and still render correctly in the canvas.
+  const safeHtml = encodeNonAscii(html)
   if (css) editor.setStyle(css)
-  const compiledHtml = transformReactComponentsInHtml(html)
-  editor.setComponents(compiledHtml)
+  editor.setComponents(safeHtml)
   editor.UndoManager.clear()
 }
+
+
 
 export function getComponentKind(component: Component | null): string {
   if (!component) return 'none'

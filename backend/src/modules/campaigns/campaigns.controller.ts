@@ -89,7 +89,7 @@ export class CampaignsController {
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: User,
   ) {
-    return this.campaignsService.applyDefaultTemplates(id, user.id, true);
+    return this.campaignsService.applyDefaultTemplates(id, user.id, false);
   }
 
   @Get(':id/pages/:pageType')

@@ -154,9 +154,12 @@ function CampaignDetailPage() {
 
   const handleApplyDefaults = async () => {
     if (!campaign) return
+    const ok = window.confirm("Are you sure you want to reset all pages to the default templates? This will overwrite your current progress on all pages.")
+    if (!ok) return
     setApplyingDefaults(true)
     try {
       await applyCampaignDefaults(campaign.id)
+      await loadCampaign(campaign.id, true)
     } finally {
       setApplyingDefaults(false)
     }
@@ -189,12 +192,6 @@ function CampaignDetailPage() {
 
   const pageActions = (
     <>
-      {hasEmptyPages && (
-        <Button variant="outline" size="sm" onClick={handleApplyDefaults} disabled={applyingDefaults}>
-          <Sparkles className="w-4 h-4" />
-          {applyingDefaults ? 'Applying...' : 'Use defaults'}
-        </Button>
-      )}
       <Button variant="outline" size="sm" onClick={() => setShowApiConfig(true)}>
         <Settings className="w-4 h-4" />
         API settings

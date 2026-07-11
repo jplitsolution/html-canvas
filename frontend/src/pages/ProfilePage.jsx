@@ -52,22 +52,22 @@ export default function ProfilePage() {
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto p-8 animate-fade-in">
-        <h1 className="text-2xl font-semibold text-fg mb-8">Profile Settings</h1>
+      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 animate-fade-in">
+        <h1 className="text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2 mb-8">Profile Settings</h1>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* General Settings */}
-          <section className="bg-bg-elevated border border-border rounded-xl p-6 shadow-sm h-fit">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded bg-accent-muted text-accent flex items-center justify-center">
+          <section className="bg-white border border-gray-100 rounded-2xl shadow-xs overflow-hidden hover:border-gray-200/80 transition-all duration-300 h-fit">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 bg-gray-50/30 mb-6">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-500 flex items-center justify-center">
                 <Settings className="w-4 h-4" />
               </div>
-              <h2 className="text-lg font-medium text-fg">Preferences</h2>
+              <h2 className="text-sm font-bold text-gray-800">Preferences</h2>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-6 px-5 pb-5">
               <div>
-                <label className="block text-sm font-medium text-fg mb-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">
                   Date Format
                 </label>
                 <select
@@ -76,7 +76,7 @@ export default function ProfilePage() {
                     setDateFormat(e.target.value)
                     addToast('Date format updated', 'success')
                   }}
-                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                 >
                   {dateFormats.map((fmt) => (
                     <option key={fmt.value} value={fmt.value}>
@@ -90,7 +90,7 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-fg mb-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">
                   Timezone
                 </label>
                 <select
@@ -99,7 +99,7 @@ export default function ProfilePage() {
                     setTimezone(e.target.value)
                     addToast('Timezone updated', 'success')
                   }}
-                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
@@ -115,17 +115,17 @@ export default function ProfilePage() {
           </section>
 
           {/* Security */}
-          <section className="bg-bg-elevated border border-border rounded-xl p-6 shadow-sm h-fit">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded bg-accent-muted text-accent flex items-center justify-center">
+          <section className="bg-white border border-gray-100 rounded-2xl shadow-xs overflow-hidden hover:border-gray-200/80 transition-all duration-300 h-fit">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3 bg-gray-50/30 mb-6">
+              <div className="w-8 h-8 rounded-xl bg-indigo-50 border border-indigo-100 text-indigo-500 flex items-center justify-center">
                 <Shield className="w-4 h-4" />
               </div>
-              <h2 className="text-lg font-medium text-fg">Security</h2>
+              <h2 className="text-sm font-bold text-gray-800">Security</h2>
             </div>
             
-            <form onSubmit={handlePasswordChange} className="space-y-4">
+            <form onSubmit={handlePasswordChange} className="space-y-6 px-5 pb-5">
               <div>
-                <label className="block text-sm font-medium text-fg mb-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">
                   Current Password
                 </label>
                 <input
@@ -133,12 +133,12 @@ export default function ProfilePage() {
                   required
                   value={passwordForm.oldPassword}
                   onChange={(e) => setPasswordForm((s) => ({ ...s, oldPassword: e.target.value }))}
-                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                   placeholder="••••••••"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-fg mb-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">
                   New Password
                 </label>
                 <input
@@ -146,12 +146,12 @@ export default function ProfilePage() {
                   required
                   value={passwordForm.newPassword}
                   onChange={(e) => setPasswordForm((s) => ({ ...s, newPassword: e.target.value }))}
-                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                   placeholder="••••••••"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-fg mb-2">
+                <label className="block text-xs font-bold text-gray-500 mb-1.5">
                   Confirm New Password
                 </label>
                 <input
@@ -159,7 +159,7 @@ export default function ProfilePage() {
                   required
                   value={passwordForm.confirmPassword}
                   onChange={(e) => setPasswordForm((s) => ({ ...s, confirmPassword: e.target.value }))}
-                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg focus:outline-none focus:ring-2 focus:ring-accent/20 focus:border-accent transition-colors"
+                  className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                   placeholder="••••••••"
                 />
               </div>

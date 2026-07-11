@@ -2,14 +2,36 @@ import type { Editor } from 'grapesjs';
 import useStore from '../../store/useStore';
 
 /**
+ * Encodes every non-ASCII character (emoji, symbols, multi-byte unicode) in an
+ * HTML string to its numeric HTML entity form (e.g. ⚡ → &#x26A1;).
+ *
+ * GrapesJS re-parses HTML strings through its own internal parser which can
+ * default to Latin-1 and corrupt multi-byte chars. Encoding them to ASCII-safe
+ * entities prevents this entirely while keeping the visual output identical.
+ */
+export function encodeNonAscii(html: string): string {
+  // eslint-disable-next-line no-control-regex
+  return html.replace(/[^\x00-\x7F]/gu, (char) => {
+    const cp = char.codePointAt(0);
+    return cp !== undefined ? `&#x${cp.toString(16).toUpperCase()};` : char;
+  });
+}
+
+/**
  * Transforms React component tags (<Button>, <Badge>, <Card>, etc.)
  * in template HTML into styled standard HTML elements.
  */
 export function transformReactComponentsInHtml(html: string): string {
   if (!html?.trim()) return html;
 
+  // Prefix meta charset so DOMParser treats the string as UTF-8.
+  // Without this, DOMParser (text/html mode) defaults to Latin-1 and
+  // corrupts multi-byte characters like emoji (⚜ ⚡ ✓ ✗ ⚠ etc.).
   const parser = new DOMParser();
-  const doc = parser.parseFromString(html, 'text/html');
+  const doc = parser.parseFromString(
+    `<html><head><meta charset="utf-8"></head><body>${html}</body></html>`,
+    'text/html'
+  );
 
   // Helpers for mapping components
   const mapButton = (el: Element) => {

@@ -148,17 +148,17 @@ start_elasticsearch() {
 build_backend() {
   log "Backend install + build..."
   cd "$BACKEND_DIR"
-  npm install
+  HUSKY=0 npm install
   npm run build
 }
 
 build_frontend() {
   log "Frontend install + build..."
   cd "$FRONTEND_DIR"
-  npm install
+  HUSKY=0 npm install
   # serve package — PM2 static files ke liye
   if ! npm ls serve >/dev/null 2>&1; then
-    npm install --save-dev serve
+    HUSKY=0 npm install --save-dev serve
   fi
   npm run build
 }
