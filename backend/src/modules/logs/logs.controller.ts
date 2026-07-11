@@ -26,6 +26,7 @@ export class LogsController {
   private buildParams(campaignId: number | number[], query: Record<string, string>) {
     return {
       campaignId,
+      visitId: query.visitId ? Number(query.visitId) : undefined,
       from: query.from,
       to: query.to,
       eventType: query.eventType,

@@ -4,7 +4,25 @@ This document tracks all version additions, database schema updates, and feature
 
 ---
 
-## [2.0.0] - Phase 2 (Current Release)
+## [2.1.0] - Phase 2 (Profile, Security, & Deployment Upgrades)
+
+### Added
+- **Admin Profile & Personalization**:
+  - Profile Page (`ProfilePage.jsx`) enabling name/email updates and password change.
+  - Timezone & Date Formatting Engine: Select local timezone and format preferences, formatted runtime logs dates in `CampaignLogsPage.jsx` using new `date.js` utility.
+  - Zustand UI store slice (`uiSlice.js`) persisting UI preferences like timezone.
+  - **Dynamic Logs Redirection**: Added a Logs shortcut button in the header and under Quick actions on `CampaignDetailPage.jsx` to navigate directly to `CampaignLogsPage.jsx` with that specific campaign selected using `useSearchParams`.
+  - **User Session Flow Timeline**: Clicking on any log row on the `Campaign Logs` dashboard opens a visual vertical chronological timeline modal displaying the journey of that specific visitor session (`visitId`).
+  - **Quick Column Filters**: Clicking on table cell values (Event Name, Vendor code, Affiliate code, Click ID, or MSISDN) instantly filters the telemetry dashboard by that specific cell value without opening the timeline modal (via click event propagation control).
+- **Deploy & PM2 Scripts**:
+  - `backend/start.sh` and `frontend/start.sh` to run clean builds before execution under PM2 process definitions.
+  - PM2 configuration in `ecosystem.config.cjs` mapping bash start wrappers.
+  - Automagic full-stack deploy script `deploy.sh`.
+
+### Security
+- **Elasticsearch Localhost Binding**: Bound Elasticsearch port `9200` to `127.0.0.1` in `docker-compose.yml` to prevent public ports exposure and mitigate ransomware attack vectors.
+
+## [2.0.0] - Phase 2 (Core Upgrades)
 
 ### Added
 - **OTP Generation & Verification Subsystem**:

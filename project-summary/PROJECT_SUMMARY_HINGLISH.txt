@@ -24,6 +24,9 @@ PROJECT ME KYA KYA COMPLETE HO GAYA HAI?
 6. Click Attribution & Partners Module: Vendors aur Affiliates tracking links check resolve karne ka mechanism taiyar hai.
 7. Elasticsearch Logging System: Funnel transactions events backend se direct Elasticsearch index me ingest hote hain, jo quick logs retrieval aur query filter dashboard facilitate karta hai.
 8. OTP Verification Subsystem: Custom rate limits, resend delay locks, twilio/msg91/partner providers adapters, aur UI timer components fully wired aur verified hain.
+9. Admin Profile, Settings & Dynamic Logs: Admin apni details update kar sakta hai, password change kar sakta hai aur local Timezone customize kar sakta hai. `CampaignLogsPage.jsx` ke logs select kiye timezone ke basis par format hote hain, aur `CampaignDetailPage.jsx` par header aur quick actions mein direct campaign logs redirection button link kiya gaya hai jo automatically us campaign ke logs filter karke show karta hai. Saath hi, logs list par click karne se **User Session Flow Timeline Modal** khulta hai jo visitor journey show karta hai, aur table columns (Event Name, Vendor, Affiliate, Click ID, aur MSISDN) par click karke direct interactive filtering active ho jati hai.
+10. Production Deployment & PM2 Setup: `deploy.sh` script build aur setup automate karti hai. PM2 `ecosystem.config.cjs` aur backend/frontend `start.sh` wrapper scripts use hote hain taaki deploy se pehle dynamic builds check ho sakein.
+11. Secure Docker Services: Elasticsearch public port ko Docker compose file me localhost `127.0.0.1` par bind karke secure kiya gaya hai taaki ransomware risks protect ho sakein.
 
 ------------------------------------------------------------------------
 ABHI KYA PENDING HAI?
@@ -34,13 +37,13 @@ ABHI KYA PENDING HAI?
 ------------------------------------------------------------------------
 BACKEND ME KYA HUA HAI?
 ------------------------------------------------------------------------
-Backend ko NestJS framework ka use karke banaya gaya hai. Data access TypeORM ORM ke dynamic adapters handle karte hain. Elasticsearch indexing `@elastic/elasticsearch` package ke throw client connection verify karta hai. APIs response envelope standardization global Interceptors compile karte hain.
+Backend ko NestJS framework ka use karke banaya gaya hai. Data access TypeORM ORM ke dynamic adapters handle karte hain. Elasticsearch indexing `@elastic/elasticsearch` package ke throw client connection verify karta hai. APIs response envelope standardization global Interceptors compile karte hain. Ab Profile profile updates aur Password change (`change-password.dto.ts`) routes add kiye gaye hain.
 
 ------------------------------------------------------------------------
 FRONTEND ME KYA HUA HAI?
 ------------------------------------------------------------------------
 Frontend React 19 aur Vite compiler par based hai. Layout styling Tailwind CSS v4 use karti hai. Zustand global states and routing context manage karta hai.
-Naye screens like `VendorsPage.jsx` (vendors/affiliates mapping), `FlowBuilderPage.jsx` (interactive flow chart logic designer), aur `CampaignLogsPage.jsx` (ES query builder and logs viewer) add ho gaye hain.
+Naye screens like `VendorsPage.jsx` (vendors/affiliates mapping), `FlowBuilderPage.jsx` (interactive flow chart logic designer), `CampaignLogsPage.jsx` (ES query builder and logs viewer with user selected timezone formatting) aur `ProfilePage.jsx` (admin profile aur credentials setup manager) add ho gaye hain.
 
 ------------------------------------------------------------------------
 DATABASE ME KYA HUA HAI?

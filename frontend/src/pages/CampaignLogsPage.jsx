@@ -36,11 +36,13 @@ import Button from '../components/ui/Button'
 import useStore from '../store/useStore'
 import { formatDate } from '../utils/date'
 import { listCampaigns } from '../services/api/campaigns'
+import { useSearchParams } from 'react-router-dom'
 import {
   getLogsStatus,
   searchCampaignLogs,
   getCampaignLogAggregations,
 } from '../services/api/logs'
+import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
@@ -94,17 +96,24 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-function getEventBadgeClass(type) {
+const getEventBadgeClass = (type) => {
   const t = String(type).toUpperCase();
   if (t.includes('SUCCESS')) return 'bg-emerald-50 text-emerald-700 border-emerald-200/50';
   if (t.includes('FAILED') || t.includes('LIMIT') || t.includes('BRUTE')) return 'bg-rose-50 text-rose-700 border-rose-200/50';
   if (t.includes('OTP_VERIFY')) return 'bg-violet-50 text-violet-700 border-violet-200/50';
   if (t.includes('OTP_SEND') || t.includes('OTP_VIEW')) return 'bg-amber-50 text-amber-700 border-amber-200/50';
   if (t.includes('VISIT')) return 'bg-blue-50 text-blue-700 border-blue-200/50';
+   if (t.includes('CONFIRM_VIEW'))
+    return 'bg-indigo-50 text-indigo-700 border-indigo-200/50';
+    if (t.includes('HOME_VIEW'))
+    return 'bg-cyan-50 text-cyan-700 border-cyan-200';
+    if (t.includes('SUBSCRIBE_CLICK'))
+    return 'bg-violet-50 text-violet-700 border-violet-200/50';
   return 'bg-gray-50 text-gray-700 border-gray-200/50';
+  
 }
 
-function getPageBadgeClass(page) {
+const getPageBadgeClass = (page) => {
   const p = String(page).toUpperCase();
   if (p.includes('THANK') || p.includes('SUCCESS')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
   if (p.includes('CONFIRM')) return 'bg-indigo-50 text-indigo-600 border-indigo-100';
@@ -117,8 +126,14 @@ function getPageBadgeClass(page) {
 
 function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
+  const [searchParams] = useSearchParams()
+  const campaignIdParam = searchParams.get('campaignId')
+
+  const [timelineVisitId, setTimelineVisitId] = useState(null)
+  const [isTimelineOpen, setIsTimelineOpen] = useState(false)
+
   const [campaigns, setCampaigns] = useState([])
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedId] = useState(campaignIdParam || 'all')
   const [esEnabled, setEsEnabled] = useState(true)
 
   const [filters, setFilters] = useState({ eventType: '', clickId: '', q: '', from: '', to: '' })
@@ -128,6 +143,14 @@ function CampaignLogsPage() {
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
   const [datePreset, setDatePreset] = useState('custom')
+
+  useEffect(() => {
+    if (campaignIdParam) {
+      setSelectedId(campaignIdParam)
+    } else {
+      setSelectedId('all')
+    }
+  }, [campaignIdParam])
 
   useEffect(() => {
     if (datePreset === 'custom') return
@@ -156,7 +179,6 @@ function CampaignLogsPage() {
     listCampaigns()
       .then((res) => {
         setCampaigns(res || [])
-        setSelectedId('all')
       })
       .catch((err) => addToast(err.message || 'Failed to load campaigns', 'error'))
   }, [addToast])
@@ -485,22 +507,36 @@ function CampaignLogsPage() {
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Affiliate</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID ID</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
-                      <tr key={`${row.visitId}-${idx}`} className="hover:bg-gray-50/80 transition-colors duration-150">
+                      <tr
+                        key={`${row.visitId}-${idx}`}
+                        className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
+                        onClick={() => {
+                          setTimelineVisitId(row.visitId)
+                          setIsTimelineOpen(true)
+                        }}
+                      >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs font-medium">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
+                        <td className="px-4 py-3 text-xs font-medium" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.eventType) updateFilter('eventType', row.eventType)
+                        }}>
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border hover:underline ${getEventBadgeClass(row.eventType)}`} title="Click to filter by event type">
                             {row.eventType || '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.pageType) updateFilter('q', row.pageType)
+                        }}>
                           {row.pageType ? (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${getPageBadgeClass(row.pageType)}`}>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border hover:underline ${getPageBadgeClass(row.pageType)}`} title="Click to search by page">
                               {row.pageType}
                             </span>
                           ) : '—'}
@@ -508,26 +544,62 @@ function CampaignLogsPage() {
                         <td className="px-4 py-3 text-xs text-gray-600 font-medium">
                           {row.status || '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700">
+                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
+                          e.stopPropagation()
+                          const val = row.vidRaw || String(row.vendorId || '')
+                          if (val) updateFilter('q', val)
+                        }}>
                           {row.vidRaw || row.vendorId ? (
-                            <span className="font-semibold text-gray-800">{row.vidRaw || row.vendorId}</span>
+                            <span className="font-semibold text-gray-800 hover:text-indigo-650 hover:underline" title="Click to search by vendor">
+                              {row.vidRaw || row.vendorId}
+                            </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700">
+                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
+                          e.stopPropagation()
+                          const val = row.affRaw || String(row.affiliateId || '')
+                          if (val) updateFilter('q', val)
+                        }}>
                           {row.affRaw || row.affiliateId ? (
-                            <span className="font-semibold text-gray-800">{row.affRaw || row.affiliateId}</span>
+                            <span className="font-semibold text-gray-800 hover:text-indigo-650 hover:underline" title="Click to search by affiliate">
+                              {row.affRaw || row.affiliateId}
+                            </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap">
-                          {row.clickId || <span className="text-gray-300">—</span>}
+                        <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.clickId) updateFilter('clickId', row.clickId)
+                        }}>
+                          {row.clickId ? (
+                            <span className="hover:underline" title="Click to filter by click ID">
+                              {row.clickId}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.phoneMasked) updateFilter('q', row.phoneMasked)
+                        }}>
                           {row.phoneMasked ? (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 hover:text-indigo-650 hover:underline" title="Click to search by phone">
                               <Shield className="w-3 h-3 text-emerald-500" />
                               {row.phoneMasked}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              setTimelineVisitId(row.visitId)
+                              setIsTimelineOpen(true)
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-bold border-indigo-100 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 px-2 py-1 rounded-lg"
+                          >
+                            <Activity className="w-3.5 h-3.5" />
+                            Timeline
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -567,6 +639,16 @@ function CampaignLogsPage() {
           )}
         </SectionCard>
       </div>
+
+      <SessionTimelineModal
+        isOpen={isTimelineOpen}
+        onClose={() => {
+          setIsTimelineOpen(false)
+          setTimelineVisitId(null)
+        }}
+        visitId={timelineVisitId}
+        campaignId={selectedId}
+      />
     </AppShell>
   )
 }

@@ -49,4 +49,7 @@ Ensure that you do not query tables that do not exist:
 2. [x] **API Response Security**: Remove the plaintext `otp` parameter returned by the `/otp/send` controller.
 3. [x] **Public API Throttling**: Configure guards on public routes (`/flow/*`, `/otp/*`) to prevent spamming and brute-force attempts.
 4. [x] **Obsolete Documentation Cleanup**: Review the project root directory and update references to direct `Subscriptions` and `Blocklist` tables.
-5. **Database Archiving**: Add a cron job to archive or clean up old telemetry records from the `visits` and `visit_events` tables.
+5. [x] **Elasticsearch Security**: Bind Elasticsearch port 9200 to localhost only (`127.0.0.1:9200`) in Docker configurations to prevent ransomware attacks.
+6. [x] **Admin Personalization**: Build `ProfilePage.jsx` and customize log dates to render with local timezones.
+7. [x] **Production PM2 Wrappers**: Configure PM2 ecosystem and start script wrappers to run build checks in deploy processes.
+8. [ ] **Database Archiving**: Add a cron job to archive or clean up old telemetry records from the `visits` and `visit_events` tables.

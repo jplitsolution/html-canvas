@@ -200,6 +200,10 @@ function CampaignDetailPage() {
         <ExternalLink className="w-4 h-4" />
         Preview
       </Button>
+      <Button variant="outline" size="sm" onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}>
+        <FileText className="w-4 h-4" />
+        Logs
+      </Button>
       <Button
         variant={campaign.active ? 'outline' : 'primary'}
         size="sm"
@@ -473,9 +477,13 @@ function CampaignDetailPage() {
             <div className="surface-card p-5">
               <h3 className="text-sm font-semibold text-fg mb-3">Quick actions</h3>
               <div className="space-y-2">
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}>
+                  <FileText className="w-4 h-4" />
+                  Campaign logs
+                </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowActivityLogs(true)}>
                   <FileText className="w-4 h-4" />
-                  Activity logs
+                  Activity logs (quick view)
                 </Button>
                 <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowApiConfig(true)}>
                   <Settings className="w-4 h-4" />

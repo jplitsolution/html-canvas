@@ -25,6 +25,7 @@ export interface CampaignEventDoc {
 
 export interface LogSearchParams {
   campaignId: number | number[];
+  visitId?: number;
   from?: string;
   to?: string;
   eventType?: string;
@@ -150,6 +151,9 @@ export class SearchService implements OnModuleInit {
       } else {
         filter.push({ term: { campaignId: params.campaignId } });
       }
+    }
+    if (params.visitId !== undefined) {
+      filter.push({ term: { visitId: params.visitId } });
     }
     if (params.eventType) filter.push({ term: { eventType: params.eventType } });
     if (params.vendorId) filter.push({ term: { vendorId: params.vendorId } });
@@ -277,9 +281,21 @@ export class SearchService implements OnModuleInit {
   }
 
   private applyDbFilters(queryBuilder: any, params: LogSearchParams): void {
-    queryBuilder.where('visit.campaignId = :campaignId', {
-      campaignId: params.campaignId,
-    });
+    if (Array.isArray(params.campaignId)) {
+      queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
+        campaignIds: params.campaignId.length > 0 ? params.campaignId : [-1],
+      });
+    } else {
+      queryBuilder.where('visit.campaignId = :campaignId', {
+        campaignId: params.campaignId,
+      });
+    }
+
+    if (params.visitId !== undefined) {
+      queryBuilder.andWhere('event.visitId = :visitId', {
+        visitId: params.visitId,
+      });
+    }
 
     if (params.eventType) {
       queryBuilder.andWhere('event.eventType = :eventType', {

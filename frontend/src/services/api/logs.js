@@ -16,6 +16,7 @@ function buildQuery(params = {}) {
     'q',
     'page',
     'size',
+    'visitId',
   ]
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
