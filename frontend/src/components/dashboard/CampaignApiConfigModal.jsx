@@ -2,14 +2,17 @@ import { memo, useEffect, useState } from 'react'
 import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
+import useStore from '../../store/useStore'
 import {
-  getCampaignApiConfig,
-  saveCampaignApiConfig,
   testSendOtp,
   checkOtpProviderHealth,
 } from '../../services/api/campaigns'
 
 function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
+  const loadCampaignApiConfig = useStore((s) => s.loadCampaignApiConfig)
+  const saveCampaignApiConfig = useStore((s) => s.saveCampaignApiConfig)
+  const addToast = useStore((s) => s.addToast)
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('billing') // 'billing', 'otp'
@@ -40,7 +43,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     setTestResult('')
     setTestPhone('')
     
-    getCampaignApiConfig(campaignId)
+    loadCampaignApiConfig(campaignId)
       .then((config) => {
         setForm({
           subscriptionApi: config.subscriptionApi || '',
@@ -63,8 +66,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           }
         }
       })
+      .catch((err) => addToast(err.message || 'Failed to load API config', 'error'))
       .finally(() => setLoading(false))
-  }, [isOpen, campaignId])
+  }, [isOpen, campaignId, loadCampaignApiConfig, addToast])
 
   const getActiveConfig = () => {
     if (otpProvider === 'twilio') return twilioConfig
@@ -86,8 +90,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
       }
       await saveCampaignApiConfig(campaignId, payload)
       onClose()
-    } catch (err) {
-      alert(err.message || 'Failed to save API config')
+    } catch {
+      // toast in slice
     } finally {
       setSaving(false)
     }

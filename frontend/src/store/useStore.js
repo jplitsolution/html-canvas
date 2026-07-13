@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createCampaignSlice } from './slices/campaignSlice'
+import { createPartnersSlice } from './slices/partnersSlice'
 import { createUiSlice } from './slices/uiSlice'
 
 const METRICS_KEY = 'templatecraft_metrics'
@@ -42,6 +43,7 @@ const initialSettings = getInitialSettings()
 
 const useStore = create((set, get) => ({
   ...createCampaignSlice(set, get),
+  ...createPartnersSlice(set, get),
   ...createUiSlice(set, get),
 
   saveCount: initialMetrics.saveCount || 0,

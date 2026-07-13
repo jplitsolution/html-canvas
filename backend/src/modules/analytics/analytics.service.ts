@@ -129,6 +129,15 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
+  async getVisit(id: number): Promise<Visit | null> {
+    if (!id) return null;
+    const cached = this.visitCache.get(`visit:${id}`);
+    if (cached) return cached;
+    const visit = await this.visitRepository.findOne({ where: { id } });
+    if (visit) this.visitCache.set(`visit:${id}`, visit);
+    return visit;
+  }
+
   async updateVisit(
     id: number,
     status: VisitStatus,

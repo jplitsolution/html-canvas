@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
-import { resolvePhoneFromUrl, resolvePhoneNumber } from '../services/flow/resolvePhoneNumber'
+import { resolvePhoneFromUrl, resolvePhoneNumber, persistPhone } from '../services/flow/resolvePhoneNumber'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
 import { trackEvent } from '../utils/analytics'
@@ -71,12 +71,23 @@ function syncPackPicker(shadow, selectedPack) {
   })
 }
 
+/** Fill empty {{phone}} slots on CONFIRM / thank-you style pages. */
+function syncPhoneDisplay(shadow, phone) {
+  if (!shadow || !phone) return
+  shadow.querySelectorAll('.flow-info-value').forEach((el) => {
+    const text = (el.textContent || '').trim()
+    if (!text || text === '{{phone}}') {
+      el.textContent = phone
+    }
+  })
+}
+
 function getSelectedPackFromShadow(shadow) {
   const selected = shadow.querySelector('[data-pack].flow-pack-selected')
   return normalizePack(selected?.getAttribute('data-pack'))
 }
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -107,64 +118,12 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
   } catch (e) {}
   let resendAttempts = initialResendAttempts
 
-  // Inject Country Code selector dynamically if not present in shadow DOM
-  let countryCodeSelect = shadow.querySelector('[data-otp-field="country-code"], select.country-code-select')
-  if (phoneInput && !countryCodeSelect) {
-    const container = document.createElement('div')
-    container.className = 'country-code-container'
-    container.style.display = 'inline-flex'
-    container.style.alignItems = 'center'
-    container.style.gap = '8px'
-    container.style.width = '100%'
-    container.style.marginBottom = '12px'
-
-    countryCodeSelect = document.createElement('select')
-    countryCodeSelect.className = 'country-code-select'
-    countryCodeSelect.style.padding = '8px 8px'
-    countryCodeSelect.style.width = '95px'
-    countryCodeSelect.style.borderRadius = '8px'
-    countryCodeSelect.style.border = '1px solid var(--border, #d1d5db)'
-    countryCodeSelect.style.backgroundColor = 'var(--bg-elevated, #ffffff)'
-    countryCodeSelect.style.color = 'var(--fg, #1f2937)'
-    countryCodeSelect.style.fontSize = '14px'
-    countryCodeSelect.style.fontWeight = '500'
-    countryCodeSelect.style.cursor = 'pointer'
-
-    const codes = [
-      { code: '91', country: '🇮🇳 +91' },
-      { code: '966', country: '🇸🇦 +966' },
-      { code: '971', country: '🇦🇪 +971' },
-      { code: '965', country: '🇰🇼 +965' },
-      { code: '973', country: '🇧🇭 +973' },
-      { code: '968', country: '🇴🇲 +968' },
-    ]
-    codes.forEach(c => {
-      const opt = document.createElement('option')
-      opt.value = c.code
-      opt.textContent = c.country
-      countryCodeSelect.appendChild(opt)
-    })
-
-    phoneInput.parentNode.insertBefore(container, phoneInput)
-    container.appendChild(countryCodeSelect)
-    container.appendChild(phoneInput)
-    
-    phoneInput.style.flex = '1'
-    phoneInput.style.marginBottom = '0'
-  }
+  // Country-code dropdown disabled for now — campaign country isn't mapped to a
+  // dial code yet, so auto-prepending +91 (etc.) produces wrong MSISDNs.
+  // User enters the full number they want to use (local or with country code).
 
   if (phoneInput && phoneRef.current) {
-    const val = phoneRef.current
-    if (val.length > 10) {
-      const cc = val.substring(0, val.length - 10)
-      const number = val.substring(val.length - 10)
-      phoneInput.value = number
-      if (countryCodeSelect) {
-        countryCodeSelect.value = cc
-      }
-    } else {
-      phoneInput.value = val
-    }
+    phoneInput.value = phoneRef.current
   }
 
   // Check if limit already exceeded on mount
@@ -189,13 +148,13 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     const basePhone = phoneInput ? phoneInput.value.trim() : ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
     
-    if (cleanBasePhone.length !== 10) {
-      setSlotText(errorSlot, 'Please enter a valid 10-digit mobile number', true)
+    if (cleanBasePhone.length < 8) {
+      setSlotText(errorSlot, 'Please enter a valid mobile number', true)
       return
     }
 
-    const countryCode = countryCodeSelect ? countryCodeSelect.value : ''
-    const msisdn = countryCode + cleanBasePhone
+    // Use number as entered — do not invent a country code.
+    const msisdn = cleanBasePhone
     
     setSlotText(errorSlot, '')
     setSlotText(statusSlot, 'Sending verification code...')
@@ -212,6 +171,10 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
       const data = await sendOtp({ phone: msisdn, visitId: visitIdRef.current, pack: packRef?.current })
       phoneRef.current = msisdn
       setPhone(msisdn)
+      persistPhone(msisdn)
+      // Drop pages rendered without MSISDN so CONFIRM re-fetches with the number.
+      pageCacheRef?.current?.delete('CONFIRM')
+      pageCacheRef?.current?.delete('THANKYOU')
       trackEvent('otp_sent')
       
       if (otpInput) {
@@ -230,6 +193,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
         const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
         const sessionObj = saved ? JSON.parse(saved) : {}
         sessionObj.resendAttempts = resendAttempts
+        sessionObj.phone = msisdn
         sessionStorage.setItem(`tc_session_${country}_${operator}`, JSON.stringify(sessionObj))
       } catch (err) {}
 
@@ -281,8 +245,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
 
     const basePhone = phoneInput ? phoneInput.value.trim() : ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
-    const countryCode = countryCodeSelect ? countryCodeSelect.value : ''
-    const msisdn = cleanBasePhone ? (countryCode + cleanBasePhone) : phoneRef.current
+    const msisdn = cleanBasePhone || phoneRef.current
     const code = otpInput ? otpInput.value.trim() : ''
 
     if (!msisdn) {
@@ -314,6 +277,9 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
       // Sync phone state and ref immediately upon successful verification
       phoneRef.current = msisdn
       setPhone(msisdn)
+      persistPhone(msisdn)
+      pageCacheRef?.current?.delete('CONFIRM')
+      pageCacheRef?.current?.delete('THANKYOU')
 
       setSlotText(statusSlot, 'Verified! Continuing...')
       setTransitioning(true)
@@ -426,7 +392,11 @@ function SubscriptionPage() {
     [country, operator, phone],
   )
 
-  phoneRef.current = phone
+  // Keep ref in sync, but never wipe a phone set mid-async (e.g. OTP verify)
+  // with a stale empty React state before setPhone commits.
+  if (phone || !phoneRef.current) {
+    phoneRef.current = phone
+  }
 
   // Helper to load session
   const getSavedSession = useCallback(() => {
@@ -460,15 +430,29 @@ function SubscriptionPage() {
 
     resolvePhoneNumber(new URLSearchParams(window.location.search)).then(({ phone: resolved }) => {
       if (cancelled) return
-      phoneRef.current = resolved
-      setPhone(resolved)
-      setPhoneResolving(false)
-
-      const currentParams = new URLSearchParams(window.location.search)
-      if (resolved && !resolvePhoneFromUrl(currentParams)) {
-        currentParams.set('msisdn', resolved)
-        setSearchParams(currentParams, { replace: true })
+      if (resolved) {
+        phoneRef.current = resolved
+        setPhone(resolved)
+        const currentParams = new URLSearchParams(window.location.search)
+        if (!resolvePhoneFromUrl(currentParams)) {
+          currentParams.set('msisdn', resolved)
+          setSearchParams(currentParams, { replace: true })
+        }
+      } else {
+        // Fall back to session phone from a prior OTP in this tab
+        try {
+          const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+          const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
+          if (sessionPhone) {
+            phoneRef.current = sessionPhone
+            setPhone(sessionPhone)
+            persistPhone(sessionPhone)
+          }
+        } catch {
+          /* ignore */
+        }
       }
+      setPhoneResolving(false)
     })
 
     return () => {
@@ -484,6 +468,14 @@ function SubscriptionPage() {
     pageDataRef.current = data
     setPageData(data)
 
+    const resolvedPhone =
+      phoneRef.current || data.variables?.phone || data.variables?.msisdn || ''
+    if (resolvedPhone) {
+      phoneRef.current = resolvedPhone
+      setPhone(resolvedPhone)
+      persistPhone(resolvedPhone)
+    }
+
     // Save session in sessionStorage
     const isVerified = (data.pageType === 'CONFIRM' || data.pageType === 'THANKYOU' || data.verified === true)
     saveSession({
@@ -491,15 +483,18 @@ function SubscriptionPage() {
       flowId: data.campaignId,
       campaignId: data.campaignId,
       visitId: data.visitId || visitIdRef.current,
-      phone: phoneRef.current,
+      phone: resolvedPhone,
       step: data.pageType,
     })
 
-    // Sync URL step parameter without breaking history
+    // Sync URL step + msisdn so refresh / share keeps the number
     setSearchParams((prev) => {
       const nextParams = new URLSearchParams(prev)
       if (nextParams.get('step') !== data.pageType) {
         nextParams.set('step', data.pageType)
+      }
+      if (resolvedPhone && !nextParams.get('msisdn')) {
+        nextParams.set('msisdn', resolvedPhone)
       }
       return nextParams
     }, { replace: false })
@@ -661,6 +656,7 @@ function SubscriptionPage() {
 
     if (pageData.pageType === 'CONFIRM') {
       syncPackPicker(shadow, selectedPackRef.current)
+      syncPhoneDisplay(shadow, phoneRef.current)
     }
 
     const handlePackClick = (event) => {
@@ -743,6 +739,7 @@ function SubscriptionPage() {
         setPhone,
         setTransitioning,
         setError,
+        pageCacheRef,
       })
     }
 

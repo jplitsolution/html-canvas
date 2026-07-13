@@ -23,9 +23,8 @@ import {
   PAGE_TYPES,
   REQUIRED_PAGE_TYPES,
   getCampaignPreviewUrl,
-  getCampaignActivityLogs,
 } from '../services/api/campaigns'
-import { listVendors, buildTrackingUrl } from '../services/api/partners'
+import { buildTrackingUrl } from '../services/api/partners'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import ActivityLogsModal from '../components/dashboard/ActivityLogsModal'
 import { getVisitPagePath } from '../utils/visitPagePath'
@@ -39,26 +38,27 @@ function CampaignDetailPage() {
   const loadCampaign = useStore((s) => s.loadCampaign)
   const updateCampaign = useStore((s) => s.updateCampaign)
   const applyCampaignDefaults = useStore((s) => s.applyCampaignDefaults)
+  const loadCampaignActivityLogs = useStore((s) => s.loadCampaignActivityLogs)
+  const vendors = useStore((s) => s.vendors)
+  const fetchVendors = useStore((s) => s.fetchVendors)
   const [showApiConfig, setShowApiConfig] = useState(false)
   const [activating, setActivating] = useState(false)
   const [applyingDefaults, setApplyingDefaults] = useState(false)
   const [showActivityLogs, setShowActivityLogs] = useState(false)
   const [recentLogs, setRecentLogs] = useState([])
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
-  const [vendors, setVendors] = useState([])
   const [assigningVendor, setAssigningVendor] = useState(false)
 
   useEffect(() => {
-    listVendors()
-      .then((res) => setVendors(res || []))
-      .catch(() => setVendors([]))
-  }, [])
+    fetchVendors().catch(() => {})
+  }, [fetchVendors])
 
   const handleAssignVendor = async (vendorId) => {
     if (!campaign) return
     setAssigningVendor(true)
     try {
       await updateCampaign(campaign.id, { vendorId: vendorId ? Number(vendorId) : null })
+      useStore.getState().addToast('Vendor updated', 'success')
     } finally {
       setAssigningVendor(false)
     }
@@ -74,18 +74,18 @@ function CampaignDetailPage() {
   const fetchRecentLogs = useCallback(() => {
     if (!id) return
     setRecentLogsLoading(true)
-    getCampaignActivityLogs(id, { page: 1, limit: 5 })
+    loadCampaignActivityLogs(id, { page: 1, limit: 5 })
       .then((res) => setRecentLogs(res.data || []))
       .catch((err) => console.error(err))
       .finally(() => setRecentLogsLoading(false))
-  }, [id])
+  }, [id, loadCampaignActivityLogs])
 
   useEffect(() => {
     if (id) fetchRecentLogs()
   }, [id, fetchRecentLogs])
 
   useEffect(() => {
-    if (id) loadCampaign(id, true)
+    if (id) loadCampaign(id)
   }, [id, loadCampaign])
 
   // useMemo MUST be before any early returns (React rules of hooks)
@@ -159,7 +159,6 @@ function CampaignDetailPage() {
     setApplyingDefaults(true)
     try {
       await applyCampaignDefaults(campaign.id)
-      await loadCampaign(campaign.id, true)
     } finally {
       setApplyingDefaults(false)
     }

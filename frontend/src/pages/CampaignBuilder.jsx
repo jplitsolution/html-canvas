@@ -25,6 +25,7 @@ export default function CampaignBuilder() {
   const error = useStore((s) => s.error)
   const loadCampaign = useStore((s) => s.loadCampaign)
   const loadCampaignPage = useStore((s) => s.loadCampaignPage)
+  const afterPageSaved = useStore((s) => s.afterPageSaved)
 
   useEffect(() => {
     if (id) loadCampaign(id)
@@ -48,16 +49,16 @@ export default function CampaignBuilder() {
         )
       }
 
-      await saveCampaignPage(editor, id, pageType)
+      const saved = await saveCampaignPage(editor, id, pageType)
+      await afterPageSaved(id, pageType, saved)
       return { id, pageType }
     },
-    [id, pageType],
+    [id, pageType, afterPageSaved],
   )
 
   const handleEditorSave = useCallback(() => {
     useStore.getState().addToast('Page saved successfully', 'success')
-    if (id) loadCampaign(id)
-  }, [id, loadCampaign])
+  }, [])
 
   const handlePreview = useCallback(() => {
     if (!campaign) return

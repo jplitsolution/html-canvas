@@ -21,7 +21,7 @@ import {
   getValidConditions,
 } from '../components/flow/flowConditions'
 import useStore from '../store/useStore'
-import { getCampaignFlow, saveCampaignFlow, PAGE_TYPE_LABELS } from '../services/api/campaigns'
+import { PAGE_TYPE_LABELS } from '../services/api/campaigns'
 
 const nodeTypes = { pageNode: PageNode }
 
@@ -113,6 +113,8 @@ function FlowBuilderPage() {
   const { id } = useParams()
   const navigate = useNavigate()
   const addToast = useStore((s) => s.addToast)
+  const loadCampaignFlow = useStore((s) => s.loadCampaignFlow)
+  const saveCampaignFlow = useStore((s) => s.saveCampaignFlow)
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -148,7 +150,7 @@ function FlowBuilderPage() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    getCampaignFlow(id)
+    loadCampaignFlow(id)
       .then((res) => {
         if (cancelled) return
         setMode(res.verificationMode || 'BOTH')
@@ -156,12 +158,12 @@ function FlowBuilderPage() {
         setNodes(toRfNodes(res.flowConfig))
         setEdges(toRfEdges(res.flowConfig))
       })
-      .catch((err) => addToast(err.message || 'Failed to load flow', 'error'))
+      .catch(() => {})
       .finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true
     }
-  }, [id, setNodes, setEdges, addToast])
+  }, [id, setNodes, setEdges, loadCampaignFlow])
 
   const existingPageTypes = useMemo(
     () => new Set(nodes.map((n) => n.data.pageType)),
@@ -417,16 +419,14 @@ function FlowBuilderPage() {
     setErrors(clientErrors) // show any "Note:" warnings during save
     try {
       await saveCampaignFlow(id, { verificationMode: mode, flowConfig })
-      addToast('Flow saved', 'success')
       setErrors([])
     } catch (err) {
       const msg = err.message || 'Failed to save flow'
       setErrors([msg])
-      addToast(msg, 'error')
     } finally {
       setSaving(false)
     }
-  }, [id, mode, entryPage, nodes, edges, addToast])
+  }, [id, mode, entryPage, nodes, edges, saveCampaignFlow])
 
   const nodeLabel = (nodeId) => {
     const node = nodes.find((n) => n.id === nodeId)
@@ -515,7 +515,7 @@ function FlowBuilderPage() {
             )}
           </div>
 
-          <div className="flex flex-col gap-3 lg:sticky lg:top-4" style={{ height: '72vh' }}>
+          <div className="flex flex-col gap-3 lg:sticky lg:top-4 max-h-[72vh] overflow-y-auto">
             <div className="surface-card p-3 shrink-0">
               <h3 className="text-sm font-semibold text-fg mb-1">Start page</h3>
               <p className="text-xs text-fg-muted mb-2">
@@ -564,13 +564,13 @@ function FlowBuilderPage() {
               </div>
             )}
 
-            <div className="surface-card p-4 flex flex-col min-h-0 flex-1 overflow-hidden">
-              <h3 className="text-sm font-semibold text-fg mb-1 shrink-0">Connections</h3>
-              <p className="text-xs text-fg-muted mb-3 shrink-0">
+            <div className="surface-card p-4 flex flex-col shrink-0">
+              <h3 className="text-sm font-semibold text-fg mb-1">Connections</h3>
+              <p className="text-xs text-fg-muted mb-3">
                 Set flow paths here. Drag nodes only to reposition.
               </p>
 
-              <div className="rounded-lg border border-accent/40 bg-accent-muted/30 p-3 mb-3 space-y-2 shrink-0">
+              <div className="rounded-lg border border-accent/40 bg-accent-muted/30 p-3 mb-3 space-y-2">
                 <p className="text-xs font-medium text-fg">Add connection</p>
                 <label className="block">
                   <span className="text-[11px] text-fg-muted">From</span>
@@ -631,7 +631,7 @@ function FlowBuilderPage() {
                 </Button>
               </div>
 
-              <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pr-0.5">
+              <div className="max-h-40 overflow-y-auto space-y-2 pr-0.5">
                 {edges.map((e) => (
                   <div key={e.id} className="rounded-lg border border-border p-2">
                     <div className="flex items-center justify-between text-xs text-fg-muted mb-1.5">
