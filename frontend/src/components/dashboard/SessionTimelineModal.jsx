@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import Modal from '../common/Modal'
 import Button from '../ui/Button'
-import { searchCampaignLogs } from '../../services/api/logs'
+import { searchCampaignLogs, searchAllCampaignLogs } from '../../services/api/logs'
 import { formatDate } from '../../utils/date'
 
 // Icon selector for timeline event types
@@ -92,7 +92,9 @@ function SessionTimelineModal({ isOpen, onClose, visitId, campaignId }) {
     setError(null)
     try {
       // Query events for this specific visit session, large page size to capture the full flow
-      const res = await searchCampaignLogs(campaignId, { visitId, page: 1, size: 150 })
+      const res = (campaignId && campaignId !== 'all')
+        ? await searchCampaignLogs(campaignId, { visitId, page: 1, size: 150 })
+        : await searchAllCampaignLogs({ visitId, page: 1, size: 150 })
       // Sort in chronological order (oldest first)
       const sorted = (res.items || []).sort(
         (a, b) => new Date(a.timestamp) - new Date(b.timestamp)
