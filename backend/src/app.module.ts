@@ -17,6 +17,7 @@ import { OtpModule } from './modules/otp/otp.module';
 import { PartnersModule } from './modules/partners/partners.module';
 import { SearchModule } from './modules/search/search.module';
 import { LogsModule } from './modules/logs/logs.module';
+import { RedisModule } from './common/redis.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { LogsModule } from './modules/logs/logs.module';
     PartnersModule,
     SearchModule,
     LogsModule,
+    RedisModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -21,34 +21,12 @@ import {
   VerificationMode,
 } from './flow-engine.service';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
-
 import { OtpRequest } from '../otp/entities/otp-request.entity';
-
-class SimpleCache<T> {
-  private cache = new Map<string, { data: T; expiresAt: number }>();
-  constructor(private readonly ttlMs: number = 15000) {}
-
-  get(key: string): T | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
-      return null;
-    }
-    return entry.data;
-  }
-
-  set(key: string, data: T) {
-    this.cache.set(key, { data, expiresAt: Date.now() + this.ttlMs });
-  }
-}
+import { RedisService } from '../../common/services/redis.service';
 
 @Injectable()
 export class FlowService {
   private readonly logger = new Logger(FlowService.name);
-  private readonly campaignCache = new SimpleCache<Campaign>(15000);
-  private readonly apiConfigCache = new SimpleCache<any>(15000);
-  private readonly attributionCache = new SimpleCache<any>(15000);
 
   constructor(
     private readonly campaignsService: CampaignsService,
@@ -57,6 +35,7 @@ export class FlowService {
     private readonly analyticsService: AnalyticsService,
     private readonly variableResolver: VariableResolverService,
     private readonly flowEngine: FlowEngineService,
+    private readonly redis: RedisService,
     @InjectRepository(ApiConfig)
     private readonly apiConfigRepository: Repository<ApiConfig>,
     @InjectRepository(OtpRequest)
@@ -73,10 +52,10 @@ export class FlowService {
     campid?: string;
   }) {
     const cacheKey = input.campid
-      ? `id:${input.campid}`
-      : `co:${String(input.country).toLowerCase()}:${String(input.operator).toLowerCase()}`;
+      ? `flow:campaign:id:${input.campid}`
+      : `flow:campaign:co:${String(input.country).toLowerCase()}:${String(input.operator).toLowerCase()}`;
 
-    const cached = this.campaignCache.get(cacheKey);
+    const cached = await this.redis.get<Campaign>(cacheKey);
     if (cached) return cached;
 
     let campaign: Campaign | null = null;
@@ -93,9 +72,9 @@ export class FlowService {
     }
 
     if (campaign) {
-      this.campaignCache.set(cacheKey, campaign);
+      await this.redis.set(cacheKey, campaign, 15);
       if (!input.campid) {
-        this.campaignCache.set(`id:${campaign.id}`, campaign);
+        await this.redis.set(`flow:campaign:id:${campaign.id}`, campaign, 15);
       }
     }
     return campaign;
@@ -192,14 +171,14 @@ export class FlowService {
 
     this.logger.log(`Campaign resolved: id=${campaign.id} active=true`);
 
-    const apiConfigCacheKey = `api:${campaign.id}`;
-    let apiConfig = this.apiConfigCache.get(apiConfigCacheKey);
+    const apiConfigCacheKey = `flow:config:${campaign.id}`;
+    let apiConfig = await this.redis.get<ApiConfig>(apiConfigCacheKey);
     if (apiConfig === null) {
       apiConfig = await this.apiConfigRepository.findOne({
         where: { campaignId: campaign.id },
       });
-      this.apiConfigCache.set(apiConfigCacheKey, apiConfig || undefined);
-    } else if (apiConfig === undefined) {
+      await this.redis.set(apiConfigCacheKey, apiConfig ?? '__NULL__', 15);
+    } else if ((apiConfig as any) === '__NULL__') {
       apiConfig = null;
     }
 
@@ -292,8 +271,8 @@ export class FlowService {
     }
 
     if (!visitId) {
-      const attrCacheKey = `attr:${input.vid}:${input.affId}`;
-      let attribution = this.attributionCache.get(attrCacheKey);
+      const attrCacheKey = `flow:attr:${input.vid}:${input.affId}`;
+      let attribution = await this.redis.get<any>(attrCacheKey);
       if (!attribution) {
         attribution = await this.partnersService
           .resolveAttribution(input.vid, input.affId)
@@ -302,7 +281,7 @@ export class FlowService {
             affiliateId: undefined,
             mismatch: false,
           }));
-        this.attributionCache.set(attrCacheKey, attribution);
+        await this.redis.set(attrCacheKey, attribution, 15);
       }
       if (attribution.mismatch) {
         this.logger.warn(

@@ -39,6 +39,12 @@ export interface SearchConfig {
   index: string;
 }
 
+export interface RedisConfig {
+  host: string;
+  port: number;
+  password?: string;
+}
+
 export interface AppConfig {
   port: number;
   environment: string;
@@ -50,6 +56,7 @@ export interface AppConfig {
   aws: AwsConfig;
   uploads: UploadsConfig;
   search: SearchConfig;
+  redis: RedisConfig;
 }
 
 export default (): AppConfig => ({
@@ -99,5 +106,10 @@ export default (): AppConfig => ({
     // ES is optional: only enabled when a node URL is configured.
     enabled: Boolean(process.env.ELASTICSEARCH_NODE),
     index: process.env.ELASTICSEARCH_INDEX || 'campaign_events',
+  },
+  redis: {
+    host: process.env.REDIS_HOST || '127.0.0.1',
+    port: parseInt(process.env.REDIS_PORT || '6379', 10),
+    password: process.env.REDIS_PASSWORD || undefined,
   },
 });

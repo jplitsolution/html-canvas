@@ -7,30 +7,11 @@ import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { OtpRequest } from '../otp/entities/otp-request.entity';
 import { SearchService } from '../search/search.service';
-
-class SimpleCache<T> {
-  private cache = new Map<string, { data: T; expiresAt: number }>();
-  constructor(private readonly ttlMs: number = 10000) {}
-
-  get(key: string): T | null {
-    const entry = this.cache.get(key);
-    if (!entry) return null;
-    if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
-      return null;
-    }
-    return entry.data;
-  }
-
-  set(key: string, data: T) {
-    this.cache.set(key, { data, expiresAt: Date.now() + this.ttlMs });
-  }
-}
+import { RedisService } from '../../common/services/redis.service';
 
 @Injectable()
 export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AnalyticsService.name);
-  private readonly visitCache = new SimpleCache<Visit>(10000); // 10 seconds cache
   private eventBuffer: Partial<VisitEvent>[] = [];
   private flushInterval: NodeJS.Timeout | null = null;
   private readonly maxBufferSize = 100;
@@ -43,6 +24,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     private readonly visitEventRepository: Repository<VisitEvent>,
     private readonly campaignsService: CampaignsService,
     private readonly searchService: SearchService,
+    private readonly redis: RedisService,
   ) {}
 
   onModuleInit() {
@@ -86,14 +68,14 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     if (!this.searchService.isEnabled()) return;
     try {
-      const cacheKey = `visit:${visitId}`;
-      let visit = this.visitCache.get(cacheKey);
+      const cacheKey = `analytics:visit:${visitId}`;
+      let visit = await this.redis.get<Visit>(cacheKey);
       if (!visit) {
         visit = await this.visitRepository.findOne({
           where: { id: visitId },
         });
         if (visit) {
-          this.visitCache.set(cacheKey, visit);
+          await this.redis.set(cacheKey, visit, 10);
         }
       }
       if (!visit) return;
@@ -124,7 +106,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     const visit = this.visitRepository.create(data);
     const saved = await this.visitRepository.save(visit);
     // Cache the visit metadata right after creation since it's going to be queried immediately
-    this.visitCache.set(`visit:${saved.id}`, saved);
+    await this.redis.set(`analytics:visit:${saved.id}`, saved, 10);
     await this.logEvent(saved.id, VisitEventType.VISIT);
     return saved;
   }
@@ -157,7 +139,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
     const saved = await this.visitRepository.save(visit);
     // Invalidate/update visitCache with updated details
-    this.visitCache.set(`visit:${id}`, saved);
+    await this.redis.set(`analytics:visit:${id}`, saved, 10);
     return saved;
   }
 
@@ -165,11 +147,11 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     const cleanPhone = phone?.trim();
     if (!cleanPhone) return;
     await this.visitRepository.update({ id }, { phone: cleanPhone });
-    // Invalidate visitCache
-    const visit = this.visitCache.get(`visit:${id}`);
+    // Update Redis visit cache
+    const visit = await this.redis.get<Visit>(`analytics:visit:${id}`);
     if (visit) {
       visit.phone = cleanPhone;
-      this.visitCache.set(`visit:${id}`, visit);
+      await this.redis.set(`analytics:visit:${id}`, visit, 10);
     }
   }
 
