@@ -4,7 +4,39 @@ This document tracks all version additions, database schema updates, and feature
 
 ---
 
-## [2.0.0] - Phase 2 (Current Release)
+## [2.2.0] - Phase 3 (High-Traffic Scaling & Database Optimizations)
+
+### Added
+- **In-Memory Caching (Phase 1 Optimization)**:
+  - Implemented `SimpleCache` with a 15-second TTL in `flow.service.ts` to cache resolved campaign configurations, API settings, and partner click attribution results, significantly reducing DB read queries during user landing flow hits.
+- **Batch Telemetry Logging & Write Buffering (Phase 3 Optimization)**:
+  - Added an in-memory buffer (`eventBuffer`) in `analytics.service.ts` to batch-log incoming user funnel events. 
+  - Automatically flushes/bulk-inserts telemetry logs using raw database inserts every 5 seconds or when the buffer matches 100 events, reducing write overhead.
+  - Added local `visitCache` (10-second TTL) inside the analytics service to eliminate repetitive visit metadata database lookups during Elasticsearch indexing.
+- **Improved Campaign Logs & Chronological Timelines**:
+  - Implemented `— All Campaigns —` search aggregate analytics in the logs page dropdown.
+  - Checked out and restored `SessionTimelineModal.jsx` to display step-by-step chronological customer journeys.
+  - Added click-to-filter tooltips and event propagation isolation inside `CampaignLogsPage.jsx` table.
+
+## [2.1.0] - Phase 2 (Profile, Security, & Deployment Upgrades)
+
+### Added
+- **Admin Profile & Personalization**:
+  - Profile Page (`ProfilePage.jsx`) enabling name/email updates and password change.
+  - Timezone & Date Formatting Engine: Select local timezone and format preferences, formatted runtime logs dates in `CampaignLogsPage.jsx` using new `date.js` utility.
+  - Zustand UI store slice (`uiSlice.js`) persisting UI preferences like timezone.
+  - **Dynamic Logs Redirection**: Added a Logs shortcut button in the header and under Quick actions on `CampaignDetailPage.jsx` to navigate directly to `CampaignLogsPage.jsx` with that specific campaign selected using `useSearchParams`.
+  - **User Session Flow Timeline**: Clicking on any log row on the `Campaign Logs` dashboard opens a visual vertical chronological timeline modal displaying the journey of that specific visitor session (`visitId`).
+  - **Quick Column Filters**: Clicking on table cell values (Event Name, Vendor code, Affiliate code, Click ID, or MSISDN) instantly filters the telemetry dashboard by that specific cell value without opening the timeline modal (via click event propagation control).
+- **Deploy & PM2 Scripts**:
+  - `backend/start.sh` and `frontend/start.sh` to run clean builds before execution under PM2 process definitions.
+  - PM2 configuration in `ecosystem.config.cjs` mapping bash start wrappers.
+  - Automagic full-stack deploy script `deploy.sh`.
+
+### Security
+- **Elasticsearch Localhost Binding**: Bound Elasticsearch port `9200` to `127.0.0.1` in `docker-compose.yml` to prevent public ports exposure and mitigate ransomware attack vectors.
+
+## [2.0.0] - Phase 2 (Core Upgrades)
 
 ### Added
 - **OTP Generation & Verification Subsystem**:

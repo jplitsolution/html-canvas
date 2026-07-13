@@ -33,12 +33,17 @@ import {
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
+import { useSearchParams } from 'react-router-dom'
+import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
+import { formatDate } from '../utils/date'
 import useStore from '../store/useStore'
 import { listCampaigns } from '../services/api/campaigns'
 import {
   getLogsStatus,
   searchCampaignLogs,
   getCampaignLogAggregations,
+  searchAllCampaignLogs,
+  getAllCampaignLogAggregations,
 } from '../services/api/logs'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
@@ -114,11 +119,38 @@ function getPageBadgeClass(page) {
   return 'bg-gray-50 text-gray-500 border-gray-100';
 }
 
+const getStatusBadgeClass = (status) => {
+  const s = String(status).toUpperCase();
+  if (s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+    return 'text-emerald-600';
+  }
+  if (s.includes('FAILED') || s.includes('BLOCKED')) {
+    return 'text-rose-600';
+  }
+  if (s.includes('OTP_SHOWN') || s.includes('CONFIRM_SHOWN')) {
+    return 'text-amber-600';
+  }
+  if (s.includes('PLAN_SHOWN') || s.includes('HOME_SHOWN')) {
+    return 'text-indigo-600';
+  }
+  if (s.includes('VISIT')) {
+    return 'text-blue-600';
+  }
+  return 'text-gray-500';
+}
+
 function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
+  const [searchParams] = useSearchParams()
+  const paramCampaignId = searchParams.get('campaignId')
+
   const [campaigns, setCampaigns] = useState([])
   const [selectedId, setSelectedId] = useState('')
   const [esEnabled, setEsEnabled] = useState(true)
+
+  const [selectedVisitId, setSelectedVisitId] = useState(null)
+  const [timelineCampaignId, setTimelineCampaignId] = useState(null)
+  const [showTimeline, setShowTimeline] = useState(false)
 
   const [filters, setFilters] = useState({ eventType: '', clickId: '', q: '', from: '', to: '' })
   const [page, setPage] = useState(1)
@@ -134,19 +166,24 @@ function CampaignLogsPage() {
     listCampaigns()
       .then((res) => {
         setCampaigns(res || [])
-        if (res && res.length > 0) setSelectedId(res[0].id)
+        if (paramCampaignId) {
+          setSelectedId(Number(paramCampaignId))
+        } else {
+          setSelectedId('all')
+        }
       })
       .catch((err) => addToast(err.message || 'Failed to load campaigns', 'error'))
-  }, [addToast])
+  }, [addToast, paramCampaignId])
 
   const fetchData = useCallback(async () => {
     if (!selectedId) return
     setLoading(true)
     try {
       const params = { ...filters, page, size: PAGE_SIZE }
+      const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
-        getCampaignLogAggregations(selectedId, filters),
-        searchCampaignLogs(selectedId, params),
+        isAll ? getAllCampaignLogAggregations(filters) : getCampaignLogAggregations(selectedId, filters),
+        isAll ? searchAllCampaignLogs(params) : searchCampaignLogs(selectedId, params),
       ])
       setAggs(aggRes)
       setLogs(logRes)
@@ -230,6 +267,7 @@ function CampaignLogsPage() {
                   setSelectedId(e.target.value)
                 }}
               >
+                <option value="all">— All Campaigns —</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.country} / {c.operator} — {c.name}
@@ -397,49 +435,105 @@ function CampaignLogsPage() {
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Affiliate</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID ID</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
-                      <tr key={`${row.visitId}-${idx}`} className="hover:bg-gray-50/80 transition-colors duration-150">
+                      <tr 
+                        key={`${row.visitId}-${idx}`} 
+                        onClick={() => {
+                          setSelectedVisitId(row.visitId)
+                          setTimelineCampaignId(row.campaignId || selectedId)
+                          setShowTimeline(true)
+                        }}
+                        className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
+                      >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
-                          {row.timestamp ? new Date(row.timestamp).toLocaleString() : '—'}
+                          {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs font-medium">
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
+                        <td className="px-4 py-3 text-xs font-medium" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.eventType) updateFilter('eventType', row.eventType)
+                        }}>
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border hover:underline ${getEventBadgeClass(row.eventType)}`} title="Click to filter by event type">
                             {row.eventType || '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.pageType) updateFilter('q', row.pageType)
+                        }}>
                           {row.pageType ? (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${getPageBadgeClass(row.pageType)}`}>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border hover:underline ${getPageBadgeClass(row.pageType)}`} title="Click to search by page">
                               {row.pageType}
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-600 font-medium">
-                          {row.status || '—'}
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.status ? (
+                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
+                              {row.status}
+                            </span>
+                          ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700">
+                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
+                          e.stopPropagation()
+                          const val = row.vidRaw || String(row.vendorId || '')
+                          if (val) updateFilter('q', val)
+                        }}>
                           {row.vidRaw || row.vendorId ? (
-                            <span className="font-semibold text-gray-800">{row.vidRaw || row.vendorId}</span>
+                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by vendor">
+                              {row.vidRaw || row.vendorId}
+                            </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700">
+                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
+                          e.stopPropagation()
+                          const val = row.affRaw || String(row.affiliateId || '')
+                          if (val) updateFilter('q', val)
+                        }}>
                           {row.affRaw || row.affiliateId ? (
-                            <span className="font-semibold text-gray-800">{row.affRaw || row.affiliateId}</span>
+                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by affiliate">
+                              {row.affRaw || row.affiliateId}
+                            </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap">
-                          {row.clickId || <span className="text-gray-300">—</span>}
+                        <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.clickId) updateFilter('clickId', row.clickId)
+                        }}>
+                          {row.clickId ? (
+                            <span className="hover:underline" title="Click to filter by click ID">
+                              {row.clickId}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
+                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap" onClick={(e) => {
+                          e.stopPropagation()
+                          if (row.phoneMasked) updateFilter('q', row.phoneMasked)
+                        }}>
                           {row.phoneMasked ? (
-                            <span className="flex items-center gap-1">
+                            <span className="flex items-center gap-1 hover:text-indigo-650 hover:underline" title="Click to search by phone">
                               <Shield className="w-3 h-3 text-emerald-500" />
                               {row.phoneMasked}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => {
+                              setSelectedVisitId(row.visitId)
+                              setTimelineCampaignId(row.campaignId || selectedId)
+                              setShowTimeline(true)
+                            }}
+                            className="flex items-center gap-1 text-[10px] font-bold border-indigo-100 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 px-2 py-1 rounded-lg"
+                          >
+                            <Activity className="w-3.5 h-3.5" />
+                            Timeline
+                          </Button>
                         </td>
                       </tr>
                     ))}
@@ -479,6 +573,17 @@ function CampaignLogsPage() {
           )}
         </SectionCard>
       </div>
+
+      <SessionTimelineModal
+        isOpen={showTimeline}
+        onClose={() => {
+          setShowTimeline(false)
+          setSelectedVisitId(null)
+          setTimelineCampaignId(null)
+        }}
+        visitId={selectedVisitId}
+        campaignId={timelineCampaignId}
+      />
     </AppShell>
   )
 }

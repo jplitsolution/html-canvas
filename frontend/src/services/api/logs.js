@@ -33,3 +33,11 @@ export async function searchCampaignLogs(campaignId, params = {}) {
 export async function getCampaignLogAggregations(campaignId, params = {}) {
   return apiClient(`/logs/campaign/${campaignId}/aggregations${buildQuery(params)}`)
 }
+
+export async function searchAllCampaignLogs(params = {}) {
+  return apiClient(`/logs/all${buildQuery(params)}`)
+}
+
+export async function getAllCampaignLogAggregations(params = {}) {
+  return apiClient(`/logs/all/aggregations${buildQuery(params)}`)
+}

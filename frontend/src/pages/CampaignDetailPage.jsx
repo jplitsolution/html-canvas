@@ -473,7 +473,7 @@ function CampaignDetailPage() {
             <div className="surface-card p-5">
               <h3 className="text-sm font-semibold text-fg mb-3">Quick actions</h3>
               <div className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowActivityLogs(true)}>
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}>
                   <FileText className="w-4 h-4" />
                   Activity logs
                 </Button>

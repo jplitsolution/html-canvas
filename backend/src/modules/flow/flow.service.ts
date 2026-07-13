@@ -9,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CampaignsService } from '../campaigns/campaigns.service';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity';
+import { Campaign } from '../campaigns/entities/campaign.entity';
 import { PartnerApiService } from './partner-api.service';
 import { PartnersService } from '../partners/partners.service';
 import { AnalyticsService } from '../analytics/analytics.service';
@@ -23,9 +24,31 @@ import { ApiConfig } from '../api-config/entities/api-config.entity';
 
 import { OtpRequest } from '../otp/entities/otp-request.entity';
 
+class SimpleCache<T> {
+  private cache = new Map<string, { data: T; expiresAt: number }>();
+  constructor(private readonly ttlMs: number = 15000) {}
+
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data;
+  }
+
+  set(key: string, data: T) {
+    this.cache.set(key, { data, expiresAt: Date.now() + this.ttlMs });
+  }
+}
+
 @Injectable()
 export class FlowService {
   private readonly logger = new Logger(FlowService.name);
+  private readonly campaignCache = new SimpleCache<Campaign>(15000);
+  private readonly apiConfigCache = new SimpleCache<any>(15000);
+  private readonly attributionCache = new SimpleCache<any>(15000);
 
   constructor(
     private readonly campaignsService: CampaignsService,
@@ -49,16 +72,33 @@ export class FlowService {
     operator: string;
     campid?: string;
   }) {
+    const cacheKey = input.campid
+      ? `id:${input.campid}`
+      : `co:${String(input.country).toLowerCase()}:${String(input.operator).toLowerCase()}`;
+
+    const cached = this.campaignCache.get(cacheKey);
+    if (cached) return cached;
+
+    let campaign: Campaign | null = null;
     if (input.campid) {
-      const byId = await this.campaignsService.findByIdForFlow(
+      campaign = await this.campaignsService.findByIdForFlow(
         Number(input.campid),
       );
-      if (byId) return byId;
     }
-    return this.campaignsService.findByCountryOperator(
-      input.country,
-      input.operator,
-    );
+    if (!campaign) {
+      campaign = await this.campaignsService.findByCountryOperator(
+        input.country,
+        input.operator,
+      );
+    }
+
+    if (campaign) {
+      this.campaignCache.set(cacheKey, campaign);
+      if (!input.campid) {
+        this.campaignCache.set(`id:${campaign.id}`, campaign);
+      }
+    }
+    return campaign;
   }
 
   /**
@@ -152,9 +192,16 @@ export class FlowService {
 
     this.logger.log(`Campaign resolved: id=${campaign.id} active=true`);
 
-    const apiConfig = await this.apiConfigRepository.findOne({
-      where: { campaignId: campaign.id },
-    });
+    const apiConfigCacheKey = `api:${campaign.id}`;
+    let apiConfig = this.apiConfigCache.get(apiConfigCacheKey);
+    if (apiConfig === null) {
+      apiConfig = await this.apiConfigRepository.findOne({
+        where: { campaignId: campaign.id },
+      });
+      this.apiConfigCache.set(apiConfigCacheKey, apiConfig || undefined);
+    } else if (apiConfig === undefined) {
+      apiConfig = null;
+    }
 
     const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
     const entryPage = this.flowEngine.getEntryPage(flowConfig);
@@ -239,13 +286,18 @@ export class FlowService {
     }
 
     if (!visitId) {
-      const attribution = await this.partnersService
-        .resolveAttribution(input.vid, input.affId)
-        .catch(() => ({
-          vendorId: undefined,
-          affiliateId: undefined,
-          mismatch: false,
-        }));
+      const attrCacheKey = `attr:${input.vid}:${input.affId}`;
+      let attribution = this.attributionCache.get(attrCacheKey);
+      if (!attribution) {
+        attribution = await this.partnersService
+          .resolveAttribution(input.vid, input.affId)
+          .catch(() => ({
+            vendorId: undefined,
+            affiliateId: undefined,
+            mismatch: false,
+          }));
+        this.attributionCache.set(attrCacheKey, attribution);
+      }
       if (attribution.mismatch) {
         this.logger.warn(
           `Attribution mismatch: aff_id=${input.affId} does not belong to vid=${input.vid}`,
