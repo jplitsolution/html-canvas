@@ -27,6 +27,7 @@ PROJECT ME KYA KYA COMPLETE HO GAYA HAI?
 9. Admin Profile, Settings & Dynamic Logs: Admin apni details update kar sakta hai, password change kar sakta hai aur local Timezone customize kar sakta hai. `CampaignLogsPage.jsx` ke logs select kiye timezone ke basis par format hote hain, aur `CampaignDetailPage.jsx` par header aur quick actions mein direct campaign logs redirection button link kiya gaya hai jo automatically us campaign ke logs filter karke show karta hai. Saath hi, logs list par click karne se **User Session Flow Timeline Modal** khulta hai jo visitor journey show karta hai, aur table columns (Event Name, Vendor, Affiliate, Click ID, aur MSISDN) par click karke direct interactive filtering active ho jati hai.
 10. Production Deployment & PM2 Setup: `deploy.sh` script build aur setup automate karti hai. PM2 `ecosystem.config.cjs` aur backend/frontend `start.sh` wrapper scripts use hote hain taaki deploy se pehle dynamic builds check ho sakein.
 11. Secure Docker Services: Elasticsearch public port ko Docker compose file me localhost `127.0.0.1` par bind karke secure kiya gaya hai taaki ransomware risks protect ho sakein.
+12. High-Traffic Scaling & Database Optimizations: Campaign routes, API configurations aur partner attribution checks ko resolve karne ke liye 15-second TTL cache (`SimpleCache`) implement kiya gaya hai (Phase 1). Telemetry writes overhead aur database read-locks minimize karne ke liye local event queue buffer (`eventBuffer` with 5s background flush / 100 capacity) aur 10s visit lookup caching implement kiya gaya hai (Phase 3).
 
 ------------------------------------------------------------------------
 ABHI KYA PENDING HAI?
@@ -37,7 +38,7 @@ ABHI KYA PENDING HAI?
 ------------------------------------------------------------------------
 BACKEND ME KYA HUA HAI?
 ------------------------------------------------------------------------
-Backend ko NestJS framework ka use karke banaya gaya hai. Data access TypeORM ORM ke dynamic adapters handle karte hain. Elasticsearch indexing `@elastic/elasticsearch` package ke throw client connection verify karta hai. APIs response envelope standardization global Interceptors compile karte hain. Ab Profile profile updates aur Password change (`change-password.dto.ts`) routes add kiye gaye hain.
+Backend ko NestJS framework ka use karke banaya gaya hai. Data access TypeORM ORM ke dynamic adapters handle karte hain. Elasticsearch indexing `@elastic/elasticsearch` package ke throw client connection verify karta hai. APIs response envelope standardization global Interceptors compile karte hain. Ab Profile profile updates aur Password change (`change-password.dto.ts`) routes add kiye gaye hain. In-memory caching layers (SimpleCache) aur telemetry batch event buffer queue backend processing optimization complete karte hain.
 
 ------------------------------------------------------------------------
 FRONTEND ME KYA HUA HAI?
