@@ -35,7 +35,7 @@ import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { useSearchParams } from 'react-router-dom'
 import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
-import { formatDate } from '../utils/date'
+import { formatDate, formatChartLabel, getDatePartsInTimezone, shiftDateString } from '../utils/date'
 import useStore from '../store/useStore'
 import {
   getLogsStatus,
@@ -55,26 +55,18 @@ const DATE_PRESETS = [
   { id: 'custom', label: 'Custom' },
 ]
 
-function toDateInputValue(date) {
-  const pad = (n) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+function getDateRangeForPreset(preset, timezone) {
+  const to = getDatePartsInTimezone(timezone)
+  if (preset === 'today') return { from: to, to }
+  if (preset === 'week') return { from: shiftDateString(to, -6), to }
+  if (preset === 'month') return { from: shiftDateString(to, -29), to }
+  return { from: '', to: '' }
 }
 
-function getDateRangeForPreset(preset) {
-  const now = new Date()
-  const to = toDateInputValue(now)
-  if (preset === 'today') return { from: to, to }
-  if (preset === 'week') {
-    const from = new Date(now)
-    from.setDate(from.getDate() - 6)
-    return { from: toDateInputValue(from), to }
-  }
-  if (preset === 'month') {
-    const from = new Date(now)
-    from.setDate(from.getDate() - 29)
-    return { from: toDateInputValue(from), to }
-  }
-  return { from: '', to: '' }
+function resolveInterval(preset, from, to) {
+  if (preset === 'today') return 'hour'
+  if (from && to && from === to) return 'hour'
+  return 'day'
 }
 
 function SectionCard({ title, children, actions, className = "" }) {
@@ -111,11 +103,14 @@ function StatCard({ label, value, icon: Icon, colorClass = "from-indigo-500 to-i
   )
 }
 
-const CustomTooltip = ({ active, payload, label }) => {
+const CustomTooltip = ({ active, payload, label, hourly }) => {
   if (active && payload && payload.length) {
+    const displayLabel =
+      payload[0]?.payload?.label ||
+      (label != null ? formatChartLabel(label, { hourly }) : '')
     return (
       <div className="rounded-xl border border-gray-800 bg-gray-900/95 p-3 text-white shadow-xl backdrop-blur-md">
-        <p className="text-[10px] font-mono text-gray-400">{label}</p>
+        <p className="text-[10px] font-semibold text-gray-300">{displayLabel}</p>
         <p className="text-xs font-bold mt-1.5 flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-indigo-400" />
           {payload[0].name || 'Events'}: <span className="font-mono text-indigo-300">{payload[0].value}</span>
@@ -193,6 +188,8 @@ function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
   const campaigns = useStore((s) => s.campaigns)
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
+  const timezone = useStore((s) => s.timezone)
+  const dateFormat = useStore((s) => s.dateFormat)
   const [searchParams] = useSearchParams()
   const paramCampaignId = searchParams.get('campaignId')
 
@@ -203,20 +200,25 @@ function CampaignLogsPage() {
   const [timelineCampaignId, setTimelineCampaignId] = useState(null)
   const [showTimeline, setShowTimeline] = useState(false)
 
-  const initialRange = getDateRangeForPreset('today')
   const [datePreset, setDatePreset] = useState('today')
-  const [filters, setFilters] = useState({
-    eventType: '',
-    clickId: '',
-    q: '',
-    from: initialRange.from,
-    to: initialRange.to,
+  const [filters, setFilters] = useState(() => {
+    const range = getDateRangeForPreset('today', timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+    return {
+      eventType: '',
+      clickId: '',
+      q: '',
+      from: range.from,
+      to: range.to,
+    }
   })
   const [page, setPage] = useState(1)
 
   const [aggs, setAggs] = useState(null)
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
+
+  const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
+  const isHourly = chartInterval === 'hour'
 
   useEffect(() => {
     getLogsStatus()
@@ -233,14 +235,26 @@ function CampaignLogsPage() {
       .catch(() => {})
   }, [addToast, paramCampaignId, fetchCampaigns])
 
+  // Keep Today/Week/Month ranges aligned when profile timezone changes
+  useEffect(() => {
+    if (datePreset === 'custom' || !timezone) return
+    const range = getDateRangeForPreset(datePreset, timezone)
+    setFilters((f) => {
+      if (f.from === range.from && f.to === range.to) return f
+      return { ...f, from: range.from, to: range.to }
+    })
+  }, [timezone, datePreset])
+
   const fetchData = useCallback(async () => {
     if (!selectedId) return
     setLoading(true)
     try {
-      const params = { ...filters, page, size: PAGE_SIZE }
+      const interval = resolveInterval(datePreset, filters.from, filters.to)
+      const aggParams = { ...filters, interval, timezone }
+      const params = { ...filters, page, size: PAGE_SIZE, timezone }
       const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
-        isAll ? getAllCampaignLogAggregations(filters) : getCampaignLogAggregations(selectedId, filters),
+        isAll ? getAllCampaignLogAggregations(aggParams) : getCampaignLogAggregations(selectedId, aggParams),
         isAll ? searchAllCampaignLogs(params) : searchCampaignLogs(selectedId, params),
       ])
       setAggs(aggRes)
@@ -250,7 +264,7 @@ function CampaignLogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedId, filters, page, addToast])
+  }, [selectedId, filters, page, addToast, datePreset, timezone])
 
   useEffect(() => {
     fetchData()
@@ -262,6 +276,15 @@ function CampaignLogsPage() {
   )
   const totalPages = Math.max(1, Math.ceil((logs.total || 0) / PAGE_SIZE))
 
+  const timeSeriesData = useMemo(() => {
+    const series = aggs?.timeSeries || []
+    return series.map((row) => ({
+      ...row,
+      label: formatChartLabel(row.key, { hourly: isHourly }),
+    }))
+    // dateFormat/timezone intentionally included so labels refresh with profile prefs
+  }, [aggs, isHourly, dateFormat, timezone])
+
   const updateFilter = (key, value) => {
     setPage(1)
     if (key === 'from' || key === 'to') setDatePreset('custom')
@@ -272,7 +295,7 @@ function CampaignLogsPage() {
     setDatePreset(preset)
     setPage(1)
     if (preset === 'custom') return
-    const range = getDateRangeForPreset(preset)
+    const range = getDateRangeForPreset(preset, timezone)
     setFilters((f) => ({ ...f, from: range.from, to: range.to }))
   }
 
@@ -344,7 +367,9 @@ function CampaignLogsPage() {
             </div>
             {datePreset !== 'custom' && filters.from && filters.to && (
               <p className="mt-2 text-[11px] text-gray-400 font-medium">
-                Showing {filters.from} → {filters.to}
+                Showing {formatChartLabel(filters.from)} → {formatChartLabel(filters.to)}
+                {isHourly ? ' · hourly' : ' · daily'}
+                {timezone ? ` · ${timezone}` : ''}
               </p>
             )}
           </div>
@@ -437,10 +462,10 @@ function CampaignLogsPage() {
 
         {/* Charts Dashboard */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <SectionCard title="Events over time">
+          <SectionCard title={isHourly ? 'Events over time (by hour)' : 'Events over time'}>
             <div style={{ width: '100%', height: 260 }}>
               <ResponsiveContainer>
-                <AreaChart data={aggs?.timeSeries || []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <AreaChart data={timeSeriesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="evGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2} />
@@ -448,9 +473,16 @@ function CampaignLogsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} tickFormatter={(v) => String(v).slice(5)} />
+                  <XAxis
+                    dataKey="key"
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fontWeight: 500 }}
+                    tickFormatter={(v) => formatChartLabel(v, { hourly: isHourly })}
+                    interval={isHourly ? 'preserveStartEnd' : 0}
+                    minTickGap={isHourly ? 28 : 8}
+                  />
                   <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip content={<CustomTooltip hourly={isHourly} />} />
                   <Area type="monotone" name="Events Count" dataKey="count" stroke="#6366f1" strokeWidth={2} fill="url(#evGrad)" />
                 </AreaChart>
               </ResponsiveContainer>

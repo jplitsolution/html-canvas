@@ -24,6 +24,10 @@ export class LogsController {
   ) {}
 
   private buildParams(campaignId: number | number[], query: Record<string, string>) {
+    const interval: 'hour' | 'day' | undefined =
+      query.interval === 'hour' || query.interval === 'day'
+        ? query.interval
+        : undefined;
     return {
       campaignId,
       visitId: query.visitId ? Number(query.visitId) : undefined,
@@ -36,6 +40,8 @@ export class LogsController {
       q: query.q,
       page: query.page ? Number(query.page) : undefined,
       size: query.size ? Number(query.size) : undefined,
+      interval,
+      timezone: query.timezone || undefined,
     };
   }
 

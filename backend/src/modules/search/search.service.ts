@@ -35,6 +35,10 @@ export interface LogSearchParams {
   q?: string;
   page?: number;
   size?: number;
+  /** Bucket size for timeSeries: hour when viewing a single day / Today */
+  interval?: 'hour' | 'day';
+  /** IANA timezone for date_histogram / SQL bucketing (e.g. Asia/Kolkata) */
+  timezone?: string;
 }
 
 /**
@@ -139,6 +143,76 @@ export class SearchService implements OnModuleInit {
     return value.replace(/([\\*?])/g, '\\$1');
   }
 
+  /**
+   * Convert a calendar date (YYYY-MM-DD) in `timeZone` to a UTC Date at
+   * start-of-day or end-of-day in that zone. Server clock is UTC; user "Today"
+   * must follow their profile timezone (e.g. Asia/Kolkata).
+   */
+  private zonedDayBound(
+    dateStr: string,
+    timeZone: string,
+    bound: 'start' | 'end',
+  ): Date {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
+    if (!match) {
+      const fallback = new Date(dateStr);
+      if (bound === 'end' && !dateStr.includes('T')) {
+        fallback.setUTCHours(23, 59, 59, 999);
+      }
+      return fallback;
+    }
+    const y = Number(match[1]);
+    const mo = Number(match[2]);
+    const d = Number(match[3]);
+    const hour = bound === 'end' ? 23 : 0;
+    const minute = bound === 'end' ? 59 : 0;
+    const second = bound === 'end' ? 59 : 0;
+
+    const tz = timeZone || 'UTC';
+    let utcMs = Date.UTC(y, mo - 1, d, hour, minute, second, 0);
+
+    for (let i = 0; i < 4; i++) {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: tz,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(new Date(utcMs));
+
+      const num = (type: string) =>
+        Number(parts.find((p) => p.type === type)?.value || '0');
+      const seen = Date.UTC(
+        num('year'),
+        num('month') - 1,
+        num('day'),
+        num('hour'),
+        num('minute'),
+        num('second'),
+      );
+      const desired = Date.UTC(y, mo - 1, d, hour, minute, second);
+      const diff = desired - seen;
+      utcMs += diff;
+      if (diff === 0) break;
+    }
+
+    return new Date(bound === 'end' ? utcMs + 999 : utcMs);
+  }
+
+  private resolveRangeBounds(params: LogSearchParams): {
+    from?: Date;
+    to?: Date;
+  } {
+    const tz = params.timezone || 'UTC';
+    return {
+      from: params.from ? this.zonedDayBound(params.from, tz, 'start') : undefined,
+      to: params.to ? this.zonedDayBound(params.to, tz, 'end') : undefined,
+    };
+  }
+
   private buildQuery(params: LogSearchParams): Record<string, unknown> {
     const filter: Array<Record<string, unknown>> = [];
     if (params.campaignId !== undefined) {
@@ -161,9 +235,10 @@ export class SearchService implements OnModuleInit {
       filter.push({ term: { affiliateId: params.affiliateId } });
     if (params.clickId) filter.push({ term: { clickId: params.clickId } });
     if (params.from || params.to) {
+      const { from, to } = this.resolveRangeBounds(params);
       const range: Record<string, string> = {};
-      if (params.from) range.gte = params.from;
-      if (params.to) range.lte = params.to;
+      if (from) range.gte = from.toISOString();
+      if (to) range.lte = to.toISOString();
       filter.push({ range: { timestamp: range } });
     }
     const must: Array<Record<string, unknown>> = [];
@@ -235,7 +310,50 @@ export class SearchService implements OnModuleInit {
     return this.searchFromDb(params);
   }
 
+  private resolveInterval(params: LogSearchParams): 'hour' | 'day' {
+    if (params.interval === 'hour' || params.interval === 'day') {
+      return params.interval;
+    }
+    if (params.from && params.to && params.from === params.to) return 'hour';
+    return 'day';
+  }
+
+  /** Offset like +05:30 for MySQL CONVERT_TZ when named zones are unavailable */
+  private getUtcOffsetString(timeZone: string, at: Date = new Date()): string {
+    try {
+      for (const name of ['longOffset', 'shortOffset'] as const) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          timeZoneName: name,
+          hour: '2-digit',
+        }).formatToParts(at);
+        const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+        if (!tzName) continue;
+        if (tzName === 'GMT' || tzName === 'UTC') return '+00:00';
+        const match = tzName.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/i);
+        if (match) {
+          const sign = match[1];
+          const hours = String(parseInt(match[2], 10)).padStart(2, '0');
+          const mins = (match[3] || '00').padStart(2, '0');
+          return `${sign}${hours}:${mins}`;
+        }
+      }
+      // Fallback: compare wall times
+      const utc = new Date(at.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const local = new Date(at.toLocaleString('en-US', { timeZone }));
+      const offsetMin = Math.round((local.getTime() - utc.getTime()) / 60000);
+      const sign = offsetMin >= 0 ? '+' : '-';
+      const abs = Math.abs(offsetMin);
+      return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+    } catch {
+      return '+00:00';
+    }
+  }
+
   async aggregations(params: LogSearchParams): Promise<Record<string, unknown>> {
+    const interval = this.resolveInterval(params);
+    const timeZone = params.timezone || 'UTC';
+
     if (this.client && !this.connectionFailed) {
       try {
         const res = await this.client.search({
@@ -246,7 +364,9 @@ export class SearchService implements OnModuleInit {
             timeSeries: {
               date_histogram: {
                 field: 'timestamp',
-                calendar_interval: 'day',
+                calendar_interval: interval,
+                time_zone: timeZone,
+                min_doc_count: 0,
               },
             },
             byEventType: { terms: { field: 'eventType', size: 30 } },
@@ -263,6 +383,7 @@ export class SearchService implements OnModuleInit {
           }));
         return {
           enabled: true,
+          interval,
           timeSeries: buckets('timeSeries'),
           byEventType: buckets('byEventType'),
           byVendor: buckets('byVendor'),
@@ -277,7 +398,7 @@ export class SearchService implements OnModuleInit {
       }
     }
 
-    return this.aggregationsFromDb(params);
+    return this.aggregationsFromDb(params, interval, timeZone);
   }
 
   private applyDbFilters(queryBuilder: any, params: LogSearchParams): void {
@@ -317,17 +438,14 @@ export class SearchService implements OnModuleInit {
         clickId: params.clickId,
       });
     }
-    if (params.from) {
-      queryBuilder.andWhere('event.createdAt >= :from', {
-        from: new Date(params.from),
-      });
-    }
-    if (params.to) {
-      const toDate = new Date(params.to);
-      toDate.setHours(23, 59, 59, 999);
-      queryBuilder.andWhere('event.createdAt <= :to', {
-        to: toDate,
-      });
+    if (params.from || params.to) {
+      const { from, to } = this.resolveRangeBounds(params);
+      if (from) {
+        queryBuilder.andWhere('event.createdAt >= :from', { from });
+      }
+      if (to) {
+        queryBuilder.andWhere('event.createdAt <= :to', { to });
+      }
     }
 
     if (params.q) {
@@ -397,7 +515,11 @@ export class SearchService implements OnModuleInit {
     return { total, page, size, items };
   }
 
-  private async aggregationsFromDb(params: LogSearchParams): Promise<Record<string, unknown>> {
+  private async aggregationsFromDb(
+    params: LogSearchParams,
+    interval: 'hour' | 'day' = 'day',
+    timeZone: string = 'UTC',
+  ): Promise<Record<string, unknown>> {
     const buildBaseQuery = (selectKey: string, alias: string = 'groupKey') => {
       const qb = this.dataSource
         .getRepository(VisitEvent)
@@ -437,13 +559,20 @@ export class SearchService implements OnModuleInit {
       .limit(20)
       .getRawMany();
 
-    // 5. timeSeries
+    // 5. timeSeries — bucket in the caller's timezone when possible
     const dbType = this.dataSource.options.type as any;
-    let dateSelect = "DATE_FORMAT(event.createdAt, '%Y-%m-%d')";
+    const offset = this.getUtcOffsetString(timeZone);
+    let dateSelect: string;
     if (dbType === 'postgres') {
-      dateSelect = "TO_CHAR(event.createdAt, 'YYYY-MM-DD')";
+      const fmt = interval === 'hour' ? 'YYYY-MM-DD"T"HH24:00:00' : 'YYYY-MM-DD';
+      dateSelect = `TO_CHAR(timezone('${timeZone.replace(/'/g, "''")}', event.createdAt AT TIME ZONE 'UTC'), '${fmt}')`;
     } else if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
-      dateSelect = "strftime('%Y-%m-%d', event.createdAt)";
+      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+      dateSelect = `strftime('${fmt}', event.createdAt)`;
+    } else {
+      // MySQL / MariaDB
+      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+      dateSelect = `DATE_FORMAT(CONVERT_TZ(event.createdAt, '+00:00', '${offset}'), '${fmt}')`;
     }
     const timeSeriesRaw = await buildBaseQuery(dateSelect)
       .groupBy('groupKey')
@@ -458,6 +587,7 @@ export class SearchService implements OnModuleInit {
 
     return {
       enabled: true,
+      interval,
       timeSeries: formatBuckets(timeSeriesRaw),
       byEventType: formatBuckets(byEventTypeRaw),
       byVendor: formatBuckets(byVendorRaw),
