@@ -61,6 +61,26 @@ function getEventIconBg(eventType) {
   return 'bg-gray-50 border-gray-200'
 }
 
+const getStatusBadgeClass = (status) => {
+  const s = String(status).toUpperCase();
+  if (s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+    return 'text-emerald-600';
+  }
+  if (s.includes('FAILED') || s.includes('BLOCKED')) {
+    return 'text-rose-600';
+  }
+  if (s.includes('OTP_SHOWN') || s.includes('CONFIRM_SHOWN')) {
+    return 'text-amber-600';
+  }
+  if (s.includes('PLAN_SHOWN') || s.includes('HOME_SHOWN')) {
+    return 'text-indigo-600';
+  }
+  if (s.includes('VISIT')) {
+    return 'text-blue-600';
+  }
+  return 'text-gray-500';
+}
+
 function SessionTimelineModal({ isOpen, onClose, visitId, campaignId }) {
   const [loading, setLoading] = useState(false)
   const [events, setEvents] = useState([])
@@ -219,8 +239,11 @@ function SessionTimelineModal({ isOpen, onClose, visitId, campaignId }) {
                           </span>
                         )}
                         {event.status && (
-                          <div className="mt-1 text-[10px] text-gray-400 font-mono">
-                            Session Status: <span className="font-bold">{event.status}</span>
+                          <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-gray-400 font-sans">
+                            <span>Session Status:</span>
+                            <span className={`font-semibold ${getStatusBadgeClass(event.status)}`}>
+                              {event.status}
+                            </span>
                           </div>
                         )}
                       </div>

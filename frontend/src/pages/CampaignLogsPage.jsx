@@ -124,6 +124,26 @@ const getPageBadgeClass = (page) => {
   return 'bg-gray-50 text-gray-500 border-gray-100';
 }
 
+const getStatusBadgeClass = (status) => {
+  const s = String(status).toUpperCase();
+  if (s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+    return 'text-emerald-600';
+  }
+  if (s.includes('FAILED') || s.includes('BLOCKED')) {
+    return 'text-rose-600';
+  }
+  if (s.includes('OTP_SHOWN') || s.includes('CONFIRM_SHOWN')) {
+    return 'text-amber-600';
+  }
+  if (s.includes('PLAN_SHOWN') || s.includes('HOME_SHOWN')) {
+    return 'text-indigo-600';
+  }
+  if (s.includes('VISIT')) {
+    return 'text-blue-600';
+  }
+  return 'text-gray-500';
+}
+
 function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
   const [searchParams] = useSearchParams()
@@ -541,8 +561,12 @@ function CampaignLogsPage() {
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-600 font-medium">
-                          {row.status || '—'}
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.status ? (
+                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
+                              {row.status}
+                            </span>
+                          ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
                           e.stopPropagation()

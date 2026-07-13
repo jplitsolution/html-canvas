@@ -398,7 +398,7 @@ export class SearchService implements OnModuleInit {
   }
 
   private async aggregationsFromDb(params: LogSearchParams): Promise<Record<string, unknown>> {
-    const buildBaseQuery = (selectKey: string, alias: string = 'key') => {
+    const buildBaseQuery = (selectKey: string, alias: string = 'groupKey') => {
       const qb = this.dataSource
         .getRepository(VisitEvent)
         .createQueryBuilder('event')
@@ -446,13 +446,13 @@ export class SearchService implements OnModuleInit {
       dateSelect = "strftime('%Y-%m-%d', event.createdAt)";
     }
     const timeSeriesRaw = await buildBaseQuery(dateSelect)
-      .groupBy('key')
-      .orderBy('key', 'ASC')
+      .groupBy('groupKey')
+      .orderBy('groupKey', 'ASC')
       .getRawMany();
 
     const formatBuckets = (rawList: any[]) =>
       rawList.map((row) => ({
-        key: row.key === null ? 'null' : String(row.key),
+        key: row.groupKey === null ? 'null' : String(row.groupKey),
         count: Number(row.count),
       }));
 
