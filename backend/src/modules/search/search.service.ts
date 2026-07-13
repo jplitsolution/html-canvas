@@ -449,7 +449,8 @@ export class SearchService implements OnModuleInit {
     }
 
     if (params.q) {
-      const searchLike = `%${params.q}%`;
+      const dbQuery = params.q.replace(/\*/g, '_');
+      const searchLike = `%${dbQuery}%`;
       queryBuilder.andWhere(
         new Brackets((qb) => {
           qb.where('visit.clickId LIKE :searchLike', { searchLike })

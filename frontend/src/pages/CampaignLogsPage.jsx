@@ -220,6 +220,13 @@ function CampaignLogsPage() {
   const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
   const isHourly = chartInterval === 'hour'
 
+  const getCampaignLabel = useCallback((campaignId) => {
+    if (!campaignId) return '—'
+    const c = campaigns.find((item) => String(item.id) === String(campaignId))
+    if (!c) return `Campaign #${campaignId}`
+    return `${c.country} / ${c.operator} — ${c.name}`
+  }, [campaigns])
+
   useEffect(() => {
     getLogsStatus()
       .then((res) => setEsEnabled(Boolean(res?.enabled)))
@@ -562,6 +569,9 @@ function CampaignLogsPage() {
                     <tr className="bg-gray-50/75 border-b border-gray-100">
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Time</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Name</th>
+                      {selectedId === 'all' && (
+                        <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campaign</th>
+                      )}
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Funnel Page</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Session Status</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor</th>
@@ -593,12 +603,23 @@ function CampaignLogsPage() {
                             {row.eventType || '—'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
-                          e.stopPropagation()
-                          if (row.pageType) updateFilter('q', row.pageType)
-                        }}>
+                        {selectedId === 'all' && (
+                          <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
+                            e.stopPropagation()
+                            if (row.campaignId) {
+                              setSelectedId(row.campaignId)
+                            }
+                          }}>
+                            {row.campaignId ? (
+                              <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline cursor-pointer" title="Click to filter by this campaign">
+                                {getCampaignLabel(row.campaignId)}
+                              </span>
+                            ) : <span className="text-gray-300">—</span>}
+                          </td>
+                        )}
+                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                           {row.pageType ? (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border hover:underline ${getPageBadgeClass(row.pageType)}`} title="Click to search by page">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${getPageBadgeClass(row.pageType)}`}>
                               {row.pageType}
                             </span>
                           ) : '—'}
