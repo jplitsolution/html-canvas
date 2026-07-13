@@ -24,7 +24,8 @@ export interface CampaignEventDoc {
 }
 
 export interface LogSearchParams {
-  campaignId: number;
+  campaignId: number | number[];
+  visitId?: number;
   from?: string;
   to?: string;
   eventType?: string;
@@ -139,9 +140,21 @@ export class SearchService implements OnModuleInit {
   }
 
   private buildQuery(params: LogSearchParams): Record<string, unknown> {
-    const filter: Array<Record<string, unknown>> = [
-      { term: { campaignId: params.campaignId } },
-    ];
+    const filter: Array<Record<string, unknown>> = [];
+    if (params.campaignId !== undefined) {
+      if (Array.isArray(params.campaignId)) {
+        if (params.campaignId.length > 0) {
+          filter.push({ terms: { campaignId: params.campaignId } });
+        } else {
+          filter.push({ terms: { campaignId: [-1] } }); // Match nothing if empty array
+        }
+      } else {
+        filter.push({ term: { campaignId: params.campaignId } });
+      }
+    }
+    if (params.visitId !== undefined) {
+      filter.push({ term: { visitId: params.visitId } });
+    }
     if (params.eventType) filter.push({ term: { eventType: params.eventType } });
     if (params.vendorId) filter.push({ term: { vendorId: params.vendorId } });
     if (params.affiliateId)
@@ -268,9 +281,21 @@ export class SearchService implements OnModuleInit {
   }
 
   private applyDbFilters(queryBuilder: any, params: LogSearchParams): void {
-    queryBuilder.where('visit.campaignId = :campaignId', {
-      campaignId: params.campaignId,
-    });
+    if (Array.isArray(params.campaignId)) {
+      queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
+        campaignIds: params.campaignId.length > 0 ? params.campaignId : [-1],
+      });
+    } else {
+      queryBuilder.where('visit.campaignId = :campaignId', {
+        campaignId: params.campaignId,
+      });
+    }
+
+    if (params.visitId !== undefined) {
+      queryBuilder.andWhere('event.visitId = :visitId', {
+        visitId: params.visitId,
+      });
+    }
 
     if (params.eventType) {
       queryBuilder.andWhere('event.eventType = :eventType', {
