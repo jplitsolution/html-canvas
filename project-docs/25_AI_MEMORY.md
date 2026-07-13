@@ -12,6 +12,9 @@ This document is designed to quickly onboard future AI models onto the TemplateC
 - **OTP Production Masking**: Plaintext OTP codes are never sent in API responses or logged when `NODE_ENV === 'production'`.
 - **IP & Phone Rate Limiting**: The public routes `/otp/*` and `/flow/transition` are protected by a custom `PublicRateLimitGuard` (setting `Retry-After` headers) and application-layer cooldowns and lockout rules.
 - **Elasticsearch Logging**: Telemetry clicks and funnel events are pushed to an Elasticsearch index (`campaign_events`) for fast audit log querying, replacing relational DB queries for charts.
+- **In-Memory Caching (Phase 1)**: Key campaign configurations, API configs, and partner attribution checks are cached for 15 seconds in `FlowService` to optimize query reads.
+- **Batch Telemetry Event Queue (Phase 3)**: High-frequency user events are buffered inside `AnalyticsService` and bulk-inserted every 5 seconds (or at 100 queue size) to prevent SQL database write locks under high volume traffic spikes.
+- **Telemetry Query Caching (Phase 3)**: Active session visit records are cached for 10 seconds to eliminate redundant database reads during Elasticsearch indexing.
 
 ---
 

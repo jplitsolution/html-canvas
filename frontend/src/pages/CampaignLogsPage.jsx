@@ -33,16 +33,18 @@ import {
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
-import useStore from '../store/useStore'
-import { formatDate } from '../utils/date'
-import { listCampaigns } from '../services/api/campaigns'
 import { useSearchParams } from 'react-router-dom'
+import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
+import { formatDate } from '../utils/date'
+import useStore from '../store/useStore'
+import { listCampaigns } from '../services/api/campaigns'
 import {
   getLogsStatus,
   searchCampaignLogs,
   getCampaignLogAggregations,
+  searchAllCampaignLogs,
+  getAllCampaignLogAggregations,
 } from '../services/api/logs'
-import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
@@ -96,24 +98,17 @@ const CustomTooltip = ({ active, payload, label }) => {
   return null;
 };
 
-const getEventBadgeClass = (type) => {
+function getEventBadgeClass(type) {
   const t = String(type).toUpperCase();
   if (t.includes('SUCCESS')) return 'bg-emerald-50 text-emerald-700 border-emerald-200/50';
   if (t.includes('FAILED') || t.includes('LIMIT') || t.includes('BRUTE')) return 'bg-rose-50 text-rose-700 border-rose-200/50';
   if (t.includes('OTP_VERIFY')) return 'bg-violet-50 text-violet-700 border-violet-200/50';
   if (t.includes('OTP_SEND') || t.includes('OTP_VIEW')) return 'bg-amber-50 text-amber-700 border-amber-200/50';
   if (t.includes('VISIT')) return 'bg-blue-50 text-blue-700 border-blue-200/50';
-   if (t.includes('CONFIRM_VIEW'))
-    return 'bg-indigo-50 text-indigo-700 border-indigo-200/50';
-    if (t.includes('HOME_VIEW'))
-    return 'bg-cyan-50 text-cyan-700 border-cyan-200';
-    if (t.includes('SUBSCRIBE_CLICK'))
-    return 'bg-violet-50 text-violet-700 border-violet-200/50';
   return 'bg-gray-50 text-gray-700 border-gray-200/50';
-  
 }
 
-const getPageBadgeClass = (page) => {
+function getPageBadgeClass(page) {
   const p = String(page).toUpperCase();
   if (p.includes('THANK') || p.includes('SUCCESS')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
   if (p.includes('CONFIRM')) return 'bg-indigo-50 text-indigo-600 border-indigo-100';
@@ -147,14 +142,15 @@ const getStatusBadgeClass = (status) => {
 function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
   const [searchParams] = useSearchParams()
-  const campaignIdParam = searchParams.get('campaignId')
-
-  const [timelineVisitId, setTimelineVisitId] = useState(null)
-  const [isTimelineOpen, setIsTimelineOpen] = useState(false)
+  const paramCampaignId = searchParams.get('campaignId')
 
   const [campaigns, setCampaigns] = useState([])
-  const [selectedId, setSelectedId] = useState(campaignIdParam || 'all')
+  const [selectedId, setSelectedId] = useState('')
   const [esEnabled, setEsEnabled] = useState(true)
+
+  const [selectedVisitId, setSelectedVisitId] = useState(null)
+  const [timelineCampaignId, setTimelineCampaignId] = useState(null)
+  const [showTimeline, setShowTimeline] = useState(false)
 
   const [filters, setFilters] = useState({ eventType: '', clickId: '', q: '', from: '', to: '' })
   const [page, setPage] = useState(1)
@@ -162,35 +158,6 @@ function CampaignLogsPage() {
   const [aggs, setAggs] = useState(null)
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
-  const [datePreset, setDatePreset] = useState('custom')
-
-  useEffect(() => {
-    if (campaignIdParam) {
-      setSelectedId(campaignIdParam)
-    } else {
-      setSelectedId('all')
-    }
-  }, [campaignIdParam])
-
-  useEffect(() => {
-    if (datePreset === 'custom') return
-    const now = new Date()
-    let from = ''
-    let to = now.toISOString().slice(0, 10)
-    if (datePreset === 'today') {
-      from = to
-    } else if (datePreset === 'week') {
-      const w = new Date(now)
-      w.setDate(now.getDate() - 7)
-      from = w.toISOString().slice(0, 10)
-    } else if (datePreset === 'month') {
-      const m = new Date(now)
-      m.setMonth(now.getMonth() - 1)
-      from = m.toISOString().slice(0, 10)
-    }
-    setFilters((f) => ({ ...f, from, to }))
-    setPage(1)
-  }, [datePreset])
 
   useEffect(() => {
     getLogsStatus()
@@ -199,18 +166,24 @@ function CampaignLogsPage() {
     listCampaigns()
       .then((res) => {
         setCampaigns(res || [])
+        if (paramCampaignId) {
+          setSelectedId(Number(paramCampaignId))
+        } else {
+          setSelectedId('all')
+        }
       })
       .catch((err) => addToast(err.message || 'Failed to load campaigns', 'error'))
-  }, [addToast])
+  }, [addToast, paramCampaignId])
 
   const fetchData = useCallback(async () => {
     if (!selectedId) return
     setLoading(true)
     try {
       const params = { ...filters, page, size: PAGE_SIZE }
+      const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
-        getCampaignLogAggregations(selectedId, filters),
-        searchCampaignLogs(selectedId, params),
+        isAll ? getAllCampaignLogAggregations(filters) : getCampaignLogAggregations(selectedId, filters),
+        isAll ? searchAllCampaignLogs(params) : searchCampaignLogs(selectedId, params),
       ])
       setAggs(aggRes)
       setLogs(logRes)
@@ -294,7 +267,7 @@ function CampaignLogsPage() {
                   setSelectedId(e.target.value)
                 }}
               >
-                <option value="all">All Campaigns</option>
+                <option value="all">— All Campaigns —</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.country} / {c.operator} — {c.name}
@@ -315,25 +288,7 @@ function CampaignLogsPage() {
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5">Date Range</label>
-              <div className="relative">
-                <select
-                  className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
-                  value={datePreset}
-                  onChange={(e) => setDatePreset(e.target.value)}
-                >
-                  <option value="today">Today</option>
-                  <option value="week">This Week</option>
-                  <option value="month">This Month</option>
-                  <option value="custom">Custom Range</option>
-                </select>
-                <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              </div>
-            </div>
-            {datePreset === 'custom' && (
-              <>
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 mb-1.5">From Date</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">From Date</label>
               <div className="relative">
                 <input
                   type="date"
@@ -356,8 +311,6 @@ function CampaignLogsPage() {
                 <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               </div>
             </div>
-              </>
-            )}
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1.5">Global Search</label>
               <div className="relative">
@@ -394,24 +347,12 @@ function CampaignLogsPage() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} tickFormatter={(v) => formatDate(v, 'YYYY-MM-DD (Date only)')} />
+                  <XAxis dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} tickFormatter={(v) => String(v).slice(5)} />
                   <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
-                  <Tooltip content={<CustomTooltip isDate />} />
+                  <Tooltip content={<CustomTooltip />} />
                   <Area type="monotone" name="Events Count" dataKey="count" stroke="#6366f1" strokeWidth={2} fill="url(#evGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex items-center gap-6 mt-4 pt-4 border-t border-border text-sm">
-              <div>
-                <p className="text-xs text-fg-muted">Total Events</p>
-                <p className="font-semibold text-fg">{totalEvents}</p>
-              </div>
-              <div>
-                <p className="text-xs text-fg-muted">Avg / Day</p>
-                <p className="font-semibold text-fg">
-                  {aggs?.timeSeries?.length > 0 ? Math.round(totalEvents / aggs.timeSeries.length) : 0}
-                </p>
-              </div>
             </div>
           </SectionCard>
 
@@ -426,17 +367,6 @@ function CampaignLogsPage() {
                   <Bar dataKey="count" name="Frequency" fill="#3b82f6" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
-              <span className="text-xs text-fg-muted">Top Event Types</span>
-              <div className="flex items-center flex-wrap gap-4">
-                {(aggs?.byEventType || []).slice(0, 3).map((agg) => (
-                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
-                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
-                    <span className="text-xs text-fg-muted">{agg.count} events</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </SectionCard>
 
@@ -462,17 +392,6 @@ function CampaignLogsPage() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
-            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
-              <span className="text-xs text-fg-muted">Top Statuses</span>
-              <div className="flex items-center flex-wrap gap-4">
-                {(aggs?.byStatus || []).slice(0, 3).map((agg) => (
-                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
-                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
-                    <span className="text-xs text-fg-muted">{agg.count} events</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </SectionCard>
 
           <SectionCard title="Affiliate Traffic Volumes">
@@ -486,17 +405,6 @@ function CampaignLogsPage() {
                   <Bar dataKey="count" name="Total Events" fill="#10b981" radius={[0, 6, 6, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-            <div className="flex flex-col gap-2 mt-4 pt-4 border-t border-border text-sm">
-              <span className="text-xs text-fg-muted">Top Affiliates</span>
-              <div className="flex items-center flex-wrap gap-4">
-                {(aggs?.byAffiliate || []).slice(0, 3).map((agg) => (
-                  <div key={agg.key} className="flex flex-col px-3 border-l border-border first:border-l-0 first:pl-0">
-                    <span className="font-semibold text-fg">{agg.key || '—'}</span>
-                    <span className="text-xs text-fg-muted">{agg.count} events</span>
-                  </div>
-                ))}
-              </div>
             </div>
           </SectionCard>
         </div>
@@ -532,13 +440,14 @@ function CampaignLogsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
-                      <tr
-                        key={`${row.visitId}-${idx}`}
-                        className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
+                      <tr 
+                        key={`${row.visitId}-${idx}`} 
                         onClick={() => {
-                          setTimelineVisitId(row.visitId)
-                          setIsTimelineOpen(true)
+                          setSelectedVisitId(row.visitId)
+                          setTimelineCampaignId(row.campaignId || selectedId)
+                          setShowTimeline(true)
                         }}
+                        className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
                       >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
@@ -574,7 +483,7 @@ function CampaignLogsPage() {
                           if (val) updateFilter('q', val)
                         }}>
                           {row.vidRaw || row.vendorId ? (
-                            <span className="font-semibold text-gray-800 hover:text-indigo-650 hover:underline" title="Click to search by vendor">
+                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by vendor">
                               {row.vidRaw || row.vendorId}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
@@ -585,7 +494,7 @@ function CampaignLogsPage() {
                           if (val) updateFilter('q', val)
                         }}>
                           {row.affRaw || row.affiliateId ? (
-                            <span className="font-semibold text-gray-800 hover:text-indigo-650 hover:underline" title="Click to search by affiliate">
+                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by affiliate">
                               {row.affRaw || row.affiliateId}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
@@ -616,8 +525,9 @@ function CampaignLogsPage() {
                             variant="outline"
                             size="xs"
                             onClick={() => {
-                              setTimelineVisitId(row.visitId)
-                              setIsTimelineOpen(true)
+                              setSelectedVisitId(row.visitId)
+                              setTimelineCampaignId(row.campaignId || selectedId)
+                              setShowTimeline(true)
                             }}
                             className="flex items-center gap-1 text-[10px] font-bold border-indigo-100 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 px-2 py-1 rounded-lg"
                           >
@@ -665,13 +575,14 @@ function CampaignLogsPage() {
       </div>
 
       <SessionTimelineModal
-        isOpen={isTimelineOpen}
+        isOpen={showTimeline}
         onClose={() => {
-          setIsTimelineOpen(false)
-          setTimelineVisitId(null)
+          setShowTimeline(false)
+          setSelectedVisitId(null)
+          setTimelineCampaignId(null)
         }}
-        visitId={timelineVisitId}
-        campaignId={selectedId}
+        visitId={selectedVisitId}
+        campaignId={timelineCampaignId}
       />
     </AppShell>
   )

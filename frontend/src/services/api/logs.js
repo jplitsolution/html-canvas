@@ -36,3 +36,11 @@ export async function getCampaignLogAggregations(campaignId, params = {}) {
   const url = campaignId === 'all' ? `/logs/all/aggregations` : `/logs/campaign/${campaignId}/aggregations`
   return apiClient(`${url}${buildQuery(params)}`)
 }
+
+export async function searchAllCampaignLogs(params = {}) {
+  return apiClient(`/logs/all${buildQuery(params)}`)
+}
+
+export async function getAllCampaignLogAggregations(params = {}) {
+  return apiClient(`/logs/all/aggregations${buildQuery(params)}`)
+}

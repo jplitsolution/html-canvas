@@ -49,6 +49,26 @@ function formatEventName(eventType) {
     .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
+const getStatusBadgeClass = (status) => {
+  const s = String(status).toUpperCase();
+  if (s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+    return 'text-emerald-600';
+  }
+  if (s.includes('FAILED') || s.includes('BLOCKED')) {
+    return 'text-rose-600';
+  }
+  if (s.includes('OTP_SHOWN') || s.includes('CONFIRM_SHOWN')) {
+    return 'text-amber-600';
+  }
+  if (s.includes('PLAN_SHOWN') || s.includes('HOME_SHOWN')) {
+    return 'text-indigo-600';
+  }
+  if (s.includes('VISIT')) {
+    return 'text-blue-600';
+  }
+  return 'text-gray-500';
+}
+
 // Get icon for specific timeline events
 function getEventIcon(eventType) {
   switch (eventType) {
@@ -298,9 +318,9 @@ function ActivityLogsModal({ isOpen, onClose, campaignId, campaignName }) {
                             </div>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap">
-                            <Badge variant={STATUS_BADGE_VARIANTS[visit.visitStatus] || 'default'}>
+                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(visit.visitStatus)}`}>
                               {visit.visitStatus}
-                            </Badge>
+                            </span>
                           </td>
                         </tr>
 

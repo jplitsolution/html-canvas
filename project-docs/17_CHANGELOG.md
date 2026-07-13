@@ -4,6 +4,20 @@ This document tracks all version additions, database schema updates, and feature
 
 ---
 
+## [2.2.0] - Phase 3 (High-Traffic Scaling & Database Optimizations)
+
+### Added
+- **In-Memory Caching (Phase 1 Optimization)**:
+  - Implemented `SimpleCache` with a 15-second TTL in `flow.service.ts` to cache resolved campaign configurations, API settings, and partner click attribution results, significantly reducing DB read queries during user landing flow hits.
+- **Batch Telemetry Logging & Write Buffering (Phase 3 Optimization)**:
+  - Added an in-memory buffer (`eventBuffer`) in `analytics.service.ts` to batch-log incoming user funnel events. 
+  - Automatically flushes/bulk-inserts telemetry logs using raw database inserts every 5 seconds or when the buffer matches 100 events, reducing write overhead.
+  - Added local `visitCache` (10-second TTL) inside the analytics service to eliminate repetitive visit metadata database lookups during Elasticsearch indexing.
+- **Improved Campaign Logs & Chronological Timelines**:
+  - Implemented `— All Campaigns —` search aggregate analytics in the logs page dropdown.
+  - Checked out and restored `SessionTimelineModal.jsx` to display step-by-step chronological customer journeys.
+  - Added click-to-filter tooltips and event propagation isolation inside `CampaignLogsPage.jsx` table.
+
 ## [2.1.0] - Phase 2 (Profile, Security, & Deployment Upgrades)
 
 ### Added

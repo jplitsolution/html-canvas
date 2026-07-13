@@ -14,7 +14,9 @@ export function createUiSlice(set, get) {
     setTimezone: (tz) => set({ timezone: tz }),
 
     addToast: (message, type = 'info') => {
-      const id = crypto.randomUUID()
+      const id = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : Math.random().toString(36).substring(2, 9) + Date.now().toString(36)
       set((s) => ({ toasts: [...s.toasts, { id, message, type }] }))
       setTimeout(() => get().removeToast(id), 3500)
     },
