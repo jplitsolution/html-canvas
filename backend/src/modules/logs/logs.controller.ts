@@ -23,9 +23,10 @@ export class LogsController {
     private readonly campaignsService: CampaignsService,
   ) {}
 
-  private buildParams(campaignId: number, query: Record<string, string>) {
+  private buildParams(campaignId: number | number[], query: Record<string, string>) {
     return {
       campaignId,
+      visitId: query.visitId ? Number(query.visitId) : undefined,
       from: query.from,
       to: query.to,
       eventType: query.eventType,
@@ -64,5 +65,29 @@ export class LogsController {
   ) {
     await this.campaignsService.findOne(campaignId, user.id);
     return this.searchService.aggregations(this.buildParams(campaignId, query));
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'Search all campaigns event logs (owner only)' })
+  async searchAll(
+    @Query() query: Record<string, string>,
+    @CurrentUser() user: User,
+  ) {
+    const campaigns = await this.campaignsService.findAll(user.id);
+    const campaignIds = campaigns.map(c => c.id);
+    if (campaignIds.length === 0) return { total: 0, page: 1, size: 25, items: [] };
+    return this.searchService.search(this.buildParams(campaignIds, query));
+  }
+
+  @Get('all/aggregations')
+  @ApiOperation({ summary: 'Aggregated log analytics for all campaigns (owner only)' })
+  async aggregationsAll(
+    @Query() query: Record<string, string>,
+    @CurrentUser() user: User,
+  ) {
+    const campaigns = await this.campaignsService.findAll(user.id);
+    const campaignIds = campaigns.map(c => c.id);
+    if (campaignIds.length === 0) return { enabled: true, timeSeries: [], byEventType: [], byVendor: [], byAffiliate: [], byStatus: [] };
+    return this.searchService.aggregations(this.buildParams(campaignIds, query));
   }
 }
