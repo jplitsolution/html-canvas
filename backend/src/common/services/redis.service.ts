@@ -20,7 +20,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       password: password || undefined,
       lazyConnect: true,
       maxRetriesPerRequest: 3,
-      retryStrategy: (times) => {
+      retryStrategy: (times: number) => {
         if (times > 5) {
           this.logger.error('Redis connection failed after 5 retries. Disabling Redis cache.');
           return null; // stop retrying
@@ -30,7 +30,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     });
 
     this.client.on('connect', () => this.logger.log(`Redis connected at ${host}:${port}`));
-    this.client.on('error', (err) => this.logger.warn(`Redis error: ${err.message}`));
+    this.client.on('error', (err: Error) => this.logger.warn(`Redis error: ${err.message}`));
 
     this.client.connect().catch(() => {
       this.logger.warn('Redis connect() failed — falling back to no-cache mode.');

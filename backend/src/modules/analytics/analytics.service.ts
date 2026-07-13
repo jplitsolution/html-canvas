@@ -113,11 +113,10 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
 
   async getVisit(id: number): Promise<Visit | null> {
     if (!id) return null;
-    const cacheKey = `analytics:visit:${id}`;
-    const cached = await this.redis.get<Visit>(cacheKey);
+    const cached = await this.redis.get<Visit>(`analytics:visit:${id}`);
     if (cached) return cached;
     const visit = await this.visitRepository.findOne({ where: { id } });
-    if (visit) await this.redis.set(cacheKey, visit, 10);
+    if (visit) await this.redis.set(`analytics:visit:${id}`, visit, 10);
     return visit;
   }
 
@@ -128,7 +127,7 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     phone?: string,
   ): Promise<Visit> {
     const visit = await this.visitRepository.findOne({ where: { id } });
-    if (!visit) return null as unknown as Visit;
+    if (!visit) return null as any;
 
     visit.visitStatus = status;
     if (pageType) {

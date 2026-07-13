@@ -185,16 +185,7 @@ export class FlowService {
     const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
     const entryPage = this.flowEngine.getEntryPage(flowConfig);
 
-    let visitId = input.visitId;
-    let resolvedPageType = input.pageType;
-
-    // Prefer request phone; fall back to visit phone (e.g. after OTP).
-    let phone = input.phone || '';
-    if (!phone && visitId) {
-      const existingVisit = await this.analyticsService.getVisit(visitId);
-      if (existingVisit?.phone) phone = existingVisit.phone.trim();
-    }
-
+    const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
     const pack = this.normalizePack(input.pack);
     const variables = {
@@ -204,6 +195,9 @@ export class FlowService {
       service_id: serviceId,
       plan: this.formatPlanLabel(pack),
     };
+
+    let visitId = input.visitId;
+    let resolvedPageType = input.pageType;
 
     // Enforce Route Guards for page access
     const providerConfigured =
@@ -409,11 +403,8 @@ export class FlowService {
       where: { campaignId: campaign.id },
     });
 
-    const visit = await this.analyticsService.getVisit(input.visitId);
-    // Prefer request phone; fall back to visit phone saved during OTP.
-    const phone = (input.phone || visit?.phone || '').trim();
+    const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
-    const headerPhoneDetected = Boolean(visit?.phone && visit.phone.trim() !== '');
 
     if (
       input.fromPage === CampaignPageType.HOME &&
@@ -423,6 +414,18 @@ export class FlowService {
         input.visitId,
         VisitEventType.SUBSCRIBE_CLICK,
       );
+
+      let headerPhoneDetected = false;
+      try {
+        const visit = await this.analyticsService['visitRepository'].findOne({
+          where: { id: input.visitId },
+        });
+        if (visit && visit.phone && visit.phone.trim() !== '') {
+          headerPhoneDetected = true;
+        }
+      } catch (err) {
+        this.logger.error(`Error resolving visit in transition: ${(err as Error).message}`);
+      }
 
       let isOtpEnabled = false;
       if (apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '') {
