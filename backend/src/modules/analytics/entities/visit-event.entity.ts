@@ -45,7 +45,7 @@ export class VisitEvent {
   })
   eventType: VisitEventType;
 
-  @Column({ type: 'json', nullable: true })
+  @Column({ type: 'jsonb', nullable: true })
   metadata?: any;
 
   @CreateDateColumn({ name: 'created_at' })

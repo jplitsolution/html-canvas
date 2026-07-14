@@ -14,7 +14,7 @@ export class Template {
   @Column()
   name: string;
 
-  @Column({ type: 'json' })
+  @Column({ type: 'jsonb' })
   data: any;
 
   @Column({ name: 'user_id', nullable: true })

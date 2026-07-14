@@ -12,9 +12,7 @@ import { RedisService } from '../../common/services/redis.service';
 @Injectable()
 export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AnalyticsService.name);
-  private eventBuffer: Partial<VisitEvent>[] = [];
   private flushInterval: NodeJS.Timeout | null = null;
-  private readonly maxBufferSize = 100;
   private readonly flushIntervalMs = 5000;
 
   constructor(
@@ -39,17 +37,41 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
   }
 
   async flushEvents() {
-    if (this.eventBuffer.length === 0) return;
-    const eventsToInsert = [...this.eventBuffer];
-    this.eventBuffer = []; // Clear buffer immediately to avoid concurrency races
+    const redisClient = this.redis.getClient();
+    if (!redisClient) return;
+
+    const lockKey = 'lock:analytics:flushEvents';
+    // Acquire a lock that expires in 4 seconds
+    const acquired = await redisClient.set(lockKey, 'locked', 'EX', 4, 'NX');
+    if (!acquired) return;
 
     try {
-      await this.visitEventRepository.insert(eventsToInsert);
-      this.logger.log(`Successfully flushed ${eventsToInsert.length} telemetry events to DB.`);
+      const batchSize = 100;
+      // Fetch up to 100 events. If Redis < 6.2, we would need a Lua script, 
+      // but LPOP with count is supported in modern Redis.
+      const rawEvents = await redisClient.lpop('analytics:event_queue', batchSize);
+      
+      if (!rawEvents || !Array.isArray(rawEvents) || rawEvents.length === 0) return;
+
+      const eventsToInsert = rawEvents.map((raw: string) => {
+        try {
+          // Cast JSON.parse to 'object' to force the single entity signature of create()
+          return this.visitEventRepository.create(JSON.parse(raw) as object);
+        } catch {
+          return null;
+        }
+      }).filter(e => e !== null) as VisitEvent[];
+
+      if (eventsToInsert.length > 0) {
+        await this.visitEventRepository.insert(eventsToInsert);
+        this.logger.log(`Successfully flushed ${eventsToInsert.length} telemetry events from Redis to Postgres.`);
+      }
     } catch (err) {
-      this.logger.error(`Failed to flush telemetry events to database: ${(err as Error).message}`);
-      // In case of failure, place back in queue
-      this.eventBuffer.unshift(...eventsToInsert);
+      this.logger.error(`Failed to flush telemetry events to Postgres: ${(err as Error).message}`);
+      // Note: If insert fails, events are lost unless we put them back. In highly reliable systems,
+      // a two-queue system (processing list) is used.
+    } finally {
+      await redisClient.del(lockKey);
     }
   }
 
@@ -160,18 +182,19 @@ export class AnalyticsService implements OnModuleInit, OnModuleDestroy {
     eventType: VisitEventType,
     metadata?: any,
   ): Promise<any> {
-    const event = this.visitEventRepository.create({
-      visitId,
-      eventType,
-      metadata,
-    });
-    this.eventBuffer.push(event);
-    if (this.eventBuffer.length >= this.maxBufferSize) {
-      void this.flushEvents();
+    const eventPayload = { visitId, eventType, metadata };
+    const redisClient = this.redis.getClient();
+    
+    if (redisClient) {
+      await redisClient.rpush('analytics:event_queue', JSON.stringify(eventPayload));
+    } else {
+      // Fallback if Redis is down
+      const event = this.visitEventRepository.create(eventPayload);
+      await this.visitEventRepository.insert(event).catch(() => {});
     }
     // Best-effort mirror into Elasticsearch for fast log search/analytics.
     void this.indexVisitEvent(visitId, eventType);
-    return event;
+    return eventPayload;
   }
 
   async getCampaignAnalytics(
