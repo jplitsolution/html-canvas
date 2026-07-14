@@ -84,8 +84,8 @@ load_deploy_env() {
   REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
   REDIS_PORT="${REDIS_PORT:-6379}"
 
-  API_URL="http://${SERVER_HOST}:${BACKEND_PORT}/api"
-  WEB_URL="http://${SERVER_HOST}:${FRONTEND_PORT}"
+  API_URL="https://${SERVER_HOST}/api"
+  WEB_URL="https://${SERVER_HOST}"
   CORS_ORIGIN="$WEB_URL"
 }
 
