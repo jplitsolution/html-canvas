@@ -521,7 +521,7 @@ export class SearchService implements OnModuleInit {
     interval: 'hour' | 'day' = 'day',
     timeZone: string = 'UTC',
   ): Promise<Record<string, unknown>> {
-    const buildBaseQuery = (selectKey: string, alias: string = 'groupKey') => {
+    const buildBaseQuery = (selectKey: string, alias = 'groupkey') => {
       const qb = this.dataSource
         .getRepository(VisitEvent)
         .createQueryBuilder('event')
@@ -576,13 +576,13 @@ export class SearchService implements OnModuleInit {
       dateSelect = `DATE_FORMAT(CONVERT_TZ(event.createdAt, '+00:00', '${offset}'), '${fmt}')`;
     }
     const timeSeriesRaw = await buildBaseQuery(dateSelect)
-      .groupBy('groupKey')
-      .orderBy('groupKey', 'ASC')
+      .groupBy('groupkey')
+      .orderBy('groupkey', 'ASC')
       .getRawMany();
 
     const formatBuckets = (rawList: any[]) =>
       rawList.map((row) => ({
-        key: row.groupKey === null ? 'null' : String(row.groupKey),
+        key: row.groupkey === null ? 'null' : String(row.groupkey),
         count: Number(row.count),
       }));
 
