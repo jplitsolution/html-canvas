@@ -60,16 +60,7 @@ export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>
     summary:
       'User lands here first. When they tap Subscribe, the app talks to the server and moves them to Confirm or OTP.',
     canChange: ['Headlines', 'Colors', 'Images', 'Feature list text', 'Button label (keep the button itself)'],
-    required: [
-      {
-        id: 'subscribe-btn',
-        label: 'Subscribe button',
-        why: 'Starts the subscription — without it nothing happens when user taps.',
-        match: 'data-action="SUBSCRIBE"',
-        thumb: 'button',
-        snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
-      },
-    ],
+    required: [],
   },
   OTP: {
     title: 'OTP verification page',

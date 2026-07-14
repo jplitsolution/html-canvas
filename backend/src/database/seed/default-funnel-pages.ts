@@ -174,122 +174,67 @@ function infoCard(
 
 const defaultPages: Record<CampaignPageType, { html: string; css: string }> = {
   [CampaignPageType.HOME]: {
-    css: sharedCss,
-    html: wrapPage(`
-      <div style="padding:36px 32px 32px;text-align:center;">
-        <div style="width:64px;height:64px;margin:0 auto 20px;border-radius:20px;background:linear-gradient(135deg,#6366f1,#3b82f6);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 16px rgba(99,102,241,0.2);">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;">
-            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-            <line x1="12" y1="18" x2="12.01" y2="18"></line>
-          </svg>
-        </div>
-        <p style="display:inline-block;margin:0 0 12px;padding:4px 12px;font-size:11px;font-weight:700;color:#4f46e5;background:#e0e7ff;border-radius:100px;text-transform:uppercase;letter-spacing:0.05em;">{{operator}} · {{country}}</p>
-        <h1 style="margin:0 0 12px;font-size:26px;font-weight:850;line-height:1.25;color:#0f172a;letter-spacing:-0.02em;">Premium Mobile Service</h1>
-        <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#475569;font-weight:500;">
-          Get unlimited access to exclusive content and premium features — billed directly on your {{operator}} number.
-        </p>
-        <ul class="flow-feature-list">
-          <li><span class="flow-check">✓</span> Instant activation on {{operator}}</li>
-          <li><span class="flow-check">✓</span> Cancel anytime from your phone</li>
-          <li><span class="flow-check">✓</span> Secure operator billing</li>
-        </ul>
-        <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
-        <p class="flow-footnote" style="margin-top:16px;">
-          By subscribing you agree to the service terms. Standard data charges may apply.
-        </p>
-      </div>
-    `),
+    css: `* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-home-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }`,
+    html: `
+<div class="wellness-home-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+</div>
+`,
   },
 
   [CampaignPageType.CONFIRM]: {
-    css: sharedCss,
-    html: wrapPage(`
-      <div style="padding:36px 32px 32px;text-align:center;">
-        <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:18px;background:rgba(99,102,241,0.08);display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;">
-            <circle cx="12" cy="12" r="10"></circle>
-            <polyline points="12 6 12 12 16 14"></polyline>
-          </svg>
-        </div>
-        <h1 style="margin:0 0 10px;font-size:22px;font-weight:850;color:#0f172a;letter-spacing:-0.01em;">Confirm Subscription</h1>
-        <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#475569;font-weight:500;">
-          Review your details before subscribing on <strong>{{operator}}</strong> ({{country}}).
-        </p>
-        ${infoCard('Mobile number', '{{phone}}', false, 'Detected automatically from your network')}
-        ${packPicker()}
-        <button type="button" data-action="CONFIRM" class="flow-btn">Confirm Subscription</button>
-        <p class="flow-footnote">Select your pack above, then confirm to subscribe.</p>
-      </div>
-    `),
+    css: `* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-confirm-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }`,
+    html: `
+<div class="wellness-confirm-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+  
+  <!-- Invisible button for Confirm -->
+  <button type="button" data-action="CONFIRM" style="position:absolute;width:50%;height:10%;top:70%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+</div>
+`,
   },
 
   [CampaignPageType.OTP]: {
-    css: sharedCss,
-    html: wrapPage(
-      `
-      <div style="padding:36px 32px 32px;text-align:center;">
-        <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:18px;background:rgba(99,102,241,0.08);display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;">
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
-          </svg>
-        </div>
-        <h1 style="margin:0 0 10px;font-size:22px;font-weight:850;color:#0f172a;letter-spacing:-0.01em;">Verify Mobile Number</h1>
-        <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#475569;font-weight:500;">
-          We couldn't detect your number automatically. Enter it to continue.
-        </p>
-
-        <div style="text-align:left;margin-bottom:14px;">
-          <label style="display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">Mobile number</label>
-          <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210"
-            style="width:100%;border:2px solid #e2e8f0;border-radius:14px;padding:12px 16px;font-size:14px;outline:none;font-weight:550;transition:border-color 0.2s;" />
-        </div>
-
-        <button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:14px;">Get OTP</button>
-
-        <div style="text-align:left;margin-bottom:14px;">
-          <label style="display:block;font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:6px;">OTP</label>
-          <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP"
-            style="width:100%;border:2px solid #e2e8f0;border-radius:14px;padding:12px 16px;font-size:14px;outline:none;font-weight:550;transition:border-color 0.2s;" />
-        </div>
-
-        <div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;font-weight:550;"></div>
-        <div data-otp-slot="status" style="min-height:18px;color:#475569;font-size:12px;margin-bottom:10px;font-weight:550;"></div>
-
-        <button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>
-        <p class="flow-footnote">You'll receive a one-time code via SMS (dev: returned in response).</p>
-      </div>
-    `,
-      '#6366f1',
-    ),
+    css: `* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-otp-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }
+.invisible-input { position: absolute; background: rgba(255,255,255,0.1); border: 1px dashed rgba(255,255,255,0.4); outline: none; color: transparent; text-shadow: 0 0 0 #000; font-size: 16px; text-align: center; }`,
+    html: `
+<div class="wellness-otp-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+  
+  <!-- Invisible input for phone -->
+  <input class="invisible-input" data-otp-field="phone" inputmode="numeric" style="width:50%; height:8%; top:50%; left:25%;" />
+  
+  <!-- Invisible button for Get Verification -->
+  <button type="button" data-otp-action="send" style="position:absolute;width:50%;height:8%;top:60%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+  
+  <!-- Invisible input for OTP -->
+  <input class="invisible-input" data-otp-field="otp" inputmode="numeric" style="width:50%; height:8%; top:70%; left:25%;" />
+  
+  <!-- Invisible button for Verify -->
+  <button type="button" data-otp-action="verify" style="position:absolute;width:50%;height:8%;top:80%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+</div>
+`,
   },
 
   [CampaignPageType.THANKYOU]: {
-    css: sharedCss,
-    html: wrapPage(
-      `
-      <div style="padding:36px 32px 32px;text-align:center;">
-        <div style="width:72px;height:72px;margin:0 auto 20px;border-radius:50%;background:#ecfdf5;display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:32px;height:32px;">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-            <polyline points="22 4 12 14.01 9 11.01"></polyline>
-          </svg>
-        </div>
-        <h1 style="margin:0 0 10px;font-size:24px;font-weight:850;color:#0f172a;letter-spacing:-0.02em;">You're Subscribed!</h1>
-        <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#475569;font-weight:500;">
-          Your <strong>{{plan}}</strong> is now active on <strong>{{operator}}</strong>.
-        </p>
-        <p style="margin:0 0 20px;font-size:13px;color:#64748b;font-weight:500;">
-          A confirmation SMS will be sent to {{phone}} shortly.
-        </p>
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:16px;padding:16px;font-size:13px;color:#166534;text-align:left;line-height:1.6;">
-          <strong>What's next?</strong><br />
-          Open the service from your mobile browser or follow the SMS instructions to start using premium content.
-        </div>
-      </div>
-    `,
-      '#10b981',
-    ),
+    css: `* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-thankyou-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }`,
+    html: `
+<div class="wellness-thankyou-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+</div>
+`,
   },
 
   [CampaignPageType.BLOCKED]: {

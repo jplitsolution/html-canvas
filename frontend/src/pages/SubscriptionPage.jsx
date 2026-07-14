@@ -15,7 +15,15 @@ const VALID_PACKS = ['daily', 'weekly', 'monthly']
 const FLOW_SHADOW_STYLES = `
   :host { display: block; width: 100%; min-height: 100vh; }
   .flow-page-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    margin: 0 auto;
     animation: flowPageIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .flow-page-inner > * {
+    max-width: 100%;
   }
   @keyframes flowPageIn {
     from { opacity: 0; transform: translateY(10px); }
@@ -57,10 +65,20 @@ function findActionTarget(event) {
 }
 
 function mountPageInShadow(shadow, pageData) {
+  const { customWidth, customHeight } = pageData.projectData || {}
+  
+  let inlineStyles = ''
+  if (customWidth) {
+    inlineStyles += `width: ${customWidth}px; max-width: ${customWidth}px; `
+  }
+  if (customHeight) {
+    inlineStyles += `height: ${customHeight}px; min-height: ${customHeight}px; overflow: hidden; position: relative; `
+  }
+
   shadow.innerHTML = `
     <style>${FLOW_SHADOW_STYLES}</style>
     <style>${pageData.css || ''}</style>
-    <div class="flow-page-inner">${pageData.html}</div>
+    <div class="flow-page-inner" style="${inlineStyles}">${pageData.html}</div>
   `
 }
 

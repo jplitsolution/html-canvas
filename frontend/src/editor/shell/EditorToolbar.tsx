@@ -11,6 +11,7 @@ import {
   ArrowLeft,
   Download,
   ChevronDown,
+  Maximize,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -42,7 +43,7 @@ export function EditorToolbar({
   onExportCurrent,
   onExportAll,
 }: EditorToolbarProps) {
-  const { editor, device, setDevice, zoom, setZoom } = useEditor();
+  const { editor, device, setDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight } = useEditor();
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -67,6 +68,7 @@ export function EditorToolbar({
     { id: 'Desktop', icon: Monitor, label: 'Desktop' },
     { id: 'Tablet', icon: Tablet, label: 'Tablet' },
     { id: 'Mobile', icon: Smartphone, label: 'Phone' },
+    { id: 'Custom', icon: Maximize, label: 'Custom' },
   ] as const;
 
   return (
@@ -119,6 +121,28 @@ export function EditorToolbar({
             <span className="hidden lg:inline">{label}</span>
           </button>
         ))}
+        
+        {device === 'Custom' && (
+          <div className="flex items-center gap-1 ml-2 mr-1">
+            <input 
+              type="number" 
+              value={customWidth} 
+              onChange={(e) => setCustomWidth(e.target.value)} 
+              className="w-16 px-2 py-1 text-xs rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-white text-center" 
+              placeholder="W" 
+              title="Width (px)"
+            />
+            <span className="text-gray-400 text-xs">x</span>
+            <input 
+              type="number" 
+              value={customHeight} 
+              onChange={(e) => setCustomHeight(e.target.value)} 
+              className="w-16 px-2 py-1 text-xs rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-white text-center" 
+              placeholder="H" 
+              title="Height (px)"
+            />
+          </div>
+        )}
       </div>
 
       <div className="hidden lg:flex items-center gap-1 p-1.5 rounded-xl bg-gray-50 border border-gray-200/60 shadow-2xs">

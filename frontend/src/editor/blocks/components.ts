@@ -72,4 +72,13 @@ export function registerComponentBlocks(editor: Editor) {
     'divider',
     `<hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0;"/>`
   )
+
+  addBlock(
+    editor,
+    'hotspot-block',
+    'Image Hotspot',
+    'component',
+    'button',
+    `<a data-tc-type="hotspot" href="#" style="position:absolute;width:100px;height:100px;display:block;z-index:10;text-decoration:none;"></a>`
+  )
 }

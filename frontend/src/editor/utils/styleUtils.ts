@@ -182,6 +182,24 @@ export function injectStylesheetsIntoCanvas(editor: Editor): void {
       head.appendChild(style);
     }
   });
+
+  // 4. Editor-only overlay styles
+  const editorStylesId = 'tc-editor-only-styles';
+  if (!iframeDoc.getElementById(editorStylesId)) {
+    const style = iframeDoc.createElement('style');
+    style.id = editorStylesId;
+    style.innerHTML = `
+      /* Make invisible hotspots visible in editor */
+      [data-tc-type="hotspot"] {
+        background-color: rgba(99,102,241,0.3) !important;
+        border: 2px dashed rgba(99,102,241,0.8) !important;
+      }
+      [data-tc-type="hotspot"]:hover {
+        background-color: rgba(99,102,241,0.5) !important;
+      }
+    `;
+    head.appendChild(style);
+  }
 }
 
 /**

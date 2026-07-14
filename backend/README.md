@@ -5,6 +5,7 @@ This is the backend API for the Visual Builder and Dynamic Subscription Flow Eng
 ---
 
 ## Tech Stack & Key Modules
+
 - **Core**: NestJS + TypeScript
 - **Database**: PostgreSQL / MySQL + TypeORM Migrations
 - **Authentication**: Passport.js + JWT
@@ -28,11 +29,13 @@ This is the backend API for the Visual Builder and Dynamic Subscription Flow Eng
 - **Upload**: Image upload for canvas assets.
 
 ### Verification modes
+
 - `MSISDN_ONLY`: resolve the number (header / ISP API via `ApiConfig.resolveMsisdnUrl`). On success go to CONFIRM, otherwise ERROR.
 - `OTP_ONLY`: always send the user through the OTP page.
 - `BOTH`: attempt to resolve the number to prefill, but still require OTP.
 
 ### Click attribution / tracking URL
+
 Shared campaign URLs look like:
 
 ```
@@ -111,12 +114,14 @@ $ node scripts/test-apis.mjs
 ## Core Flows
 
 ### 1. Admin — Campaign Setup
+
 1. Create a campaign with `country`, `operator`, and `serviceId`.
 2. Apply default funnel pages or edit each page in the canvas editor.
 3. Configure partner API URLs on the campaign (`blocklistApi`, `subscribeApi`, etc.).
 4. Activate the campaign.
 
 ### 2. Public — Subscription Flow
+
 `GET /api/flow/page?country=India&operator=Zain&page=HOME&msisdn=919876543210`
 
 Resolves the active campaign, calls partner APIs as needed, and returns rendered HTML for the requested funnel step.
@@ -126,6 +131,7 @@ Resolves the active campaign, calls partner APIs as needed, and returns rendered
 Handles button actions (`data-action` in template HTML) such as confirm subscribe, advancing the funnel.
 
 ### 3. Analytics
+
 `GET /api/analytics/campaign/:campaignId`
 
 Returns visit counts, blocked/subscribed users, and conversion rate for a campaign.

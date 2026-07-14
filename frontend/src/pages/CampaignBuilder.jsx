@@ -38,7 +38,7 @@ export default function CampaignBuilder() {
   const pageLabel = PAGE_TYPE_LABELS[pageType] || pageType
 
   const saveHandler = useCallback(
-    async (editor) => {
+    async (editor, meta) => {
       if (!id || !pageType) return null
 
       const { ok, missing } = validateFunnelPage(editor, pageType)
@@ -49,7 +49,7 @@ export default function CampaignBuilder() {
         )
       }
 
-      const saved = await saveCampaignPage(editor, id, pageType)
+      const saved = await saveCampaignPage(editor, id, pageType, meta?.customWidth, meta?.customHeight)
       await afterPageSaved(id, pageType, saved)
       return { id, pageType }
     },

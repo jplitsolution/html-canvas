@@ -49,6 +49,7 @@ export function createGrapesConfig(container: HTMLElement): EditorConfig {
         { name: 'Desktop', width: '' },
         { name: 'Tablet', width: '768px', widthMedia: '1023px' },
         { name: 'Mobile', width: '375px', widthMedia: '767px' },
+        { name: 'Custom', width: '1200px' },
       ],
     },
 

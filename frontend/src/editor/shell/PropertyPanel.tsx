@@ -334,15 +334,28 @@ export function PropertyPanel() {
               </>
             )}
             <Field label="Button color">
-              <input
-                type="color"
-                className="w-full h-9 rounded-lg border border-border"
-                value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#2563eb')}
-                onChange={(e) => {
-                  setStyleProp(selected, 'background-color', e.target.value);
-                  update();
-                }}
-              />
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  className="flex-1 h-9 rounded-lg border border-border cursor-pointer"
+                  value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#2563eb')}
+                  onChange={(e) => {
+                    setStyleProp(selected, 'background-color', e.target.value);
+                    update();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStyleProp(selected, 'background-color', 'transparent');
+                    update();
+                  }}
+                  className="px-3 h-9 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent hover:text-accent transition-colors"
+                  title="Make transparent"
+                >
+                  Clear
+                </button>
+              </div>
             </Field>
             <StepArrows
               label="Corner roundness"
@@ -513,16 +526,59 @@ export function PropertyPanel() {
               </Field>
             )}
 
-            <Field label="Background">
-              <input
-                type="color"
-                className="w-full h-9 rounded-lg border border-border"
-                value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#ffffff')}
-                onChange={(e) => {
-                  setStyleProp(selected, 'background-color', e.target.value);
-                  update();
-                }}
-              />
+            <Field label="Background Image">
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editor) {
+                      editor.runCommand('open-assets', { target: selected });
+                    }
+                  }}
+                  className="w-full py-2.5 text-sm font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg transition-colors"
+                >
+                  {getStyleProp(selected, 'background-image') && getStyleProp(selected, 'background-image') !== 'none'
+                    ? 'Change image'
+                    : 'Add background image'}
+                </button>
+                {getStyleProp(selected, 'background-image') && getStyleProp(selected, 'background-image') !== 'none' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStyleProp(selected, 'background-image', 'none');
+                      update();
+                    }}
+                    className="w-full py-1.5 text-xs font-medium rounded-lg border border-danger/30 text-danger bg-danger/5 hover:bg-danger/10 transition-colors"
+                  >
+                    Remove Image
+                  </button>
+                )}
+              </div>
+            </Field>
+
+            <Field label="Background Color">
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  className="flex-1 h-9 rounded-lg border border-border cursor-pointer"
+                  value={toHex(getStyleProp(selected, 'background-color') || getStyleProp(selected, 'background') || '#ffffff')}
+                  onChange={(e) => {
+                    setStyleProp(selected, 'background-color', e.target.value);
+                    update();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStyleProp(selected, 'background-color', 'transparent');
+                    update();
+                  }}
+                  className="px-3 h-9 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent hover:text-accent transition-colors"
+                  title="Make transparent"
+                >
+                  Clear
+                </button>
+              </div>
             </Field>
             <PositionControls selected={selected} update={update} />
             <Field label="Layout">

@@ -9,6 +9,7 @@ export interface BlockDefinition {
 
 export const SECTION_BLOCKS: BlockDefinition[] = [
   { id: 'navbar-block', label: 'Navbar', thumb: 'navbar', keywords: ['header', 'nav', 'menu'] },
+  { id: 'image-banner-block', label: 'Image Banner', thumb: 'image', keywords: ['banner', 'hero', 'hotspot'] },
   { id: 'hero-block', label: 'Hero Section', thumb: 'hero', keywords: ['banner', 'headline'] },
   { id: 'features-block', label: 'Feature Grid', thumb: 'features', keywords: ['grid', 'features'] },
   { id: 'pricing-block', label: 'Pricing Section', thumb: 'pricing', keywords: ['plans', 'price'] },
@@ -20,6 +21,7 @@ export const SECTION_BLOCKS: BlockDefinition[] = [
   { id: 'team-block', label: 'Team Section', thumb: 'team', keywords: ['people', 'staff'] },
   { id: 'logos-block', label: 'Logo Cloud', thumb: 'logos', keywords: ['brands', 'clients'] },
   { id: 'footer-block', label: 'Footer', thumb: 'footer', keywords: ['bottom'] },
+  { id: 'html-section', label: 'Custom HTML', thumb: 'text', keywords: ['code', 'raw', 'embed'] },
 ]
 
 export const COMPONENT_BLOCKS: BlockDefinition[] = [
@@ -28,6 +30,7 @@ export const COMPONENT_BLOCKS: BlockDefinition[] = [
   { id: 'image-block', label: 'Image', thumb: 'image', keywords: ['photo', 'picture'] },
   { id: 'card-block', label: 'Card', thumb: 'card', keywords: ['box', 'container'] },
   { id: 'divider-block', label: 'Divider', thumb: 'divider', keywords: ['line', 'separator'] },
+  { id: 'hotspot-block', label: 'Image Hotspot', thumb: 'button', keywords: ['link', 'area', 'clickable'] },
 ]
 
 export const ALL_BLOCKS = [...SECTION_BLOCKS, ...COMPONENT_BLOCKS]

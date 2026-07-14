@@ -9,14 +9,14 @@
 .tc-builder .gjs-editor-host {
   position: absolute;
   inset: 0;
-  min-height: 900px;
+  min-height: 100%;
   pointer-events: auto;
   z-index: 1;
 }
 
 .tc-builder .gjs-editor-host .gjs-editor {
   height: 100% !important;
-  min-height: 900px;
+  min-height: 100%;
 }
 
 .tc-builder .gjs-editor-host .gjs-cv-canvas,
@@ -54,18 +54,18 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   top: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  min-height: 900px;
+  min-height: 100%;
   background: transparent !important;
 }
 
 .tc-builder .gjs-cv-canvas__frames {
   height: 100% !important;
-  min-height: 900px;
+  min-height: 100%;
 }
 
 .tc-builder .gjs-editor-cont {
   height: 100% !important;
-  min-height: 900px;
+  min-height: 100%;
 }
 
 .tc-builder .gjs-frame-wrapper {
@@ -73,13 +73,12 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   border-radius: 0;
   box-shadow: none;
   margin: 0 auto;
-  min-height: 900px;
+  min-height: 100%;
   top: 0 !important;
   transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tc-page-frame {
-  min-height: 900px;
   overflow: visible !important;
 }
 
@@ -283,6 +282,28 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   position: relative !important;
 }
 
+/* Fix overlap between value and unit */
+.tc-advanced-styles-host .gjs-sm-field .gjs-sm-input {
+  flex: 1 1 auto !important;
+  width: 100% !important;
+  display: flex !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-field input {
+  flex: 1 !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  padding-right: 32px !important;
+}
+
+.tc-advanced-styles-host .gjs-sm-unit {
+  position: absolute !important;
+  right: 6px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  flex: 0 0 auto !important;
+}
+
 .tc-advanced-styles-host .gjs-field:focus-within,
 .tc-advanced-styles-host .gjs-sm-field:focus-within,
 .tc-advanced-traits-host .gjs-field:focus-within {
@@ -298,11 +319,12 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   text-transform: uppercase !important;
   background: #f1f5f9 !important;
   color: #475569 !important;
-  padding: 2px 6px !important;
-  border-radius: 6px !important;
-  margin-right: 4px !important;
+  padding: 3px 5px !important;
+  border-radius: 4px !important;
+  margin: 0 !important;
   cursor: pointer !important;
   transition: all 0.2s ease !important;
+  z-index: 10 !important;
 }
 
 .tc-advanced-styles-host .gjs-sm-unit:hover {

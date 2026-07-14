@@ -1,4 +1,4 @@
-﻿import type { ThumbnailKey } from '../blocks/thumbnails'
+import type { ThumbnailKey } from '../blocks/thumbnails'
 import { PREVIEW } from './templateImages'
 import {
   sharedCss,
@@ -112,7 +112,7 @@ export const STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const otpTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .otp-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%); }
 .otp-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); border: 1px solid #e5e7eb; overflow: hidden; }
 .otp-bar { height: 6px; background: #2563eb; }
@@ -165,7 +165,7 @@ const otpTemplate1Html = `
 
 const otpTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .otp-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .otp-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .otp-icon { width: 56px; height: 56px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 4px 4px 0px #111827; }
@@ -257,7 +257,7 @@ const otpTemplate3Html = `
 
 const otpTemplate4Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .otp-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .otp-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .otp-icon { width: 56px; height: 56px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: rgba(212, 175, 55, 0.05); }
@@ -300,8 +300,42 @@ const otpTemplate4Html = `
   </div>
 </div>
 `
+const wellnessOtpCss = `
+* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-otp-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }
+.invisible-input { position: absolute; background: rgba(255,255,255,0.1); border: 1px dashed rgba(255,255,255,0.4); outline: none; color: transparent; text-shadow: 0 0 0 #000; font-size: 16px; text-align: center; }
+`
+
+const wellnessOtpHtml = `
+<div class="wellness-otp-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+  
+  <!-- Invisible input for phone -->
+  <input class="invisible-input" data-otp-field="phone" inputmode="numeric" style="width:50%; height:8%; top:50%; left:25%;" />
+  
+  <!-- Invisible button for Get Verification -->
+  <button type="button" data-otp-action="send" style="position:absolute;width:50%;height:8%;top:60%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+  
+  <!-- Invisible input for OTP -->
+  <input class="invisible-input" data-otp-field="otp" inputmode="numeric" style="width:50%; height:8%; top:70%; left:25%;" />
+  
+  <!-- Invisible button for Verify -->
+  <button type="button" data-otp-action="verify" style="position:absolute;width:50%;height:8%;top:80%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+</div>
+`
 
 export const OTP_STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    id: 'otp-wellness',
+    name: 'Wellness 360',
+    description: 'Image-based Wellness 360 OTP with invisible interactive hotspots.',
+    thumb: 'image',
+    previewImage: '',
+    css: wellnessOtpCss,
+    html: wellnessOtpHtml,
+  },
   {
     id: 'otp-royal',
     name: 'Classic Royal Blue',
@@ -345,7 +379,7 @@ export const OTP_STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const confirmTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f8fafc; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .confirm-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); }
 .confirm-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; overflow: hidden; }
 .confirm-bar { height: 6px; background: #4f46e5; }
@@ -410,7 +444,7 @@ const confirmTemplate1Html = `
 
 const confirmTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .confirm-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .confirm-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .confirm-icon { width: 56px; height: 56px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 4px 4px 0px #111827; }
@@ -470,7 +504,7 @@ const confirmTemplate2Html = `
 
 const confirmTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .confirm-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .confirm-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .confirm-icon { width: 56px; height: 56px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(212, 175, 55, 0.05); }
@@ -527,8 +561,32 @@ const confirmTemplate3Html = `
   </div>
 </div>
 `
+const wellnessConfirmCss = `
+* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-confirm-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }
+`
+
+const wellnessConfirmHtml = `
+<div class="wellness-confirm-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+  
+  <!-- Invisible button for Confirm -->
+  <button type="button" data-action="CONFIRM" style="position:absolute;width:50%;height:10%;top:70%;left:25%;background:rgba(255,255,255,0.1);border:1px dashed rgba(255,255,255,0.4);color:transparent;cursor:pointer;"></button>
+</div>
+`
 
 export const CONFIRM_STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    id: 'confirm-wellness',
+    name: 'Wellness 360',
+    description: 'Image-based Wellness 360 Confirm with invisible interactive hotspots.',
+    thumb: 'image',
+    previewImage: '',
+    css: wellnessConfirmCss,
+    html: wellnessConfirmHtml,
+  },
   {
     id: 'confirm-classic',
     name: 'Classic Royal Blue',
@@ -563,7 +621,7 @@ export const CONFIRM_STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const homeTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f8fafc; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg, #f8fafc 0%, #f1f5f9 100%); }
 .home-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(15,23,42,0.08), 0 0 0 1px rgba(15,23,42,0.04); overflow: hidden; }
 .home-bar { height: 6px; background: linear-gradient(90deg, #6366f1, #3b82f6); }
@@ -607,7 +665,7 @@ const homeTemplate1Html = `
 
 const homeTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .home-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .home-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 4px 4px 0px #111827; }
@@ -641,7 +699,7 @@ const homeTemplate2Html = `
 
 const homeTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .home-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .home-icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(212, 175, 55, 0.05); }
@@ -672,8 +730,30 @@ const homeTemplate3Html = `
   </div>
 </div>
 `
+const wellnessHomeCss = `
+* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-home-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }
+`
+const wellnessHomeHtml = `
+<div class="wellness-home-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+  <a data-tc-type="hotspot" href="#" style="position:absolute;width:30%;height:12%;top:57%;left:8%;display:block;text-decoration:none;"></a>
+  <a data-tc-type="hotspot" href="#" style="position:absolute;width:30%;height:14%;top:55%;left:60%;display:block;text-decoration:none;"></a>
+</div>
+`
 
 export const HOME_STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    id: 'home-wellness',
+    name: 'Wellness 360',
+    description: 'Custom Zain Wellness template with image hotspots ready for routing.',
+    thumb: 'image',
+    previewImage: '',
+    css: wellnessHomeCss,
+    html: wellnessHomeHtml,
+  },
   {
     id: 'home-indigo',
     name: 'Classic Royal Blue',
@@ -708,7 +788,7 @@ export const HOME_STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const thankyouTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f8fafc; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .thankyou-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%); }
 .thankyou-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 24px; box-shadow: 0 10px 25px -5px rgba(15,23,42,0.05); border: 1px solid #e2e8f0; overflow: hidden; padding: 36px 28px; text-align: center; }
 .thankyou-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #ecfdf5; color: #10b981; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
@@ -740,7 +820,7 @@ const thankyouTemplate1Html = `
 
 const thankyouTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .thankyou-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .thankyou-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .thankyou-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: 4px 4px 0px #111827; }
@@ -767,7 +847,7 @@ const thankyouTemplate2Html = `
 
 const thankyouTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .thankyou-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .thankyou-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .thankyou-icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(212, 175, 55, 0.05); }
@@ -791,8 +871,29 @@ const thankyouTemplate3Html = `
   </div>
 </div>
 `
+const wellnessThankyouCss = `
+* { box-sizing: border-box; margin: 0; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
+.wellness-thankyou-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-img { width: 100%; height: auto; display: block; }
+`
+
+const wellnessThankyouHtml = `
+<div class="wellness-thankyou-container">
+  <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
+</div>
+`
 
 export const THANKYOU_STARTER_TEMPLATES: StarterTemplate[] = [
+  {
+    id: 'thankyou-wellness',
+    name: 'Wellness 360',
+    description: 'Image-based Wellness 360 Thank You page.',
+    thumb: 'image',
+    previewImage: '',
+    css: wellnessThankyouCss,
+    html: wellnessThankyouHtml,
+  },
   {
     id: 'thankyou-classic',
     name: 'Classic Royal Blue',
@@ -827,7 +928,7 @@ export const THANKYOU_STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const blockedTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f8fafc; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .blocked-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .blocked-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 24px; box-shadow: 0 10px 25px -5px rgba(15,23,42,0.05); border: 1px solid #e2e8f0; overflow: hidden; padding: 36px 28px; text-align: center; }
 .blocked-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef2f2; color: #ef4444; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
@@ -856,7 +957,7 @@ const blockedTemplate1Html = `
 
 const blockedTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .blocked-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .blocked-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .blocked-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: 4px 4px 0px #111827; }
@@ -880,7 +981,7 @@ const blockedTemplate2Html = `
 
 const blockedTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .blocked-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .blocked-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .blocked-icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(212, 175, 55, 0.05); }
@@ -937,7 +1038,7 @@ export const BLOCKED_STARTER_TEMPLATES: StarterTemplate[] = [
 // ----------------------------------------------------
 const errorTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f8fafc; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
 .error-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .error-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 24px; box-shadow: 0 10px 25px -5px rgba(15,23,42,0.05); border: 1px solid #e2e8f0; overflow: hidden; padding: 36px 28px; text-align: center; }
 .error-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fff7ed; color: #f97316; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; }
@@ -967,7 +1068,7 @@ const errorTemplate1Html = `
 
 const errorTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #f3f4f6; color: #111827; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
 .error-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .error-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
 .error-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 32px; box-shadow: 4px 4px 0px #111827; }
@@ -991,7 +1092,7 @@ const errorTemplate2Html = `
 
 const errorTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
-body { font-family: Inter, system-ui, sans-serif; background-color: #0f0f11; color: #e4e4e7; }
+body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
 .error-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
 .error-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
 .error-icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; background: rgba(212, 175, 55, 0.05); }

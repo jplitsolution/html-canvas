@@ -183,9 +183,22 @@ export function syncCanvasFrameHeight(editor: Editor) {
         720,
       )
 
-      const height = Math.ceil(contentHeight) + 2
-      frameEl.style.height = `${height}px`
-      frameEl.style.minHeight = `${height}px`
+      const pageFrame = document.querySelector('.tc-page-frame') as HTMLElement | null
+      const isFixedHeight = pageFrame && pageFrame.style.height && pageFrame.style.height !== 'auto'
+
+      if (isFixedHeight) {
+        // If Custom Height is set, let CSS handle it
+        frameEl.style.height = '100%'
+        frameEl.style.minHeight = '100%'
+        // don't overwrite pageFrame minHeight
+      } else {
+        const height = Math.ceil(contentHeight) + 2
+        frameEl.style.height = `${height}px`
+        frameEl.style.minHeight = `${height}px`
+        if (pageFrame) {
+          pageFrame.style.minHeight = `${Math.max(height, 400)}px`
+        }
+      }
 
       const frameWrapper = frameEl.closest('.gjs-frame-wrapper') as HTMLElement | null
       if (frameWrapper) {
@@ -195,11 +208,6 @@ export function syncCanvasFrameHeight(editor: Editor) {
       const canvasEl = frameEl.closest('.gjs-cv-canvas') as HTMLElement | null
       if (canvasEl) {
         canvasEl.style.top = '0px'
-      }
-
-      const pageFrame = document.querySelector('.tc-page-frame') as HTMLElement | null
-      if (pageFrame) {
-        pageFrame.style.minHeight = `${Math.max(height, 900)}px`
       }
     })
   }, 80)

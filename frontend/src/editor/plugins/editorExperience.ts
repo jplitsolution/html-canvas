@@ -64,6 +64,15 @@ export function setupEditorExperience(
     const tag = (component.get('tagName') || '').toLowerCase()
     if (tag === 'img') {
       component.set('editable', false)
+      const toolbar = component.get('toolbar') || []
+      const hasReplace = toolbar.some((t: any) => t.command === 'tc-image-replace')
+      if (!hasReplace) {
+        toolbar.unshift({
+          attributes: { class: 'fa fa-image', title: 'Replace Image' },
+          command: 'tc-image-replace',
+        })
+        component.set('toolbar', toolbar)
+      }
     }
   })
 
@@ -75,9 +84,7 @@ export function setupEditorExperience(
   })
 
   editor.on('load', () => {
-    // Backspace is for editing text — only Delete removes the selected block
-    editor.Keymaps.remove('core:component-delete')
-    editor.Keymaps.add('core:component-delete', 'delete', 'core:component-delete', { prevent: true })
+    // Rely on GrapesJS default keymaps for core:component-delete (which supports backspace & delete)
   })
 
   const onKeyDown = (e: KeyboardEvent) => {

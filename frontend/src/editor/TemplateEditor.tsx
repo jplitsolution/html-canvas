@@ -50,12 +50,14 @@ export default function TemplateEditor({
 
   const [editor, setEditor] = useState<GrapesEditor | null>(null)
   const [isEmpty, setIsEmpty] = useState(true)
-  const [device, setDevice] = useState('Desktop')
+  const [device, setDevice] = useState(() => (initialData?.projectData?.customWidth ? 'Custom' : 'Desktop'))
   const [zoom, setZoom] = useState(100)
   const [advancedMode, setAdvancedMode] = useState(false)
   const [selectionVersion, setSelectionVersion] = useState(0)
   const [saving, setSaving] = useState(false)
   const [isDirty, setIsDirty] = useState(false)
+  const [customWidth, setCustomWidth] = useState(() => (initialData?.projectData?.customWidth?.toString() || '1200'))
+  const [customHeight, setCustomHeight] = useState(() => (initialData?.projectData?.customHeight?.toString() || '800'))
   const [dragDebug, setDragDebug] = useState<DragDebugState>({
     draggedItem: null,
     selectedItem: null,
@@ -74,19 +76,19 @@ export default function TemplateEditor({
 
   const refreshSelection = useCallback(() => setSelectionVersion((v) => v + 1), [])
 
-  const callbacksRef = useRef({ onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler })
+  const callbacksRef = useRef({ onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler, customWidth, customHeight })
   useEffect(() => {
-    callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler }
-  }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler])
+    callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler, customWidth, customHeight }
+  }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler, customWidth, customHeight])
 
   const handleSave = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
     setSaving(true)
     try {
-      const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb, saveHandler: customSave } =
+      const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb, saveHandler: customSave, customWidth: cw, customHeight: ch } =
         callbacksRef.current
-      const meta = { id, name, createdAt, metadata }
+      const meta = { id, name, createdAt, metadata, customWidth: cw, customHeight: ch }
       if (!customSave) {
         useStore.getState().addToast('Save handler not configured', 'error')
         return
@@ -408,9 +410,13 @@ export default function TemplateEditor({
     zoom,
     advancedMode,
     funnelPageType,
+    customWidth,
+    customHeight,
     setAdvancedMode,
     setZoom,
     setDevice,
+    setCustomWidth,
+    setCustomHeight,
     refreshSelection,
     selectionVersion,
     dragDebug,

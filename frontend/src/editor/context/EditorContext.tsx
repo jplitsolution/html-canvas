@@ -8,9 +8,13 @@ interface EditorContextValue {
   zoom: number
   advancedMode: boolean
   funnelPageType?: string
+  customWidth: string
+  customHeight: string
   setAdvancedMode: (v: boolean) => void
   setZoom: (z: number) => void
   setDevice: (d: string) => void
+  setCustomWidth: (w: string) => void
+  setCustomHeight: (h: string) => void
   refreshSelection: () => void
   selectionVersion: number
   dragDebug: import('../plugins/dragAndDrop').DragDebugState

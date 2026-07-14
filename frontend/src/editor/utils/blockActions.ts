@@ -30,7 +30,7 @@ export function applyStarterHtml(editor: Editor, html: string, css = '') {
   // multi-byte chars (showing âšœ â¡ etc.). Entity-encoding keeps them ASCII-safe
   // so they survive the internal parse and still render correctly in the canvas.
   const safeHtml = encodeNonAscii(html)
-  if (css) editor.setStyle(css)
+  editor.setStyle(css) // Always apply CSS to ensure old styles are cleared when starting from scratch
   editor.setComponents(safeHtml)
   editor.UndoManager.clear()
 }

@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Puzzle,
   ShieldCheck,
+  Code2,
 } from 'lucide-react'
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
@@ -25,7 +26,7 @@ import { uploadImage } from '../../services/api/upload'
 import { PlacementModal } from '../components/PlacementModal'
 import { FUNNEL_PAGE_GUIDES, type FunnelPageType } from '../utils/funnelGuide'
 
-type SidebarTab = 'flow' | 'layouts' | 'sections' | 'parts' | 'photos' | 'structure'
+type SidebarTab = 'flow' | 'layouts' | 'sections' | 'parts' | 'photos' | 'structure' | 'code'
 
 const TABS: { id: SidebarTab; label: string; hint: string; icon: typeof Boxes }[] = [
   { id: 'flow', label: 'Required parts', hint: 'Re-add flow buttons & fields the page needs', icon: ShieldCheck },
@@ -34,6 +35,7 @@ const TABS: { id: SidebarTab; label: string; hint: string; icon: typeof Boxes }[
   { id: 'parts', label: 'Parts', hint: 'Buttons, text, images & more', icon: Puzzle },
   { id: 'photos', label: 'Your photos', hint: 'Upload and add images', icon: ImageIcon },
   { id: 'structure', label: 'Page outline', hint: 'See everything on the page', icon: Boxes },
+  { id: 'code', label: 'Code', hint: 'Edit raw HTML and CSS of the entire page', icon: Code2 },
 ]
 
 function findHeadingInSection(section: any): any | null {
@@ -72,7 +74,6 @@ export function EditorSidebar() {
   const [assets, setAssets] = useState<Array<{ src: string }>>([])
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
-  const [showAdvanced, setShowAdvanced] = useState(false)
   const [placementModal, setPlacementModal] = useState<{ src: string } | null>(null)
 
   const refreshAssets = useCallback(() => {
@@ -299,21 +300,10 @@ export function EditorSidebar() {
                 <div id="tc-layers-panel" className="tc-layers-host flex-1 min-h-0 overflow-y-auto" />
               </div>
             )}
-          </div>
 
-          {/* Advanced code — hidden by default */}
-          <div className="shrink-0 border-t border-border">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 text-xs font-medium text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
-            >
-              <span>For developers: edit code</span>
-              {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
-            {showAdvanced && (
-              <div className="h-48 px-3 pb-3 overflow-hidden">
-                <RawHtmlPanel editor={editor} active={showAdvanced} />
+            {tab === 'code' && (
+              <div className="flex-1 min-h-0 flex flex-col p-3">
+                <RawHtmlPanel editor={editor} active={tab === 'code'} />
               </div>
             )}
           </div>

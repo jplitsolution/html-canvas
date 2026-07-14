@@ -2,29 +2,22 @@ import type { Editor } from 'grapesjs'
 import { uploadImage } from '../../services/api/upload'
 
 export function setupAssetUpload(editor: Editor) {
-  editor.AssetManager.config.upload = false
+  editor.AssetManager.config.upload = 'dummy_url' // Set to string to enable UI
 
-  const am = editor.AssetManager as Editor['AssetManager'] & {
-    uploadFile?: (files: FileList | File[]) => Promise<{ data: Array<{ src: string; type: string }> }>
-  }
-
-  am.uploadFile = async (files: FileList | File[]) => {
-    const fileList = files instanceof FileList ? Array.from(files) : files
-    const results: Array<{ src: string; type: string }> = []
+  editor.AssetManager.config.uploadFile = async (e: any) => {
+    const files = e.dataTransfer ? e.dataTransfer.files : e.target.files
+    const fileList = Array.from(files) as File[]
 
     for (const file of fileList) {
       if (!file.type.startsWith('image/')) continue
       try {
         const response = await uploadImage(file)
         const url = response.url
-        results.push({ src: url, type: 'image' })
         editor.AssetManager.add({ src: url, type: 'image', name: file.name })
       } catch (err) {
         console.error('Image upload failed:', err)
       }
     }
-
-    return { data: results }
   }
 
   editor.Commands.add('open-assets', {

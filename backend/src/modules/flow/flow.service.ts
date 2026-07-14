@@ -376,6 +376,7 @@ export class FlowService {
       variables,
       actions: this.getActions(resolvedPageType),
       pack: this.normalizePack(input.pack),
+      projectData: templateData.projectData || {},
     };
   }
 

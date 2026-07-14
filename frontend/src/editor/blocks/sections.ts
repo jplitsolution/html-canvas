@@ -32,6 +32,15 @@ export function registerSectionBlocks(editor: Editor) {
     </header>
   `)
 
+  addSection(editor, 'image-banner-block', 'Image Banner', 'image', `
+    <div data-tc-type="image-banner" style="position:relative;display:inline-block;width:100%;max-width:100%;overflow:hidden;margin:0 auto;">
+      <img data-tc-type="image" src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&h=400&fit=crop" alt="Banner Image" style="width:100%;height:auto;display:block;" />
+      <div data-gjs-droppable="true" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;box-sizing:border-box;">
+        <h2 data-gjs-type="text" style="color:#ffffff;font-size:32px;font-weight:bold;text-shadow:0 2px 4px rgba(0,0,0,0.5);text-align:center;margin:0;">Your Banner Title</h2>
+      </div>
+    </div>
+  `)
+
   addSection(editor, 'hero-block', 'Hero Section', 'hero', `
     <section data-tc-type="section" style="padding:80px 32px;text-align:center;background:linear-gradient(135deg,#eef2ff 0%,#ffffff 100%);font-family:Inter,sans-serif;">
       <h1 data-gjs-type="text" style="font-size:clamp(32px, 8vw, 48px);font-weight:700;color:#0f172a;margin:0 0 16px;line-height:1.1;">Build beautiful websites faster</h1>
@@ -189,5 +198,13 @@ export function registerSectionBlocks(editor: Editor) {
       </div>
       <div data-gjs-type="text" style="text-align:center;border-top:1px solid #1e293b;padding-top:24px;font-size:13px;max-width:960px;margin:0 auto;">© 2026 Brand. All rights reserved.</div>
     </footer>
+  `)
+
+  addSection(editor, 'html-section', 'Custom HTML', 'text', `
+    <section data-tc-type="section" style="padding:32px;background:#ffffff;font-family:Inter,sans-serif;">
+      <div data-gjs-type="text" style="padding:16px;border:1px dashed #cbd5e1;color:#64748b;text-align:center;">
+        Double-click here to edit this text or add custom HTML tags via the code editor (if available).
+      </div>
+    </section>
   `)
 }
