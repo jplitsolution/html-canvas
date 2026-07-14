@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { join } from 'path';
 import configuration from './config/configuration';
 import { UsersModule } from './modules/users/users.module';
@@ -40,6 +42,19 @@ import { RedisModule } from './common/redis.module';
         synchronize: false,
         migrations: [join(__dirname, 'database/migrations/*{.ts,.js}')],
         migrationsRun: true,
+      }),
+    }),
+
+    ScheduleModule.forRoot(),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('redis.host'),
+          port: configService.get<number>('redis.port'),
+          password: configService.get<string>('redis.password'),
+        },
       }),
     }),
 

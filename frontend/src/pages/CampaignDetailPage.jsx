@@ -18,6 +18,7 @@ import {
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
+import { copyToClipboard } from '../utils/clipboard'
 import {
   PAGE_TYPE_LABELS,
   PAGE_TYPES,
@@ -65,10 +66,13 @@ function CampaignDetailPage() {
   }
 
   const copyTracking = (url) => {
-    navigator.clipboard?.writeText(url).then(
-      () => useStore.getState().addToast('Tracking URL copied', 'success'),
-      () => useStore.getState().addToast('Copy failed', 'error'),
-    )
+    copyToClipboard(url).then((success) => {
+      if (success) {
+        useStore.getState().addToast('Tracking URL copied', 'success')
+      } else {
+        useStore.getState().addToast('Copy failed', 'error')
+      }
+    })
   }
 
   const fetchRecentLogs = useCallback(() => {
