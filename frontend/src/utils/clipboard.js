@@ -1,56 +1,47 @@
 export function copyWithExecCommand(text) {
+  let success = false;
   try {
-    const textarea = document.createElement('textarea');
-    textarea.value = text;
-    textarea.style.position = 'fixed';
-    textarea.style.left = '-9999px';
-    textarea.style.top = '-9999px';
-    textarea.setAttribute('readonly', 'true');
-    textarea.style.fontSize = '16px'; 
+    const el = document.createElement('textarea');
+    el.value = text;
+    // Make it hidden but still focusable and selectable
+    el.setAttribute('readonly', '');
+    el.style.position = 'absolute';
+    el.style.left = '-9999px';
+    document.body.appendChild(el);
+    
+    const selected = document.getSelection().rangeCount > 0 ? document.getSelection().getRangeAt(0) : false;
+    
+    el.select();
+    el.setSelectionRange(0, 999999); // For mobile devices
+    
+    success = document.execCommand('copy');
+    document.body.removeChild(el);
 
-    document.body.appendChild(textarea);
-
-    const isIOS = typeof navigator !== 'undefined' && /ipad|iphone/i.test(navigator.userAgent || '');
-
-    if (isIOS) {
-      const range = document.createRange();
-      range.selectNodeContents(textarea);
-      const selection = window.getSelection();
-      if (selection) {
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-      textarea.setSelectionRange(0, 999999);
-    } else {
-      textarea.focus();
-      textarea.select();
+    if (selected) {
+      document.getSelection().removeAllRanges();
+      document.getSelection().addRange(selected);
     }
-
-    let ok = false;
-    try {
-      ok = document.execCommand('copy');
-    } catch (err) {
-      ok = false;
-    }
-
-    document.body.removeChild(textarea);
-    return ok;
-  } catch (error) {
-    return false;
+  } catch (err) {
+    success = false;
   }
+  return success;
 }
 
 export function copyToClipboard(text) {
   const value = text ? String(text).trim() : '';
   if (!value) return Promise.resolve(false);
 
-  if (typeof window !== 'undefined' && window.isSecureContext && navigator.clipboard?.writeText) {
+  // Try modern Clipboard API first (only works on HTTPS or localhost)
+  if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
     return navigator.clipboard.writeText(value)
       .then(() => true)
-      .catch(() => false);
+      .catch(() => {
+        // Fallback if clipboard API throws error (e.g. permission denied)
+        return copyWithExecCommand(value);
+      });
   }
 
-  // Executed synchronously on HTTP to preserve user gesture
+  // Fallback for HTTP (insecure context)
   const success = copyWithExecCommand(value);
   return Promise.resolve(success);
 }

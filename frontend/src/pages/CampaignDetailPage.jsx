@@ -49,6 +49,7 @@ function CampaignDetailPage() {
   const [recentLogs, setRecentLogs] = useState([])
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
   const [assigningVendor, setAssigningVendor] = useState(false)
+  const [copiedId, setCopiedId] = useState(null)
 
   useEffect(() => {
     fetchVendors().catch(() => {})
@@ -65,10 +66,11 @@ function CampaignDetailPage() {
     }
   }
 
-  const copyTracking = (url) => {
+  const copyTracking = (url, id) => {
     copyToClipboard(url).then((success) => {
       if (success) {
-        useStore.getState().addToast('Tracking URL copied', 'success')
+        setCopiedId(id)
+        setTimeout(() => setCopiedId(null), 2000)
       } else {
         useStore.getState().addToast('Copy failed', 'error')
       }
@@ -457,11 +459,17 @@ function CampaignDetailPage() {
                             <span className="text-xs font-medium text-fg">{aff.name}</span>
                             <button
                               type="button"
-                              onClick={() => copyTracking(url)}
-                              className="text-fg-muted hover:text-fg"
+                              onClick={() => copyTracking(url, aff.id)}
+                              className="text-fg-muted hover:text-fg cursor-pointer flex items-center justify-center transition-colors"
                               title="Copy tracking URL"
                             >
-                              <Copy className="w-3.5 h-3.5" />
+                              {copiedId === aff.id ? (
+                                <span className="text-[10px] text-green-500 font-medium flex items-center gap-1">
+                                  <CheckCircle2 className="w-3.5 h-3.5" /> Copied!
+                                </span>
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
                             </button>
                           </div>
                           <code className="text-[10px] text-fg-subtle break-all block">{url}</code>
