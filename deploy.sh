@@ -105,6 +105,7 @@ write_backend_env() {
 PORT=${BACKEND_PORT}
 NODE_ENV=production
 
+DB_TYPE=${DB_TYPE:-mysql}
 DB_HOST=${DB_HOST}
 DB_PORT=${DB_PORT}
 DB_USERNAME=${DB_USERNAME}
