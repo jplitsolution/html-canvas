@@ -40,18 +40,18 @@ export class OtpRequest {
   @Column({ type: 'int', default: 0 })
   attempts: number;
 
-  @Column({ name: 'used_at', type: 'datetime', nullable: true })
+  @Column({ name: 'used_at', type: 'timestamp', nullable: true })
   usedAt?: Date | null;
 
-  @Column({ name: 'verified_at', type: 'datetime', nullable: true })
+  @Column({ name: 'verified_at', type: 'timestamp', nullable: true })
   verifiedAt?: Date | null;
 
-  @Column({ name: 'expires_at', type: 'datetime' })
+  @Column({ name: 'expires_at', type: 'timestamp' })
   expiresAt: Date;
 
-  @CreateDateColumn({ name: 'created_at', type: 'datetime' })
+  @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn({ name: 'updated_at', type: 'datetime' })
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamp' })
   updatedAt: Date;
 }
