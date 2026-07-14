@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Plus, LogIn, ChevronRight } from 'lucide-react'
+import { Search, Plus, ChevronRight } from 'lucide-react'
 import useStore from '../store/useStore'
 import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
@@ -50,25 +50,7 @@ function CampaignsPage() {
     )
   }
 
-  if (!isAuthenticated) {
-    return (
-      <AppShell>
-        <div className="page-container">
-          <EmptyState
-            icon={LogIn}
-            title="Sign in to manage campaigns"
-            description="Create and manage subscription funnels by country and operator"
-            action={
-              <Button variant="primary" onClick={() => navigate('/login')}>
-                <LogIn className="w-4 h-4" />
-                Sign in
-              </Button>
-            }
-          />
-        </div>
-      </AppShell>
-    )
-  }
+
 
   return (
     <AppShell actions={pageActions}>

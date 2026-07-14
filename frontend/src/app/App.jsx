@@ -26,7 +26,14 @@ function App() {
           <main id="main-content">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route path="/campaigns" element={<CampaignsPage />} />
+              <Route 
+                path="/campaigns" 
+                element={
+                  <RequireAuth>
+                    <CampaignsPage />
+                  </RequireAuth>
+                } 
+              />
               <Route
                 path="/analytics"
                 element={
