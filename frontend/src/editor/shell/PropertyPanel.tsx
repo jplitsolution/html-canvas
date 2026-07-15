@@ -19,6 +19,72 @@ import {
 } from '../utils/spacingUtils';
 import type { Component } from 'grapesjs';
 
+function formatHtml(html: string): string {
+  if (!html?.trim()) return ''
+  return html
+    .replace(/></g, '>\n<')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
+
+function ComponentCodeEditor({ selected, editor, update }: { selected: Component; editor: any; update: () => void }) {
+  const [code, setCode] = useState('');
+  const [isDirty, setIsDirty] = useState(false);
+
+  useLayoutEffect(() => {
+    // get outer HTML with inline styles
+    const el = selected.getEl();
+    if (el) {
+      setCode(formatHtml(el.outerHTML));
+    } else {
+      setCode(formatHtml(selected.toHTML()));
+    }
+    setIsDirty(false);
+  }, [selected, editor, update]); // refresh on update()
+
+  const applyCode = () => {
+    try {
+      const newComp = selected.replaceWith(code);
+      if (Array.isArray(newComp)) {
+        editor.select(newComp[0]);
+      } else {
+        editor.select(newComp);
+      }
+      setIsDirty(false);
+      update();
+    } catch (err) {
+      console.error('Failed to apply component code', err);
+    }
+  };
+
+  return (
+    <div className="pt-4 mt-4 border-t border-border">
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-semibold text-fg">Component Code (HTML)</h3>
+      </div>
+      <textarea
+        value={code}
+        onChange={(e) => {
+          setCode(e.target.value);
+          setIsDirty(true);
+        }}
+        spellCheck={false}
+        className="w-full h-32 text-[10px] font-mono p-2 bg-bg-subtle text-fg border border-border rounded resize-y focus:outline-none focus:ring-1 focus:ring-accent"
+      />
+      {isDirty && (
+        <button
+          type="button"
+          onClick={applyCode}
+          className="mt-2 w-full py-1.5 text-[11px] font-semibold bg-accent text-accent-fg rounded hover:bg-accent-hover transition-colors"
+        >
+          Apply Code
+        </button>
+      )}
+    </div>
+  );
+}
+
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block space-y-1.5">
@@ -681,6 +747,7 @@ export function PropertyPanel() {
               <h3 className="text-xs font-semibold text-fg mb-2">CSS styles</h3>
               <div ref={styleHostRef} className="tc-advanced-styles-host" />
             </div>
+            <ComponentCodeEditor selected={selected} editor={editor} update={update} />
           </div>
         )}
       </div>

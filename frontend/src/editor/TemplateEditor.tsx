@@ -185,6 +185,11 @@ export default function TemplateEditor({
     const cleanupTextEditing = setupTextEditing(ed, refreshSelection)
 
     // Register section ID auto-generation and nav link validation hooks
+    let lastDragEvent: any = null
+    ed.on('canvas:dragover', (e) => {
+      lastDragEvent = e
+    })
+
     ed.on('component:add', (component) => {
       const parent = component.parent()
       const isTopLevel = parent && (parent.get('type') === 'wrapper' || parent === safeGetWrapper(ed))
@@ -273,6 +278,50 @@ export default function TemplateEditor({
       }, 0)
     })
 
+    // Hook for Canva-style Absolute Free-Form Placement
+    ed.on('component:add', (component) => {
+      setTimeout(() => {
+        if (!mounted || editorRef.current !== ed) return
+        
+        const type = component.get('type')
+        const tag = (component.get('tagName') || '').toLowerCase()
+        const isWrapperOrSection = type === 'wrapper' || tag === 'body' || ['section', 'header', 'footer', 'main'].includes(tag) || component.getAttributes()?.['data-tc-type'] === 'section'
+        
+        if (!isWrapperOrSection) {
+          const parent = component.parent()
+          if (parent) {
+            // Fix Preview Issue: Parent MUST be relative/absolute for absolute children
+            const pStyle = parent.getStyle() || {}
+            if (pStyle.position !== 'absolute' && pStyle.position !== 'relative' && pStyle.position !== 'fixed') {
+              parent.addStyle({ position: 'relative' })
+            }
+
+            // Fix Exact Drop Issue: Set position: absolute and top/left to where the mouse actually is
+            if (lastDragEvent && lastDragEvent.clientX !== undefined) {
+              const parentEl = parent.getEl ? parent.getEl() : null
+              if (parentEl) {
+                const rect = parentEl.getBoundingClientRect()
+                // Mouse position relative to the iframe viewport minus the parent's top/left bounds
+                const top = lastDragEvent.clientY - rect.top
+                const left = lastDragEvent.clientX - rect.left
+                
+                // Keep existing styles but override position and add coordinates
+                component.addStyle({ 
+                  position: 'absolute', 
+                  top: `${top}px`, 
+                  left: `${left}px`,
+                  margin: '0' // strip margin so it drops exactly at cursor
+                })
+              }
+            } else if (!component.getStyle()?.position) {
+              // Fallback if no drag event tracked, just ensure it's absolute
+              component.addStyle({ position: 'absolute', margin: '0' })
+            }
+          }
+        }
+      }, 50)
+    })
+
     ed.on('component:remove', (removedComponent) => {
       const id = removedComponent.getAttributes()?.id || removedComponent.getId()
       if (!id) return
@@ -338,6 +387,41 @@ export default function TemplateEditor({
       }
       ed.UndoManager.clear()
       setCanvasZoom(ed, 100)
+      
+      // Enable absolute drag mode for free-form dragging anywhere
+      ed.setDragMode('absolute')
+
+      // Healing script: Fix existing absolute components from before the update
+      const wrapper = ed.getWrapper()
+      if (wrapper) {
+        const walk = (cmp: any) => {
+          const style = cmp.getStyle() || {}
+          const isAbsolute = style.position === 'absolute' || cmp.getAttributes()?.['data-tc-type'] === 'hotspot'
+          if (isAbsolute) {
+            // Remove margins which break absolute positioning
+            if (style.margin || style['margin-top'] || style['margin-left']) {
+              const newStyle = { ...style }
+              delete newStyle.margin
+              delete newStyle['margin-top']
+              delete newStyle['margin-left']
+              delete newStyle['margin-right']
+              delete newStyle['margin-bottom']
+              cmp.setStyle(newStyle)
+            }
+            // Ensure parent is relative
+            const parent = cmp.parent()
+            if (parent) {
+              const pStyle = parent.getStyle() || {}
+              if (pStyle.position !== 'absolute' && pStyle.position !== 'relative' && pStyle.position !== 'fixed') {
+                parent.addStyle({ position: 'relative' })
+              }
+            }
+          }
+          cmp.components().forEach(walk)
+        }
+        walk(wrapper)
+      }
+
       requestAnimationFrame(() => {
         ensureBlockManagerMounted(ed)
         filterBlockElements(ed, 'sections', '')

@@ -19,9 +19,7 @@ function formatHtml(html: string): string {
 }
 
 export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
-  const [html, setHtml] = useState('')
-  const [css, setCss] = useState('')
-  const [view, setView] = useState<'html' | 'css'>('html')
+  const [code, setCode] = useState('')
   const [isDirty, setIsDirty] = useState(false)
   const [applyError, setApplyError] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
@@ -29,8 +27,10 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
   const syncFromEditor = useCallback(() => {
     if (!editor) return
     const snapshot = getActivePageSnapshot(editor)
-    setHtml(formatHtml(snapshot.html))
-    setCss(snapshot.css || '')
+    const formattedHtml = formatHtml(snapshot.html)
+    const currentCss = snapshot.css || ''
+    const combinedCode = `<style>\n${currentCss}\n</style>\n\n${formattedHtml}`
+    setCode(combinedCode)
     setIsDirty(false)
     setApplyError(null)
   }, [editor])
@@ -66,13 +66,30 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
     setApplyError(null)
 
     try {
-      if (view === 'css') {
-        editor.setStyle(css)
+      let parsedCss = ''
+      let parsedHtml = code
+
+      const styleMatch = code.match(/<style>([\s\S]*?)<\/style>([\s\S]*)/i)
+      if (styleMatch) {
+        parsedCss = styleMatch[1].trim()
+        parsedHtml = styleMatch[2].trim()
       } else {
-        const compiled = transformReactComponentsInHtml(html)
-        editor.setComponents(compiled)
-        ensureAllTextEditable(editor)
+        // Fallback: extract any inline style tags
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = code
+        const styles = tempDiv.querySelectorAll('style')
+        styles.forEach(s => {
+          parsedCss += s.innerHTML + '\n'
+          s.remove()
+        })
+        parsedHtml = tempDiv.innerHTML
       }
+
+      editor.setStyle(parsedCss)
+      const compiled = transformReactComponentsInHtml(parsedHtml)
+      editor.setComponents(compiled)
+      ensureAllTextEditable(editor)
+
       setIsDirty(false)
     } catch (err) {
       setApplyError(err instanceof Error ? err.message : 'Failed to apply changes')
@@ -81,15 +98,14 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
     }
   }
 
-  const currentValue = view === 'html' ? html : css
-  const lineCount = currentValue ? currentValue.split('\n').length : 1
+  const lineCount = code ? code.split('\n').length : 1
 
   return (
     <div className="flex flex-col h-full min-h-0 gap-2">
       <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5 text-xs font-medium text-fg-muted">
           <Code2 className="w-3.5 h-3.5" />
-          <span>Raw {view === 'html' ? 'HTML' : 'CSS'}</span>
+          <span>Raw Code (HTML + CSS)</span>
           {isDirty && (
             <span className="px-1.5 py-0.5 rounded bg-warning-muted text-warning text-[10px] font-semibold uppercase">
               Unsaved
@@ -106,42 +122,23 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
         </button>
       </div>
 
-      <div className="flex gap-1 shrink-0">
-        {(['html', 'css'] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setView(tab)}
-            className={`flex-1 py-1.5 text-[11px] font-semibold uppercase tracking-wider rounded-md transition-colors ${
-              view === tab
-                ? 'bg-accent text-accent-fg'
-                : 'bg-bg-subtle text-fg-muted hover:text-fg border border-border'
-            }`}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
       <div className="relative flex-1 min-h-0">
         <textarea
-          value={currentValue}
+          value={code}
           onChange={(e) => {
-            const value = e.target.value
-            if (view === 'html') setHtml(value)
-            else setCss(value)
+            setCode(e.target.value)
             setIsDirty(true)
             setApplyError(null)
           }}
           spellCheck={false}
           className="absolute inset-0 w-full h-full resize-none rounded-lg border border-border bg-bg-subtle text-fg font-mono text-[11px] leading-relaxed p-3 focus:outline-none focus:ring-2 focus:ring-accent/30"
-          placeholder={view === 'html' ? '<!-- Page HTML -->' : '/* Page CSS */'}
+          placeholder={'<style>\n/* CSS */\n</style>\n<!-- HTML -->'}
         />
       </div>
 
       <div className="flex items-center justify-between gap-2 shrink-0 text-[10px] text-fg-muted">
         <span>{lineCount} line{lineCount === 1 ? '' : 's'}</span>
-        <span>{currentValue.length.toLocaleString()} chars</span>
+        <span>{code.length.toLocaleString()} chars</span>
       </div>
 
       {applyError && (
@@ -159,7 +156,7 @@ export function RawHtmlPanel({ editor, active }: RawHtmlPanelProps) {
       </button>
 
       <p className="text-[10px] text-fg-muted leading-relaxed shrink-0">
-        Edit {view.toUpperCase()} here, then click Apply to update the canvas. Use Refresh to discard local edits.
+        Edit code here, then click Apply to update the canvas. Use Refresh to discard local edits.
       </p>
     </div>
   )
