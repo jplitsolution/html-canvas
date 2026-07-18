@@ -3,6 +3,7 @@ import {
   IsIn,
   IsInt,
   IsObject,
+  IsArray,
   IsOptional,
   IsString,
   MinLength,
@@ -55,10 +56,15 @@ export class UpdateCampaignDto {
   @IsBoolean()
   active?: boolean;
 
-  @ApiPropertyOptional({ description: 'Assign a vendor to this campaign' })
+  @ApiPropertyOptional({ description: 'Legacy: Assign vendors to this campaign' })
   @IsOptional()
-  @IsInt()
-  vendorId?: number;
+  @IsInt({ each: true })
+  vendorIds?: number[];
+
+  @ApiPropertyOptional({ description: 'Assign specific vendors and affiliates' })
+  @IsOptional()
+  @IsArray()
+  trackings?: { vendorId: number; affiliateId?: number | null }[];
 }
 
 export class UpdateFlowDto {

@@ -90,7 +90,8 @@ export class PartnersService {
 
   async removeVendor(id: number, userId: number): Promise<void> {
     const vendor = await this.getVendor(id, userId);
-    await this.vendorRepository.remove(vendor);
+    vendor.active = false;
+    await this.vendorRepository.save(vendor);
   }
 
   // ---- Affiliates ----
@@ -160,7 +161,8 @@ export class PartnersService {
     if (!affiliate) {
       throw new NotFoundException(`Affiliate ${id} not found`);
     }
-    await this.affiliateRepository.remove(affiliate);
+    affiliate.active = false;
+    await this.affiliateRepository.save(affiliate);
   }
 
   // ---- Attribution resolution (used by the public flow) ----

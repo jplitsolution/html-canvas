@@ -352,7 +352,10 @@ export class SearchService implements OnModuleInit {
 
   async aggregations(params: LogSearchParams): Promise<Record<string, unknown>> {
     const interval = this.resolveInterval(params);
-    const timeZone = params.timezone || 'UTC';
+    let timeZone = params.timezone || 'UTC';
+    if (timeZone === 'Asia/Calcutta') {
+      timeZone = 'Asia/Kolkata';
+    }
 
     if (this.client && !this.connectionFailed) {
       try {

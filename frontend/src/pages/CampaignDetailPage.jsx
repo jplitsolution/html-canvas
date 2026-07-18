@@ -14,6 +14,8 @@ import {
   Workflow,
   Copy,
   Store,
+  Plus,
+  Trash2,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -50,17 +52,66 @@ function CampaignDetailPage() {
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
   const [assigningVendor, setAssigningVendor] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
+  
+  const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
+  const [selectedAffiliateForAdd, setSelectedAffiliateForAdd] = useState('null')
 
   useEffect(() => {
     fetchVendors().catch(() => {})
   }, [fetchVendors])
 
-  const handleAssignVendor = async (vendorId) => {
+  const handleAddTracking = async (value) => {
+    if (!campaign || !value) return
+    setAssigningVendor(true)
+    try {
+      const [vId, aId] = value.split(':')
+      const vendorId = Number(vId)
+      const affiliateId = aId !== 'null' ? Number(aId) : null
+      
+      let currentTrackings = (campaign.trackings || []).map(t => ({
+        vendorId: t.vendor?.id,
+        affiliateId: t.affiliate?.id || null,
+      }))
+      
+      // Enforce mutual exclusion: 
+      // If adding an affiliate, remove 'All Traffic' for this vendor.
+      // If adding 'All Traffic', remove all specific affiliates for this vendor.
+      if (affiliateId !== null) {
+        currentTrackings = currentTrackings.filter(t => !(t.vendorId === vendorId && t.affiliateId === null));
+      } else {
+        currentTrackings = currentTrackings.filter(t => t.vendorId !== vendorId);
+      }
+      
+      // Add if it doesn't already exist
+      if (!currentTrackings.find(t => t.vendorId === vendorId && t.affiliateId === affiliateId)) {
+        currentTrackings.push({ vendorId, affiliateId })
+        await updateCampaign(campaign.id, { trackings: currentTrackings })
+        useStore.getState().addToast('Tracking added', 'success')
+      }
+
+    } finally {
+      setAssigningVendor(false)
+    }
+  }
+
+  const handleSubmitTracking = async () => {
+    if (!selectedVendorForAdd) return
+    await handleAddTracking(`${selectedVendorForAdd}:${selectedAffiliateForAdd}`)
+    setSelectedVendorForAdd('')
+    setSelectedAffiliateForAdd('null')
+  }
+
+  const handleRemoveTracking = async (vendorId, affiliateId) => {
     if (!campaign) return
     setAssigningVendor(true)
     try {
-      await updateCampaign(campaign.id, { vendorId: vendorId ? Number(vendorId) : null })
-      useStore.getState().addToast('Vendor updated', 'success')
+      const currentTrackings = (campaign.trackings || []).map(t => ({
+        vendorId: t.vendor?.id,
+        affiliateId: t.affiliate?.id || null,
+      }))
+      const newTrackings = currentTrackings.filter(t => !(t.vendorId === vendorId && t.affiliateId === affiliateId))
+      await updateCampaign(campaign.id, { trackings: newTrackings })
+      useStore.getState().addToast('Tracking removed', 'success')
     } finally {
       setAssigningVendor(false)
     }
@@ -386,6 +437,148 @@ function CampaignDetailPage() {
                 </table>
               )}
             </div>
+
+            {/* Attribution & Tracking */}
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <Store className="w-4 h-4 text-fg-subtle" />
+                  <div>
+                    <h2 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h2>
+                    <p className="text-xs text-fg-muted mt-0.5">Assign vendors to generate affiliate links</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base min-w-[140px]"
+                    value={selectedVendorForAdd}
+                    onChange={(e) => {
+                      setSelectedVendorForAdd(e.target.value)
+                      setSelectedAffiliateForAdd('null')
+                    }}
+                    disabled={assigningVendor}
+                  >
+                    <option value="" disabled>Select Vendor...</option>
+                    {vendors.filter(v => v.active !== false).map((v) => (
+                      <option key={v.id} value={v.id}>{v.name}</option>
+                    ))}
+                  </select>
+
+                  {selectedVendorForAdd && (
+                    <>
+                      <select
+                        className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base min-w-[140px]"
+                        value={selectedAffiliateForAdd}
+                        onChange={(e) => setSelectedAffiliateForAdd(e.target.value)}
+                        disabled={assigningVendor}
+                      >
+                        <option value="null">All Traffic (No specific affiliate)</option>
+                        {(vendors.find(v => String(v.id) === selectedVendorForAdd)?.affiliates || [])
+                          .filter(a => a.active !== false)
+                          .map(a => (
+                            <option key={a.id} value={a.id}>{a.name}</option>
+                          ))}
+                      </select>
+                      <Button
+                        size="sm"
+                        onClick={handleSubmitTracking}
+                        disabled={assigningVendor}
+                      >
+                        <Plus className="w-4 h-4 mr-1" /> Add
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="p-0 border-t border-border">
+                {!(campaign.trackings && campaign.trackings.length > 0) ? (
+                  <div className="text-center p-6">
+                    <p className="text-xs text-fg-subtle">
+                      No vendors assigned yet.{' '}
+                      <Link to="/vendors" className="text-accent">
+                        Manage vendors
+                      </Link>
+                    </p>
+                  </div>
+                ) : (
+                  <table className="data-table mb-0">
+                    <thead>
+                      <tr>
+                        <th>Vendor</th>
+                        <th>Affiliate</th>
+                        <th>Tracking URL</th>
+                        <th className="text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(campaign.trackings || []).map((t) => {
+                        const vendorId = t.vendor.id;
+                        const affiliateId = t.affiliate?.id;
+                        const vendor = vendors.find((v) => v.id === vendorId) || t.vendor;
+                        const affiliate = affiliateId ? vendor.affiliates?.find((a) => a.id === affiliateId) : null;
+                        
+                        const trackingUrl = affiliate
+                          ? getCampaignPreviewUrl(campaign).replace('HOME', `HOME&aff_id=${affiliate.code}`)
+                          : getCampaignPreviewUrl(campaign);
+
+                        return (
+                          <tr key={`${vendorId}-${affiliateId || 'none'}`}>
+                            <td className="font-medium whitespace-nowrap">
+                              <span className="flex items-center gap-2">
+                                {vendor.name}
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
+                                  {vendor.code}
+                                </span>
+                              </span>
+                            </td>
+                            <td>
+                              {affiliate ? (
+                                <span className="flex items-center gap-2">
+                                  {affiliate.name}
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
+                                    {affiliate.code}
+                                  </span>
+                                </span>
+                              ) : (
+                                <span className="text-fg-subtle text-xs italic">All Traffic</span>
+                              )}
+                            </td>
+                            <td>
+                              <code className="text-[10px] text-fg-subtle break-all">{trackingUrl}</code>
+                            </td>
+                            <td className="text-right whitespace-nowrap">
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(window.location.origin + trackingUrl);
+                                    useStore.getState().addToast('Tracking URL copied', 'success');
+                                  }}
+                                  className="text-fg-muted hover:text-fg cursor-pointer flex items-center justify-center transition-colors p-1"
+                                  title="Copy tracking URL"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-danger hover:text-danger hover:bg-danger/10 px-1 py-1 h-auto"
+                                  onClick={() => handleRemoveTracking(vendorId, affiliateId)}
+                                  disabled={assigningVendor}
+                                  title="Remove assignment"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Sidebar info */}
@@ -401,85 +594,7 @@ function CampaignDetailPage() {
               </p>
             </div>
 
-            <div className="surface-card p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <Store className="w-4 h-4 text-fg-subtle" />
-                <h3 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h3>
-              </div>
-              <label className="block text-xs text-fg-muted mb-1">Assigned vendor</label>
-              <select
-                className="w-full text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base mb-3"
-                value={campaign.vendorId || ''}
-                onChange={(e) => handleAssignVendor(e.target.value)}
-                disabled={assigningVendor}
-              >
-                <option value="">— No vendor —</option>
-                {vendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.code})
-                  </option>
-                ))}
-              </select>
-
-              {(() => {
-                const vendor = vendors.find((v) => v.id === Number(campaign.vendorId))
-                if (!vendor) {
-                  return (
-                    <p className="text-xs text-fg-subtle">
-                      Assign a vendor to generate affiliate tracking links.{' '}
-                      <Link to="/vendors" className="text-accent">
-                        Manage vendors
-                      </Link>
-                    </p>
-                  )
-                }
-                const affiliates = vendor.affiliates || []
-                if (affiliates.length === 0) {
-                  return (
-                    <p className="text-xs text-fg-subtle">
-                      No affiliates for this vendor.{' '}
-                      <Link to="/vendors" className="text-accent">
-                        Add affiliates
-                      </Link>
-                    </p>
-                  )
-                }
-                return (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-fg-muted">Tracking links</p>
-                    {affiliates.map((aff) => {
-                      const url = buildTrackingUrl({
-                        campaign,
-                        vendorCode: vendor.code,
-                        affiliateCode: aff.code,
-                      })
-                      return (
-                        <div key={aff.id} className="rounded-md border border-border p-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium text-fg">{aff.name}</span>
-                            <button
-                              type="button"
-                              onClick={() => copyTracking(url, aff.id)}
-                              className="text-fg-muted hover:text-fg cursor-pointer flex items-center justify-center transition-colors"
-                              title="Copy tracking URL"
-                            >
-                              {copiedId === aff.id ? (
-                                <span className="text-[10px] text-green-500 font-medium flex items-center gap-1">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Copied!
-                                </span>
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                          <code className="text-[10px] text-fg-subtle break-all block">{url}</code>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
-            </div>
+            {/* End Attribution block (moved to main column) */}
 
             <div className="surface-card p-5">
               <h3 className="text-sm font-semibold text-fg mb-3">Quick actions</h3>

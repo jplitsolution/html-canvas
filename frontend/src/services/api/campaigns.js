@@ -57,6 +57,7 @@ function mapCampaign(campaign) {
     pages,
     requiredComplete,
     flowConfig,
+    trackings: campaign.trackings || [],
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
   }

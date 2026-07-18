@@ -23,6 +23,7 @@ import {
 import { UpdateCampaignPageDto } from './dto/update-campaign-page.dto';
 import { Template } from '../templates/entities/template.entity';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
+import { CampaignTracking } from './entities/campaign-tracking.entity';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages';
 import {
   FlowConfig,
@@ -44,6 +45,8 @@ export class CampaignsService {
     private readonly templateRepository: Repository<Template>,
     @InjectRepository(ApiConfig)
     private readonly apiConfigRepository: Repository<ApiConfig>,
+    @InjectRepository(CampaignTracking)
+    private readonly trackingRepository: Repository<CampaignTracking>,
   ) {}
 
   private normalize(value: string): string {
@@ -53,7 +56,7 @@ export class CampaignsService {
   async findAll(userId: number): Promise<Campaign[]> {
     const campaigns = await this.campaignRepository.find({
       where: { userId },
-      relations: { pages: { template: true } },
+      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
       order: { updatedAt: 'DESC' },
     });
     return campaigns.map((c) => this.sanitizeCampaignListItem(c));
@@ -62,7 +65,7 @@ export class CampaignsService {
   async findOne(id: number, userId: number): Promise<Campaign> {
     const campaign = await this.campaignRepository.findOne({
       where: { id },
-      relations: { pages: { template: true } },
+      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
     });
     if (!campaign) {
       throw new NotFoundException(`Campaign with ID ${id} not found`);
@@ -87,6 +90,9 @@ export class CampaignsService {
       .createQueryBuilder('campaign')
       .leftJoinAndSelect('campaign.pages', 'pages')
       .leftJoinAndSelect('pages.template', 'template')
+      .leftJoinAndSelect('campaign.trackings', 'trackings')
+      .leftJoinAndSelect('trackings.vendor', 'vendor')
+      .leftJoinAndSelect('trackings.affiliate', 'affiliate')
       .where('LOWER(campaign.country) = LOWER(:country)', {
         country: normalizedCountry,
       })
@@ -109,7 +115,7 @@ export class CampaignsService {
     if (!id || Number.isNaN(id)) return null;
     const campaign = await this.campaignRepository.findOne({
       where: { id },
-      relations: { pages: { template: true } },
+      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
     });
     if (campaign) {
       await this.ensureCampaignPages(campaign);
@@ -269,8 +275,30 @@ export class CampaignsService {
     if (dto.name !== undefined) campaign.name = dto.name.trim();
     if (dto.serviceId !== undefined) campaign.serviceId = dto.serviceId;
     if (dto.active !== undefined) campaign.active = dto.active;
-    if (dto.vendorId !== undefined) campaign.vendorId = dto.vendorId ?? undefined;
+    if (dto.trackings !== undefined) {
+      await this.trackingRepository.delete({ campaign: { id: campaign.id } });
+      if (dto.trackings && dto.trackings.length > 0) {
+        const insertData = dto.trackings.map((t) => ({
+          campaign: { id: campaign.id },
+          vendor: { id: t.vendorId },
+          affiliate: t.affiliateId ? { id: t.affiliateId } : null,
+        } as any));
+        await this.trackingRepository.insert(insertData);
+      }
+    } else if (dto.vendorIds !== undefined) {
+      await this.trackingRepository.delete({ campaign: { id: campaign.id } });
+      if (dto.vendorIds && dto.vendorIds.length > 0) {
+        const insertData = dto.vendorIds.map((id) => ({
+          campaign: { id: campaign.id },
+          vendor: { id },
+          affiliate: null,
+        } as any));
+        await this.trackingRepository.insert(insertData);
+      }
+    }
 
+    // Remove trackings from memory so TypeORM's save(campaign) does not try to cascade-update orphaned trackings
+    delete (campaign as any).trackings;
     await this.campaignRepository.save(campaign);
     return this.findOne(id, userId);
   }
@@ -329,7 +357,8 @@ export class CampaignsService {
 
   async remove(id: number, userId: number): Promise<void> {
     const campaign = await this.findOne(id, userId);
-    await this.campaignRepository.remove(campaign);
+    campaign.active = false;
+    await this.campaignRepository.save(campaign);
   }
 
   async applyDefaultTemplates(

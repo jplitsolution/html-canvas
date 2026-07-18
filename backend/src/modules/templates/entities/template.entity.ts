@@ -20,7 +20,7 @@ export class Template {
   @Column({ name: 'user_id', nullable: true })
   userId?: number;
 
-  @Column({ name: 'is_prebuilt', default: false })
+  @Column({ name: 'is_prebuilt', type: 'boolean', default: false })
   isPrebuilt: boolean;
 
   @CreateDateColumn({ name: 'created_at' })

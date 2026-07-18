@@ -11,6 +11,7 @@ import {
 } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { CampaignPage } from './campaign-page.entity';
+import { CampaignTracking } from './campaign-tracking.entity';
 
 @Entity('campaigns')
 @Index(['country', 'operator'], { unique: true })
@@ -36,9 +37,9 @@ export class Campaign {
   @Column({ name: 'user_id' })
   userId: number;
 
-  /** Optional vendor assigned to this campaign (drives affiliate tracking links). */
-  @Column({ name: 'vendor_id', nullable: true })
-  vendorId?: number;
+  /** Explicit table for tracking Vendor & Affiliate assignments. */
+  @OneToMany(() => CampaignTracking, (tracking) => tracking.campaign, { cascade: true, orphanedRowAction: 'delete' })
+  trackings: CampaignTracking[];
 
   /** Per-campaign verification policy: MSISDN_ONLY | OTP_ONLY | BOTH (null = legacy). */
   @Column({ name: 'verification_mode', type: 'varchar', length: 16, nullable: true })
