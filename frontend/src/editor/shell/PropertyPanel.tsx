@@ -788,6 +788,30 @@ export function PropertyPanel() {
                 <option value="small">Small</option>
               </select>
             </Field>
+            <div className="flex gap-2">
+              <Field label="Width">
+                <input
+                  className={inputClass}
+                  placeholder="e.g. 100px or 50%"
+                  value={getStyleProp(selected, 'width') || ''}
+                  onChange={(e) => {
+                    setStyleProp(selected, 'width', e.target.value);
+                    update();
+                  }}
+                />
+              </Field>
+              <Field label="Height">
+                <input
+                  className={inputClass}
+                  placeholder="e.g. auto"
+                  value={getStyleProp(selected, 'height') || ''}
+                  onChange={(e) => {
+                    setStyleProp(selected, 'height', e.target.value);
+                    update();
+                  }}
+                />
+              </Field>
+            </div>
             <PositionControls selected={selected} update={update} />
           </>
         )}
@@ -1129,6 +1153,31 @@ export function PropertyPanel() {
             <BackgroundImageField selected={selected} editor={editor} update={update} />
 
             <AddHotspotButton selected={selected} editor={editor} />
+
+            <Field label="Text Color">
+              <div className="flex gap-2">
+                <input
+                  type="color"
+                  className="flex-1 h-9 rounded-lg border border-border cursor-pointer"
+                  value={toHex(getStyleProp(selected, 'color') || '#000000')}
+                  onChange={(e) => {
+                    setStyleProp(selected, 'color', e.target.value);
+                    update();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStyleProp(selected, 'color', '');
+                    update();
+                  }}
+                  className="px-3 h-9 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent hover:text-accent transition-colors"
+                  title="Reset to default"
+                >
+                  Clear
+                </button>
+              </div>
+            </Field>
 
             <Field label="Background Color">
               <div className="flex gap-2">
