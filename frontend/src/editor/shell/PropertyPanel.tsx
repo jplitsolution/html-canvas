@@ -547,11 +547,18 @@ export function PropertyPanel() {
                 <Field label="When clicked, go to">
                   <select
                     className={inputClass}
-                    value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
+                    value={(() => {
+                      const href = selected.getAttributes()?.href || '';
+                      if (href.startsWith('#')) return 'anchor';
+                      if (href.startsWith('http://') || href.startsWith('https://')) return 'external';
+                      return 'page';
+                    })()}
                     onChange={(e) => {
                       if (e.target.value === 'anchor') {
                         const anchors = listSectionAnchorsOnPage(editor, selected);
                         selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
+                      } else if (e.target.value === 'page') {
+                        selected.addAttributes({ href: 'otp' });
                       } else {
                         selected.addAttributes({ href: 'https://' });
                       }
@@ -559,64 +566,104 @@ export function PropertyPanel() {
                     }}
                   >
                     <option value="anchor">Another part of this page</option>
+                    <option value="page">Another page in this campaign</option>
                     <option value="external">Another website</option>
                   </select>
                 </Field>
 
-                {(selected.getAttributes()?.href || '').startsWith('#') ? (
-                  <Field label="Scroll to section">
-                    <select
-                      className={inputClass}
-                      value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
-                      onChange={(e) => {
-                        selected.addAttributes({ href: `#${e.target.value}` });
-                        update();
-                      }}
-                    >
-                      <option value="">Select a section...</option>
-                      {(() => {
-                        const sections: { id: string; label: string }[] = [];
-                        const wrapper = editor.getWrapper();
-                        if (wrapper) {
-                          const walk = (cmp: any) => {
-                            const tag = (cmp.get('tagName') || '').toLowerCase();
-                            const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
-                            const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
-                            if (isSection && tag !== 'header' && tag !== 'footer') {
-                              const id = cmp.getAttributes()?.id || cmp.getId();
-                              const label = cmp.get('sectionLabel') || id || 'Untitled Section';
-                              sections.push({ id, label });
+                {(() => {
+                  const href = selected.getAttributes()?.href || '';
+                  const type = href.startsWith('#') ? 'anchor' : (href.startsWith('http://') || href.startsWith('https://')) ? 'external' : 'page';
+                  
+                  if (type === 'anchor') {
+                    return (
+                      <Field label="Scroll to section">
+                        <select
+                          className={inputClass}
+                          value={href.replace(/^#/, '')}
+                          onChange={(e) => {
+                            selected.addAttributes({ href: `#${e.target.value}` });
+                            update();
+                          }}
+                        >
+                          <option value="">Select a section...</option>
+                          {(() => {
+                            const sections: { id: string; label: string }[] = [];
+                            const wrapper = editor.getWrapper();
+                            if (wrapper) {
+                              const walk = (cmp: any) => {
+                                const tag = (cmp.get('tagName') || '').toLowerCase();
+                                const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
+                                const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
+                                if (isSection && tag !== 'header' && tag !== 'footer') {
+                                  const id = cmp.getAttributes()?.id || cmp.getId();
+                                  const label = cmp.get('sectionLabel') || id || 'Untitled Section';
+                                  sections.push({ id, label });
+                                }
+                                cmp.components().forEach(walk);
+                              };
+                              walk(wrapper);
                             }
-                            cmp.components().forEach(walk);
-                          };
-                          walk(wrapper);
-                        }
-                        const seen = new Set();
-                        const uniqueSections = sections.filter((s) => {
-                          if (seen.has(s.id)) return false;
-                          seen.add(s.id);
-                          return true;
-                        });
-                        return uniqueSections.map((sec) => (
-                          <option key={sec.id} value={sec.id}>
-                            {sec.label} (#{sec.id})
-                          </option>
-                        ));
-                      })()}
-                    </select>
-                  </Field>
-                ) : (
-                  <Field label="Website address">
-                    <input
-                      className={inputClass}
-                      value={selected.getAttributes()?.href || ''}
-                      onChange={(e) => {
-                        selected.addAttributes({ href: e.target.value });
-                        update();
-                      }}
-                    />
-                  </Field>
-                )}
+                            const seen = new Set();
+                            const uniqueSections = sections.filter((s) => {
+                              if (seen.has(s.id)) return false;
+                              seen.add(s.id);
+                              return true;
+                            });
+                            return uniqueSections.map((sec) => (
+                              <option key={sec.id} value={sec.id}>
+                                {sec.label} (#{sec.id})
+                              </option>
+                            ));
+                          })()}
+                        </select>
+                      </Field>
+                    );
+                  }
+                  
+                  if (type === 'page') {
+                    return (
+                      <Field label="Page name">
+                        <input
+                          className={inputClass}
+                          placeholder="e.g. otp, confirm"
+                          value={href}
+                          list="campaign-pages-list"
+                          onChange={(e) => {
+                            selected.addAttributes({ href: e.target.value });
+                            update();
+                          }}
+                        />
+                        <datalist id="campaign-pages-list">
+                          <option value="HOME">HOME</option>
+                          <option value="OTP">OTP</option>
+                          <option value="CONFIRM">CONFIRM</option>
+                          <option value="THANKYOU">THANKYOU</option>
+                          <option value="ERROR">ERROR</option>
+                          {editor && editor.Pages.getAll().map((p: any) => {
+                            const pid = String(p.getId());
+                            const pname = String(p.get('name') || pid);
+                            if (['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'ERROR'].includes(pid.toUpperCase())) return null;
+                            return <option key={pid} value={pid}>{pname}</option>;
+                          })}
+                        </datalist>
+                      </Field>
+                    );
+                  }
+
+                  return (
+                    <Field label="Website address">
+                      <input
+                        className={inputClass}
+                        value={href}
+                        onChange={(e) => {
+                          selected.addAttributes({ href: e.target.value });
+                          update();
+                        }}
+                      />
+                    </Field>
+                  );
+                })()}
               </>
             )}
             <Field label="Button color">
@@ -760,11 +807,18 @@ export function PropertyPanel() {
             <Field label="When clicked, go to">
               <select
                 className={inputClass}
-                value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
+                value={(() => {
+                  const href = selected.getAttributes()?.href || '';
+                  if (href.startsWith('#')) return 'anchor';
+                  if (href.startsWith('http://') || href.startsWith('https://')) return 'external';
+                  return 'page';
+                })()}
                 onChange={(e) => {
                   if (e.target.value === 'anchor') {
                     const anchors = listSectionAnchorsOnPage(editor, selected);
                     selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
+                  } else if (e.target.value === 'page') {
+                    selected.addAttributes({ href: 'otp' });
                   } else {
                     selected.addAttributes({ href: 'https://' });
                   }
@@ -772,65 +826,105 @@ export function PropertyPanel() {
                 }}
               >
                 <option value="anchor">Another part of this page (Scroll)</option>
+                <option value="page">Another page in this campaign</option>
                 <option value="external">Another website (URL)</option>
               </select>
             </Field>
 
-            {(selected.getAttributes()?.href || '').startsWith('#') ? (
-              <Field label="Scroll to section">
-                <select
-                  className={inputClass}
-                  value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
-                  onChange={(e) => {
-                    selected.addAttributes({ href: `#${e.target.value}` });
-                    update();
-                  }}
-                >
-                  <option value="">Select a section...</option>
-                  {(() => {
-                    const sections: { id: string; label: string }[] = [];
-                    const wrapper = editor.getWrapper();
-                    if (wrapper) {
-                      const walk = (cmp: any) => {
-                        const tag = (cmp.get('tagName') || '').toLowerCase();
-                        const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
-                        const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
-                        if (isSection && tag !== 'header' && tag !== 'footer') {
-                          const id = cmp.getAttributes()?.id || cmp.getId();
-                          const label = cmp.get('sectionLabel') || id || 'Untitled Section';
-                          sections.push({ id, label });
+            {(() => {
+              const href = selected.getAttributes()?.href || '';
+              const type = href.startsWith('#') ? 'anchor' : (href.startsWith('http://') || href.startsWith('https://')) ? 'external' : 'page';
+
+              if (type === 'anchor') {
+                return (
+                  <Field label="Scroll to section">
+                    <select
+                      className={inputClass}
+                      value={href.replace(/^#/, '')}
+                      onChange={(e) => {
+                        selected.addAttributes({ href: `#${e.target.value}` });
+                        update();
+                      }}
+                    >
+                      <option value="">Select a section...</option>
+                      {(() => {
+                        const sections: { id: string; label: string }[] = [];
+                        const wrapper = editor.getWrapper();
+                        if (wrapper) {
+                          const walk = (cmp: any) => {
+                            const tag = (cmp.get('tagName') || '').toLowerCase();
+                            const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
+                            const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
+                            if (isSection && tag !== 'header' && tag !== 'footer') {
+                              const id = cmp.getAttributes()?.id || cmp.getId();
+                              const label = cmp.get('sectionLabel') || id || 'Untitled Section';
+                              sections.push({ id, label });
+                            }
+                            cmp.components().forEach(walk);
+                          };
+                          walk(wrapper);
                         }
-                        cmp.components().forEach(walk);
-                      };
-                      walk(wrapper);
-                    }
-                    const seen = new Set();
-                    const uniqueSections = sections.filter((s) => {
-                      if (seen.has(s.id)) return false;
-                      seen.add(s.id);
-                      return true;
-                    });
-                    return uniqueSections.map((sec) => (
-                      <option key={sec.id} value={sec.id}>
-                        {sec.label} (#{sec.id})
-                      </option>
-                    ));
-                  })()}
-                </select>
-              </Field>
-            ) : (
-              <Field label="Website address (URL)">
-                <input
-                  className={inputClass}
-                  placeholder="e.g. https://google.com"
-                  value={selected.getAttributes()?.href || ''}
-                  onChange={(e) => {
-                    selected.addAttributes({ href: e.target.value });
-                    update();
-                  }}
-                />
-              </Field>
-            )}
+                        const seen = new Set();
+                        const uniqueSections = sections.filter((s) => {
+                          if (seen.has(s.id)) return false;
+                          seen.add(s.id);
+                          return true;
+                        });
+                        return uniqueSections.map((sec) => (
+                          <option key={sec.id} value={sec.id}>
+                            {sec.label} (#{sec.id})
+                          </option>
+                        ));
+                      })()}
+                    </select>
+                  </Field>
+                );
+              }
+
+              if (type === 'page') {
+                return (
+                  <Field label="Page name">
+                    <input
+                      className={inputClass}
+                      placeholder="e.g. otp, confirm"
+                      value={href}
+                      list="campaign-pages-list"
+                      onChange={(e) => {
+                        selected.addAttributes({ href: e.target.value });
+                        update();
+                      }}
+                    />
+                    <datalist id="campaign-pages-list">
+                      <option value="HOME">HOME</option>
+                      <option value="OTP">OTP</option>
+                      <option value="CONFIRM">CONFIRM</option>
+                      <option value="THANKYOU">THANKYOU</option>
+                      <option value="ERROR">ERROR</option>
+                      {editor && editor.Pages.getAll().map((p: any) => {
+                        const pid = String(p.getId());
+                        const pname = String(p.get('name') || pid);
+                        if (['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'ERROR'].includes(pid.toUpperCase())) return null;
+                        return <option key={pid} value={pid}>{pname}</option>;
+                      })}
+                    </datalist>
+                  </Field>
+                );
+              }
+
+              return (
+                <Field label="Website address (URL)">
+                  <input
+                    className={inputClass}
+                    placeholder="e.g. https://google.com"
+                    value={href}
+                    onChange={(e) => {
+                      selected.addAttributes({ href: e.target.value });
+                      update();
+                    }}
+                  />
+                </Field>
+              );
+            })()}
             
             <Field label="Open in">
               <select

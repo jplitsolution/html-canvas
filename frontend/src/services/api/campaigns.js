@@ -139,6 +139,13 @@ export function getCampaignPreviewUrl(campaign) {
     operator: campaign.operator,
     step: 'HOME',
   })
+  
+  if (campaign.trackings && campaign.trackings.length > 0) {
+    const t = campaign.trackings[0]
+    if (t.vendor?.code) params.set('vid', t.vendor.code)
+    if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
+  }
+  
   return `/subscription?${params.toString()}`
 }
 
@@ -149,6 +156,13 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
     operator: campaign.operator,
     step: pageType || 'HOME',
   })
+  
+  if (campaign.trackings && campaign.trackings.length > 0) {
+    const t = campaign.trackings[0]
+    if (t.vendor?.code) params.set('vid', t.vendor.code)
+    if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
+  }
+  
   return `/subscription?${params.toString()}`
 }
 

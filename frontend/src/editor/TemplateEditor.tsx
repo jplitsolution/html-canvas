@@ -452,14 +452,18 @@ export default function TemplateEditor({
               if (parentEl) {
                 const rect = parentEl.getBoundingClientRect()
                 // Mouse position relative to the iframe viewport minus the parent's top/left bounds
-                const top = lastDragEvent.clientY - rect.top
-                const left = lastDragEvent.clientX - rect.left
+                const topPx = lastDragEvent.clientY - rect.top
+                const leftPx = lastDragEvent.clientX - rect.left
+                
+                // Convert to percentages for responsive scaling
+                const topPct = (topPx / rect.height) * 100
+                const leftPct = (leftPx / rect.width) * 100
                 
                 // Keep existing styles but override position and add coordinates
                 component.addStyle({ 
                   position: 'absolute', 
-                  top: `${top}px`, 
-                  left: `${left}px`,
+                  top: `${topPct.toFixed(2)}%`, 
+                  left: `${leftPct.toFixed(2)}%`,
                   'z-index': '20',
                   margin: '0' // strip margin so it drops exactly at cursor
                 })

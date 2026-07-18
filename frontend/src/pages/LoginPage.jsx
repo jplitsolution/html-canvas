@@ -1,6 +1,7 @@
 import { memo, useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { login, register } from '../services/api/auth'
+import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
@@ -9,6 +10,7 @@ import BrandLogo, { PartnerBadge } from '../components/ui/BrandLogo'
 function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const redirectTo = location.state?.from?.pathname || '/campaigns'
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
@@ -33,6 +35,20 @@ function LoginPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  if (authLoading) {
+    return (
+      <AppShell minimal>
+        <div className="flex-1 flex items-center justify-center px-4 py-12">
+          <p className="text-fg-muted">Loading...</p>
+        </div>
+      </AppShell>
+    )
+  }
+
+  if (isAuthenticated) {
+    return <Navigate to={redirectTo} replace />
   }
 
   return (

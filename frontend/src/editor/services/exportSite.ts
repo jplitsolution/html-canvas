@@ -386,9 +386,9 @@ export function cleanLocalhostUrls(text: string): string {
 
 export function stripWrapperIdFromCss(css: string): string {
   if (!css) return ''
-  // GrapesJS prefixes rules with wrapper ID (e.g. #i8x92y or #wrapper).
   // Strip wrapper ID prefixes so CSS rules apply universally in preview & live sites!
-  return css.replace(/#i[a-z0-9_-]+\s*/gi, '').replace(/#wrapper\s*/gi, '')
+  // e.g., if GrapesJS outputs "#wrapper .my-class", we remove "#wrapper "
+  return css.replace(/#wrapper\s+/gi, '')
 }
 
 function syncComponentStylesToHtmlAttributes(mainCmp: any) {

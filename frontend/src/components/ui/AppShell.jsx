@@ -16,7 +16,7 @@ const navLinks = [
 function AppShell({ children, actions, minimal = false }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { isAuthenticated, user } = useAuth()
+  const { isAuthenticated, user, loading } = useAuth()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const navRef = useRef(null)
 
@@ -86,7 +86,9 @@ function AppShell({ children, actions, minimal = false }) {
         </nav>
 
         <div className="shrink-0 px-3 py-4 border-t border-border bg-bg-elevated">
-          {isAuthenticated ? (
+          {loading ? (
+            <div className="animate-pulse h-8 bg-bg-muted rounded w-full"></div>
+          ) : isAuthenticated ? (
             <div className="space-y-2">
               {user?.name && (
                 <p className="px-3 text-xs text-fg-muted truncate">{user.name}</p>
@@ -145,7 +147,9 @@ function AppShell({ children, actions, minimal = false }) {
                       )
                     })}
                     <div className="mt-2 pt-2 border-t border-border px-4">
-                      {isAuthenticated ? (
+                      {loading ? (
+                        <div className="animate-pulse h-8 bg-bg-muted rounded w-full"></div>
+                      ) : isAuthenticated ? (
                         <div className="space-y-2">
                           <Button variant="outline" size="sm" className="w-full" onClick={() => navigate('/profile')}>
                             <User className="w-4 h-4" />
