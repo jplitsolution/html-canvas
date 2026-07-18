@@ -391,36 +391,28 @@ export function stripWrapperIdFromCss(css: string): string {
   return css.replace(/#i[a-z0-9_-]+\s*/gi, '').replace(/#wrapper\s*/gi, '')
 }
 
-/**
- * Ensures component style properties (like background-color, color, padding, border)
- * are written directly into inline HTML style="..." attributes so exported HTML / preview
- * renders background colors (e.g. white cards, blue buttons) 100% reliably in any environment.
- */
 function syncComponentStylesToHtmlAttributes(mainCmp: any) {
   if (!mainCmp) return
   const walk = (cmp: any) => {
     try {
       // 1. Read live DOM inline style attribute from editor iframe element if available
       const el = cmp.getEl?.()
+      let styleStr = ''
       if (el && typeof el.getAttribute === 'function') {
-        const domStyle = el.getAttribute('style')
-        if (domStyle && domStyle.trim()) {
-          cmp.addAttributes({ style: domStyle.trim() })
-        }
-      } else {
-        // 2. Fallback to GrapesJS style model object
+        styleStr = el.getAttribute('style') || ''
+      }
+      
+      // 2. Fallback to GrapesJS style model object
+      if (!styleStr.trim()) {
         const styleObj = (cmp.getStyle?.() || {}) as Record<string, string>
-        if (styleObj && Object.keys(styleObj).length > 0) {
-          const styleParts: string[] = []
-          Object.entries(styleObj).forEach(([k, v]) => {
-            if (v && typeof v === 'string' && v.trim()) {
-              styleParts.push(`${k}:${v}`)
-            }
-          })
-          if (styleParts.length > 0) {
-            cmp.addAttributes({ style: styleParts.join('; ') })
-          }
-        }
+        styleStr = Object.entries(styleObj)
+          .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
+          .map(([k, v]) => `${k}:${v}`)
+          .join('; ')
+      }
+
+      if (styleStr.trim()) {
+        cmp.addAttributes({ 'temp-style': styleStr.trim() })
       }
     } catch (e) {
       // ignore
@@ -433,62 +425,75 @@ function syncComponentStylesToHtmlAttributes(mainCmp: any) {
   walk(mainCmp)
 }
 
-/**
- * Extracts clean HTML directly from the live editor DOM element tree in the iframe.
- * Preserves 100% of inline style="..." attributes (e.g. background-color, color, borders)
- * while removing GrapesJS editor selection overlays (gjs-selected, gjs-hovered, etc.).
- */
-export function getCleanHtmlFromDom(mainCmp: any, fallbackHtml: string): string {
-  try {
-    const el = mainCmp?.getEl?.()
-    if (!el || typeof el.cloneNode !== 'function') return fallbackHtml
-
-    // Clone DOM node so we don't mutate the live editor canvas
-    const clone = el.cloneNode(true) as HTMLElement
-
-    const removeGjsArtifacts = (node: HTMLElement) => {
-      if (node.classList) {
-        node.classList.remove(
-          'gjs-hovered',
-          'gjs-selected',
-          'gjs-comp-selected',
-          'gjs-free-transform',
-          'gjs-resizer',
-          'gjs-drag-helper'
-        )
-        if (node.classList.length === 0) {
-          node.removeAttribute('class')
-        }
-      }
-      const attrsToRemove: string[] = []
-      if (node.attributes) {
-        for (let i = 0; i < node.attributes.length; i++) {
-          const attrName = node.attributes[i].name
-          if (
-            attrName.startsWith('data-gjs-') ||
-            attrName === 'data-gjs-type' ||
-            attrName === 'data-gjs-highlightable'
-          ) {
-            attrsToRemove.push(attrName)
-          }
-        }
-      }
-      attrsToRemove.forEach((a) => node.removeAttribute(a))
-
-      if (node.children) {
-        for (let i = 0; i < node.children.length; i++) {
-          removeGjsArtifacts(node.children[i] as HTMLElement)
-        }
-      }
+function cleanTempStyleAttributes(mainCmp: any) {
+  if (!mainCmp) return
+  const walk = (cmp: any) => {
+    try {
+      cmp.removeAttribute?.('temp-style')
+    } catch (e) {
+      // ignore
     }
-
-    removeGjsArtifacts(clone)
-    const resultHtml = clone.innerHTML?.trim()
-    return resultHtml || fallbackHtml
-  } catch (e) {
-    console.warn('getCleanHtmlFromDom failed, using fallback:', e)
-    return fallbackHtml
+    const children = cmp.components?.()
+    if (children && typeof children.forEach === 'function') {
+      children.forEach(walk)
+    }
   }
+  walk(mainCmp)
+}
+
+export function inlineCssInHtml(html: string, css: string, wrapperStyle: string = ''): string {
+  if (!html) return ''
+
+  const parser = new DOMParser()
+  const doc = parser.parseFromString(html, 'text/html')
+
+  const stylesMap = new Map<string, string>()
+  
+  if (css) {
+    // Normalize spaces and remove comments
+    const cleanCss = css.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\s+/g, ' ')
+    
+    // Split CSS into individual rules
+    const rules = cleanCss.split('}')
+    rules.forEach((rule) => {
+      const parts = rule.split('{')
+      if (parts.length === 2) {
+        const selector = parts[0].trim()
+        const declarations = parts[1].trim()
+        
+        // Match all classes in this selector using regex
+        const classRegex = /\.([a-zA-Z0-9_-]+)/g
+        let classMatch
+        while ((classMatch = classRegex.exec(selector)) !== null) {
+          const className = classMatch[1]
+          const existing = stylesMap.get(className) || ''
+          stylesMap.set(className, `${existing}; ${declarations}`.replace(/^;\s*/, ''))
+        }
+      }
+    })
+  }
+
+  // Iterate over all elements in the HTML body
+  const allElements = doc.body.querySelectorAll('*')
+  allElements.forEach((el) => {
+    let combinedStyles = el.getAttribute('style') || ''
+    
+    // Check if element classes match our CSS rules
+    const classes = Array.from(el.classList)
+    classes.forEach((cls) => {
+      const ruleStyles = stylesMap.get(cls)
+      if (ruleStyles) {
+        combinedStyles = `${combinedStyles}; ${ruleStyles}`.replace(/^;\s*/, '')
+      }
+    })
+
+    if (combinedStyles) {
+      el.setAttribute('style', combinedStyles)
+    }
+  })
+
+  const innerHtml = doc.body.innerHTML
+  return `<div class="page-wrapper" style="${wrapperStyle}">${innerHtml}</div>`
 }
 
 export function getActivePageSnapshot(editor: Editor): { html: string; css: string } {
@@ -499,12 +504,22 @@ export function getActivePageSnapshot(editor: Editor): { html: string; css: stri
   syncComponentStylesToHtmlAttributes(main)
 
   const rawHtml = editor.getHtml({ component: main })
-  const domHtml = getCleanHtmlFromDom(main, rawHtml)
+  cleanTempStyleAttributes(main)
+
+  const processedHtml = rawHtml.replace(/\btemp-style=/g, 'style=')
   const rawCss = editor.getCss({ component: main, avoidProtected: true }) || ''
   const css = stripWrapperIdFromCss(rawCss)
 
+  const styleObj = (main.getStyle?.() || {}) as Record<string, string>
+  const wrapperStyle = Object.entries(styleObj)
+    .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
+    .map(([k, v]) => `${k}:${v}`)
+    .join('; ')
+
+  const inlinedHtml = inlineCssInHtml(processedHtml, rawCss, wrapperStyle)
+
   return {
-    html: cleanLocalhostUrls(domHtml),
+    html: cleanLocalhostUrls(inlinedHtml),
     css: cleanLocalhostUrls(css),
   }
 }
@@ -542,15 +557,25 @@ export function collectPageExports(editor: Editor): PageExport[] {
 
     syncComponentStylesToHtmlAttributes(main)
     const rawHtml = editor.getHtml({ component: main })
-    const domHtml = getCleanHtmlFromDom(main, rawHtml)
+    cleanTempStyleAttributes(main)
+
+    const processedHtml = rawHtml.replace(/\btemp-style=/g, 'style=')
     const rawCss = editor.getCss({ component: main, avoidProtected: true }) || ''
     const css = stripWrapperIdFromCss(rawCss)
+
+    const styleObj = (main.getStyle?.() || {}) as Record<string, string>
+    const wrapperStyle = Object.entries(styleObj)
+      .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
+      .map(([k, v]) => `${k}:${v}`)
+      .join('; ')
+
+    const inlinedHtml = inlineCssInHtml(processedHtml, rawCss, wrapperStyle)
 
     return {
       id: pageId,
       name: pageName,
       filename: pageExportFilename(pageName, pageId, isHome),
-      html: cleanLocalhostUrls(domHtml),
+      html: cleanLocalhostUrls(inlinedHtml),
       css: cleanLocalhostUrls(css),
     }
   })
