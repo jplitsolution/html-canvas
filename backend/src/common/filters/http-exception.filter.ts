@@ -51,10 +51,16 @@ export class HttpExceptionFilter implements ExceptionFilter {
     }
 
     // Log the error
-    this.logger.error(
-      `${request.method} ${request.url} [Status: ${status}]: ${message}`,
-      exception instanceof Error ? exception.stack : undefined,
-    );
+    if (status >= 500) {
+      this.logger.error(
+        `${request.method} ${request.url} [Status: ${status}]: ${message}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    } else {
+      this.logger.warn(
+        `${request.method} ${request.url} [Status: ${status}]: ${message}`,
+      );
+    }
 
     if (status === HttpStatus.TOO_MANY_REQUESTS) {
       let retryAfter = 60;

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
 import { getFlowElementInfo } from '../utils/funnelGuide';
@@ -94,6 +94,225 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function extractUrlFromBgImage(bgImage: unknown): string {
+  if (!bgImage || typeof bgImage !== 'string' || bgImage === 'none') return ''
+  const match = bgImage.match(/url\(["']?(.+?)["']?\)/)
+  return match ? match[1] : ''
+}
+
+function BackgroundImageField({
+  selected,
+  editor,
+  update,
+}: {
+  selected: Component;
+  editor: any;
+  update: () => void;
+}) {
+  const currentBgImage = getStyleProp(selected, 'background-image') || ''
+  const currentUrl = extractUrlFromBgImage(currentBgImage)
+  const hasImage = Boolean(currentBgImage && typeof currentBgImage === 'string' && currentBgImage !== 'none')
+
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlValue, setUrlValue] = useState('')
+
+  const applyUrl = useCallback((url: string) => {
+    if (!url.trim()) return
+    const trimmed = url.trim()
+    // Use setStyle (inline) not addStyle (CSS manager) so background-image
+    // is always included in exported/preview HTML as an inline style attribute
+    const existingStyle = selected.getStyle() || {}
+    selected.setStyle({
+      ...existingStyle,
+      'background-image': `url("${trimmed}")`,
+      'background-size': existingStyle['background-size'] || 'cover',
+      'background-position': existingStyle['background-position'] || 'center',
+      'background-repeat': existingStyle['background-repeat'] || 'no-repeat',
+      // Required so absolutely-positioned hotspots are contained correctly
+      'position': existingStyle.position || 'relative',
+      // Must not be hidden — clips background and absolute children like hotspots
+      'overflow': 'visible',
+    })
+    setShowUrlInput(false)
+    setUrlValue('')
+    update()
+  }, [selected, update])
+
+  return (
+    <div className="space-y-2">
+      <span className="text-xs font-medium text-fg-muted">Background Image</span>
+
+      {/* Current image preview */}
+      {hasImage && currentUrl && (
+        <div
+          className="w-full h-16 rounded-lg border border-border bg-bg-subtle overflow-hidden relative"
+          style={{ backgroundImage: `url("${currentUrl}")`, backgroundSize: 'cover', backgroundPosition: 'center' }}
+        >
+          <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+            <span className="text-[10px] text-white font-medium bg-black/40 px-2 py-0.5 rounded">Background Set</span>
+          </div>
+        </div>
+      )}
+
+      {/* Buttons row */}
+      <div className="flex gap-1.5">
+        <button
+          type="button"
+          onClick={() => {
+            if (!editor) return
+            editor.runCommand('open-assets', { target: selected })
+
+            // ── Guaranteed fallback: directly wire the AM's confirm button ──
+            // GrapesJS renders a "Select" / "Add" button in the asset manager modal.
+            // When user single-clicks an asset and hits that button, we need to catch it.
+            setTimeout(() => {
+              const modalEl = document.querySelector('.gjs-mdl-content')
+              if (!modalEl) return
+
+              // Remove any previously attached listener to avoid duplicates
+              const old = (modalEl as any)._tcBgClickHandler
+              if (old) modalEl.removeEventListener('click', old, true)
+
+              const handler = (e: Event) => {
+                const target = e.target as HTMLElement
+                // GrapesJS "Select" / "Add" button inside asset manager
+                const isConfirmBtn =
+                  target.closest('[data-key="add"]') ||
+                  target.closest('.gjs-am-add-asset') ||
+                  (target.tagName === 'BUTTON' &&
+                    (target.textContent?.trim().toLowerCase() === 'select' ||
+                      target.textContent?.trim().toLowerCase() === 'add'))
+
+                if (!isConfirmBtn) return
+
+                // Get the highlighted/selected asset URL from the AM
+                const highlighted = modalEl.querySelector(
+                  '.gjs-am-asset.gjs-two-color, .gjs-am-asset--selected, .gjs-am-asset:focus-within'
+                ) as HTMLElement | null
+
+                const img = highlighted?.querySelector('img') as HTMLImageElement | null
+                const bgStyle = highlighted?.style?.backgroundImage || ''
+                const srcMatch = bgStyle.match(/url\(["']?(.+?)["']?\)/)
+                const rawUrl = img?.getAttribute('src') || (srcMatch ? srcMatch[1] : '') ||
+                  (editor as any)._tc_highlighted_asset_url || ''
+                const url = rawUrl.replace(/https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|0\.0\.0\.0)(:\d+)?/g, '')
+
+                if (!url) return
+
+                const bgTarget = (editor as any)._tc_asset_target
+                if (!bgTarget) return
+
+                e.preventDefault()
+                e.stopPropagation()
+
+                // Apply background-image as inline style (setStyle)
+                const existingStyle = bgTarget.getStyle() || {}
+                bgTarget.setStyle({
+                  ...existingStyle,
+                  'background-image': `url("${url}")`,
+                  'background-size': existingStyle['background-size'] || 'cover',
+                  'background-position': existingStyle['background-position'] || 'center',
+                  'background-repeat': existingStyle['background-repeat'] || 'no-repeat',
+                  'position': existingStyle.position || 'relative',
+                  'overflow': 'visible',
+                })
+
+                ;(editor as any)._tc_asset_target = null
+                editor.Modal.close()
+                update()
+              }
+
+              ;(modalEl as any)._tcBgClickHandler = handler
+              modalEl.addEventListener('click', handler, true)
+            }, 400)
+          }}
+          className="flex-1 py-2 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg transition-colors"
+        >
+          {hasImage ? '🖼 Change' : '📁 Browse'}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setUrlValue(currentUrl)
+            setShowUrlInput(!showUrlInput)
+          }}
+          className="flex-1 py-2 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg transition-colors"
+          title="Enter image URL directly"
+        >
+          🔗 URL
+        </button>
+      </div>
+
+      {/* URL input */}
+      {showUrlInput && (
+        <div className="space-y-1.5">
+          <input
+            type="text"
+            className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
+            placeholder="https://example.com/image.jpg"
+            value={urlValue}
+            onChange={(e) => setUrlValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyUrl(urlValue)
+              if (e.key === 'Escape') setShowUrlInput(false)
+            }}
+            autoFocus
+          />
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => applyUrl(urlValue)}
+              className="flex-1 py-1.5 text-xs font-semibold rounded-lg bg-accent text-accent-fg hover:bg-accent-hover transition-colors"
+            >
+              Apply
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(false)}
+              className="flex-1 py-1.5 text-xs font-medium rounded-lg border border-border bg-bg-subtle text-fg transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Remove button */}
+      {hasImage && (
+        <button
+          type="button"
+          onClick={() => {
+            setStyleProp(selected, 'background-image', 'none')
+            setShowUrlInput(false)
+            update()
+          }}
+          className="w-full py-1.5 text-xs font-medium rounded-lg border border-danger/30 text-danger bg-danger/5 hover:bg-danger/10 transition-colors"
+        >
+          ✕ Remove Image
+        </button>
+      )}
+    </div>
+  )
+}
+
+function AddHotspotButton({ selected, editor }: { selected: Component; editor: any }) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        if (!editor || !selected) return
+        // Use the registered GrapesJS command which uses components().add()
+        // This bypasses droppable restrictions unlike selected.append()
+        editor.runCommand('tc-add-hotspot', { target: selected })
+      }}
+      className="w-full py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50/20 text-indigo-700 hover:bg-indigo-50/50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
+    >
+      <span>+</span> Add Hotspot
+    </button>
+  )
+}
+
+
 const inputClass =
   'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200';
 
@@ -104,6 +323,7 @@ const KIND_LABELS: Record<string, string> = {
   section: 'Section',
   generic: 'Block',
   link: 'Link',
+  hotspot: 'Image Hotspot',
   none: 'Element',
 };
 
@@ -471,6 +691,20 @@ export function PropertyPanel() {
             >
               Change photo
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (editor) {
+                  const parent = selected.parent() || editor.getWrapper();
+                  if (parent) {
+                    editor.runCommand('tc-add-hotspot', { target: parent });
+                  }
+                }
+              }}
+              className="w-full mt-2 py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50/20 text-indigo-700 hover:bg-indigo-50/50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
+            >
+              <span>+</span> Add Hotspot
+            </button>
             <Field label="Description for accessibility">
               <input
                 className={inputClass}
@@ -508,6 +742,212 @@ export function PropertyPanel() {
               </select>
             </Field>
             <PositionControls selected={selected} update={update} />
+          </>
+        )}
+
+        {kind === 'hotspot' && (
+          <>
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/20 p-3 space-y-1">
+              <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" />
+                Image Hotspot
+              </p>
+              <p className="text-[11px] text-indigo-600/80 leading-relaxed">
+                This is an invisible button. It will show a purple dashed border here in the editor, but will be completely invisible and transparent in the preview and live site.
+              </p>
+            </div>
+            
+            <Field label="When clicked, go to">
+              <select
+                className={inputClass}
+                value={(selected.getAttributes()?.href || '').startsWith('#') ? 'anchor' : 'external'}
+                onChange={(e) => {
+                  if (e.target.value === 'anchor') {
+                    const anchors = listSectionAnchorsOnPage(editor, selected);
+                    selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
+                  } else {
+                    selected.addAttributes({ href: 'https://' });
+                  }
+                  update();
+                }}
+              >
+                <option value="anchor">Another part of this page (Scroll)</option>
+                <option value="external">Another website (URL)</option>
+              </select>
+            </Field>
+
+            {(selected.getAttributes()?.href || '').startsWith('#') ? (
+              <Field label="Scroll to section">
+                <select
+                  className={inputClass}
+                  value={(selected.getAttributes()?.href || '').replace(/^#/, '')}
+                  onChange={(e) => {
+                    selected.addAttributes({ href: `#${e.target.value}` });
+                    update();
+                  }}
+                >
+                  <option value="">Select a section...</option>
+                  {(() => {
+                    const sections: { id: string; label: string }[] = [];
+                    const wrapper = editor.getWrapper();
+                    if (wrapper) {
+                      const walk = (cmp: any) => {
+                        const tag = (cmp.get('tagName') || '').toLowerCase();
+                        const SECTION_TAGS = new Set(['section', 'header', 'footer', 'nav', 'main', 'article']);
+                        const isSection = SECTION_TAGS.has(tag) || cmp.getAttributes()?.['data-tc-type'] === 'section';
+                        if (isSection && tag !== 'header' && tag !== 'footer') {
+                          const id = cmp.getAttributes()?.id || cmp.getId();
+                          const label = cmp.get('sectionLabel') || id || 'Untitled Section';
+                          sections.push({ id, label });
+                        }
+                        cmp.components().forEach(walk);
+                      };
+                      walk(wrapper);
+                    }
+                    const seen = new Set();
+                    const uniqueSections = sections.filter((s) => {
+                      if (seen.has(s.id)) return false;
+                      seen.add(s.id);
+                      return true;
+                    });
+                    return uniqueSections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.label} (#{sec.id})
+                      </option>
+                    ));
+                  })()}
+                </select>
+              </Field>
+            ) : (
+              <Field label="Website address (URL)">
+                <input
+                  className={inputClass}
+                  placeholder="e.g. https://google.com"
+                  value={selected.getAttributes()?.href || ''}
+                  onChange={(e) => {
+                    selected.addAttributes({ href: e.target.value });
+                    update();
+                  }}
+                />
+              </Field>
+            )}
+            
+            <Field label="Open in">
+              <select
+                className={inputClass}
+                value={selected.getAttributes()?.target || '_self'}
+                onChange={(e) => {
+                  selected.addAttributes({ target: e.target.value });
+                  update();
+                }}
+              >
+                <option value="_self">Same Window (Default)</option>
+                <option value="_blank">New Window</option>
+              </select>
+            </Field>
+
+            <Field label="Hotspot Name / Label">
+              <input
+                className={inputClass}
+                placeholder="e.g. Subscribe Button Hotspot"
+                value={selected.getAttributes()?.title || ''}
+                onChange={(e) => {
+                  selected.addAttributes({ title: e.target.value });
+                  update();
+                }}
+              />
+              <p className="text-[10px] text-fg-muted mt-1">Useful to identify this hotspot in the Layers panel</p>
+            </Field>
+
+            {/* Position and size controls for hotspot */}
+            <div className="pt-2 border-t border-border space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-xs font-semibold text-fg">Hotspot Position & Size</h3>
+                <button
+                  title="Make this hotspot cover the entire image — clicking anywhere on the image will trigger the link"
+                  onClick={() => {
+                    selected.addStyle({
+                      width: '100%',
+                      height: '100%',
+                      top: '0px',
+                      left: '0px',
+                      right: '0px',
+                      bottom: '0px',
+                    });
+                    update();
+                  }}
+                  style={{
+                    fontSize: '10px',
+                    padding: '3px 8px',
+                    borderRadius: '6px',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: '#fff',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontWeight: 600,
+                    letterSpacing: '0.02em',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  ⛶ Cover Full Image
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium text-fg-muted uppercase">Width</span>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={getStyleProp(selected, 'width') || '100px'}
+                    onChange={(e) => {
+                      setStyleProp(selected, 'width', e.target.value);
+                      update();
+                    }}
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium text-fg-muted uppercase">Height</span>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={getStyleProp(selected, 'height') || '100px'}
+                    onChange={(e) => {
+                      setStyleProp(selected, 'height', e.target.value);
+                      update();
+                    }}
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium text-fg-muted uppercase">Left Position</span>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={getStyleProp(selected, 'left') || '0px'}
+                    onChange={(e) => {
+                      setStyleProp(selected, 'left', e.target.value);
+                      update();
+                    }}
+                  />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-[10px] font-medium text-fg-muted uppercase">Top Position</span>
+                  <input
+                    type="text"
+                    className={inputClass}
+                    value={getStyleProp(selected, 'top') || '0px'}
+                    onChange={(e) => {
+                      setStyleProp(selected, 'top', e.target.value);
+                      update();
+                    }}
+                  />
+                </label>
+              </div>
+              <p className="text-[10px] text-fg-muted mt-2">
+                Tip: Click <strong>⛶ Cover Full Image</strong> to make the entire image clickable. Or drag and resize the hotspot using the blue handles.
+              </p>
+            </div>
           </>
         )}
 
@@ -592,35 +1032,9 @@ export function PropertyPanel() {
               </Field>
             )}
 
-            <Field label="Background Image">
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (editor) {
-                      editor.runCommand('open-assets', { target: selected });
-                    }
-                  }}
-                  className="w-full py-2.5 text-sm font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent text-fg transition-colors"
-                >
-                  {getStyleProp(selected, 'background-image') && getStyleProp(selected, 'background-image') !== 'none'
-                    ? 'Change image'
-                    : 'Add background image'}
-                </button>
-                {getStyleProp(selected, 'background-image') && getStyleProp(selected, 'background-image') !== 'none' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStyleProp(selected, 'background-image', 'none');
-                      update();
-                    }}
-                    className="w-full py-1.5 text-xs font-medium rounded-lg border border-danger/30 text-danger bg-danger/5 hover:bg-danger/10 transition-colors"
-                  >
-                    Remove Image
-                  </button>
-                )}
-              </div>
-            </Field>
+            <BackgroundImageField selected={selected} editor={editor} update={update} />
+
+            <AddHotspotButton selected={selected} editor={editor} />
 
             <Field label="Background Color">
               <div className="flex gap-2">

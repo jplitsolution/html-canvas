@@ -45,43 +45,51 @@ function getAssetSorter(editor: Editor) {
 export function startAssetDrag(editor: Editor, src: string, ev: MouseEvent) {
   if (ev.button !== 0) return false
 
-  lockInsertion()
-
   const sorter = getAssetSorter(editor)
   if (!sorter) return false
-
-  ev.preventDefault()
-  editor.refreshCanvas()
 
   const content = buildImageHtml(src)
   const dropModel = getTempDropModel(editor, content)
   const el = dropModel?.view?.el as HTMLElement | undefined
   if (!el) return false
 
-  editor.em.set({
-    dragResult: null,
-    dragSource: { content },
-  })
-
-  sorter.startSort([{ element: el, dragSource: { content } }])
-  document.body.classList.add('tc-is-dragging')
-  window.dispatchEvent(new CustomEvent('tc-asset-drag-start', { detail: { src } }))
-
   const bm = editor.BlockManager as BlockManagerLike
+  const startX = ev.clientX
+  const startY = ev.clientY
+  let isDragStarted = false
 
-  const onUp = () => {
-    document.removeEventListener('mouseup', onUp)
-    sorter.endDrag()
-    bm.endDrag(false)
-    editor.em.set({ dragResult: null, dragSource: undefined })
-    unlockInsertion()
-    setTimeout(() => {
-      document.body.classList.remove('tc-is-dragging')
-    }, 50)
-    document.body.classList.remove('tc-canvas-drop-over')
-    window.dispatchEvent(new CustomEvent('tc-asset-drag-stop'))
+  const onMove = (moveEv: MouseEvent) => {
+    if (!isDragStarted && (Math.abs(moveEv.clientX - startX) > 4 || Math.abs(moveEv.clientY - startY) > 4)) {
+      isDragStarted = true
+      lockInsertion()
+      editor.Canvas.refresh()
+      editor.em.set({
+        dragResult: null,
+        dragSource: { content },
+      })
+      sorter.startSort([{ element: el, dragSource: { content } }])
+      document.body.classList.add('tc-is-dragging')
+      window.dispatchEvent(new CustomEvent('tc-asset-drag-start', { detail: { src } }))
+    }
   }
 
+  const onUp = () => {
+    document.removeEventListener('mousemove', onMove)
+    document.removeEventListener('mouseup', onUp)
+    if (isDragStarted) {
+      sorter.endDrag()
+      bm.endDrag(false)
+      editor.em.set({ dragResult: null, dragSource: undefined })
+      unlockInsertion()
+      setTimeout(() => {
+        document.body.classList.remove('tc-is-dragging')
+      }, 50)
+      document.body.classList.remove('tc-canvas-drop-over')
+      window.dispatchEvent(new CustomEvent('tc-asset-drag-stop'))
+    }
+  }
+
+  document.addEventListener('mousemove', onMove)
   document.addEventListener('mouseup', onUp)
   return true
 }

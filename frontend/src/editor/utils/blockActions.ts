@@ -56,9 +56,13 @@ export function getComponentKind(component: Component | null): string {
   return 'generic'
 }
 
-export function getStyleProp(component: Component, prop: string): string {
-  const style = component.getStyle() as Record<string, string>
-  return style[prop] || ''
+export function getStyleProp(component: Component | null | undefined, prop: string): string {
+  if (!component || typeof component.getStyle !== 'function') return ''
+  const style = (component.getStyle() || {}) as Record<string, unknown>
+  const val = style[prop]
+  if (typeof val === 'string') return val
+  if (val !== null && val !== undefined && typeof val !== 'object') return String(val)
+  return ''
 }
 
 export function setStyleProp(component: Component, prop: string, value: string) {

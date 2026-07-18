@@ -81,6 +81,26 @@ export default function TemplateEditor({
     callbacksRef.current = { onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler, customWidth, customHeight }
   }, [onSave, onDirtyChange, onPreview, projectCreatedAt, projectMetadata, projectId, projectTitle, saveHandler, customWidth, customHeight])
 
+  // Sync GrapesJS "Custom" device width when the user changes the custom dimension inputs.
+  // GrapesConfig initialises Custom at 1200 px; here we keep it in lockstep with state.
+  useEffect(() => {
+    const ed = editorRef.current
+    if (!ed || !customWidth) return
+    const customDevice = ed.Devices.get('Custom')
+    if (customDevice) {
+      const px = `${customWidth}px`
+      if (customDevice.get('width') !== px) {
+        customDevice.set('width', px)
+      }
+    }
+    // If we're currently in Custom mode, re-apply the frame width
+    const selected = ed.Devices.getSelected()
+    if (selected && String(selected.get('name')) === 'Custom') {
+      const frameEl = ed.Canvas?.getFrameEl?.() as HTMLIFrameElement | null
+      if (frameEl) frameEl.style.width = `${customWidth}px`
+    }
+  }, [customWidth])
+
   const handleSave = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
@@ -177,6 +197,125 @@ export default function TemplateEditor({
     editorRef.current = ed
     setEditor(ed)
 
+    // Register custom hotspot component type
+    ed.Components.addType('hotspot', {
+      isComponent: (el) => el.getAttribute && el.getAttribute('data-tc-type') === 'hotspot',
+      model: {
+        defaults: {
+          tagName: 'a',
+          draggable: true,
+          droppable: false,
+          resizable: true,
+          traits: [
+            {
+              type: 'text',
+              name: 'href',
+              label: 'Link URL',
+            },
+            {
+              type: 'select',
+              name: 'target',
+              label: 'Open in',
+              options: [
+                { id: '_self', value: '_self', name: 'Same Window' },
+                { id: '_blank', value: '_blank', name: 'New Window' },
+              ]
+            }
+          ]
+        }
+      }
+    })
+
+    // ── Dedicated hotspot insertion command ─────────────────────────────
+    // Uses components().add() directly which bypasses droppable restrictions
+    ed.Commands.add('tc-add-hotspot', {
+      run(ed: any, _sender: any, opts: { target?: any; coverFull?: boolean } = {}) {
+        let target = opts.target || ed.getSelected()
+        if (!target) {
+          console.warn('[tc-add-hotspot] No valid target component')
+          return
+        }
+
+        const targetTag = (target.get?.('tagName') || '').toLowerCase()
+        
+        // <img> tags are void HTML elements and cannot contain child <a> tags.
+        // If target is an <img>, target its parent container instead so the hotspot <a> renders valid HTML!
+        if (targetTag === 'img') {
+          const parent = target.parent()
+          if (parent) {
+            target = parent
+          }
+        }
+
+        if (typeof target.components !== 'function') {
+          console.warn('[tc-add-hotspot] Target component cannot accept children')
+          return
+        }
+
+        // Ensure parent has position:relative
+        const pStyle = target.getStyle?.() || {}
+        if (!['absolute', 'relative', 'fixed'].includes(pStyle.position || '')) {
+          target.addStyle?.({ position: 'relative' })
+        }
+
+        // coverFull = true → hotspot covers 100% of parent (entire image is clickable)
+        const hotspotStyle = opts.coverFull
+          ? {
+              position: 'absolute',
+              top: '0px',
+              left: '0px',
+              width: '100%',
+              height: '100%',
+              display: 'block',
+              'z-index': '50',
+              cursor: 'pointer',
+              'text-decoration': 'none',
+            }
+          : {
+              position: 'absolute',
+              top: '10%',
+              left: '10%',
+              width: '30%',
+              height: '25%',
+              display: 'block',
+              'z-index': '50',
+              cursor: 'pointer',
+              'text-decoration': 'none',
+            }
+
+        // Directly add to component's children collection (bypasses droppable check)
+        const children = target.components()
+        const hotspot = children.add({
+          tagName: 'a',
+          type: 'hotspot',
+          attributes: { 'data-tc-type': 'hotspot', href: '#' },
+          style: hotspotStyle,
+          draggable: true,
+          droppable: false,
+          resizable: true,
+          selectable: true,
+          hoverable: true,
+        }) as any
+
+        console.log('[tc-add-hotspot] Added hotspot to', target.get?.('tagName'), hotspot)
+
+        // Select the new hotspot
+        setTimeout(() => {
+          try {
+            const h = Array.isArray(hotspot) ? hotspot[0] : hotspot
+            if (h) ed.select(h)
+          } catch (e) {
+            console.warn('[tc-add-hotspot] Select failed:', e)
+          }
+        }, 100)
+      }
+    })
+
+    // Expose editor globally for debugging in dev
+    if (import.meta.env.DEV) {
+      ;(window as any).editor = ed
+    }
+
     registerAllBlocks(ed, funnelPageType)
     setupAssetUpload(ed)
     setupAssetCanvasDrop(ed)
@@ -186,6 +325,17 @@ export default function TemplateEditor({
 
     // Register section ID auto-generation and nav link validation hooks
     let lastDragEvent: any = null
+    let isDraggingBlock = false
+
+    ed.on('block:drag:start', () => {
+      isDraggingBlock = true
+    })
+
+    ed.on('block:drag:stop', () => {
+      isDraggingBlock = false
+      lastDragEvent = null
+    })
+
     ed.on('canvas:dragover', (e) => {
       lastDragEvent = e
     })
@@ -297,7 +447,7 @@ export default function TemplateEditor({
             }
 
             // Fix Exact Drop Issue: Set position: absolute and top/left to where the mouse actually is
-            if (lastDragEvent && lastDragEvent.clientX !== undefined) {
+            if (isDraggingBlock && lastDragEvent && lastDragEvent.clientX !== undefined) {
               const parentEl = parent.getEl ? parent.getEl() : null
               if (parentEl) {
                 const rect = parentEl.getBoundingClientRect()
@@ -310,14 +460,17 @@ export default function TemplateEditor({
                   position: 'absolute', 
                   top: `${top}px`, 
                   left: `${left}px`,
+                  'z-index': '20',
                   margin: '0' // strip margin so it drops exactly at cursor
                 })
               }
             } else if (!component.getStyle()?.position) {
               // Fallback if no drag event tracked, just ensure it's absolute
-              component.addStyle({ position: 'absolute', margin: '0' })
+              component.addStyle({ position: 'absolute', 'z-index': '20', margin: '0' })
             }
           }
+          // Enable resizable handles visually for absolute items
+          component.set('resizable', true)
         }
       }, 50)
     })
@@ -416,10 +569,32 @@ export default function TemplateEditor({
                 parent.addStyle({ position: 'relative' })
               }
             }
+            // Enable resizable handles visually for existing absolute items
+            cmp.set('resizable', true)
           }
           cmp.components().forEach(walk)
         }
         walk(wrapper)
+      }
+
+      // Healing script for wellness containers
+      try {
+        const cssRules = ed.CssComposer.getAll();
+        cssRules.forEach((rule: any) => {
+          const selectors = rule.getSelectors().getFullString();
+          if (
+            selectors.includes('wellness-otp-container') ||
+            selectors.includes('wellness-confirm-container') ||
+            selectors.includes('wellness-home-container')
+          ) {
+            const style = rule.getStyle() || {};
+            if (style['min-height'] === '100vh') {
+              rule.addStyle({ 'min-height': 'auto' });
+            }
+          }
+        });
+      } catch (e) {
+        console.error('Failed to heal CSS rules:', e);
       }
 
       requestAnimationFrame(() => {

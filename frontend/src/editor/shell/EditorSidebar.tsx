@@ -22,6 +22,7 @@ import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragA
 import { startAssetDrag } from '../plugins/assetDrag'
 import { insertImageComponent } from '../utils/insertImage'
 import { insertBackgroundWithText } from '../utils/insertBackground'
+import { unlockInsertion } from '../utils/insertionLock'
 import { uploadImage } from '../../services/api/upload'
 import { PlacementModal } from '../components/PlacementModal'
 import { FUNNEL_PAGE_GUIDES, type FunnelPageType } from '../utils/funnelGuide'
@@ -75,6 +76,8 @@ export function EditorSidebar() {
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [placementModal, setPlacementModal] = useState<{ src: string } | null>(null)
+  const [deletingAsset, setDeletingAsset] = useState<string | null>(null)
+  const [brokenAssets, setBrokenAssets] = useState<string[]>([])
 
   const refreshAssets = useCallback(() => {
     if (!editor) return
@@ -104,12 +107,68 @@ export function EditorSidebar() {
     setPlacementModal({ src })
   }, [])
 
+  const deleteAsset = useCallback((src: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    if (!editor) return
+    // Find and remove from GrapesJS AssetManager
+    const all = editor.AssetManager.getAll()
+    const asset = all.find((a: Asset) => (a.get('src') as string) === src)
+    if (asset) {
+      editor.AssetManager.remove(asset)
+    }
+    setDeletingAsset(null)
+    refreshAssets()
+  }, [editor, refreshAssets])
+
   const handlePlacementConfirm = useCallback(
-    (placement: 'inline' | 'background', overlayText?: string) => {
+    (placement: 'inline' | 'background' | 'set-background', overlayText?: string) => {
       if (!editor || !placementModal) return
-      insertAsset(placementModal.src, placement, overlayText)
+      unlockInsertion()
+
+      if (placement === 'set-background') {
+        // Use the currently selected component OR the wrapper as fallback
+        const selectedCmp = editor.getSelected() || editor.getWrapper()
+        if (selectedCmp) {
+          // ── Write as inline style so it always appears in exported HTML ──
+          // addStyle() writes to GrapesJS CSS manager (separate <style> block) which
+          // can be overridden or lost. setStyle() merges into the element's style attr.
+          const existingStyle = selectedCmp.getStyle() || {}
+          selectedCmp.setStyle({
+            ...existingStyle,
+            'background-image': `url("${placementModal.src}")`,
+            'background-size': 'cover',
+            'background-position': 'center',
+            'background-repeat': 'no-repeat',
+            // Ensure section can contain absolutely positioned hotspots
+            'position': existingStyle.position || 'relative',
+            // overflow must NOT be hidden — clips both background and absolute children
+            'overflow': 'visible',
+          })
+          console.log('[TC] set-background applied inline style to', selectedCmp.get('tagName'))
+        }
+      } else {
+        insertAsset(placementModal.src, placement, overlayText)
+        if (placement === 'background' && overlayText?.trim()) updateBackgroundText(editor, overlayText.trim())
+      }
+
       setPlacementModal(null)
       refreshAssets()
+
+      // Force canvas refresh and focus iframe so it draws/selects the element immediately
+      setTimeout(() => {
+        if (editor) {
+          editor.Canvas.refresh()
+          try {
+            const body = editor.Canvas.getBody()
+            if (body && typeof body.focus === 'function') {
+              body.focus()
+            }
+          } catch (e) {
+            console.warn('Failed to focus editor canvas:', e)
+          }
+        }
+      }, 50)
     },
     [editor, placementModal, insertAsset, refreshAssets],
   )
@@ -135,15 +194,22 @@ export function EditorSidebar() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!editor || !e.target.files?.length) return
-    const file = e.target.files[0]
+    const files = Array.from(e.target.files)
     e.target.value = ''
     setUploading(true)
     setUploadError(null)
     try {
-      const result = await uploadImage(file)
-      editor.AssetManager.add({ src: result.url, type: 'image', name: file.name })
+      const uploadPromises = files.map(async (file) => {
+        if (!file.type.startsWith('image/')) return null
+        const result = await uploadImage(file)
+        editor.AssetManager.add({ src: result.url, type: 'image', name: file.name })
+        return result.url
+      })
+      const urls = (await Promise.all(uploadPromises)).filter((url): url is string => !!url)
       refreshAssets()
-      setPlacementModal({ src: result.url })
+      if (urls.length === 1) {
+        setPlacementModal({ src: urls[0] })
+      }
       setTab('photos')
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Upload failed')
@@ -157,6 +223,19 @@ export function EditorSidebar() {
   const filteredAssets = assets.filter((a) =>
     assetSearch ? a.src.toLowerCase().includes(assetSearch.toLowerCase()) : true,
   )
+
+  // Check if a section/generic block is currently selected (for "Set as background" option)
+  const selectedKind = (() => {
+    if (!editor) return 'none'
+    const sel = editor.getSelected()
+    if (!sel) return 'none'
+    const tag = (sel.get('tagName') || '').toLowerCase()
+    const type = sel.get('type') || ''
+    const tcType = sel.getAttributes?.()?.['data-tc-type'] || ''
+    if (tcType === 'section' || ['section', 'main', 'article', 'header', 'footer', 'div'].includes(tag) || type === 'wrapper') return 'section'
+    return 'other'
+  })()
+  const hasSelectedSection = selectedKind === 'section'
 
   return (
     <>
@@ -249,7 +328,7 @@ export function EditorSidebar() {
                 <label className="flex items-center justify-center gap-2 w-full py-3 px-3 rounded-lg border border-dashed border-border bg-bg-subtle text-sm font-medium text-fg-muted hover:border-accent hover:text-accent cursor-pointer transition-colors">
                   <Upload className="w-4 h-4" />
                   {uploading ? 'Uploading...' : 'Upload a photo'}
-                  <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileUpload} disabled={uploading} />
                 </label>
 
                 {uploadError && (
@@ -267,23 +346,53 @@ export function EditorSidebar() {
                 />
 
                 <div className="grid grid-cols-2 gap-2">
-                  {filteredAssets.map((a) => (
-                    <button
-                      key={a.src}
-                      type="button"
-                      title="Click to add to page"
-                      className="aspect-square rounded-lg overflow-hidden border border-border hover:border-accent hover:ring-2 hover:ring-accent/20 cursor-pointer"
-                      onMouseDown={(e) => {
-                        if (!editor) return
-                        if (!startAssetDrag(editor, a.src, e.nativeEvent)) {
-                          insertImageComponent(editor, a.src)
-                        }
-                      }}
-                      onClick={() => openPlacementForAsset(a.src)}
-                    >
-                      <img src={a.src} alt="" className="w-full h-full object-cover pointer-events-none" draggable={false} />
-                    </button>
-                  ))}
+                  {filteredAssets.map((a) => {
+                    const isBroken = brokenAssets.includes(a.src)
+                    return (
+                      <div
+                        key={a.src}
+                        className={`relative aspect-square rounded-lg overflow-hidden border border-border hover:border-accent hover:ring-2 hover:ring-accent/20 group flex flex-col items-center justify-center text-center bg-bg-subtle`}
+                      >
+                        {isBroken ? (
+                          <div className="flex flex-col items-center justify-center p-2 text-fg-muted select-none">
+                            <ImageIcon className="w-8 h-8 mb-1 text-slate-400 opacity-40" />
+                            <span className="text-[10px] font-semibold tracking-wide uppercase text-slate-400">Missing</span>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            title="Click to add to page"
+                            className="w-full h-full cursor-pointer block"
+                            onMouseDown={(e) => {
+                              if (editor) {
+                                startAssetDrag(editor, a.src, e.nativeEvent)
+                              }
+                            }}
+                            onClick={() => openPlacementForAsset(a.src)}
+                          >
+                            <img
+                              src={a.src}
+                              alt=""
+                              className="w-full h-full object-cover pointer-events-none"
+                              draggable={false}
+                              onError={() => {
+                                setBrokenAssets((prev) => [...prev, a.src])
+                              }}
+                            />
+                          </button>
+                        )}
+                        {/* Delete button — appears on hover */}
+                        <button
+                          type="button"
+                          title="Delete this image"
+                          onClick={(e) => deleteAsset(a.src, e)}
+                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600 z-10"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )
+                  })}
                 </div>
 
                 {filteredAssets.length === 0 && (
@@ -319,6 +428,7 @@ export function EditorSidebar() {
         uploading={uploading}
         onClose={() => setPlacementModal(null)}
         onConfirm={handlePlacementConfirm}
+        hasSelectedSection={hasSelectedSection}
       />
     </>
   )

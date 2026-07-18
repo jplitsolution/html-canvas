@@ -4,9 +4,10 @@ import { Image, Layout, X, Type } from 'lucide-react'
 interface PlacementModalProps {
   isOpen: boolean
   onClose: () => void
-  onConfirm: (placement: 'inline' | 'background', overlayText?: string) => void
+  onConfirm: (placement: 'inline' | 'background' | 'set-background', overlayText?: string) => void
   imageUrl: string | null
   uploading?: boolean
+  hasSelectedSection?: boolean
 }
 
 export function PlacementModal({
@@ -15,8 +16,9 @@ export function PlacementModal({
   onConfirm,
   imageUrl,
   uploading = false,
+  hasSelectedSection = false,
 }: PlacementModalProps) {
-  const [selected, setSelected] = useState<'inline' | 'background'>('inline')
+  const [selected, setSelected] = useState<'inline' | 'background' | 'set-background'>('inline')
   const [overlayText, setOverlayText] = useState('Your headline here')
 
   useEffect(() => {
@@ -51,33 +53,47 @@ export function PlacementModal({
           Choose how you want this image to appear on your page.
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
           <button
             type="button"
             onClick={() => setSelected('inline')}
-            className={`p-4 rounded-lg border-2 transition-all text-left ${
+            className={`p-3 rounded-lg border-2 transition-all text-left ${
               selected === 'inline'
                 ? 'border-accent bg-accent-muted'
                 : 'border-border hover:border-border-strong bg-bg-subtle'
             }`}
           >
-            <Image className="w-6 h-6 mb-2 text-accent" />
-            <p className="text-sm font-medium text-fg">Regular image</p>
-            <p className="text-xs text-fg-muted mt-0.5">Shows as a normal photo on the page</p>
+            <Image className="w-5 h-5 mb-1.5 text-accent" />
+            <p className="text-xs font-semibold text-fg">Regular image</p>
+            <p className="text-[11px] text-fg-muted mt-0.5 leading-tight">Normal photo on page</p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelected('set-background')}
+            className={`p-3 rounded-lg border-2 transition-all text-left ${
+              selected === 'set-background'
+                ? 'border-accent bg-accent-muted'
+                : 'border-border hover:border-border-strong bg-bg-subtle'
+            }`}
+          >
+            <Layout className="w-5 h-5 mb-1.5 text-green-600" />
+            <p className="text-xs font-semibold text-fg">Set as background</p>
+            <p className="text-[11px] text-fg-muted mt-0.5 leading-tight">Apply to active section</p>
           </button>
 
           <button
             type="button"
             onClick={() => setSelected('background')}
-            className={`p-4 rounded-lg border-2 transition-all text-left ${
+            className={`p-3 rounded-lg border-2 transition-all text-left ${
               selected === 'background'
                 ? 'border-accent bg-accent-muted'
                 : 'border-border hover:border-border-strong bg-bg-subtle'
             }`}
           >
-            <Layout className="w-6 h-6 mb-2 text-accent" />
-            <p className="text-sm font-medium text-fg">Banner with text</p>
-            <p className="text-xs text-fg-muted mt-0.5">Full-width background with headline</p>
+            <Layout className="w-5 h-5 mb-1.5 text-indigo-500" />
+            <p className="text-xs font-semibold text-fg">New banner section</p>
+            <p className="text-[11px] text-fg-muted mt-0.5 leading-tight">Full-width banner with text</p>
           </button>
         </div>
 

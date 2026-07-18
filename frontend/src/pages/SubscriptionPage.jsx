@@ -14,6 +14,14 @@ const VALID_PACKS = ['daily', 'weekly', 'monthly']
 
 const FLOW_SHADOW_STYLES = `
   :host { display: block; width: 100%; min-height: 100vh; }
+  body, .flow-page-inner > div {
+    width: 100%;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
   .flow-page-inner {
     display: flex;
     flex-direction: column;
@@ -75,10 +83,19 @@ function mountPageInShadow(shadow, pageData) {
     inlineStyles += `height: ${customHeight}px; min-height: ${customHeight}px; overflow: hidden; position: relative; `
   }
 
+  // Transform <body> tag to <div> to avoid invalid nested <body> inside Shadow DOM,
+  // which browser parsers often collapse or strip.
+  let cleanedHtml = pageData.html || ''
+  if (cleanedHtml.trim().toLowerCase().startsWith('<body')) {
+    cleanedHtml = cleanedHtml.replace(/^<body/i, '<div').replace(/<\/body>$/i, '</div>')
+  }
+
+  const cleanCss = (pageData.css || '').replace(/#i[a-z0-9_-]+\s*/gi, '').replace(/#wrapper\s*/gi, '')
+
   shadow.innerHTML = `
     <style>${FLOW_SHADOW_STYLES}</style>
-    <style>${pageData.css || ''}</style>
-    <div class="flow-page-inner" style="${inlineStyles}">${pageData.html}</div>
+    <style>${cleanCss}</style>
+    <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
   `
 }
 
@@ -690,6 +707,22 @@ function SubscriptionPage() {
       syncPackPicker(shadow, nextPack)
     }
 
+    const handleAnchorClick = (event) => {
+      const path = event.composedPath?.() || []
+      const anchor = path.find((node) => node instanceof HTMLAnchorElement)
+      if (!anchor) return
+
+      const href = anchor.getAttribute('href')
+      if (!href || !href.startsWith('#') || href === '#') return
+
+      event.preventDefault()
+      const targetId = decodeURIComponent(href.slice(1))
+      const targetEl = shadow.getElementById(targetId)
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+    }
+
     const handleClick = async (event) => {
       const hit = findActionTarget(event)
       if (!hit || !visitIdRef.current || transitionLockRef.current) return
@@ -763,9 +796,11 @@ function SubscriptionPage() {
 
     shadow.addEventListener('click', handlePackClick)
     shadow.addEventListener('click', handleClick)
+    shadow.addEventListener('click', handleAnchorClick)
     return () => {
       shadow.removeEventListener('click', handlePackClick)
       shadow.removeEventListener('click', handleClick)
+      shadow.removeEventListener('click', handleAnchorClick)
       if (otpCleanup) otpCleanup()
     }
   }, [pageData, country, operator, cachePage])

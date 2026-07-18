@@ -335,14 +335,22 @@ export function renderPageDocument(
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script>
+    tailwind = {
+      config: {
+        corePlugins: {
+          preflight: false,
+        }
+      }
+    };
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>${hostCss}
 ${optimizedCss}
 ${scrollBehavior}
 ${RESPONSIVE_STYLE_RULES}</style>
 </head>
-<body>${optimizedHtml}
+<body id="wrapper">${optimizedHtml}
 <script>${ANCHOR_SCROLL_SCRIPT}</script>
 </body>
 </html>`
@@ -371,14 +379,133 @@ export function buildPreviewDocument(
   return renderPageDocument(title, bodyHtml, css, pages, 'index.html', true)
 }
 
+export function cleanLocalhostUrls(text: string): string {
+  if (!text) return ''
+  return text.replace(/https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|0\.0\.0\.0)(:\d+)?/g, '')
+}
+
+export function stripWrapperIdFromCss(css: string): string {
+  if (!css) return ''
+  // GrapesJS prefixes rules with wrapper ID (e.g. #i8x92y or #wrapper).
+  // Strip wrapper ID prefixes so CSS rules apply universally in preview & live sites!
+  return css.replace(/#i[a-z0-9_-]+\s*/gi, '').replace(/#wrapper\s*/gi, '')
+}
+
+/**
+ * Ensures component style properties (like background-color, color, padding, border)
+ * are written directly into inline HTML style="..." attributes so exported HTML / preview
+ * renders background colors (e.g. white cards, blue buttons) 100% reliably in any environment.
+ */
+function syncComponentStylesToHtmlAttributes(mainCmp: any) {
+  if (!mainCmp) return
+  const walk = (cmp: any) => {
+    try {
+      // 1. Read live DOM inline style attribute from editor iframe element if available
+      const el = cmp.getEl?.()
+      if (el && typeof el.getAttribute === 'function') {
+        const domStyle = el.getAttribute('style')
+        if (domStyle && domStyle.trim()) {
+          cmp.addAttributes({ style: domStyle.trim() })
+        }
+      } else {
+        // 2. Fallback to GrapesJS style model object
+        const styleObj = (cmp.getStyle?.() || {}) as Record<string, string>
+        if (styleObj && Object.keys(styleObj).length > 0) {
+          const styleParts: string[] = []
+          Object.entries(styleObj).forEach(([k, v]) => {
+            if (v && typeof v === 'string' && v.trim()) {
+              styleParts.push(`${k}:${v}`)
+            }
+          })
+          if (styleParts.length > 0) {
+            cmp.addAttributes({ style: styleParts.join('; ') })
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    const children = cmp.components?.()
+    if (children && typeof children.forEach === 'function') {
+      children.forEach(walk)
+    }
+  }
+  walk(mainCmp)
+}
+
+/**
+ * Extracts clean HTML directly from the live editor DOM element tree in the iframe.
+ * Preserves 100% of inline style="..." attributes (e.g. background-color, color, borders)
+ * while removing GrapesJS editor selection overlays (gjs-selected, gjs-hovered, etc.).
+ */
+export function getCleanHtmlFromDom(mainCmp: any, fallbackHtml: string): string {
+  try {
+    const el = mainCmp?.getEl?.()
+    if (!el || typeof el.cloneNode !== 'function') return fallbackHtml
+
+    // Clone DOM node so we don't mutate the live editor canvas
+    const clone = el.cloneNode(true) as HTMLElement
+
+    const removeGjsArtifacts = (node: HTMLElement) => {
+      if (node.classList) {
+        node.classList.remove(
+          'gjs-hovered',
+          'gjs-selected',
+          'gjs-comp-selected',
+          'gjs-free-transform',
+          'gjs-resizer',
+          'gjs-drag-helper'
+        )
+        if (node.classList.length === 0) {
+          node.removeAttribute('class')
+        }
+      }
+      const attrsToRemove: string[] = []
+      if (node.attributes) {
+        for (let i = 0; i < node.attributes.length; i++) {
+          const attrName = node.attributes[i].name
+          if (
+            attrName.startsWith('data-gjs-') ||
+            attrName === 'data-gjs-type' ||
+            attrName === 'data-gjs-highlightable'
+          ) {
+            attrsToRemove.push(attrName)
+          }
+        }
+      }
+      attrsToRemove.forEach((a) => node.removeAttribute(a))
+
+      if (node.children) {
+        for (let i = 0; i < node.children.length; i++) {
+          removeGjsArtifacts(node.children[i] as HTMLElement)
+        }
+      }
+    }
+
+    removeGjsArtifacts(clone)
+    const resultHtml = clone.innerHTML?.trim()
+    return resultHtml || fallbackHtml
+  } catch (e) {
+    console.warn('getCleanHtmlFromDom failed, using fallback:', e)
+    return fallbackHtml
+  }
+}
+
 export function getActivePageSnapshot(editor: Editor): { html: string; css: string } {
   const selected = editor.Pages.getSelected()
   const main = selected?.getMainComponent() || editor.getWrapper()
   if (!main) return { html: '', css: '' }
 
+  syncComponentStylesToHtmlAttributes(main)
+
+  const rawHtml = editor.getHtml({ component: main })
+  const domHtml = getCleanHtmlFromDom(main, rawHtml)
+  const rawCss = editor.getCss({ component: main, avoidProtected: true }) || ''
+  const css = stripWrapperIdFromCss(rawCss)
+
   return {
-    html: editor.getHtml({ component: main }),
-    css: editor.getCss({ component: main, avoidProtected: true }) || '',
+    html: cleanLocalhostUrls(domHtml),
+    css: cleanLocalhostUrls(css),
   }
 }
 
@@ -413,12 +540,18 @@ export function collectPageExports(editor: Editor): PageExport[] {
       return { id: pageId, name: pageName, filename: pageExportFilename(pageName, pageId, isHome), html: '', css: '' }
     }
 
+    syncComponentStylesToHtmlAttributes(main)
+    const rawHtml = editor.getHtml({ component: main })
+    const domHtml = getCleanHtmlFromDom(main, rawHtml)
+    const rawCss = editor.getCss({ component: main, avoidProtected: true }) || ''
+    const css = stripWrapperIdFromCss(rawCss)
+
     return {
       id: pageId,
       name: pageName,
       filename: pageExportFilename(pageName, pageId, isHome),
-      html: editor.getHtml({ component: main }),
-      css: editor.getCss({ component: main, avoidProtected: true }) || '',
+      html: cleanLocalhostUrls(domHtml),
+      css: cleanLocalhostUrls(css),
     }
   })
 }

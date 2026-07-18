@@ -12,9 +12,8 @@ export interface SpacingBox {
   left: number
 }
 
-/** Parse margin/padding shorthand into 4 sides (px numbers). */
-export function parseSpacing(value: string | undefined | null): SpacingBox {
-  if (!value?.trim()) {
+export function parseSpacing(value: string | undefined | null | unknown): SpacingBox {
+  if (!value || typeof value !== 'string' || !value.trim()) {
     return { top: 0, right: 0, bottom: 0, left: 0 }
   }
 

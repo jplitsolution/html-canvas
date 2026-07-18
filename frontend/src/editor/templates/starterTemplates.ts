@@ -303,7 +303,7 @@ const otpTemplate4Html = `
 const wellnessOtpCss = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
-.wellness-otp-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-otp-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: auto; }
 .wellness-img { width: 100%; height: auto; display: block; }
 .invisible-input { position: absolute; background: rgba(255,255,255,0.1); border: 1px dashed rgba(255,255,255,0.4); outline: none; color: transparent; text-shadow: 0 0 0 #000; font-size: 16px; text-align: center; }
 `
@@ -564,7 +564,7 @@ const confirmTemplate3Html = `
 const wellnessConfirmCss = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
-.wellness-confirm-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-confirm-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: auto; }
 .wellness-img { width: 100%; height: auto; display: block; }
 `
 
@@ -733,7 +733,7 @@ const homeTemplate3Html = `
 const wellnessHomeCss = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; margin: 0; padding: 0; }
-.wellness-home-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: 100vh; }
+.wellness-home-container { position: relative; width: 100%; max-width: 480px; margin: 0 auto; background-color: transparent; min-height: auto; }
 .wellness-img { width: 100%; height: auto; display: block; }
 `
 const wellnessHomeHtml = `

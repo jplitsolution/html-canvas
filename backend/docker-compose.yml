@@ -21,7 +21,7 @@ services:
     image: redis:7-alpine
     container_name: templatecraft_redis
     restart: always
-    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 64mb --maxmemory-policy noeviction
     ports:
       - '127.0.0.1:6379:6379'
     volumes:

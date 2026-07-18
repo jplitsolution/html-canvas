@@ -7,7 +7,7 @@ export function lockInsertion() {
 
 export function unlockInsertion() {
   isInsertionLocked = false;
-  lastInsertionTime = Date.now();
+  lastInsertionTime = 0;
 }
 
 export function canInsert(): boolean {

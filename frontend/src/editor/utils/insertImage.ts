@@ -2,7 +2,7 @@ import type { Editor } from 'grapesjs'
 import { buildImageHtml } from './imageHtml'
 import { canInsert } from './insertionLock'
 
-/** Insert a rendered <img> on the canvas (not a URL text node) */
+/** Insert a new <img> on the canvas. Always adds a new component (never replaces). */
 export function insertImageComponent(editor: Editor, src: string, alt = 'Image') {
   if (!src?.trim()) return null
   if (!canInsert()) {
@@ -11,26 +11,37 @@ export function insertImageComponent(editor: Editor, src: string, alt = 'Image')
   }
 
   const wrapper = editor.getWrapper()
+  if (!wrapper) return null
+
   const selected = editor.getSelected()
-  const tag = (selected?.get('tagName') || '').toLowerCase()
-
-  // Replace src when an image is already selected
-  if (tag === 'img' && selected) {
-    selected.addAttributes({ src, alt })
-    editor.select(selected)
-    return selected
-  }
-
   const content = buildImageHtml(src, alt)
+
   let target = wrapper
   let at: number | undefined
 
-  if (selected?.parent() === wrapper) {
-    target = selected.parent() || wrapper
-    at = selected.index() + 1
+  if (selected) {
+    const tagName = (selected.get('tagName') || '').toLowerCase()
+    const type = selected.get('type') || ''
+    
+    // If the selected component is a container (section, row, column, div, cell),
+    // insert the image INSIDE it (append to the end of the container)
+    const isContainer = ['section', 'header', 'footer', 'div', 'main', 'article'].includes(tagName) || 
+                        ['row', 'column', 'cell', 'wrapper'].includes(type)
+    
+    if (isContainer && type !== 'wrapper') {
+      target = selected
+      at = undefined
+    } else {
+      // Otherwise, insert it as a sibling (after the selected component)
+      const parent = selected.parent()
+      if (parent) {
+        target = parent
+        at = selected.index() + 1
+      }
+    }
   }
 
-  const added = target?.append(content, at !== undefined ? { at } : undefined)
+  const added = target.append(content, at !== undefined ? { at } : undefined)
   const component = Array.isArray(added) ? added[0] : added
   if (component) editor.select(component)
   return component ?? null

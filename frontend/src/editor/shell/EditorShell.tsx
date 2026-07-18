@@ -84,7 +84,7 @@ export function EditorShell({
     ? { maxWidth: '768px', width: '768px' }
     : isCustom
     ? { 
-        maxWidth: customWidth ? `${customWidth}px` : '100%', 
+        maxWidth: '100%', 
         width: customWidth ? `${customWidth}px` : '100%',
         height: customHeight ? `${customHeight}px` : 'auto',
         minHeight: customHeight ? `${customHeight}px` : '400px'
@@ -117,7 +117,16 @@ export function EditorShell({
 
         <main className="tc-canvas-area flex-1 min-w-0 flex flex-col relative overflow-hidden">
           <FunnelGuideBanner pageType={funnelPageType} />
-          <div className={scrollWrapperClass}>
+          <div className={scrollWrapperClass} style={{ scrollBehavior: 'smooth' }}>
+            {/* Outer relative wrapper holds resize handles outside tc-page-frame clip */}
+            <div
+              className="relative max-w-full"
+              style={isCustom ? {
+                width: customWidth ? `${customWidth}px` : '100%',
+                maxWidth: '100%',
+                minHeight: customHeight ? `${customHeight}px` : '400px',
+              } : {}}
+            >
             <div
               className={`tc-page-frame tc-drop-zone rounded-xl shadow-lg border bg-white relative ${
                 dragDebug.isOverCanvas ? 'tc-drop-zone--over' : ''
@@ -128,30 +137,15 @@ export function EditorShell({
                 transition: isCustom ? 'none' : 'max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
             >
-              <div ref={canvasRef} className="gjs-editor-host absolute inset-0" style={{ pointerEvents: 'auto' }} />
-              
-              {isCustom && (
-                <>
-                  <div 
-                    className="absolute top-1/2 -right-3 w-6 h-12 bg-white border border-gray-300 rounded shadow-sm cursor-ew-resize flex items-center justify-center -translate-y-1/2 z-50 hover:bg-gray-50"
-                    onMouseDown={(e) => handleDragStart(e, 'width')}
-                  >
-                    <div className="w-1 h-4 border-l border-r border-gray-300"></div>
-                  </div>
-                  <div 
-                    className="absolute -bottom-3 left-1/2 w-12 h-6 bg-white border border-gray-300 rounded shadow-sm cursor-ns-resize flex items-center justify-center -translate-x-1/2 z-50 hover:bg-gray-50"
-                    onMouseDown={(e) => handleDragStart(e, 'height')}
-                  >
-                    <div className="w-4 h-1 border-t border-b border-gray-300"></div>
-                  </div>
-                  <div 
-                    className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border border-gray-300 rounded shadow-sm cursor-nwse-resize flex items-center justify-center z-50 hover:bg-gray-50"
-                    onMouseDown={(e) => handleDragStart(e, 'both')}
-                  >
-                    <div className="w-2 h-2 rounded-full border border-gray-400"></div>
-                  </div>
-                </>
-              )}
+              <div
+                ref={canvasRef}
+                className="gjs-editor-host absolute inset-0"
+                style={{
+                  pointerEvents: 'auto',
+                  overflow: 'visible',
+                  borderRadius: 'inherit',
+                }}
+              />
 
               {isEmpty && !dragDebug.isDragging && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 z-10">
@@ -202,6 +196,34 @@ export function EditorShell({
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+
+              {/* Resize handles — live in outer wrapper so overflow:hidden on canvas doesn't clip them */}
+              {isCustom && (
+                <>
+                  {/* Right edge — width drag */}
+                  <div
+                    className="absolute top-1/2 -right-3 w-6 h-12 bg-white border border-gray-300 rounded shadow-sm cursor-ew-resize flex items-center justify-center -translate-y-1/2 z-50 hover:bg-gray-50"
+                    onMouseDown={(e) => handleDragStart(e, 'width')}
+                  >
+                    <div className="w-1 h-4 border-l border-r border-gray-300"></div>
+                  </div>
+                  {/* Bottom edge — height drag */}
+                  <div
+                    className="absolute -bottom-3 left-1/2 w-12 h-6 bg-white border border-gray-300 rounded shadow-sm cursor-ns-resize flex items-center justify-center -translate-x-1/2 z-50 hover:bg-gray-50"
+                    onMouseDown={(e) => handleDragStart(e, 'height')}
+                  >
+                    <div className="w-4 h-1 border-t border-b border-gray-300"></div>
+                  </div>
+                  {/* Bottom-right corner — both width & height */}
+                  <div
+                    className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border border-gray-300 rounded shadow-sm cursor-nwse-resize flex items-center justify-center z-50 hover:bg-gray-50"
+                    onMouseDown={(e) => handleDragStart(e, 'both')}
+                  >
+                    <div className="w-2 h-2 rounded-full border border-gray-400"></div>
+                  </div>
+                </>
               )}
             </div>
           </div>

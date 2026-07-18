@@ -19,15 +19,20 @@ export function insertBackgroundWithText(editor: Editor, imageUrl: string): Comp
       data-tc-type="section" 
       data-background-image="${safeUrl}"
       style="
+        width: 100%;
+        max-width: 100%;
+        margin: 0;
         background-image: url('${safeUrl}');
         background-size: cover;
         background-position: center;
-        padding: 80px 32px;
+        background-repeat: no-repeat;
+        padding: 90px 32px;
         min-height: 420px;
         position: relative;
         display: flex;
         align-items: center;
         justify-content: center;
+        box-sizing: border-box;
         font-family: Inter, system-ui, sans-serif;
         overflow: hidden;
       "
@@ -54,6 +59,7 @@ export function insertBackgroundWithText(editor: Editor, imageUrl: string): Comp
           max-width: 640px;
           padding: 20px;
           width: 100%;
+          box-sizing: border-box;
         "
       >
         <h2 
@@ -102,10 +108,20 @@ export function insertBackgroundWithText(editor: Editor, imageUrl: string): Comp
     </section>
   `;
 
-  wrapper.append(html);
-  
-  const components = wrapper.components();
-  const last = components.at(components.length - 1);
+  const selected = editor.getSelected();
+  let target = wrapper;
+  let at: number | undefined;
+
+  if (selected) {
+    const parent = selected.parent();
+    if (parent) {
+      target = parent;
+      at = selected.index() + 1;
+    }
+  }
+
+  const added = target.append(html, at !== undefined ? { at } : undefined);
+  const last = Array.isArray(added) ? added[0] : added;
   if (last) {
     editor.select(last);
     // Scroll to the new section
