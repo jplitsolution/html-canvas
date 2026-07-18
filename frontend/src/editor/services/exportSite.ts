@@ -493,7 +493,7 @@ export function inlineCssInHtml(html: string, css: string, wrapperStyle: string 
   })
 
   const innerHtml = doc.body.innerHTML
-  return `<div class="page-wrapper" style="${wrapperStyle}">${innerHtml}</div>`
+  return `<div class="page-wrapper" style="min-height: 100vh; width: 100%; position: relative; ${wrapperStyle}">${innerHtml}</div>`
 }
 
 export function getActivePageSnapshot(editor: Editor): { html: string; css: string } {
