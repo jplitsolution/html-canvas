@@ -395,21 +395,33 @@ function syncComponentStylesToHtmlAttributes(mainCmp: any) {
   if (!mainCmp) return
   const walk = (cmp: any) => {
     try {
-      // 1. Read live DOM inline style attribute from editor iframe element if available
-      const el = cmp.getEl?.()
-      let styleStr = ''
-      if (el && typeof el.getAttribute === 'function') {
-        styleStr = el.getAttribute('style') || ''
-      }
+      // 1. Get styles from GrapesJS component style model (main source of truth)
+      const styleObj = (cmp.getStyle?.() || {}) as Record<string, string>
       
-      // 2. Fallback to GrapesJS style model object
-      if (!styleStr.trim()) {
-        const styleObj = (cmp.getStyle?.() || {}) as Record<string, string>
-        styleStr = Object.entries(styleObj)
-          .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
-          .map(([k, v]) => `${k}:${v}`)
-          .join('; ')
+      // 2. Read live DOM inline style attribute from editor iframe element if available
+      const el = cmp.getEl?.()
+      const domStyleStr = (el && typeof el.getAttribute === 'function') ? el.getAttribute('style') || '' : ''
+      
+      // Parse DOM styles
+      const domStyles: Record<string, string> = {}
+      if (domStyleStr.trim()) {
+        domStyleStr.split(';').forEach((part) => {
+          const colonIdx = part.indexOf(':')
+          if (colonIdx > 0) {
+            const k = part.substring(0, colonIdx).trim()
+            const v = part.substring(colonIdx + 1).trim()
+            if (k && v) domStyles[k] = v
+          }
+        })
       }
+
+      // Merge: GrapesJS styleObj takes precedence over DOM style attributes
+      const mergedStyles = { ...domStyles, ...styleObj }
+      
+      const styleStr = Object.entries(mergedStyles)
+        .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
+        .map(([k, v]) => `${k}:${v}`)
+        .join('; ')
 
       if (styleStr.trim()) {
         cmp.addAttributes({ 'temp-style': styleStr.trim() })
