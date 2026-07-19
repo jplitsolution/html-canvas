@@ -117,3 +117,13 @@ gantt
 - **Database**: `users` table.
 - **Completed %**: 100%
 - **Status**: Production Ready.
+
+### 3.9 Interactive Hotspots & Client-Side Navigation Interceptor
+- **Purpose**: Allow mapping custom image hotspots to subscription system actions (e.g. `SUBSCRIBE`) and client-side page routing to prevent full page reloads.
+- **Files**: `TemplateEditor.tsx`, `PropertyPanel.tsx`, `funnelGuide.ts`, `SubscriptionPage.jsx`
+- **APIs**: None.
+- **Frontend**: Custom interactive hotspot picker in GrapesJS properties panel mapping "Continue campaign flow (Subscribe)" to `data-action="SUBSCRIBE"`, update template rules guide for `HOME` pages to validate subscription triggers, keep specific dynamic classes/IDs styling on render, and intercept user clicks inside shadow DOM for internal router navigation via `step` parameter.
+- **Backend**: None.
+- **Database**: None.
+- **Completed %**: 100%
+- **Status**: Production Ready.

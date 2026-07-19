@@ -83,7 +83,7 @@ This sequence handles incoming traffic to campaigns and compiles templates dynam
 This sequence traces actions when a user proceeds to subscribe.
 
 ### 4.1 Funnel Step Transition (`POST /flow/transition`)
-1. **Transition Action**: The mobile user clicks the subscription button (`data-action="SUBSCRIBE"`).
+1. **Transition Action**: The mobile user clicks the subscription button or image hotspot (`data-action="SUBSCRIBE"`).
 2. **Evaluation**:
    - If the user's mobile number (`phone` / MSISDN) is detected (from headers or URL parameters):
      - The backend advances the funnel state to **`CONFIRM`**.

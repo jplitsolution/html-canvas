@@ -15,6 +15,8 @@ This document is designed to quickly onboard future AI models onto the TemplateC
 - **In-Memory Caching (Phase 1)**: Key campaign configurations, API configs, and partner attribution checks are cached for 15 seconds in `FlowService` to optimize query reads.
 - **Batch Telemetry Event Queue (Phase 3)**: High-frequency user events are buffered inside `AnalyticsService` and bulk-inserted every 5 seconds (or at 100 queue size) to prevent SQL database write locks under high volume traffic spikes.
 - **Telemetry Query Caching (Phase 3)**: Active session visit records are cached for 10 seconds to eliminate redundant database reads during Elasticsearch indexing.
+- **Action-Mapped Hotspots**: Custom hotspots placed on page templates can trigger `SUBSCRIBE` actions (by setting `data-action="SUBSCRIBE"` and `href="#"`).
+- **Intercepted Client Routing**: The public client runtime (`SubscriptionPage.jsx`) intercepts anchor clicks pointing to step paths (like `HOME`, `OTP`, `CONFIRM`, etc.) to run client-side state transitions (using query parameters) instead of regular window redirections.
 
 ---
 

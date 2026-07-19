@@ -5,6 +5,7 @@ TemplateCraft is an enterprise-grade SaaS platform for building, deploying, and 
 ## Features
 
 - **Visual Page Canvas**: Dynamic editing of funnels inside the browser using GrapesJS.
+- **Interactive Hotspots & Custom Triggers**: Support for visual interactive hotspots mapped to system actions (e.g. `SUBSCRIBE` flow triggers) and client-side page routing intercepts.
 - **Provider-Based OTP Engine**: Supports Twilio, MSG91, Kaleyra, Custom HTTP APIs, and Remote Telecom Partner verification.
 - **Funnel Routing & Redirections**: Dynamic routing based on operator header parameters, subscriber status, and blocklist guards.
 - **Real-Time Funnel Analytics**: Dynamic dashboards capturing traffic impressions, conversions, subscriber metrics, and a dedicated real-time OTP Analytics Dashboard.

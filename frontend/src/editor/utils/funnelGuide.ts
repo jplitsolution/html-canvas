@@ -58,9 +58,24 @@ export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>
   HOME: {
     title: 'Subscribe page (Home)',
     summary:
-      'User lands here first. When they tap Subscribe, the app talks to the server and moves them to Confirm or OTP.',
-    canChange: ['Headlines', 'Colors', 'Images', 'Feature list text', 'Button label (keep the button itself)'],
-    required: [],
+      'User lands here first. When they tap Subscribe (button or image hotspot), the app talks to the server and moves them to Confirm or OTP via Flow Builder.',
+    canChange: [
+      'Headlines',
+      'Colors',
+      'Images',
+      'Feature list text',
+      'Button / hotspot label (keep data-action="SUBSCRIBE")',
+    ],
+    required: [
+      {
+        id: 'subscribe-btn',
+        label: 'Subscribe action',
+        why: 'Starts the subscription funnel. Use a visible button or an invisible image hotspot with Continue campaign flow.',
+        match: 'data-action="SUBSCRIBE"',
+        thumb: 'button',
+        snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
+      },
+    ],
   },
   OTP: {
     title: 'OTP verification page',
@@ -250,8 +265,9 @@ export function getFlowElementInfo(attrs: Record<string, string>): {
   if (action === 'SUBSCRIBE') {
     return {
       isSystem: true,
-      label: 'Subscribe button (system)',
-      description: 'Starts subscription. You can change the text and colors — do not delete this button.',
+      label: 'Subscribe action (system)',
+      description:
+        'Starts the subscription funnel. Works on a button or image hotspot — do not remove data-action="SUBSCRIBE".',
     }
   }
   if (action === 'CONFIRM') {
