@@ -28,6 +28,8 @@ PROJECT ME KYA KYA COMPLETE HO GAYA HAI?
 10. Production Deployment & PM2 Setup: `deploy.sh` script build aur setup automate karti hai. PM2 `ecosystem.config.cjs` aur backend/frontend `start.sh` wrapper scripts use hote hain taaki deploy se pehle dynamic builds check ho sakein.
 11. Secure Docker Services: Elasticsearch public port ko Docker compose file me localhost `127.0.0.1` par bind karke secure kiya gaya hai taaki ransomware risks protect ho sakein.
 12. High-Traffic Scaling & Database Optimizations: Campaign routes, API configurations aur partner attribution checks ko resolve karne ke liye 15-second TTL cache (`SimpleCache`) implement kiya gaya hai (Phase 1). Telemetry writes overhead aur database read-locks minimize karne ke liye local event queue buffer (`eventBuffer` with 5s background flush / 100 capacity) aur 10s visit lookup caching implement kiya gaya hai (Phase 3).
+13. Interactive Hotspots aur Client-Side Routing: GrapesJS editor me image hotspots ab direct `SUBSCRIBE` action ke sath map ho sakte hain (`data-action="SUBSCRIBE"`). Isse custom graphic elements/banners par transparent subscription button overlay lagana easy ho gaya hai. Sath hi, Shadow DOM rendering ke andar internal page links (jaise HOME, OTP, CONFIRM, etc.) ko client-side select karke search query parameter (`step`) par load kiya jata hai bina dynamic page reloads ke, jisse frontend response user navigation smooth rehta hai.
+
 
 ------------------------------------------------------------------------
 ABHI KYA PENDING HAI?

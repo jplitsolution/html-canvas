@@ -90,7 +90,7 @@ function mountPageInShadow(shadow, pageData) {
     cleanedHtml = cleanedHtml.replace(/^<body/i, '<div').replace(/<\/body>$/i, '</div>')
   }
 
-  const cleanCss = (pageData.css || '').replace(/#i[a-z0-9_-]+\s*/gi, '').replace(/#wrapper\s*/gi, '')
+  const cleanCss = (pageData.css || '').replace(/#wrapper\s*/gi, '')
 
   shadow.innerHTML = `
     <style>${FLOW_SHADOW_STYLES}</style>
@@ -711,6 +711,8 @@ function SubscriptionPage() {
       const path = event.composedPath?.() || []
       const anchor = path.find((node) => node instanceof HTMLAnchorElement)
       if (!anchor) return
+      // Flow hotspots use href="#" + data-action — let handleClick own those.
+      if (anchor.getAttribute('data-action')) return
 
       const href = anchor.getAttribute('href')
       if (!href || !href.startsWith('#') || href === '#') return
@@ -727,7 +729,25 @@ function SubscriptionPage() {
       const hit = findActionTarget(event)
       if (!hit || !visitIdRef.current || transitionLockRef.current) return
 
-      const { action } = hit
+      const { action, node } = hit
+      // External / page links without a flow action should navigate normally.
+      if (!node.getAttribute('data-action') && node.matches?.('a[href]')) {
+        const href = (node.getAttribute('href') || '').trim()
+        const targetPage = href.toUpperCase()
+        const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+
+        if (VALID_PAGES.includes(targetPage)) {
+          event.preventDefault()
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.set('step', targetPage)
+            return next
+          })
+          return
+        }
+
+        if (href && href !== '#' && !href.startsWith('#')) return
+      }
       event.preventDefault()
 
       const currentPage = pageDataRef.current

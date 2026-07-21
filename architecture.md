@@ -225,7 +225,7 @@ To handle high volumes without performance degradation:
 
 ---
 
-## 7. Analytics Flow
+## 8. Analytics Flow
 
 Analytics data is updated real-time using events:
 - Total unique traffic counts.
@@ -235,14 +235,22 @@ Analytics data is updated real-time using events:
 
 ---
 
-## 8. Security Model
+## 9. Security Model
 
 - **Admin APIs**: Secured via standard `JwtAuthGuard` (Authorization header `Bearer <token>`). Endpoints verify that the logged-in user owns the resource being manipulated (Campaign-scoped ownership).
 - **Public APIs**: Endpoints `/flow/*` and `/otp/*` are completely public (unauthenticated) to allow traffic from end-users, but they enforce rate-limiting, resend delays, brute-force lockout, and transition validations.
 
 ---
 
-## 9. Future Scaling
+## 10. Canvas Templates & Client-Side Navigation Interceptor
+
+To support visual campaign templates built via GrapesJS, the consumer landing page (`SubscriptionPage.jsx`) mounts templates inside a Shadow DOM. Interactive components have the following features:
+- **Action-Mapped Image Hotspots**: Transparent overlay links can be added via the editor and mapped to system actions such as `SUBSCRIBE` (which resolves operator flow redirects/OTP inputs). These use a `data-action="SUBSCRIBE"` attribute and `href="#"`.
+- **Client-Side Page Navigation Interception**: Clicks on internal anchor links mapping to standard funnel steps (`HOME`, `OTP`, `CONFIRM`, `THANKYOU`, `BLOCKED`, `ERROR`) are intercepted by the runtime event listener to route step-transitions client-side (by updating the query string `step` parameter) without performing full page reloads, providing a smooth user experience.
+
+---
+
+## 11. Future Scaling
 
 1. **Caching**: Store routing records (blocklist state, active subscription mappings) in Redis with high TTL for sub-10ms response times.
 2. **Read/Write DB Splitting**: Direct high-frequency analytics writes (Visits, Events) to write-heavy nodes or offload to queues (RabbitMQ/Kafka) to process asynchronously.

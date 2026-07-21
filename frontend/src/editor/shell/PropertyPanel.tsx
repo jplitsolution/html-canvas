@@ -864,23 +864,33 @@ export function PropertyPanel() {
               <select
                 className={inputClass}
                 value={(() => {
-                  const href = selected.getAttributes()?.href || '';
+                  const attrs = selected.getAttributes() || {};
+                  if (attrs['data-action'] === 'SUBSCRIBE') return 'flow';
+                  const href = attrs.href || '';
                   if (href.startsWith('#')) return 'anchor';
                   if (href.startsWith('http://') || href.startsWith('https://')) return 'external';
                   return 'page';
                 })()}
                 onChange={(e) => {
-                  if (e.target.value === 'anchor') {
+                  const next = e.target.value;
+                  if (next === 'flow') {
+                    selected.addAttributes({ 'data-action': 'SUBSCRIBE', href: '#' });
+                    selected.removeAttributes('target');
+                  } else if (next === 'anchor') {
+                    selected.removeAttributes('data-action');
                     const anchors = listSectionAnchorsOnPage(editor, selected);
                     selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
-                  } else if (e.target.value === 'page') {
+                  } else if (next === 'page') {
+                    selected.removeAttributes('data-action');
                     selected.addAttributes({ href: 'OTP' });
                   } else {
+                    selected.removeAttributes('data-action');
                     selected.addAttributes({ href: 'https://' });
                   }
                   update();
                 }}
               >
+                <option value="flow">Continue campaign flow (Subscribe)</option>
                 <option value="anchor">Another part of this page (Scroll)</option>
                 <option value="page">Another page in this campaign</option>
                 <option value="external">Another website (URL)</option>
@@ -888,8 +898,24 @@ export function PropertyPanel() {
             </Field>
 
             {(() => {
-              const href = selected.getAttributes()?.href || '';
-              const type = href.startsWith('#') ? 'anchor' : (href.startsWith('http://') || href.startsWith('https://')) ? 'external' : 'page';
+              const attrs = selected.getAttributes() || {};
+              const href = attrs.href || '';
+              const type =
+                attrs['data-action'] === 'SUBSCRIBE'
+                  ? 'flow'
+                  : href.startsWith('#')
+                    ? 'anchor'
+                    : href.startsWith('http://') || href.startsWith('https://')
+                      ? 'external'
+                      : 'page';
+
+              if (type === 'flow') {
+                return (
+                  <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
+                    Starts the subscription funnel on preview/live. The next page comes from Flow Builder (OTP, Confirm, etc.).
+                  </p>
+                );
+              }
 
               if (type === 'anchor') {
                 return (
@@ -965,6 +991,7 @@ export function PropertyPanel() {
               );
             })()}
             
+            {(selected.getAttributes()?.['data-action'] !== 'SUBSCRIBE') && (
             <Field label="Open in">
               <select
                 className={inputClass}
@@ -978,6 +1005,7 @@ export function PropertyPanel() {
                 <option value="_blank">New Window</option>
               </select>
             </Field>
+            )}
 
             <Field label="Name (optional)">
               <input

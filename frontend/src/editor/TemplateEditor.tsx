@@ -292,7 +292,12 @@ export default function TemplateEditor({
         const hotspot = children.add({
           tagName: 'a',
           type: 'hotspot',
-          attributes: { 'data-tc-type': 'hotspot', href: '#' },
+          attributes: {
+            'data-tc-type': 'hotspot',
+            'data-action': 'SUBSCRIBE',
+            href: '#',
+            title: 'Subscribe Hotspot',
+          },
           style: hotspotStyle,
           draggable: true,
           droppable: false,
