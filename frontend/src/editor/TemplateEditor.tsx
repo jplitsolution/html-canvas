@@ -259,6 +259,9 @@ export default function TemplateEditor({
         }
 
         // coverFull = true → hotspot covers 100% of parent (entire image is clickable)
+        // Default: centered slightly lower on the image with a stable px height so it
+        // stays visible even when the parent height is still resolving (avoids a thin
+        // strip stuck at the top from % height collapsing to ~0).
         const hotspotStyle = opts.coverFull
           ? {
               position: 'absolute',
@@ -273,10 +276,11 @@ export default function TemplateEditor({
             }
           : {
               position: 'absolute',
-              top: '10%',
-              left: '10%',
-              width: '30%',
-              height: '25%',
+              top: '40%',
+              left: '25%',
+              width: '50%',
+              height: '120px',
+              'min-height': '80px',
               display: 'block',
               'z-index': '50',
               cursor: 'pointer',

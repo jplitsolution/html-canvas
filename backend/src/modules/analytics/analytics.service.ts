@@ -1,6 +1,6 @@
-import { Injectable, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, MoreThan, Like, In } from 'typeorm';
+import { Repository, Like, In, FindOptionsWhere } from 'typeorm';
 import { Visit, VisitStatus } from './entities/visit.entity';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
 import { CampaignAnalyticsDto } from './dto/campaign-analytics.dto';
@@ -83,9 +83,9 @@ export class AnalyticsService {
     status: VisitStatus,
     pageType?: string,
     phone?: string,
-  ): Promise<Visit> {
+  ): Promise<Visit | null> {
     const visit = await this.visitRepository.findOne({ where: { id } });
-    if (!visit) return null as any;
+    if (!visit) return null;
 
     visit.visitStatus = status;
     if (pageType) {
@@ -108,24 +108,28 @@ export class AnalyticsService {
   async logEvent(
     visitId: number,
     eventType: VisitEventType,
-    metadata?: any,
-  ): Promise<any> {
+    metadata?: Record<string, unknown>,
+  ): Promise<{
+    visitId: number;
+    eventType: VisitEventType;
+    metadata?: Record<string, unknown>;
+  }> {
     const eventPayload = { visitId, eventType, metadata };
 
     // Enqueue job via BullMQ
     try {
-      await this.analyticsQueue.add(
-        'process-event',
-        eventPayload,
-        {
-          removeOnComplete: true, // keeps Redis clean
-          attempts: 3,            // retry 3 times on failure
-          backoff: { type: 'exponential', delay: 1000 },
-        },
-      );
-    } catch (err) {
+      await this.analyticsQueue.add('process-event', eventPayload, {
+        removeOnComplete: true, // keeps Redis clean
+        attempts: 3, // retry 3 times on failure
+        backoff: { type: 'exponential', delay: 1000 },
+      });
+    } catch {
       this.logger.warn('Redis queue failed, falling back to direct DB insert');
-      const eventEntity = this.visitEventRepository.create(eventPayload as any);
+      const eventEntity = this.visitEventRepository.create({
+        visitId,
+        eventType,
+        metadata,
+      });
       await this.visitEventRepository.insert(eventEntity);
     }
 
@@ -209,14 +213,14 @@ export class AnalyticsService {
     const limit = Number(query.limit) || 20;
     const skip = (page - 1) * limit;
 
-    const where: any = { campaignId };
+    const where: FindOptionsWhere<Visit> = { campaignId };
 
     if (query.phone && query.phone.trim() !== '') {
       where.phone = Like(`%${query.phone.trim()}%`);
     }
 
     if (query.status && query.status.trim() !== '' && query.status !== 'all') {
-      where.visitStatus = query.status;
+      where.visitStatus = query.status as VisitStatus;
     }
 
     const [data, total] = await this.visitRepository.findAndCount({
@@ -232,7 +236,9 @@ export class AnalyticsService {
     // Sort events for each visit chronologically by createdAt (ASC)
     data.forEach((visit) => {
       if (visit.events) {
-        visit.events.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+        visit.events.sort(
+          (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+        );
       }
     });
 
@@ -310,4 +316,3 @@ export class AnalyticsService {
     return pages;
   }
 }
-

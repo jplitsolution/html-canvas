@@ -307,7 +307,7 @@ function AddHotspotButton({ selected, editor }: { selected: Component; editor: a
       }}
       className="w-full py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50/20 text-indigo-700 hover:bg-indigo-50/50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
     >
-      <span>+</span> Add Hotspot
+      <span>+</span> Add Clickable Area
     </button>
   )
 }
@@ -316,6 +316,55 @@ function AddHotspotButton({ selected, editor }: { selected: Component; editor: a
 const inputClass =
   'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200';
 
+const DEFAULT_CAMPAIGN_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'ERROR'] as const
+
+function getCampaignPageOptions(editor: any): { id: string; label: string }[] {
+  const options: { id: string; label: string }[] = DEFAULT_CAMPAIGN_PAGES.map((id) => ({ id, label: id }))
+  const seen = new Set(DEFAULT_CAMPAIGN_PAGES.map((id) => id.toUpperCase()))
+
+  if (editor?.Pages?.getAll) {
+    for (const p of editor.Pages.getAll()) {
+      const pid = String(p.getId())
+      const key = pid.toUpperCase()
+      if (seen.has(key)) continue
+      seen.add(key)
+      options.push({ id: pid, label: String(p.get('name') || pid) })
+    }
+  }
+
+  return options
+}
+
+function CampaignPageSelect({
+  href,
+  editor,
+  onChange,
+}: {
+  href: string
+  editor: any
+  onChange: (pageId: string) => void
+}) {
+  const options = getCampaignPageOptions(editor)
+  const matched = options.find((o) => o.id.toLowerCase() === (href || '').toLowerCase())
+  const value = matched?.id || options[0]?.id || 'OTP'
+
+  return (
+    <Field label="Page name">
+      <select
+        className={inputClass}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        {options.map((page) => (
+          <option key={page.id} value={page.id}>
+            {page.label}
+          </option>
+        ))}
+      </select>
+    </Field>
+  )
+}
+
 const KIND_LABELS: Record<string, string> = {
   text: 'Text',
   button: 'Button',
@@ -323,7 +372,7 @@ const KIND_LABELS: Record<string, string> = {
   section: 'Section',
   generic: 'Block',
   link: 'Link',
-  hotspot: 'Image Hotspot',
+  hotspot: 'Clickable Area',
   none: 'Element',
 };
 
@@ -558,7 +607,7 @@ export function PropertyPanel() {
                         const anchors = listSectionAnchorsOnPage(editor, selected);
                         selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
                       } else if (e.target.value === 'page') {
-                        selected.addAttributes({ href: 'otp' });
+                        selected.addAttributes({ href: 'OTP' });
                       } else {
                         selected.addAttributes({ href: 'https://' });
                       }
@@ -623,31 +672,14 @@ export function PropertyPanel() {
                   
                   if (type === 'page') {
                     return (
-                      <Field label="Page name">
-                        <input
-                          className={inputClass}
-                          placeholder="e.g. otp, confirm"
-                          value={href}
-                          list="campaign-pages-list"
-                          onChange={(e) => {
-                            selected.addAttributes({ href: e.target.value });
-                            update();
-                          }}
-                        />
-                        <datalist id="campaign-pages-list">
-                          <option value="HOME">HOME</option>
-                          <option value="OTP">OTP</option>
-                          <option value="CONFIRM">CONFIRM</option>
-                          <option value="THANKYOU">THANKYOU</option>
-                          <option value="ERROR">ERROR</option>
-                          {editor && editor.Pages.getAll().map((p: any) => {
-                            const pid = String(p.getId());
-                            const pname = String(p.get('name') || pid);
-                            if (['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'ERROR'].includes(pid.toUpperCase())) return null;
-                            return <option key={pid} value={pid}>{pname}</option>;
-                          })}
-                        </datalist>
-                      </Field>
+                      <CampaignPageSelect
+                        href={href}
+                        editor={editor}
+                        onChange={(pageId) => {
+                          selected.addAttributes({ href: pageId });
+                          update();
+                        }}
+                      />
                     );
                   }
 
@@ -750,7 +782,7 @@ export function PropertyPanel() {
               }}
               className="w-full mt-2 py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50/20 text-indigo-700 hover:bg-indigo-50/50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
             >
-              <span>+</span> Add Hotspot
+              <span>+</span> Add Clickable Area
             </button>
             <Field label="Description for accessibility">
               <input
@@ -821,10 +853,10 @@ export function PropertyPanel() {
             <div className="rounded-lg border border-indigo-200 bg-indigo-50/20 p-3 space-y-1">
               <p className="text-xs font-semibold text-indigo-700 flex items-center gap-1.5">
                 <span className="inline-block w-2 h-2 rounded-full bg-indigo-500" />
-                Image Hotspot
+                Clickable Area
               </p>
               <p className="text-[11px] text-indigo-600/80 leading-relaxed">
-                This is an invisible button. It will show a purple dashed border here in the editor, but will be completely invisible and transparent in the preview and live site.
+                Draw a box on the image that people can tap or click. In the editor you will see a purple dashed border — on the live page it stays invisible.
               </p>
             </div>
             
@@ -842,7 +874,7 @@ export function PropertyPanel() {
                     const anchors = listSectionAnchorsOnPage(editor, selected);
                     selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
                   } else if (e.target.value === 'page') {
-                    selected.addAttributes({ href: 'otp' });
+                    selected.addAttributes({ href: 'OTP' });
                   } else {
                     selected.addAttributes({ href: 'https://' });
                   }
@@ -907,31 +939,14 @@ export function PropertyPanel() {
 
               if (type === 'page') {
                 return (
-                  <Field label="Page name">
-                    <input
-                      className={inputClass}
-                      placeholder="e.g. otp, confirm"
-                      value={href}
-                      list="campaign-pages-list"
-                      onChange={(e) => {
-                        selected.addAttributes({ href: e.target.value });
-                        update();
-                      }}
-                    />
-                    <datalist id="campaign-pages-list">
-                      <option value="HOME">HOME</option>
-                      <option value="OTP">OTP</option>
-                      <option value="CONFIRM">CONFIRM</option>
-                      <option value="THANKYOU">THANKYOU</option>
-                      <option value="ERROR">ERROR</option>
-                      {editor && editor.Pages.getAll().map((p: any) => {
-                        const pid = String(p.getId());
-                        const pname = String(p.get('name') || pid);
-                        if (['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'ERROR'].includes(pid.toUpperCase())) return null;
-                        return <option key={pid} value={pid}>{pname}</option>;
-                      })}
-                    </datalist>
-                  </Field>
+                  <CampaignPageSelect
+                    href={href}
+                    editor={editor}
+                    onChange={(pageId) => {
+                      selected.addAttributes({ href: pageId });
+                      update();
+                    }}
+                  />
                 );
               }
 
@@ -964,25 +979,25 @@ export function PropertyPanel() {
               </select>
             </Field>
 
-            <Field label="Hotspot Name / Label">
+            <Field label="Name (optional)">
               <input
                 className={inputClass}
-                placeholder="e.g. Subscribe Button Hotspot"
+                placeholder="e.g. Subscribe button"
                 value={selected.getAttributes()?.title || ''}
                 onChange={(e) => {
                   selected.addAttributes({ title: e.target.value });
                   update();
                 }}
               />
-              <p className="text-[10px] text-fg-muted mt-1">Useful to identify this hotspot in the Layers panel</p>
+              <p className="text-[10px] text-fg-muted mt-1">Helps you recognise this area later in the layers list</p>
             </Field>
 
-            {/* Position and size controls for hotspot */}
+            {/* Position and size controls for clickable area */}
             <div className="pt-2 border-t border-border space-y-3">
               <div className="flex items-center justify-between mb-1">
-                <h3 className="text-xs font-semibold text-fg">Hotspot Position & Size</h3>
+                <h3 className="text-xs font-semibold text-fg">Size & Position</h3>
                 <button
-                  title="Make this hotspot cover the entire image — clicking anywhere on the image will trigger the link"
+                  title="Make the whole image clickable"
                   onClick={() => {
                     selected.addStyle({
                       width: '100%',
@@ -1063,7 +1078,7 @@ export function PropertyPanel() {
                 </label>
               </div>
               <p className="text-[10px] text-fg-muted mt-2">
-                Tip: Click <strong>⛶ Cover Full Image</strong> to make the entire image clickable. Or drag and resize the hotspot using the blue handles.
+                Tip: Click <strong>⛶ Cover Full Image</strong> to make the whole image clickable. Or drag the blue handles to move and resize this area.
               </p>
             </div>
           </>

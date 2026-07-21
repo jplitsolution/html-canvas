@@ -76,9 +76,9 @@ export function registerComponentBlocks(editor: Editor) {
   addBlock(
     editor,
     'hotspot-block',
-    'Image Hotspot',
+    'Clickable Area',
     'component',
     'button',
-    `<a data-tc-type="hotspot" href="#" style="position:absolute;width:100px;height:100px;display:block;z-index:10;text-decoration:none;"></a>`
+    `<a data-tc-type="hotspot" href="#" style="position:absolute;top:40%;left:25%;width:50%;height:120px;min-height:80px;display:block;z-index:50;text-decoration:none;"></a>`
   )
 }

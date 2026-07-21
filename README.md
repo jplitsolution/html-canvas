@@ -21,6 +21,7 @@ TemplateCraft is an enterprise-grade SaaS platform for building, deploying, and 
 ## OTP Subsystem Documentation
 
 The upgraded OTP engine is fully documented in [docs/otp/](file:///d:/dddd/docs/otp/):
+
 1. [01_ARCHITECTURE.md](file:///d:/dddd/docs/otp/01_ARCHITECTURE.md) - Conceptual Design
 2. [02_PROVIDER_SYSTEM.md](file:///d:/dddd/docs/otp/02_PROVIDER_SYSTEM.md) - Stateless Adapters
 3. [03_DATABASE.md](file:///d:/dddd/docs/otp/03_DATABASE.md) - Schema Specifications
@@ -39,24 +40,28 @@ The upgraded OTP engine is fully documented in [docs/otp/](file:///d:/dddd/docs/
 ## Setup & Execution
 
 ### 1. Database Setup
+
 ```bash
 cd backend
 npm run db:setup
 ```
 
 ### 2. Run Backend
+
 ```bash
 cd backend
 npm run start:dev
 ```
 
 ### 3. Run Frontend
+
 ```bash
 cd frontend
 npm run dev
 ```
 
 ### 4. Running Tests
+
 - **Backend Unit & Spec**: `npm run test` (inside `backend`)
 - **Backend Integration (E2E)**: `npm run test:e2e` (inside `backend`)
 - **Frontend Unit**: `npm run test` (inside `frontend`)

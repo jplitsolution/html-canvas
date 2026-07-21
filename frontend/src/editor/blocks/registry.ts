@@ -30,7 +30,7 @@ export const COMPONENT_BLOCKS: BlockDefinition[] = [
   { id: 'image-block', label: 'Image', thumb: 'image', keywords: ['photo', 'picture'] },
   { id: 'card-block', label: 'Card', thumb: 'card', keywords: ['box', 'container'] },
   { id: 'divider-block', label: 'Divider', thumb: 'divider', keywords: ['line', 'separator'] },
-  { id: 'hotspot-block', label: 'Image Hotspot', thumb: 'button', keywords: ['link', 'area', 'clickable'] },
+  { id: 'hotspot-block', label: 'Clickable Area', thumb: 'button', keywords: ['link', 'area', 'clickable', 'hotspot', 'button'] },
 ]
 
 export const ALL_BLOCKS = [...SECTION_BLOCKS, ...COMPONENT_BLOCKS]
