@@ -124,7 +124,7 @@ function BackgroundImageField({
     const existingStyle = selected.getStyle() || {}
     selected.setStyle({
       ...existingStyle,
-      'background-image': `url("${trimmed}")`,
+      'background-image': `url('${trimmed}')`,
       'background-size': existingStyle['background-size'] || 'cover',
       'background-position': existingStyle['background-position'] || 'center',
       'background-repeat': existingStyle['background-repeat'] || 'no-repeat',

@@ -18,6 +18,9 @@ This document details known bugs, security gaps, documentation discrepancies, an
 ### 1.4 Obsolete Documentation in Root Directory
 - **Status**: Resolved. Obsolete references to local `Subscriptions` and `Blocklist` tables in root `architecture.md` and `changes.md` have been cleaned up and replaced with dynamic partner configuration checks.
 
+### 1.5 Background Image Missing in Preview
+- **Status**: Resolved. The `style` attribute in the HTML snapshot was breaking due to unescaped double quotes when rendering background image URLs. Fixed in `exportSite.ts` and `PropertyPanel.tsx` by utilizing single quotes for URLs.
+
 ---
 
 ## 2. Performance Bottlenecks & Active Debt

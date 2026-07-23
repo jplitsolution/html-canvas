@@ -18,6 +18,10 @@ This document tracks all version additions, database schema updates, and feature
   - Checked out and restored `SessionTimelineModal.jsx` to display step-by-step chronological customer journeys.
   - Added click-to-filter tooltips and event propagation isolation inside `CampaignLogsPage.jsx` table.
 
+### Fixed
+- **Background Image Rendering in Preview**:
+  - Fixed an issue where background images applied via the Property Panel failed to render in preview mode. Double quotes in inline styles (`style="background-image: url("...")"`) were prematurely terminating the HTML attribute. Replaced with single quotes during snapshot generation (`exportSite.ts`) and property assignment (`PropertyPanel.tsx`).
+
 ## [2.1.0] - Phase 2 (Profile, Security, & Deployment Upgrades)
 
 ### Added

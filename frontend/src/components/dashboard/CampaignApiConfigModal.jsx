@@ -1,5 +1,6 @@
 import { memo, useEffect, useState } from 'react'
 import Modal from '../common/Modal'
+import { Trash2, GripVertical } from 'lucide-react'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
 import useStore from '../../store/useStore'
@@ -32,6 +33,35 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const [partnerConfig, setPartnerConfig] = useState({ sendUrl: '', verifyUrl: '', method: 'POST', verifyMethod: 'POST', headersJson: '', bodyJson: '', verifyBodyJson: '' })
   const [customConfig, setCustomConfig] = useState({ url: '', method: 'POST', headersJson: '', bodyJson: '' })
 
+  // Failover states
+  const [failoverEnabled, setFailoverEnabled] = useState(false)
+  const [failoverProviders, setFailoverProviders] = useState([])
+  const [newFailoverProvider, setNewFailoverProvider] = useState('msg91')
+
+  const addFailoverProvider = () => {
+    setFailoverProviders([
+      ...failoverProviders,
+      { name: newFailoverProvider, priority: failoverProviders.length + 1, retryCount: 2, timeout: 5000, config: {} }
+    ])
+  }
+
+  const removeFailoverProvider = (index) => {
+    setFailoverProviders(failoverProviders.filter((_, i) => i !== index))
+  }
+
+  const updateFailoverProvider = (index, field, value) => {
+    const updated = [...failoverProviders]
+    updated[index] = { ...updated[index], [field]: value }
+    setFailoverProviders(updated)
+  }
+
+  const updateFailoverProviderConfig = (index, field, value) => {
+    const updated = [...failoverProviders]
+    updated[index].config = { ...updated[index].config, [field]: value }
+    setFailoverProviders(updated)
+  }
+
+
   // Testing tool states
   const [testPhone, setTestPhone] = useState('')
   const [testing, setTesting] = useState(false)
@@ -56,14 +86,30 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         if (config.otpConfigJson) {
           try {
             const parsed = JSON.parse(config.otpConfigJson)
-            if (provider === 'twilio') setTwilioConfig((c) => ({ ...c, ...parsed }))
-            else if (provider === 'msg91') setMsg91Config((c) => ({ ...c, ...parsed }))
-            else if (provider === 'kaleyra') setKaleyraConfig((c) => ({ ...c, ...parsed }))
-            else if (provider === 'partner') setPartnerConfig((c) => ({ ...c, ...parsed }))
-            else if (provider === 'custom' || provider === 'custom_http') setCustomConfig((c) => ({ ...c, ...parsed }))
+            if (parsed.failover === true) {
+              setFailoverEnabled(true)
+              const providersArray = Object.entries(parsed.providers || {}).map(([name, data]) => ({
+                name,
+                priority: data.priority || 10,
+                retryCount: data.retryCount || 2,
+                timeout: data.timeout || 5000,
+                config: data.config || {}
+              })).sort((a, b) => a.priority - b.priority)
+              setFailoverProviders(providersArray)
+            } else {
+              setFailoverEnabled(false)
+              if (provider === 'twilio') setTwilioConfig((c) => ({ ...c, ...parsed }))
+              else if (provider === 'msg91') setMsg91Config((c) => ({ ...c, ...parsed }))
+              else if (provider === 'kaleyra') setKaleyraConfig((c) => ({ ...c, ...parsed }))
+              else if (provider === 'partner') setPartnerConfig((c) => ({ ...c, ...parsed }))
+              else if (provider === 'custom' || provider === 'custom_http') setCustomConfig((c) => ({ ...c, ...parsed }))
+            }
           } catch (e) {
             console.error('Failed to parse OTP config JSON', e)
           }
+        } else {
+          setFailoverEnabled(false)
+          setFailoverProviders([])
         }
       })
       .catch((err) => addToast(err.message || 'Failed to load API config', 'error'))
@@ -82,11 +128,28 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const handleSave = async () => {
     setSaving(true)
     try {
-      const activeConfig = getActiveConfig()
+      let finalConfigJson = ''
+      
+      if (failoverEnabled) {
+        const providersObj = {}
+        failoverProviders.forEach(p => {
+          providersObj[p.name] = {
+            priority: Number(p.priority),
+            retryCount: Number(p.retryCount),
+            timeout: Number(p.timeout),
+            config: p.config
+          }
+        })
+        finalConfigJson = JSON.stringify({ failover: true, providers: providersObj })
+      } else {
+        const activeConfig = getActiveConfig()
+        finalConfigJson = JSON.stringify(activeConfig)
+      }
+
       const payload = {
         ...form,
-        otpProvider,
-        otpConfigJson: JSON.stringify(activeConfig),
+        otpProvider: failoverEnabled ? 'failover' : otpProvider,
+        otpConfigJson: finalConfigJson,
       }
       await saveCampaignApiConfig(campaignId, payload)
       onClose()
@@ -221,8 +284,21 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             </div>
           ) : (
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">OTP Gateway Provider</label>
+              <div className="flex items-center justify-between p-3 border border-border rounded-lg bg-bg-subtle/50">
+                <div>
+                  <h3 className="text-sm font-semibold text-fg">Multi-Provider Failover Routing</h3>
+                  <p className="text-xs text-fg-muted">Automatically route traffic through backup providers if the primary fails.</p>
+                </div>
+                <div className="relative inline-block w-10 mr-2 align-middle select-none transition duration-200 ease-in">
+                  <input type="checkbox" checked={failoverEnabled} onChange={(e) => setFailoverEnabled(e.target.checked)} className="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer" />
+                  <label className="toggle-label block overflow-hidden h-5 rounded-full bg-gray-300 cursor-pointer"></label>
+                </div>
+              </div>
+
+              {!failoverEnabled ? (
+                <div className="space-y-4 border border-border rounded-lg p-3 bg-bg-subtle/30">
+                  <div>
+                    <label className="block text-sm font-medium text-fg mb-1.5">Primary OTP Gateway Provider</label>
                 <select
                   value={otpProvider}
                   onChange={(e) => setOtpProvider(e.target.value)}
@@ -416,6 +492,93 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                       placeholder='{"to":"{{phone}}","msg":"OTP is {{otp}}"}'
                     />
                   </div>
+                </div>
+              )}
+              </div>
+            ) : (
+                <div className="space-y-4 border border-border rounded-lg p-3 bg-bg-subtle/30">
+                   <div className="flex gap-2 mb-3">
+                     <select value={newFailoverProvider} onChange={(e) => setNewFailoverProvider(e.target.value)} className="rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg outline-none">
+                       <option value="twilio">Twilio</option>
+                       <option value="msg91">MSG91</option>
+                       <option value="kaleyra">Kaleyra</option>
+                       <option value="partner">Telecom Partner API</option>
+                       <option value="custom_http">Custom HTTP API</option>
+                     </select>
+                     <Button type="button" onClick={addFailoverProvider} variant="primary" size="sm">Add Provider</Button>
+                   </div>
+                   
+                   {failoverProviders.map((p, index) => (
+                      <div key={index} className="p-3 border border-border rounded-lg bg-bg-base relative group shadow-sm transition-all">
+                         <div className="flex justify-between items-center mb-3">
+                           <h4 className="font-semibold text-sm text-fg uppercase tracking-wide flex items-center gap-2">
+                              <GripVertical className="w-4 h-4 text-fg-subtle cursor-move" />
+                              {p.name.replace('_', ' ')}
+                           </h4>
+                           <button type="button" onClick={() => removeFailoverProvider(index)} className="p-1 text-fg-muted hover:text-danger hover:bg-danger/10 rounded">
+                              <Trash2 className="w-4 h-4"/>
+                           </button>
+                         </div>
+                         
+                         <div className="grid grid-cols-3 gap-3 mb-4 bg-bg-subtle/50 p-2 rounded-md">
+                           <div>
+                             <label className="block text-xs font-medium text-fg-muted mb-1">Priority (1 = Highest)</label>
+                             <Input type="number" value={p.priority} onChange={(e) => updateFailoverProvider(index, 'priority', e.target.value)} />
+                           </div>
+                           <div>
+                             <label className="block text-xs font-medium text-fg-muted mb-1">Max Retries</label>
+                             <Input type="number" value={p.retryCount} onChange={(e) => updateFailoverProvider(index, 'retryCount', e.target.value)} />
+                           </div>
+                           <div>
+                             <label className="block text-xs font-medium text-fg-muted mb-1">Timeout (ms)</label>
+                             <Input type="number" value={p.timeout} onChange={(e) => updateFailoverProvider(index, 'timeout', e.target.value)} />
+                           </div>
+                         </div>
+                         
+                         <div className="space-y-3">
+                            {p.name === 'twilio' && (
+                               <div className="grid grid-cols-2 gap-3">
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Account SID</label><Input value={p.config.accountSid || ''} onChange={(e) => updateFailoverProviderConfig(index, 'accountSid', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Auth Token</label><Input value={p.config.authToken || ''} onChange={(e) => updateFailoverProviderConfig(index, 'authToken', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">From Number</label><Input value={p.config.from || ''} onChange={(e) => updateFailoverProviderConfig(index, 'from', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Message Template</label><Input value={p.config.messageTemplate || ''} onChange={(e) => updateFailoverProviderConfig(index, 'messageTemplate', e.target.value)} /></div>
+                               </div>
+                            )}
+                            {p.name === 'msg91' && (
+                               <div className="grid grid-cols-2 gap-3">
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Auth Key</label><Input value={p.config.authKey || ''} onChange={(e) => updateFailoverProviderConfig(index, 'authKey', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Template ID</label><Input value={p.config.templateId || ''} onChange={(e) => updateFailoverProviderConfig(index, 'templateId', e.target.value)} /></div>
+                                 <div className="col-span-2"><label className="block text-xs font-medium text-fg mb-1">Sender Name</label><Input value={p.config.sender || ''} onChange={(e) => updateFailoverProviderConfig(index, 'sender', e.target.value)} /></div>
+                               </div>
+                            )}
+                            {p.name === 'kaleyra' && (
+                               <div className="grid grid-cols-2 gap-3">
+                                 <div><label className="block text-xs font-medium text-fg mb-1">API Key</label><Input value={p.config.apiKey || ''} onChange={(e) => updateFailoverProviderConfig(index, 'apiKey', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Sender ID</label><Input value={p.config.sender || ''} onChange={(e) => updateFailoverProviderConfig(index, 'sender', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Region</label>
+                                    <select value={p.config.region || 'global'} onChange={(e) => updateFailoverProviderConfig(index, 'region', e.target.value)} className="w-full rounded-md border border-border bg-bg-base px-3 py-1.5 text-xs text-fg">
+                                      <option value="global">Global (api.kaleyra.io)</option>
+                                      <option value="eu">Europe</option>
+                                    </select>
+                                 </div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Message Template</label><Input value={p.config.messageTemplate || ''} onChange={(e) => updateFailoverProviderConfig(index, 'messageTemplate', e.target.value)} /></div>
+                               </div>
+                            )}
+                            {(p.name === 'partner' || p.name === 'custom_http') && (
+                               <div className="space-y-3">
+                                 <div><label className="block text-xs font-medium text-fg mb-1">URL (GET/POST)</label><Input value={p.config.url || p.config.sendUrl || ''} onChange={(e) => updateFailoverProviderConfig(index, 'url', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Headers (JSON)</label><Input value={p.config.headersJson || ''} onChange={(e) => updateFailoverProviderConfig(index, 'headersJson', e.target.value)} /></div>
+                                 <div><label className="block text-xs font-medium text-fg mb-1">Body Template (JSON)</label><Input value={p.config.bodyJson || ''} onChange={(e) => updateFailoverProviderConfig(index, 'bodyJson', e.target.value)} /></div>
+                               </div>
+                            )}
+                         </div>
+                      </div>
+                   ))}
+                   {failoverProviders.length === 0 && (
+                     <div className="text-center p-6 text-fg-muted text-sm border border-dashed border-border rounded-lg">
+                        No failover providers added yet. Add a provider above to build your routing chain.
+                     </div>
+                   )}
                 </div>
               )}
 

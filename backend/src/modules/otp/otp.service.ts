@@ -8,6 +8,7 @@ import { Campaign } from '../campaigns/entities/campaign.entity';
 import { Visit } from '../analytics/entities/visit.entity';
 import { SmsProviderManager } from './providers/sms-provider.manager';
 import { VisitEvent, VisitEventType } from '../analytics/entities/visit-event.entity';
+import { RedisService } from '../../common/services/redis.service';
 
 interface ProviderMetric {
   successCount: number;
@@ -73,6 +74,7 @@ export class OtpService {
     @InjectRepository(VisitEvent)
     private readonly visitEventRepository: Repository<VisitEvent>,
     private readonly providerManager: SmsProviderManager,
+    private readonly redisService: RedisService,
   ) {}
 
   private hashOtp(otp: string, salt: string) {
@@ -114,80 +116,53 @@ export class OtpService {
   ) {
     const cleanPhone = String(phone).trim();
 
-    // 0. Temporary Lockout Guard (15 minutes after 5 failed verification attempts)
-    const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-    const lockedRequest = await this.otpRepository.findOne({
-      where: {
-        phone: cleanPhone,
-        status: 'failed',
-        attempts: 5,
-        updatedAt: MoreThan(fifteenMinutesAgo),
-      },
-    });
-    if (lockedRequest) {
-      const elapsedMs = OtpService.getCorrectedElapsedMs(lockedRequest.updatedAt);
-      const msRemaining = 15 * 60 * 1000 - elapsedMs;
-      if (msRemaining > 0) {
-        const secRemaining = Math.max(1, Math.ceil(msRemaining / 1000));
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: `Too many verification attempts. Lockout in progress. Try again in ${secRemaining} seconds.`,
-            error: 'Too Many Requests',
-            retryAfter: secRemaining,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
+    // 0. Temporary Lockout Guard (Redis)
+    const lockoutKey = `otp:lockout:${cleanPhone}`;
+    const isLocked = await this.redisService.get(lockoutKey);
+    if (isLocked) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: `Too many verification attempts. Lockout in progress. Try again later.`,
+          error: 'Too Many Requests',
+          retryAfter: 900,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
-    // 1. Resend Delay Guard (30 seconds)
-    const latest = await this.otpRepository.findOne({
-      where: { phone: cleanPhone },
-      order: { createdAt: 'DESC' },
-    });
-    if (latest) {
-      const elapsedMs = OtpService.getCorrectedElapsedMs(latest.createdAt);
-      if (elapsedMs < 30000) {
-        const secRemaining = Math.ceil((30000 - elapsedMs) / 1000);
-        throw new HttpException(
-          {
-            statusCode: HttpStatus.TOO_MANY_REQUESTS,
-            message: 'Please wait 30 seconds before requesting another OTP',
-            error: 'Too Many Requests',
-            retryAfter: secRemaining,
-          },
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
-      }
+    // 1. Resend Delay Guard (Redis)
+    const delayKey = `otp:delay:${cleanPhone}`;
+    const delayActive = await this.redisService.get(delayKey);
+    if (delayActive) {
+      throw new HttpException(
+        {
+          statusCode: HttpStatus.TOO_MANY_REQUESTS,
+          message: 'Please wait 30 seconds before requesting another OTP',
+          error: 'Too Many Requests',
+          retryAfter: 30,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     // 2. Request Rate Limit Guard (Max 5 requests per 10 minutes)
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-    const count = await this.otpRepository.count({
-      where: {
-        phone: cleanPhone,
-        createdAt: MoreThan(tenMinutesAgo),
-      },
-    });
-    if (count >= 5) {
-      const oldest = await this.otpRepository.findOne({
-        where: { phone: cleanPhone, createdAt: MoreThan(tenMinutesAgo) },
-        order: { createdAt: 'ASC' },
-      });
-      const elapsedMs = oldest ? OtpService.getCorrectedElapsedMs(oldest.createdAt) : 0;
-      const msRemaining = oldest ? 10 * 60 * 1000 - elapsedMs : 10 * 60 * 1000;
-      const secRemaining = Math.max(1, Math.ceil(msRemaining / 1000));
+    const countKey = `otp:req_count:${cleanPhone}`;
+    const currentCount = await this.redisService.incr(countKey, 10 * 60);
+    if (currentCount > 5) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
           message: 'Too many OTP requests. Please try again later.',
           error: 'Too Many Requests',
-          retryAfter: secRemaining,
+          retryAfter: 10 * 60,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+
+    // Set Resend Delay Lock (30s)
+    await this.redisService.set(delayKey, '1', 30);
 
     // 3. Resolve configurations
     let campaignId: number | null = testOverride?.campaignId ?? null;
@@ -434,25 +409,16 @@ export class OtpService {
     const cleanOtp = String(otp).trim();
     const now = new Date();
 
-    // 0. Temporary Lockout Guard (15 minutes after 5 failed verification attempts)
-    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-    const lockedRequest = await this.otpRepository.findOne({
-      where: {
-        phone: cleanPhone,
-        status: 'failed',
-        attempts: 5,
-        updatedAt: MoreThan(fifteenMinutesAgo),
-      },
-    });
-    if (lockedRequest) {
-      const msRemaining = lockedRequest.updatedAt.getTime() + 15 * 60 * 1000 - now.getTime();
-      const secRemaining = Math.max(1, Math.ceil(msRemaining / 1000));
+    // 0. Temporary Lockout Guard (Redis)
+    const lockoutKey = `otp:lockout:${cleanPhone}`;
+    const isLocked = await this.redisService.get(lockoutKey);
+    if (isLocked) {
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: `Too many verification attempts. Lockout in progress. Try again in ${secRemaining} seconds.`,
+          message: `Too many verification attempts. Lockout in progress. Try again later.`,
           error: 'Too Many Requests',
-          retryAfter: secRemaining,
+          retryAfter: 900,
         },
         HttpStatus.TOO_MANY_REQUESTS,
       );
@@ -477,6 +443,7 @@ export class OtpService {
     if (active.attempts >= this.maxAttempts) {
       active.status = 'failed';
       await this.otpRepository.save(active);
+      await this.redisService.set(lockoutKey, '1', 15 * 60);
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -535,6 +502,7 @@ export class OtpService {
         if (active.attempts >= this.maxAttempts) {
           active.status = 'failed';
           await this.otpRepository.save(active);
+          await this.redisService.set(lockoutKey, '1', 15 * 60);
           
           if (visitId) {
             try {
@@ -580,6 +548,7 @@ export class OtpService {
         if (active.attempts >= this.maxAttempts) {
           active.status = 'failed';
           await this.otpRepository.save(active);
+          await this.redisService.set(lockoutKey, '1', 15 * 60);
 
           if (visitId) {
             try {

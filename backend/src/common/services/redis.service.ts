@@ -82,6 +82,22 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Increment a key atomically. Optionally sets TTL if the key was newly created (value is 1 after increment).
+   */
+  async incr(key: string, ttlSeconds?: number): Promise<number> {
+    if (!this.client) return 0;
+    try {
+      const result = await this.client.incr(key);
+      if (result === 1 && ttlSeconds) {
+        await this.client.expire(key, ttlSeconds);
+      }
+      return result;
+    } catch {
+      return 0;
+    }
+  }
+
+  /**
    * Returns true if Redis connection is alive.
    */
   isConnected(): boolean {

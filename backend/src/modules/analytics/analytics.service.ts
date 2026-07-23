@@ -1,5 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 import { Repository, Like, In, FindOptionsWhere } from 'typeorm';
 import { Visit, VisitStatus } from './entities/visit.entity';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity';
@@ -22,6 +25,7 @@ export class AnalyticsService {
     private readonly campaignsService: CampaignsService,
     private readonly searchService: SearchService,
     @InjectQueue('analytics-events') private readonly analyticsQueue: Queue,
+    private readonly configService: ConfigService,
   ) {}
 
   private maskPhone(phone?: string): string | undefined {
@@ -314,5 +318,77 @@ export class AnalyticsService {
     }
 
     return pages;
+  }
+
+  async archiveOldData(): Promise<void> {
+    const retentionDays = this.configService.get<number>('ARCHIVE_RETENTION_DAYS', 30);
+    const thresholdDate = new Date();
+    thresholdDate.setDate(thresholdDate.getDate() - retentionDays);
+    
+    this.logger.log(`Starting database archiving for data older than ${thresholdDate.toISOString()} (${retentionDays} days)`);
+
+    const archivesDir = path.join(process.cwd(), 'archives');
+    try {
+      await fs.mkdir(archivesDir, { recursive: true });
+    } catch (err) {
+      this.logger.error(`Failed to create archives directory: ${err.message}`);
+      return;
+    }
+
+    const timestampStr = new Date().toISOString().split('T')[0];
+    const eventsFile = path.join(archivesDir, `visit_events_${timestampStr}.jsonl`);
+    const visitsFile = path.join(archivesDir, `visits_${timestampStr}.jsonl`);
+
+    let eventsArchived = 0;
+    let visitsArchived = 0;
+
+    // 1. Archive & Delete Visit Events
+    try {
+      const qbEvents = this.visitEventRepository.createQueryBuilder('ve')
+        .where('ve.createdAt < :date', { date: thresholdDate });
+        
+      const oldEvents = await qbEvents.getMany();
+      if (oldEvents.length > 0) {
+        const lines = oldEvents.map(e => JSON.stringify(e)).join('\n') + '\n';
+        await fs.appendFile(eventsFile, lines, 'utf8');
+        eventsArchived = oldEvents.length;
+
+        // Delete using batches to prevent deadlocks or excessive memory usage on DB
+        const ids = oldEvents.map(e => e.id);
+        for (let i = 0; i < ids.length; i += 1000) {
+          const batch = ids.slice(i, i + 1000);
+          await this.visitEventRepository.delete(batch);
+        }
+        this.logger.log(`Archived and deleted ${eventsArchived} visit events.`);
+      }
+    } catch (err) {
+      this.logger.error(`Error archiving visit events: ${err.message}`);
+    }
+
+    // 2. Archive & Delete Visits
+    // Note: cascade delete on VisitEvent is configured in schema if visits are deleted, 
+    // but deleting explicitly first is safer.
+    try {
+      const qbVisits = this.visitRepository.createQueryBuilder('v')
+        .where('v.createdAt < :date', { date: thresholdDate });
+        
+      const oldVisits = await qbVisits.getMany();
+      if (oldVisits.length > 0) {
+        const lines = oldVisits.map(v => JSON.stringify(v)).join('\n') + '\n';
+        await fs.appendFile(visitsFile, lines, 'utf8');
+        visitsArchived = oldVisits.length;
+
+        const ids = oldVisits.map(v => v.id);
+        for (let i = 0; i < ids.length; i += 1000) {
+          const batch = ids.slice(i, i + 1000);
+          await this.visitRepository.delete(batch);
+        }
+        this.logger.log(`Archived and deleted ${visitsArchived} visits.`);
+      }
+    } catch (err) {
+      this.logger.error(`Error archiving visits: ${err.message}`);
+    }
+
+    this.logger.log(`Database archiving completed. Events: ${eventsArchived}, Visits: ${visitsArchived}`);
   }
 }

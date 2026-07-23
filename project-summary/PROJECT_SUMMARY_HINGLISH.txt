@@ -64,7 +64,7 @@ Database structure TypeORM auto-migrations ke throw database schema load karta h
 ------------------------------------------------------------------------
 KNOWN BUGS
 ------------------------------------------------------------------------
-Saare major known bugs aur security gaps (OTP wiring, API security leak aur obsolete tables documentation references) successfully resolve kar diye gaye hain. Abhi koi active critical bugs identified nahi hain.
+Saare major known bugs aur security gaps (OTP wiring, API security leak, obsolete tables documentation references, aur preview mode mein background image rendering issue) successfully resolve kar diye gaye hain. Abhi koi active critical bugs identified nahi hain.
 
 ------------------------------------------------------------------------
 MAJOR MODULES DETAILED EXPLANATION (2-3 Paragraphs Each)

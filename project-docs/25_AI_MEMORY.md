@@ -58,3 +58,4 @@ Ensure that you do not query tables that do not exist:
 6. [x] **Admin Personalization**: Build `ProfilePage.jsx` and customize log dates to render with local timezones.
 7. [x] **Production PM2 Wrappers**: Configure PM2 ecosystem and start script wrappers to run build checks in deploy processes.
 8. [ ] **Database Archiving**: Add a cron job to archive or clean up old telemetry records from the `visits` and `visit_events` tables.
+9. [x] **Preview Mode UI Fixes**: Fixed background image rendering in the shadow DOM by sanitizing double quotes in inline style attributes.

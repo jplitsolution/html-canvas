@@ -520,7 +520,7 @@ export function getActivePageSnapshot(editor: Editor): { html: string; css: stri
   const styleObj = (main.getStyle?.() || {}) as Record<string, string>
   const wrapperStyle = Object.entries(styleObj)
     .filter(([_, v]) => v !== null && v !== undefined && String(v).trim().length > 0)
-    .map(([k, v]) => `${k}:${v}`)
+    .map(([k, v]) => `${k}:${String(v).replace(/"/g, "'")}`)
     .join('; ')
 
   const inlinedHtml = `<div class="page-wrapper" style="min-height: 100vh; width: 100%; position: relative; ${wrapperStyle}">${rawHtml}</div>`
