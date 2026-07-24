@@ -6,7 +6,8 @@ import ScreenReaderAnnouncer from '../components/common/ScreenReaderAnnouncer'
 import AuthProvider from '../context/AuthContext'
 import RequireAuth from '../components/auth/RequireAuth'
 import LoginPage from '../pages/LoginPage'
-import CampaignsPage from '../pages/CampaignsPage'
+import MarketsPage from '../pages/MarketsPage'
+import MarketCampaignsPage from '../pages/MarketCampaignsPage'
 import CampaignDetailPage from '../pages/CampaignDetailPage'
 import CampaignBuilder from '../pages/CampaignBuilder'
 import SubscriptionPage from '../pages/SubscriptionPage'
@@ -26,13 +27,25 @@ function App() {
           <main id="main-content">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route 
-                path="/campaigns" 
+              <Route
+                path="/markets"
                 element={
                   <RequireAuth>
-                    <CampaignsPage />
+                    <MarketsPage />
                   </RequireAuth>
-                } 
+                }
+              />
+              <Route
+                path="/markets/:countryCode/:operatorCode"
+                element={
+                  <RequireAuth>
+                    <MarketCampaignsPage />
+                  </RequireAuth>
+                }
+              />
+              <Route
+                path="/campaigns"
+                element={<Navigate to="/markets" replace />}
               />
               <Route
                 path="/analytics"
@@ -83,8 +96,8 @@ function App() {
                 }
               />
               <Route path="/subscription" element={<SubscriptionPage />} />
-              <Route path="/" element={<Navigate to="/campaigns" replace />} />
-              <Route path="*" element={<Navigate to="/campaigns" replace />} />
+              <Route path="/" element={<Navigate to="/markets" replace />} />
+              <Route path="*" element={<Navigate to="/markets" replace />} />
             </Routes>
           </main>
           <ToastContainer />

@@ -5,6 +5,8 @@ import {
   ConflictException,
   BadRequestException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -30,6 +32,13 @@ import {
   FlowEngineService,
   VerificationMode,
 } from '../flow/flow-engine.service';
+import { MarketsService } from '../markets/markets.service';
+import {
+  buildTrackingId,
+  deriveCountryCode,
+  deriveOperatorCode,
+} from '../markets/tracking-id.util';
+import { RedisService } from '../../common/services/redis.service';
 
 @Injectable()
 export class CampaignsService {
@@ -47,25 +56,56 @@ export class CampaignsService {
     private readonly apiConfigRepository: Repository<ApiConfig>,
     @InjectRepository(CampaignTracking)
     private readonly trackingRepository: Repository<CampaignTracking>,
+    @Inject(forwardRef(() => MarketsService))
+    private readonly marketsService: MarketsService,
+    private readonly redis: RedisService,
   ) {}
+
+  private async invalidateFlowCampaignCache(campaign: Campaign): Promise<void> {
+    const keys = [
+      `flow:campaign:id:${campaign.id}`,
+      campaign.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
+      `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`,
+    ].filter(Boolean) as string[];
+    await Promise.all(keys.map((k) => this.redis.del(k)));
+  }
 
   private normalize(value: string): string {
     return value.trim();
   }
 
+  private withTrackingId(campaign: Campaign): Campaign {
+    const cc = campaign.marketOperator?.country?.code;
+    const oc = campaign.marketOperator?.code;
+    if (cc && oc) {
+      campaign.trackingId = buildTrackingId(cc, oc, campaign.id);
+    }
+    return campaign;
+  }
+
   async findAll(userId: number): Promise<Campaign[]> {
     const campaigns = await this.campaignRepository.find({
       where: { userId },
-      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
+      relations: {
+        pages: { template: true },
+        trackings: { vendor: true, affiliate: true },
+        marketOperator: { country: true },
+      },
       order: { updatedAt: 'DESC' },
     });
-    return campaigns.map((c) => this.sanitizeCampaignListItem(c));
+    return campaigns.map((c) =>
+      this.sanitizeCampaignListItem(this.withTrackingId(c)),
+    );
   }
 
   async findOne(id: number, userId: number): Promise<Campaign> {
     const campaign = await this.campaignRepository.findOne({
       where: { id },
-      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
+      relations: {
+        pages: { template: true },
+        trackings: { vendor: true, affiliate: true },
+        marketOperator: { country: true },
+      },
     });
     if (!campaign) {
       throw new NotFoundException(`Campaign with ID ${id} not found`);
@@ -76,9 +116,13 @@ export class CampaignsService {
       );
     }
     await this.ensureCampaignPages(campaign);
-    return campaign;
+    return this.sanitizeCampaignListItem(this.withTrackingId(campaign));
   }
 
+  /**
+   * Legacy country/operator lookup. If multiple campaigns match, prefer the
+   * single active one; otherwise return null so callers require campid.
+   */
   async findByCountryOperator(
     country: string,
     operator: string,
@@ -86,25 +130,45 @@ export class CampaignsService {
     const normalizedCountry = this.normalize(country);
     const normalizedOperator = this.normalize(operator);
 
-    const campaign = await this.campaignRepository
+    const campaigns = await this.campaignRepository
       .createQueryBuilder('campaign')
       .leftJoinAndSelect('campaign.pages', 'pages')
       .leftJoinAndSelect('pages.template', 'template')
       .leftJoinAndSelect('campaign.trackings', 'trackings')
       .leftJoinAndSelect('trackings.vendor', 'vendor')
       .leftJoinAndSelect('trackings.affiliate', 'affiliate')
+      .leftJoinAndSelect('campaign.marketOperator', 'marketOperator')
+      .leftJoinAndSelect('marketOperator.country', 'marketCountry')
       .where('LOWER(campaign.country) = LOWER(:country)', {
         country: normalizedCountry,
       })
       .andWhere('LOWER(campaign.operator) = LOWER(:operator)', {
         operator: normalizedOperator,
       })
-      .getOne();
+      .getMany();
+
+    if (campaigns.length === 0) return null;
+
+    let campaign: Campaign | null = null;
+    if (campaigns.length === 1) {
+      campaign = campaigns[0];
+    } else {
+      const actives = campaigns.filter((c) => c.active);
+      if (actives.length === 1) {
+        campaign = actives[0];
+      } else {
+        this.logger.warn(
+          `Ambiguous country/operator lookup for ${normalizedCountry}/${normalizedOperator}: ${campaigns.length} campaigns — require campid`,
+        );
+        return null;
+      }
+    }
 
     if (campaign) {
       await this.ensureCampaignPages(campaign);
+      return this.withTrackingId(campaign);
     }
-    return campaign;
+    return null;
   }
 
   /**
@@ -115,10 +179,41 @@ export class CampaignsService {
     if (!id || Number.isNaN(id)) return null;
     const campaign = await this.campaignRepository.findOne({
       where: { id },
-      relations: { pages: { template: true }, trackings: { vendor: true, affiliate: true } },
+      relations: {
+        pages: { template: true },
+        trackings: { vendor: true, affiliate: true },
+        marketOperator: { country: true },
+      },
     });
     if (campaign) {
       await this.ensureCampaignPages(campaign);
+      return this.withTrackingId(campaign);
+    }
+    return null;
+  }
+
+  /**
+   * Resolve by composite tracking id (IN-AIRTEL-12). Verifies codes match.
+   */
+  async findByTrackingId(
+    countryCode: string,
+    operatorCode: string,
+    campaignId: number,
+  ): Promise<Campaign | null> {
+    const campaign = await this.findByIdForFlow(campaignId);
+    if (!campaign) return null;
+    const cc = campaign.marketOperator?.country?.code?.toUpperCase();
+    const oc = campaign.marketOperator?.code?.toUpperCase();
+    if (cc && oc) {
+      if (
+        cc !== countryCode.toUpperCase() ||
+        oc !== operatorCode.toUpperCase()
+      ) {
+        this.logger.warn(
+          `Tracking id mismatch: expected ${cc}-${oc}-${campaignId}, got ${countryCode}-${operatorCode}-${campaignId}`,
+        );
+        return null;
+      }
     }
     return campaign;
   }
@@ -178,21 +273,43 @@ export class CampaignsService {
   }
 
   async create(dto: CreateCampaignDto, userId: number): Promise<Campaign> {
-    const country = this.normalize(dto.country);
-    const operator = this.normalize(dto.operator);
+    const { country, operator } =
+      await this.marketsService.resolveOperatorForCreate({
+        userId,
+        operatorId: dto.operatorId,
+        countryCode:
+          dto.countryCode ||
+          (dto.country ? deriveCountryCode(dto.country) : undefined),
+        operatorCode:
+          dto.operatorCode ||
+          (dto.operator ? deriveOperatorCode(dto.operator) : undefined),
+        countryName: dto.country,
+        operatorName: dto.operator,
+      });
 
-    const existing = await this.campaignRepository.findOne({
-      where: { country, operator },
+    const countryName = this.normalize(dto.country || country.name);
+    const operatorName = this.normalize(dto.operator || operator.name);
+
+    const nameConflict = await this.campaignRepository.findOne({
+      where: { operatorId: operator.id, name: dto.name.trim() },
     });
-    if (existing) {
+    if (nameConflict) {
       throw new ConflictException(
-        `Campaign already exists for ${country} / ${operator}`,
+        `Campaign "${dto.name.trim()}" already exists for ${country.code} / ${operator.code}`,
       );
     }
 
     let sourcePages: CampaignPage[] = [];
     if (dto.copyFromCampaignId) {
-      const source = await this.findOne(dto.copyFromCampaignId, userId);
+      const source = await this.campaignRepository.findOne({
+        where: { id: dto.copyFromCampaignId, userId },
+        relations: { pages: { template: true } },
+      });
+      if (!source) {
+        throw new NotFoundException(
+          `Source campaign ${dto.copyFromCampaignId} not found`,
+        );
+      }
       sourcePages = source.pages || [];
     }
 
@@ -200,8 +317,9 @@ export class CampaignsService {
     const campaign = await this.campaignRepository.save(
       this.campaignRepository.create({
         name: dto.name.trim(),
-        country,
-        operator,
+        country: countryName,
+        operator: operatorName,
+        operatorId: operator.id,
         serviceId: dto.serviceId,
         userId,
         active: false,
@@ -245,7 +363,9 @@ export class CampaignsService {
       );
     }
 
-    return this.findOne(campaign.id, userId);
+    return this.sanitizeCampaignListItem(
+      await this.findOne(campaign.id, userId),
+    );
   }
 
   async update(
@@ -257,13 +377,14 @@ export class CampaignsService {
 
     if (dto.active === true) {
       const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
-      const requiredTypes = flowConfig && flowConfig.nodes
-        ? flowConfig.nodes.map((n) => n.pageType)
-        : REQUIRED_CAMPAIGN_PAGE_TYPES;
+      const requiredTypes =
+        flowConfig && flowConfig.nodes
+          ? flowConfig.nodes.map((n) => n.pageType)
+          : REQUIRED_CAMPAIGN_PAGE_TYPES;
 
       const missing = requiredTypes.filter((type) => {
         const page = campaign.pages.find((p) => p.pageType === type);
-        return !page?.template?.data?.html;
+        return !page || !this.pageHasContent(page);
       });
       if (missing.length > 0) {
         throw new BadRequestException(
@@ -276,31 +397,42 @@ export class CampaignsService {
     if (dto.serviceId !== undefined) campaign.serviceId = dto.serviceId;
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
-      await this.trackingRepository.delete({ campaign: { id: campaign.id } });
+      await this.trackingRepository.delete({ campaignId: campaign.id });
       if (dto.trackings && dto.trackings.length > 0) {
-        const insertData = dto.trackings.map((t) => ({
-          campaign: { id: campaign.id },
-          vendor: { id: t.vendorId },
-          affiliate: t.affiliateId ? { id: t.affiliateId } : null,
-        } as any));
-        await this.trackingRepository.insert(insertData);
+        await this.trackingRepository.insert(
+          dto.trackings.map((t) => ({
+            campaignId: campaign.id,
+            vendorId: Number(t.vendorId),
+            affiliateId:
+              t.affiliateId == null || Number.isNaN(Number(t.affiliateId))
+                ? null
+                : Number(t.affiliateId),
+            active:
+              t.active === undefined || t.active === null ? true : !!t.active,
+          })),
+        );
       }
     } else if (dto.vendorIds !== undefined) {
-      await this.trackingRepository.delete({ campaign: { id: campaign.id } });
+      await this.trackingRepository.delete({ campaignId: campaign.id });
       if (dto.vendorIds && dto.vendorIds.length > 0) {
-        const insertData = dto.vendorIds.map((id) => ({
-          campaign: { id: campaign.id },
-          vendor: { id },
-          affiliate: null,
-        } as any));
-        await this.trackingRepository.insert(insertData);
+        await this.trackingRepository.insert(
+          dto.vendorIds.map((vid) => ({
+            campaignId: campaign.id,
+            vendorId: Number(vid),
+            affiliateId: null,
+            active: true,
+          })),
+        );
       }
     }
 
-    // Remove trackings from memory so TypeORM's save(campaign) does not try to cascade-update orphaned trackings
     delete (campaign as any).trackings;
     await this.campaignRepository.save(campaign);
-    return this.findOne(id, userId);
+    const refreshed = this.sanitizeCampaignListItem(
+      await this.findOne(id, userId),
+    );
+    await this.invalidateFlowCampaignCache(refreshed);
+    return refreshed;
   }
 
   async getFlow(
@@ -330,18 +462,13 @@ export class CampaignsService {
 
     let flowConfig: FlowConfig;
     if (dto.flowConfig) {
-      // Strip optional nodes that are not connected to the graph before
-      // validation so that e.g. a floating BLOCKED or ERROR node that the
-      // user hasn't wired up yet doesn't block saving.
       flowConfig = this.flowEngine.stripUnreachableNodes(
         dto.flowConfig as unknown as FlowConfig,
         mode,
       );
       const { ok, errors } = this.flowEngine.validate(flowConfig, mode);
       if (!ok) {
-        throw new BadRequestException(
-          `Invalid flow: ${errors.join(' ')}`,
-        );
+        throw new BadRequestException(`Invalid flow: ${errors.join(' ')}`);
       }
     } else {
       flowConfig =

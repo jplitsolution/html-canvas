@@ -11,7 +11,7 @@ function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated, loading: authLoading } = useAuth()
-  const redirectTo = location.state?.from?.pathname || '/campaigns'
+  const redirectTo = location.state?.from?.pathname || '/markets'
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')

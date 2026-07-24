@@ -6,7 +6,6 @@ import {
   Pencil,
   Settings,
   Power,
-  Sparkles,
   FileText,
   User,
   CheckCircle2,
@@ -16,6 +15,9 @@ import {
   Store,
   Plus,
   Trash2,
+  Link2,
+  AlertCircle,
+  Check,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -32,6 +34,46 @@ import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigMod
 import ActivityLogsModal from '../components/dashboard/ActivityLogsModal'
 import { getVisitPagePath } from '../utils/visitPagePath'
 
+function StatusToggle({ active, onToggle, disabled, activating, blockedReason }) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-fg">Campaign status</p>
+        <p className="text-xs text-fg-muted mt-0.5">
+          {active
+            ? 'Live — traffic can reach this funnel'
+            : blockedReason
+              ? blockedReason
+              : 'Draft — activate when pages are ready'}
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={active}
+        aria-label={active ? 'Deactivate campaign' : 'Activate campaign'}
+        disabled={disabled || activating}
+        title={blockedReason || undefined}
+        onClick={onToggle}
+        className={`
+          relative inline-flex h-8 w-[3.25rem] shrink-0 items-center rounded-full
+          transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
+          disabled:cursor-not-allowed disabled:opacity-50
+          ${active ? 'bg-success' : 'bg-bg-canvas border border-border'}
+        `}
+      >
+        <span
+          className={`
+            inline-block h-6 w-6 transform rounded-full bg-white shadow-sm
+            transition-transform duration-200
+            ${active ? 'translate-x-[1.35rem]' : 'translate-x-1'}
+          `}
+        />
+      </button>
+    </div>
+  )
+}
+
 function CampaignDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -40,19 +82,17 @@ function CampaignDetailPage() {
   const error = useStore((s) => s.error)
   const loadCampaign = useStore((s) => s.loadCampaign)
   const updateCampaign = useStore((s) => s.updateCampaign)
-  const applyCampaignDefaults = useStore((s) => s.applyCampaignDefaults)
   const loadCampaignActivityLogs = useStore((s) => s.loadCampaignActivityLogs)
   const vendors = useStore((s) => s.vendors)
   const fetchVendors = useStore((s) => s.fetchVendors)
   const [showApiConfig, setShowApiConfig] = useState(false)
   const [activating, setActivating] = useState(false)
-  const [applyingDefaults, setApplyingDefaults] = useState(false)
   const [showActivityLogs, setShowActivityLogs] = useState(false)
   const [recentLogs, setRecentLogs] = useState([])
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
   const [assigningVendor, setAssigningVendor] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
-  
+
   const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
   const [selectedAffiliateForAdd, setSelectedAffiliateForAdd] = useState('null')
 
@@ -67,28 +107,26 @@ function CampaignDetailPage() {
       const [vId, aId] = value.split(':')
       const vendorId = Number(vId)
       const affiliateId = aId !== 'null' ? Number(aId) : null
-      
-      let currentTrackings = (campaign.trackings || []).map(t => ({
+
+      let currentTrackings = (campaign.trackings || []).map((t) => ({
         vendorId: t.vendor?.id,
         affiliateId: t.affiliate?.id || null,
+        active: t.active !== false,
       }))
-      
-      // Enforce mutual exclusion: 
-      // If adding an affiliate, remove 'All Traffic' for this vendor.
-      // If adding 'All Traffic', remove all specific affiliates for this vendor.
+
       if (affiliateId !== null) {
-        currentTrackings = currentTrackings.filter(t => !(t.vendorId === vendorId && t.affiliateId === null));
+        currentTrackings = currentTrackings.filter(
+          (t) => !(t.vendorId === vendorId && t.affiliateId === null),
+        )
       } else {
-        currentTrackings = currentTrackings.filter(t => t.vendorId !== vendorId);
-      }
-      
-      // Add if it doesn't already exist
-      if (!currentTrackings.find(t => t.vendorId === vendorId && t.affiliateId === affiliateId)) {
-        currentTrackings.push({ vendorId, affiliateId })
-        await updateCampaign(campaign.id, { trackings: currentTrackings })
-        useStore.getState().addToast('Tracking added', 'success')
+        currentTrackings = currentTrackings.filter((t) => t.vendorId !== vendorId)
       }
 
+      if (!currentTrackings.find((t) => t.vendorId === vendorId && t.affiliateId === affiliateId)) {
+        currentTrackings.push({ vendorId, affiliateId, active: true })
+        await updateCampaign(campaign.id, { trackings: currentTrackings })
+        useStore.getState().addToast('Tracking assigned', 'success')
+      }
     } finally {
       setAssigningVendor(false)
     }
@@ -103,13 +141,20 @@ function CampaignDetailPage() {
 
   const handleRemoveTracking = async (vendorId, affiliateId) => {
     if (!campaign) return
+    const ok = window.confirm(
+      'Remove this tracking assignment? The shareable link will stop working for this vendor/affiliate.',
+    )
+    if (!ok) return
     setAssigningVendor(true)
     try {
-      const currentTrackings = (campaign.trackings || []).map(t => ({
+      const currentTrackings = (campaign.trackings || []).map((t) => ({
         vendorId: t.vendor?.id,
         affiliateId: t.affiliate?.id || null,
+        active: t.active !== false,
       }))
-      const newTrackings = currentTrackings.filter(t => !(t.vendorId === vendorId && t.affiliateId === affiliateId))
+      const newTrackings = currentTrackings.filter(
+        (t) => !(t.vendorId === vendorId && t.affiliateId === affiliateId),
+      )
       await updateCampaign(campaign.id, { trackings: newTrackings })
       useStore.getState().addToast('Tracking removed', 'success')
     } finally {
@@ -117,11 +162,46 @@ function CampaignDetailPage() {
     }
   }
 
-  const copyTracking = (url, id) => {
+  const handleToggleTrackingActive = async (vendorId, affiliateId) => {
+    if (!campaign) return
+    setAssigningVendor(true)
+    try {
+      const targetVendorId = Number(vendorId)
+      const targetAffiliateId = affiliateId == null ? null : Number(affiliateId)
+      const currentTrackings = (campaign.trackings || []).map((t) => {
+        const tVendorId = Number(t.vendor?.id)
+        const tAffiliateId = t.affiliate?.id == null ? null : Number(t.affiliate.id)
+        const isMatch =
+          tVendorId === targetVendorId && tAffiliateId === targetAffiliateId
+        const currentlyOn = t.active !== false
+        return {
+          vendorId: tVendorId,
+          affiliateId: tAffiliateId,
+          active: isMatch ? !currentlyOn : currentlyOn,
+        }
+      })
+      await updateCampaign(campaign.id, { trackings: currentTrackings })
+      const nowActive = currentTrackings.find(
+        (t) =>
+          t.vendorId === targetVendorId && t.affiliateId === targetAffiliateId,
+      )?.active
+      useStore.getState().addToast(
+        nowActive
+          ? 'Assignment activated'
+          : 'Assignment deactivated — link will show not available',
+        'success',
+      )
+    } finally {
+      setAssigningVendor(false)
+    }
+  }
+
+  const copyTracking = (url, copyKey) => {
     copyToClipboard(url).then((success) => {
       if (success) {
-        setCopiedId(id)
+        setCopiedId(copyKey)
         setTimeout(() => setCopiedId(null), 2000)
+        useStore.getState().addToast('Tracking URL copied', 'success')
       } else {
         useStore.getState().addToast('Copy failed', 'error')
       }
@@ -145,7 +225,6 @@ function CampaignDetailPage() {
     if (id) loadCampaign(id)
   }, [id, loadCampaign])
 
-  // useMemo MUST be before any early returns (React rules of hooks)
   const orderedPageTypes = useMemo(() => {
     const defaultOrder = PAGE_TYPES
     if (!campaign || !campaign.flowConfig) return defaultOrder
@@ -183,7 +262,6 @@ function CampaignDetailPage() {
       }
     }
 
-    // Add remaining nodes from flowConfig
     for (const n of nodes) {
       addPage(n.pageType)
     }
@@ -191,12 +269,12 @@ function CampaignDetailPage() {
     return order
   }, [campaign])
 
-  const hasEmptyPages = useMemo(() => {
-    if (!campaign) return false
-    const activePageTypes = campaign.flowConfig?.nodes?.map((n) => n.pageType) || REQUIRED_PAGE_TYPES
-    return campaign.pages.some(
-      (p) => activePageTypes.includes(p.pageType) && !p.hasContent,
-    )
+  const pagesReadyCount = useMemo(() => {
+    if (!campaign) return 0
+    return REQUIRED_PAGE_TYPES.filter((type) => {
+      const page = campaign.pages?.find((p) => p.pageType === type)
+      return page?.hasContent
+    }).length
   }, [campaign])
 
   const handleToggleActive = async () => {
@@ -204,22 +282,25 @@ function CampaignDetailPage() {
     setActivating(true)
     try {
       await updateCampaign(campaign.id, { active: !campaign.active })
+      useStore.getState().addToast(
+        campaign.active ? 'Campaign deactivated' : 'Campaign activated',
+        'success',
+      )
     } finally {
       setActivating(false)
     }
   }
 
-  const handleApplyDefaults = async () => {
-    if (!campaign) return
-    const ok = window.confirm("Are you sure you want to reset all pages to the default templates? This will overwrite your current progress on all pages.")
-    if (!ok) return
-    setApplyingDefaults(true)
-    try {
-      await applyCampaignDefaults(campaign.id)
-    } finally {
-      setApplyingDefaults(false)
-    }
-  }
+  const activeVendors = useMemo(
+    () => vendors.filter((v) => v.active !== false),
+    [vendors],
+  )
+
+  const selectedVendorAffiliates = useMemo(() => {
+    if (!selectedVendorForAdd) return []
+    const vendor = vendors.find((v) => String(v.id) === selectedVendorForAdd)
+    return (vendor?.affiliates || []).filter((a) => a.active !== false)
+  }, [vendors, selectedVendorForAdd])
 
   if (loading) {
     return (
@@ -236,8 +317,8 @@ function CampaignDetailPage() {
       <AppShell>
         <div className="page-container text-center py-12">
           <p className="text-fg-muted mb-4">{error || 'Campaign not found'}</p>
-          <Button variant="outline" onClick={() => navigate('/campaigns')}>
-            Back to campaigns
+          <Button variant="outline" onClick={() => navigate('/markets')}>
+            Back to markets
           </Button>
         </div>
       </AppShell>
@@ -245,6 +326,16 @@ function CampaignDetailPage() {
   }
 
   const previewUrl = getCampaignPreviewUrl(campaign)
+  const marketPath =
+    campaign.countryCode && campaign.operatorCode
+      ? `/markets/${campaign.countryCode}/${campaign.operatorCode}`
+      : '/markets'
+  const canActivate = campaign.requiredComplete
+  const activateBlockedReason =
+    !campaign.active && !canActivate
+      ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
+      : null
+  const trackings = campaign.trackings || []
 
   const pageActions = (
     <>
@@ -256,20 +347,6 @@ function CampaignDetailPage() {
         <ExternalLink className="w-4 h-4" />
         Preview
       </Button>
-      <Button
-        variant={campaign.active ? 'outline' : 'primary'}
-        size="sm"
-        onClick={handleToggleActive}
-        disabled={activating || (!campaign.active && !campaign.requiredComplete)}
-        title={
-          !campaign.active && !campaign.requiredComplete
-            ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
-            : undefined
-        }
-      >
-        <Power className="w-4 h-4" />
-        {campaign.active ? 'Deactivate' : 'Activate'}
-      </Button>
     </>
   )
 
@@ -278,33 +355,324 @@ function CampaignDetailPage() {
       <div className="page-container">
         <button
           type="button"
-          onClick={() => navigate('/campaigns')}
+          onClick={() => navigate(marketPath)}
           className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to campaigns
+          Back to market
         </button>
 
-        <div className="page-header flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="page-header-title">
-                {campaign.country} / {campaign.operator}
-              </h1>
-              <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
-                {campaign.active ? 'Active' : 'Draft'}
-              </span>
-            </div>
-            <p className="page-header-description">{campaign.name}</p>
-            {campaign.serviceId && (
-              <p className="text-xs text-fg-subtle mt-1">Service ID: {campaign.serviceId}</p>
-            )}
+        <div className="page-header mb-6">
+          <p className="text-xs text-fg-subtle mb-1">
+            <Link to="/markets" className="hover:text-fg">
+              Markets
+            </Link>
+            {' / '}
+            <Link to={marketPath} className="hover:text-fg">
+              {campaign.country} / {campaign.operator}
+            </Link>
+          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="page-header-title">{campaign.name}</h1>
+            <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
+              {campaign.active ? 'Active' : 'Draft'}
+            </span>
           </div>
+          {campaign.trackingId && (
+            <p className="text-xs text-fg-subtle mt-1.5">
+              Tracking ID{' '}
+              <code className="font-mono text-fg-muted bg-bg-muted px-1.5 py-0.5 rounded">
+                {campaign.trackingId}
+              </code>
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Funnel pages */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Status + readiness */}
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <StatusToggle
+                  active={!!campaign.active}
+                  onToggle={handleToggleActive}
+                  disabled={!campaign.active && !canActivate}
+                  activating={activating}
+                  blockedReason={activateBlockedReason}
+                />
+              </div>
+              <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="rounded-lg bg-bg-muted/60 border border-border px-3.5 py-3">
+                  <p className="text-[11px] uppercase tracking-wide text-fg-subtle font-medium">
+                    Required pages
+                  </p>
+                  <p className="text-lg font-semibold text-fg mt-1 tabular-nums">
+                    {pagesReadyCount}/{REQUIRED_PAGE_TYPES.length}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-bg-muted/60 border border-border px-3.5 py-3">
+                  <p className="text-[11px] uppercase tracking-wide text-fg-subtle font-medium">
+                    Tracking links
+                  </p>
+                  <p className="text-lg font-semibold text-fg mt-1 tabular-nums">
+                    {trackings.length}
+                  </p>
+                </div>
+                <div className="rounded-lg bg-bg-muted/60 border border-border px-3.5 py-3">
+                  <p className="text-[11px] uppercase tracking-wide text-fg-subtle font-medium">
+                    Readiness
+                  </p>
+                  <p
+                    className={`text-sm font-semibold mt-1.5 ${
+                      canActivate ? 'text-success' : 'text-warning'
+                    }`}
+                  >
+                    {canActivate ? 'Ready to go live' : 'Pages incomplete'}
+                  </p>
+                </div>
+              </div>
+              {!canActivate && (
+                <div className="px-5 pb-4">
+                  <div className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-muted/40 px-3.5 py-2.5 text-xs text-fg-muted">
+                    <AlertCircle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+                    <span>
+                      Finish editing HOME, CONFIRM, and THANKYOU before you can activate this
+                      campaign.
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Attribution & Tracking */}
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg bg-accent-muted text-accent">
+                      <Link2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h2>
+                      <p className="text-xs text-fg-muted mt-0.5">
+                        Assign vendors and affiliates to generate shareable tracking URLs
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    to="/vendors"
+                    className="text-xs text-accent hover:underline shrink-0 pt-1"
+                  >
+                    Manage vendors
+                  </Link>
+                </div>
+              </div>
+
+              <div className="px-5 py-4 border-b border-border bg-bg-muted/25">
+                <p className="text-xs font-medium text-fg mb-3">Assign new tracking</p>
+                <div className="flex flex-col sm:flex-row gap-2.5">
+                  <select
+                    className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring"
+                    value={selectedVendorForAdd}
+                    onChange={(e) => {
+                      setSelectedVendorForAdd(e.target.value)
+                      setSelectedAffiliateForAdd('null')
+                    }}
+                    disabled={assigningVendor}
+                  >
+                    <option value="">Select vendor…</option>
+                    {activeVendors.map((v) => (
+                      <option key={v.id} value={v.id}>
+                        {v.name} ({v.code})
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                    value={selectedAffiliateForAdd}
+                    onChange={(e) => setSelectedAffiliateForAdd(e.target.value)}
+                    disabled={assigningVendor || !selectedVendorForAdd}
+                  >
+                    <option value="null">All traffic</option>
+                    {selectedVendorAffiliates.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name} ({a.code})
+                      </option>
+                    ))}
+                  </select>
+
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={handleSubmitTracking}
+                    disabled={assigningVendor || !selectedVendorForAdd}
+                    className="sm:shrink-0"
+                  >
+                    <Plus className="w-4 h-4" />
+                    {assigningVendor ? 'Assigning…' : 'Assign'}
+                  </Button>
+                </div>
+                {activeVendors.length === 0 && (
+                  <p className="text-xs text-fg-muted mt-3">
+                    No active vendors yet.{' '}
+                    <Link to="/vendors" className="text-accent hover:underline">
+                      Create a vendor
+                    </Link>{' '}
+                    first.
+                  </p>
+                )}
+              </div>
+
+              {trackings.length === 0 ? (
+                <div className="px-5 py-10 text-center">
+                  <Store className="w-8 h-8 mx-auto mb-3 text-fg-subtle" />
+                  <p className="text-sm font-medium text-fg">No tracking assigned</p>
+                  <p className="text-xs text-fg-muted mt-1 max-w-sm mx-auto">
+                    Pick a vendor above to generate an affiliate tracking link for this campaign.
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {trackings.map((t) => {
+                    const vendorId = t.vendor?.id
+                    const affiliateId = t.affiliate?.id
+                    const vendor = vendors.find((v) => v.id === vendorId) || t.vendor
+                    const affiliate = affiliateId
+                      ? vendor?.affiliates?.find((a) => a.id === affiliateId) || t.affiliate
+                      : null
+                    const assignmentActive = t.active !== false
+                    const vendorActive = vendor?.active !== false
+                    const affiliateActive = !affiliate || affiliate.active !== false
+                    const linkActive = assignmentActive && vendorActive && affiliateActive
+                    const displayUrl = buildTrackingUrl({
+                      campaign,
+                      vendorCode: vendor?.code,
+                      affiliateCode: affiliate?.code,
+                    })
+                    const relativeDisplay = displayUrl.replace(window.location.origin, '')
+                    const copyKey = `${vendorId}-${affiliateId || 'none'}`
+
+                    return (
+                      <div
+                        key={copyKey}
+                        className={`px-5 py-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${
+                          linkActive ? '' : 'bg-bg-muted/30'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-semibold text-fg">{vendor?.name}</span>
+                            <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
+                              {vendor?.code}
+                            </code>
+                            <span
+                              className={`badge ${linkActive ? 'badge-success' : 'badge-muted'}`}
+                            >
+                              {linkActive ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-fg-muted">
+                            Affiliate:{' '}
+                            {affiliate ? (
+                              <>
+                                <span className="text-fg font-medium">{affiliate.name}</span>
+                                <code className="ml-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
+                                  {affiliate.code}
+                                </code>
+                              </>
+                            ) : (
+                              <span className="italic text-fg-subtle">All traffic</span>
+                            )}
+                          </p>
+                          {!linkActive && (
+                            <p className="text-[11px] text-warning flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" />
+                              {!assignmentActive
+                                ? 'Assignment off — visitors see “not available”'
+                                : !vendorActive
+                                  ? 'Vendor is deactivated — reactivate on Vendors page'
+                                  : 'Affiliate is deactivated — reactivate on Vendors page'}
+                            </p>
+                          )}
+                          <code className="block text-[11px] text-fg-subtle break-all leading-relaxed bg-bg-muted/50 border border-border rounded-md px-2.5 py-2">
+                            {relativeDisplay}
+                          </code>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-2 mr-1">
+                            <span className="text-[11px] text-fg-subtle">
+                              {assignmentActive ? 'On' : 'Off'}
+                            </span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={assignmentActive}
+                              aria-label={
+                                assignmentActive
+                                  ? 'Deactivate assignment'
+                                  : 'Activate assignment'
+                              }
+                              disabled={assigningVendor}
+                              onClick={() =>
+                                handleToggleTrackingActive(vendorId, affiliateId || null)
+                              }
+                              className={`
+                                relative inline-flex h-6 w-11 shrink-0 items-center rounded-full
+                                transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                                disabled:cursor-not-allowed disabled:opacity-50
+                                ${assignmentActive ? 'bg-success' : 'bg-bg-canvas border border-border'}
+                              `}
+                            >
+                              <span
+                                className={`
+                                  inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
+                                  transition-transform duration-200
+                                  ${assignmentActive ? 'translate-x-6' : 'translate-x-1'}
+                                `}
+                              />
+                            </button>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyTracking(displayUrl, copyKey)}
+                            title="Copy tracking URL"
+                          >
+                            {copiedId === copyKey ? (
+                              <Check className="w-3.5 h-3.5 text-success" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                            {copiedId === copyKey ? 'Copied' : 'Copy'}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(displayUrl, '_blank')}
+                            title="Open tracking URL"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-danger hover:text-danger hover:bg-danger-muted"
+                            onClick={() => handleRemoveTracking(vendorId, affiliateId || null)}
+                            disabled={assigningVendor}
+                            title="Remove assignment"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Funnel pages */}
             <div className="surface-card overflow-hidden">
               <div className="px-5 py-4 border-b border-border flex items-center justify-between">
                 <div>
@@ -326,7 +694,10 @@ function CampaignDetailPage() {
                   const required = REQUIRED_PAGE_TYPES.includes(pageType)
                   const hasContent = page?.hasContent
                   return (
-                    <div key={pageType} className="flex items-center justify-between px-5 py-3.5 gap-4">
+                    <div
+                      key={pageType}
+                      className="flex items-center justify-between px-5 py-3.5 gap-4"
+                    >
                       <div className="flex items-center gap-3 min-w-0">
                         {hasContent ? (
                           <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
@@ -405,7 +776,10 @@ function CampaignDetailPage() {
                         <td>
                           <div className="flex flex-wrap items-center gap-1">
                             {getVisitPagePath(log).map((page, idx, pages) => (
-                              <span key={`${log.id}-${page}-${idx}`} className="inline-flex items-center gap-1">
+                              <span
+                                key={`${log.id}-${page}-${idx}`}
+                                className="inline-flex items-center gap-1"
+                              >
                                 <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted">
                                   /{page}
                                 </span>
@@ -422,10 +796,11 @@ function CampaignDetailPage() {
                               log.visitStatus === 'SUCCESS' || log.visitStatus === 'SUBSCRIBED'
                                 ? 'badge-success'
                                 : log.visitStatus === 'BLOCKED' || log.visitStatus === 'FAILED'
-                                ? 'badge-warning'
-                                : log.visitStatus === 'OTP_SHOWN' || log.visitStatus === 'CONFIRM_SHOWN'
-                                ? 'badge-accent'
-                                : 'badge-muted'
+                                  ? 'badge-warning'
+                                  : log.visitStatus === 'OTP_SHOWN' ||
+                                      log.visitStatus === 'CONFIRM_SHOWN'
+                                    ? 'badge-accent'
+                                    : 'badge-muted'
                             }`}
                           >
                             {log.visitStatus}
@@ -437,179 +812,78 @@ function CampaignDetailPage() {
                 </table>
               )}
             </div>
-
-            {/* Attribution & Tracking */}
-            <div className="surface-card overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <Store className="w-4 h-4 text-fg-subtle" />
-                  <div>
-                    <h2 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h2>
-                    <p className="text-xs text-fg-muted mt-0.5">Assign vendors to generate affiliate links</p>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base min-w-[140px]"
-                    value={selectedVendorForAdd}
-                    onChange={(e) => {
-                      setSelectedVendorForAdd(e.target.value)
-                      setSelectedAffiliateForAdd('null')
-                    }}
-                    disabled={assigningVendor}
-                  >
-                    <option value="" disabled>Select Vendor...</option>
-                    {vendors.filter(v => v.active !== false).map((v) => (
-                      <option key={v.id} value={v.id}>{v.name}</option>
-                    ))}
-                  </select>
-
-                  {selectedVendorForAdd && (
-                    <>
-                      <select
-                        className="text-sm border border-border rounded-md px-2.5 py-1.5 bg-bg-base min-w-[140px]"
-                        value={selectedAffiliateForAdd}
-                        onChange={(e) => setSelectedAffiliateForAdd(e.target.value)}
-                        disabled={assigningVendor}
-                      >
-                        <option value="null">All Traffic (No specific affiliate)</option>
-                        {(vendors.find(v => String(v.id) === selectedVendorForAdd)?.affiliates || [])
-                          .filter(a => a.active !== false)
-                          .map(a => (
-                            <option key={a.id} value={a.id}>{a.name}</option>
-                          ))}
-                      </select>
-                      <Button
-                        size="sm"
-                        onClick={handleSubmitTracking}
-                        disabled={assigningVendor}
-                      >
-                        <Plus className="w-4 h-4 mr-1" /> Add
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-              <div className="p-0 border-t border-border">
-                {!(campaign.trackings && campaign.trackings.length > 0) ? (
-                  <div className="text-center p-6">
-                    <p className="text-xs text-fg-subtle">
-                      No vendors assigned yet.{' '}
-                      <Link to="/vendors" className="text-accent">
-                        Manage vendors
-                      </Link>
-                    </p>
-                  </div>
-                ) : (
-                  <table className="data-table mb-0">
-                    <thead>
-                      <tr>
-                        <th>Vendor</th>
-                        <th>Affiliate</th>
-                        <th>Tracking URL</th>
-                        <th className="text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(campaign.trackings || []).map((t) => {
-                        const vendorId = t.vendor.id;
-                        const affiliateId = t.affiliate?.id;
-                        const vendor = vendors.find((v) => v.id === vendorId) || t.vendor;
-                        const affiliate = affiliateId ? vendor.affiliates?.find((a) => a.id === affiliateId) : null;
-                        
-                        const trackingUrl = affiliate
-                          ? getCampaignPreviewUrl(campaign).replace('HOME', `HOME&aff_id=${affiliate.code}`)
-                          : getCampaignPreviewUrl(campaign);
-
-                        return (
-                          <tr key={`${vendorId}-${affiliateId || 'none'}`}>
-                            <td className="font-medium whitespace-nowrap">
-                              <span className="flex items-center gap-2">
-                                {vendor.name}
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
-                                  {vendor.code}
-                                </span>
-                              </span>
-                            </td>
-                            <td>
-                              {affiliate ? (
-                                <span className="flex items-center gap-2">
-                                  {affiliate.name}
-                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
-                                    {affiliate.code}
-                                  </span>
-                                </span>
-                              ) : (
-                                <span className="text-fg-subtle text-xs italic">All Traffic</span>
-                              )}
-                            </td>
-                            <td>
-                              <code className="text-[10px] text-fg-subtle break-all">{trackingUrl}</code>
-                            </td>
-                            <td className="text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-1">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(window.location.origin + trackingUrl);
-                                    useStore.getState().addToast('Tracking URL copied', 'success');
-                                  }}
-                                  className="text-fg-muted hover:text-fg cursor-pointer flex items-center justify-center transition-colors p-1"
-                                  title="Copy tracking URL"
-                                >
-                                  <Copy className="w-3.5 h-3.5" />
-                                </button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-danger hover:text-danger hover:bg-danger/10 px-1 py-1 h-auto"
-                                  onClick={() => handleRemoveTracking(vendorId, affiliateId)}
-                                  disabled={assigningVendor}
-                                  title="Remove assignment"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </div>
           </div>
 
-          {/* Sidebar info */}
+          {/* Sidebar */}
           <div className="space-y-4">
+            <div className="surface-card p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-fg">Live status</h3>
+                <Power className={`w-4 h-4 ${campaign.active ? 'text-success' : 'text-fg-subtle'}`} />
+              </div>
+              <div
+                className={`rounded-lg border px-3.5 py-3 ${
+                  campaign.active
+                    ? 'border-success/30 bg-success-muted/50'
+                    : 'border-border bg-bg-muted/50'
+                }`}
+              >
+                <p className={`text-sm font-semibold ${campaign.active ? 'text-success' : 'text-fg'}`}>
+                  {campaign.active ? 'Campaign is live' : 'Campaign is draft'}
+                </p>
+                <p className="text-xs text-fg-muted mt-1">
+                  {campaign.active
+                    ? 'Use the status toggle above to take this campaign offline.'
+                    : 'Use the status toggle above to go live when pages are ready.'}
+                </p>
+              </div>
+            </div>
+
             <div className="surface-card p-5">
               <h3 className="text-sm font-semibold text-fg mb-3">Test URL</h3>
               <code className="text-xs text-fg-muted break-all block bg-bg-muted p-3 rounded-md border border-border">
                 {previewUrl}
               </code>
-              <p className="text-xs text-fg-subtle mt-3 leading-relaxed">
-                Users select Daily / Weekly / Monthly pack on the Confirm page. Backend sends{' '}
-                <code className="text-fg-muted">planId</code> to the partner subscribe API.
-              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full mt-3"
+                onClick={() => window.open(previewUrl, '_blank')}
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open preview
+              </Button>
             </div>
-
-            {/* End Attribution block (moved to main column) */}
 
             <div className="surface-card p-5">
               <h3 className="text-sm font-semibold text-fg mb-3">Quick actions</h3>
               <div className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}
+                >
                   <FileText className="w-4 h-4" />
                   Activity logs
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => setShowApiConfig(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => setShowApiConfig(true)}
+                >
                   <Settings className="w-4 h-4" />
                   API configuration
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start" onClick={() => window.open(previewUrl, '_blank')}>
-                  <ExternalLink className="w-4 h-4" />
-                  Open preview
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-start"
+                  onClick={() => navigate(`/campaigns/${campaign.id}/flow`)}
+                >
+                  <Workflow className="w-4 h-4" />
+                  Flow builder
                 </Button>
               </div>
             </div>

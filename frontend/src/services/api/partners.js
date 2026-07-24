@@ -45,7 +45,7 @@ export function buildTrackingUrl({ origin, campaign, vendorCode, affiliateCode }
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
-    campid: String(campaign.id),
+    campid: campaign.trackingId || String(campaign.id),
   })
   let qs = params.toString()
   if (vendorCode) qs += `&vid=${encodeURIComponent(vendorCode)}`

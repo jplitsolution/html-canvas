@@ -170,6 +170,7 @@ export class PartnersService {
   /**
    * Resolve raw tracking-URL codes (vid / aff_id) to vendor + affiliate ids.
    * Never throws: unknown codes simply resolve to null so the funnel is never blocked.
+   * Codes are matched case-insensitively (URL may send ADM01 while DB stores adm01).
    */
   async resolveAttribution(
     vidCode?: string,
@@ -183,16 +184,18 @@ export class PartnersService {
     const normalizedAff = affCode ? this.normalizeCode(affCode) : '';
 
     if (normalizedVid) {
-      const vendor = await this.vendorRepository.findOne({
-        where: { code: normalizedVid },
-      });
+      const vendor = await this.vendorRepository
+        .createQueryBuilder('v')
+        .where('LOWER(v.code) = :code', { code: normalizedVid })
+        .getOne();
       if (vendor) vendorId = vendor.id;
     }
 
     if (normalizedAff) {
-      const affiliate = await this.affiliateRepository.findOne({
-        where: { code: normalizedAff },
-      });
+      const affiliate = await this.affiliateRepository
+        .createQueryBuilder('a')
+        .where('LOWER(a.code) = :code', { code: normalizedAff })
+        .getOne();
       if (affiliate) {
         affiliateId = affiliate.id;
         if (vendorId && affiliate.vendorId !== vendorId) {

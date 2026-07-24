@@ -7,24 +7,47 @@ import {
   IsOptional,
   IsString,
   MinLength,
+  Matches,
+  ValidateNested,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type, Transform } from 'class-transformer';
 
 export class CreateCampaignDto {
-  @ApiProperty({ example: 'India Zain' })
+  @ApiProperty({ example: 'India Airtel Wellness' })
   @IsString()
   @MinLength(1)
   name: string;
 
-  @ApiProperty({ example: 'India' })
+  @ApiPropertyOptional({ example: 'India' })
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  country: string;
+  country?: string;
 
-  @ApiProperty({ example: 'Zain' })
+  @ApiPropertyOptional({ example: 'Airtel' })
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  operator: string;
+  operator?: string;
+
+  @ApiPropertyOptional({ example: 'IN' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9]+$/)
+  countryCode?: string;
+
+  @ApiPropertyOptional({ example: 'AIRTEL' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9]+$/)
+  operatorCode?: string;
+
+  @ApiPropertyOptional({ description: 'Link to an existing market operator' })
+  @IsOptional()
+  @IsInt()
+  operatorId?: number;
 
   @ApiPropertyOptional({ example: 'zain_svc_01' })
   @IsOptional()
@@ -37,6 +60,34 @@ export class CreateCampaignDto {
   @IsOptional()
   @IsInt()
   copyFromCampaignId?: number;
+}
+
+export class CampaignTrackingItemDto {
+  @ApiProperty({ example: 1 })
+  @Type(() => Number)
+  @IsInt()
+  vendorId: number;
+
+  @ApiPropertyOptional({ example: 2, nullable: true })
+  @IsOptional()
+  @Transform(({ value }) => (value === null || value === '' || value === undefined ? null : Number(value)))
+  @ValidateIf((_, v) => v !== null && v !== undefined)
+  @IsInt()
+  affiliateId?: number | null;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'When false, public tracking URL shows not available',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null) return undefined
+    if (value === true || value === 'true' || value === 1 || value === '1') return true
+    if (value === false || value === 'false' || value === 0 || value === '0') return false
+    return Boolean(value)
+  })
+  @IsBoolean()
+  active?: boolean;
 }
 
 export class UpdateCampaignDto {
@@ -64,7 +115,9 @@ export class UpdateCampaignDto {
   @ApiPropertyOptional({ description: 'Assign specific vendors and affiliates' })
   @IsOptional()
   @IsArray()
-  trackings?: { vendorId: number; affiliateId?: number | null }[];
+  @ValidateNested({ each: true })
+  @Type(() => CampaignTrackingItemDto)
+  trackings?: CampaignTrackingItemDto[];
 }
 
 export class UpdateFlowDto {

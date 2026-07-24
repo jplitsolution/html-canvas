@@ -55,6 +55,30 @@ export function createPartnersSlice(set, get) {
       }
     },
 
+    updateVendor: async (vendorId, payload) => {
+      try {
+        const vendor = await partnersApi.updateVendor(vendorId, payload)
+        set((s) => ({
+          vendors: s.vendors.map((v) =>
+            v.id === vendorId ? { ...v, ...vendor, affiliates: vendor.affiliates || v.affiliates } : v,
+          ),
+          vendorsRevision: s.vendorsRevision + 1,
+        }))
+        get().addToast(
+          payload.active === false
+            ? 'Vendor deactivated'
+            : payload.active === true
+              ? 'Vendor activated'
+              : 'Vendor updated',
+          'success',
+        )
+        return vendor
+      } catch (err) {
+        get().addToast(err.message || 'Failed to update vendor', 'error')
+        throw err
+      }
+    },
+
     deleteVendor: async (vendorId) => {
       try {
         await partnersApi.deleteVendor(vendorId)
@@ -84,6 +108,33 @@ export function createPartnersSlice(set, get) {
         return affiliate
       } catch (err) {
         get().addToast(err.message || 'Failed to create affiliate', 'error')
+        throw err
+      }
+    },
+
+    updateAffiliate: async (affiliateId, payload) => {
+      try {
+        const affiliate = await partnersApi.updateAffiliate(affiliateId, payload)
+        set((s) => ({
+          vendors: s.vendors.map((v) => ({
+            ...v,
+            affiliates: (v.affiliates || []).map((a) =>
+              a.id === affiliateId ? { ...a, ...affiliate } : a,
+            ),
+          })),
+          vendorsRevision: s.vendorsRevision + 1,
+        }))
+        get().addToast(
+          payload.active === false
+            ? 'Affiliate deactivated'
+            : payload.active === true
+              ? 'Affiliate activated'
+              : 'Affiliate updated',
+          'success',
+        )
+        return affiliate
+      } catch (err) {
+        get().addToast(err.message || 'Failed to update affiliate', 'error')
         throw err
       }
     },

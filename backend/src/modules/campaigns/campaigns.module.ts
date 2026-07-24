@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Campaign } from './entities/campaign.entity';
 import { CampaignPage } from './entities/campaign-page.entity';
@@ -7,10 +7,12 @@ import { CampaignsController } from './campaigns.controller';
 import { Template } from '../templates/entities/template.entity';
 import { CampaignTracking } from './entities/campaign-tracking.entity';
 import { ApiConfig } from '../api-config/entities/api-config.entity';
+import { MarketsModule } from '../markets/markets.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Campaign, CampaignPage, Template, ApiConfig, CampaignTracking]),
+    forwardRef(() => MarketsModule),
   ],
   controllers: [CampaignsController],
   providers: [CampaignsService],
