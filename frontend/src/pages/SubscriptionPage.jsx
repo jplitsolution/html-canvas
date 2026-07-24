@@ -62,9 +62,10 @@ function findActionTarget(event) {
   for (const node of path) {
     if (!(node instanceof HTMLElement)) continue
     if (node.closest('[data-pack]')) continue
-    if (!node.matches('[data-action], button, a')) continue
+    if (!node.matches('[data-action], [data-actions], button, a')) continue
     const action =
       node.getAttribute('data-action') ||
+      (node.hasAttribute('data-actions') ? 'CHAIN' : null) ||
       (node.textContent?.toLowerCase().includes('confirm') ? 'CONFIRM' : null) ||
       (node.textContent?.toLowerCase().includes('subscribe') ? 'SUBSCRIBE' : null)
     if (action) return { node, action }
@@ -712,7 +713,7 @@ function SubscriptionPage() {
       const anchor = path.find((node) => node instanceof HTMLAnchorElement)
       if (!anchor) return
       // Flow hotspots use href="#" + data-action — let handleClick own those.
-      if (anchor.getAttribute('data-action')) return
+      if (anchor.getAttribute('data-action') || anchor.hasAttribute('data-actions')) return
 
       const href = anchor.getAttribute('href')
       if (!href || !href.startsWith('#') || href === '#') return
@@ -730,6 +731,77 @@ function SubscriptionPage() {
       if (!hit || !visitIdRef.current || transitionLockRef.current) return
 
       const { action, node } = hit
+
+      // Handle Sequential Action Chain (Priority Flow)
+      if (action === 'CHAIN' || node.hasAttribute('data-actions')) {
+        event.preventDefault()
+        let actions = []
+        try {
+          actions = JSON.parse(node.getAttribute('data-actions') || '[]')
+        } catch (e) {
+          console.error('Invalid data-actions JSON:', e)
+        }
+
+        if (actions.length > 0) {
+          transitionLockRef.current = true
+          setTransitioning(true)
+          setError('')
+
+          try {
+            for (let i = 0; i < actions.length; i++) {
+              const step = actions[i]
+              if (step.type === 'api') {
+                const url = (step.url || '').trim()
+                if (!url) continue
+                const res = await fetch(url, { method: 'GET', mode: 'cors' }).catch((err) => {
+                  throw new Error(`Priority ${i + 1} URL Check Failed: ${err.message || 'Network error'}`)
+                })
+                if (!res.ok) {
+                  throw new Error(`Priority ${i + 1} URL Check Failed (HTTP ${res.status})`)
+                }
+              } else if (step.type === 'page') {
+                const targetPage = (step.page || '').toUpperCase()
+                const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+                if (VALID_PAGES.includes(targetPage)) {
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.set('step', targetPage)
+                    return next
+                  })
+                }
+              } else if (step.type === 'flow') {
+                const fromPage = pageDataRef.current?.pageType
+                const next = await transitionFlow({
+                  visitId: visitIdRef.current,
+                  country,
+                  operator,
+                  fromPage: fromPage || 'HOME',
+                  action: 'SUBSCRIBE',
+                  phone: phoneRef.current,
+                })
+                cachePage(next)
+              } else if (step.type === 'anchor') {
+                const targetId = step.section
+                if (targetId) {
+                  const targetEl = shadow.getElementById(targetId)
+                  if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }
+              } else if (step.type === 'external') {
+                if (step.url) {
+                  window.open(step.url, node.getAttribute('target') || '_self')
+                }
+              }
+            }
+          } catch (err) {
+            setError(err.message || 'Action chain execution failed')
+          } finally {
+            setTransitioning(false)
+            transitionLockRef.current = false
+          }
+          return
+        }
+      }
+
       // External / page links without a flow action should navigate normally.
       if (!node.getAttribute('data-action') && node.matches?.('a[href]')) {
         const href = (node.getAttribute('href') || '').trim()

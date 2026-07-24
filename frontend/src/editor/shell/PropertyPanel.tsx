@@ -365,6 +365,232 @@ function CampaignPageSelect({
   )
 }
 
+interface ActionStep {
+  type: 'api' | 'page' | 'external' | 'anchor' | 'flow'
+  url?: string
+  page?: string
+  section?: string
+}
+
+function ActionChainEditor({
+  selected,
+  editor,
+  update,
+}: {
+  selected: any
+  editor: any
+  update: () => void
+}) {
+  const attrs = selected.getAttributes() || {}
+  let actions: ActionStep[] = []
+  try {
+    actions = JSON.parse(attrs['data-actions'] || '[]')
+  } catch (e) {
+    actions = []
+  }
+
+  if (actions.length === 0) {
+    actions = [
+      { type: 'api', url: 'https://' },
+      { type: 'page', page: 'OTP' },
+    ]
+  }
+
+  const saveActions = (newActions: ActionStep[]) => {
+    selected.addAttributes({
+      'data-action': 'CHAIN',
+      'data-actions': JSON.stringify(newActions),
+      href: '#',
+    })
+    update()
+  }
+
+  const updateStep = (index: number, field: string, value: any) => {
+    const next = [...actions]
+    next[index] = { ...next[index], [field]: value }
+    saveActions(next)
+  }
+
+  const addStep = () => {
+    const next = [...actions, { type: 'page' as const, page: 'OTP' }]
+    saveActions(next)
+  }
+
+  const removeStep = (index: number) => {
+    if (actions.length <= 1) return
+    const next = actions.filter((_, i) => i !== index)
+    saveActions(next)
+  }
+
+  const moveStep = (index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1
+    if (targetIndex < 0 || targetIndex >= actions.length) return
+    const next = [...actions]
+    const temp = next[index]
+    next[index] = next[targetIndex]
+    next[targetIndex] = temp
+    saveActions(next)
+  }
+
+  return (
+    <div className="space-y-3 pt-1">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-fg">Action Priority Flow</span>
+        <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono font-semibold">
+          {actions.length} Steps
+        </span>
+      </div>
+
+      <p className="text-[11px] text-fg-muted leading-relaxed">
+        Actions execute in order (Priority 1 first). If Step 1 succeeds (200 OK), Step 2 executes. If any step fails, an error is thrown.
+      </p>
+
+      <div className="space-y-2.5">
+        {actions.map((step, idx) => (
+          <div
+            key={idx}
+            className="p-2.5 rounded-lg border border-border bg-bg-muted/40 space-y-2 relative"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-indigo-600">
+                Priority {idx + 1}
+              </span>
+              <div className="flex items-center gap-1">
+                {idx > 0 && (
+                  <button
+                    type="button"
+                    title="Move Up"
+                    onClick={() => moveStep(idx, 'up')}
+                    className="px-1.5 py-0.5 text-[10px] bg-bg hover:bg-border border border-border rounded text-fg-muted hover:text-fg font-bold"
+                  >
+                    ↑
+                  </button>
+                )}
+                {idx < actions.length - 1 && (
+                  <button
+                    type="button"
+                    title="Move Down"
+                    onClick={() => moveStep(idx, 'down')}
+                    className="px-1.5 py-0.5 text-[10px] bg-bg hover:bg-border border border-border rounded text-fg-muted hover:text-fg font-bold"
+                  >
+                    ↓
+                  </button>
+                )}
+                {actions.length > 1 && (
+                  <button
+                    type="button"
+                    title="Delete Step"
+                    onClick={() => removeStep(idx)}
+                    className="px-1.5 py-0.5 text-[10px] bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded font-bold ml-1"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <Field label="Action Type">
+              <select
+                className={inputClass}
+                value={step.type}
+                onChange={(e) => updateStep(idx, 'type', e.target.value)}
+              >
+                <option value="api">Validate URL / Webhook (API Check)</option>
+                <option value="page">Another page in this campaign</option>
+                <option value="external">Another website (URL Redirect)</option>
+                <option value="anchor">Another part of this page (Scroll)</option>
+                <option value="flow">Continue campaign flow (Subscribe)</option>
+              </select>
+            </Field>
+
+            {step.type === 'api' && (
+              <Field label="Webhook / API URL to check">
+                <input
+                  className={inputClass}
+                  placeholder="https://example.com/api/check"
+                  value={step.url || ''}
+                  onChange={(e) => updateStep(idx, 'url', e.target.value)}
+                />
+              </Field>
+            )}
+
+            {step.type === 'external' && (
+              <Field label="Website address (URL)">
+                <input
+                  className={inputClass}
+                  placeholder="https://example.com"
+                  value={step.url || ''}
+                  onChange={(e) => updateStep(idx, 'url', e.target.value)}
+                />
+              </Field>
+            )}
+
+            {step.type === 'page' && (
+              <CampaignPageSelect
+                href={step.page || 'OTP'}
+                editor={editor}
+                onChange={(pageId) => updateStep(idx, 'page', pageId)}
+              />
+            )}
+
+            {step.type === 'anchor' && (
+              <Field label="Scroll to section">
+                <select
+                  className={inputClass}
+                  value={step.section || ''}
+                  onChange={(e) => updateStep(idx, 'section', e.target.value)}
+                >
+                  <option value="">Select a section...</option>
+                  {(() => {
+                    const sections: { id: string; label: string }[] = []
+                    const wrapper = editor.getWrapper()
+                    if (wrapper) {
+                      const walk = (cmp: any) => {
+                        const tag = (cmp.get('tagName') || '').toLowerCase()
+                        const SECTION_TAGS = new Set([
+                          'section',
+                          'header',
+                          'footer',
+                          'nav',
+                          'main',
+                          'article',
+                        ])
+                        const isSection =
+                          SECTION_TAGS.has(tag) ||
+                          cmp.getAttributes()?.['data-tc-type'] === 'section'
+                        if (isSection && tag !== 'header' && tag !== 'footer') {
+                          const id = cmp.getAttributes()?.id || cmp.getId()
+                          const label = cmp.get('sectionLabel') || id || 'Untitled Section'
+                          sections.push({ id, label })
+                        }
+                        cmp.components().forEach(walk)
+                      }
+                      walk(wrapper)
+                    }
+                    return sections.map((sec) => (
+                      <option key={sec.id} value={sec.id}>
+                        {sec.label} (#{sec.id})
+                      </option>
+                    ))
+                  })()}
+                </select>
+              </Field>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={addStep}
+        className="w-full py-1.5 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 rounded-lg text-xs text-indigo-600 font-medium hover:bg-indigo-50/50 transition-colors flex items-center justify-center gap-1"
+      >
+        + Add Priority Action Step
+      </button>
+    </div>
+  )
+}
+
 const KIND_LABELS: Record<string, string> = {
   text: 'Text',
   button: 'Button',
@@ -597,18 +823,36 @@ export function PropertyPanel() {
                   <select
                     className={inputClass}
                     value={(() => {
-                      const href = selected.getAttributes()?.href || '';
+                      const attrs = selected.getAttributes() || {};
+                      if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain';
+                      const href = attrs.href || '';
                       if (href.startsWith('#')) return 'anchor';
                       if (href.startsWith('http://') || href.startsWith('https://')) return 'external';
                       return 'page';
                     })()}
                     onChange={(e) => {
-                      if (e.target.value === 'anchor') {
+                      const next = e.target.value;
+                      if (next === 'chain') {
+                        selected.addAttributes({
+                          'data-action': 'CHAIN',
+                          'data-actions': JSON.stringify([
+                            { type: 'api', url: 'https://' },
+                            { type: 'page', page: 'OTP' },
+                          ]),
+                          href: '#',
+                        });
+                      } else if (next === 'anchor') {
+                        selected.removeAttributes('data-action');
+                        selected.removeAttributes('data-actions');
                         const anchors = listSectionAnchorsOnPage(editor, selected);
                         selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
-                      } else if (e.target.value === 'page') {
+                      } else if (next === 'page') {
+                        selected.removeAttributes('data-action');
+                        selected.removeAttributes('data-actions');
                         selected.addAttributes({ href: 'OTP' });
                       } else {
+                        selected.removeAttributes('data-action');
+                        selected.removeAttributes('data-actions');
                         selected.addAttributes({ href: 'https://' });
                       }
                       update();
@@ -617,13 +861,26 @@ export function PropertyPanel() {
                     <option value="anchor">Another part of this page</option>
                     <option value="page">Another page in this campaign</option>
                     <option value="external">Another website</option>
+                    <option value="chain">Sequential Action Chain (Priority Flow)</option>
                   </select>
                 </Field>
 
                 {(() => {
-                  const href = selected.getAttributes()?.href || '';
-                  const type = href.startsWith('#') ? 'anchor' : (href.startsWith('http://') || href.startsWith('https://')) ? 'external' : 'page';
-                  
+                  const attrs = selected.getAttributes() || {};
+                  const href = attrs.href || '';
+                  const type =
+                    attrs['data-action'] === 'CHAIN' || attrs['data-actions']
+                      ? 'chain'
+                      : href.startsWith('#')
+                        ? 'anchor'
+                        : href.startsWith('http://') || href.startsWith('https://')
+                          ? 'external'
+                          : 'page';
+
+                  if (type === 'chain') {
+                    return <ActionChainEditor selected={selected} editor={editor} update={update} />;
+                  }
+
                   if (type === 'anchor') {
                     return (
                       <Field label="Scroll to section">
@@ -865,6 +1122,7 @@ export function PropertyPanel() {
                 className={inputClass}
                 value={(() => {
                   const attrs = selected.getAttributes() || {};
+                  if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain';
                   if (attrs['data-action'] === 'SUBSCRIBE') return 'flow';
                   const href = attrs.href || '';
                   if (href.startsWith('#')) return 'anchor';
@@ -873,18 +1131,31 @@ export function PropertyPanel() {
                 })()}
                 onChange={(e) => {
                   const next = e.target.value;
-                  if (next === 'flow') {
+                  if (next === 'chain') {
+                    selected.addAttributes({
+                      'data-action': 'CHAIN',
+                      'data-actions': JSON.stringify([
+                        { type: 'api', url: 'https://' },
+                        { type: 'page', page: 'OTP' },
+                      ]),
+                      href: '#',
+                    });
+                  } else if (next === 'flow') {
+                    selected.removeAttributes('data-actions');
                     selected.addAttributes({ 'data-action': 'SUBSCRIBE', href: '#' });
                     selected.removeAttributes('target');
                   } else if (next === 'anchor') {
                     selected.removeAttributes('data-action');
+                    selected.removeAttributes('data-actions');
                     const anchors = listSectionAnchorsOnPage(editor, selected);
                     selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' });
                   } else if (next === 'page') {
                     selected.removeAttributes('data-action');
+                    selected.removeAttributes('data-actions');
                     selected.addAttributes({ href: 'OTP' });
                   } else {
                     selected.removeAttributes('data-action');
+                    selected.removeAttributes('data-actions');
                     selected.addAttributes({ href: 'https://' });
                   }
                   update();
@@ -894,6 +1165,7 @@ export function PropertyPanel() {
                 <option value="anchor">Another part of this page (Scroll)</option>
                 <option value="page">Another page in this campaign</option>
                 <option value="external">Another website (URL)</option>
+                <option value="chain">Sequential Action Chain (Priority Flow)</option>
               </select>
             </Field>
 
@@ -901,13 +1173,19 @@ export function PropertyPanel() {
               const attrs = selected.getAttributes() || {};
               const href = attrs.href || '';
               const type =
-                attrs['data-action'] === 'SUBSCRIBE'
-                  ? 'flow'
-                  : href.startsWith('#')
-                    ? 'anchor'
-                    : href.startsWith('http://') || href.startsWith('https://')
-                      ? 'external'
-                      : 'page';
+                attrs['data-action'] === 'CHAIN' || attrs['data-actions']
+                  ? 'chain'
+                  : attrs['data-action'] === 'SUBSCRIBE'
+                    ? 'flow'
+                    : href.startsWith('#')
+                      ? 'anchor'
+                      : href.startsWith('http://') || href.startsWith('https://')
+                        ? 'external'
+                        : 'page';
+
+              if (type === 'chain') {
+                return <ActionChainEditor selected={selected} editor={editor} update={update} />;
+              }
 
               if (type === 'flow') {
                 return (
