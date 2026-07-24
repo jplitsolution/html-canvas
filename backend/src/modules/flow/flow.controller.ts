@@ -64,6 +64,7 @@ export class FlowController {
       action: body.action,
       phone: body.phone,
       planId: body.planId,
+      campid: body.campid,
     });
   }
 }

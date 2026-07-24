@@ -14,6 +14,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
+import { MarketsModule } from './modules/markets/markets.module';
 import { FlowModule } from './modules/flow/flow.module';
 import { OtpModule } from './modules/otp/otp.module';
 import { PartnersModule } from './modules/partners/partners.module';
@@ -65,6 +66,7 @@ import { RedisModule } from './common/redis.module';
     DatabaseModule,
     AnalyticsModule,
     CampaignsModule,
+    MarketsModule,
     FlowModule,
     OtpModule,
     PartnersModule,

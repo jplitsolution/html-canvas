@@ -87,7 +87,7 @@ export default function CampaignBuilder() {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 bg-bg-canvas px-4">
         <p className="text-sm text-fg-muted text-center">{error || 'Page not found'}</p>
-        <Button variant="outline" onClick={() => navigate(id ? `/campaigns/${id}` : '/campaigns')}>
+        <Button variant="outline" onClick={() => navigate(id ? `/campaigns/${id}` : '/markets')}>
           Back to campaign
         </Button>
       </div>

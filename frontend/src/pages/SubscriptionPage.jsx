@@ -122,7 +122,7 @@ function getSelectedPackFromShadow(shadow) {
   return normalizePack(selected?.getAttribute('data-pack'))
 }
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -324,6 +324,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
           visitId: visitIdRef.current,
           country,
           operator,
+          campid: campid || undefined,
           fromPage: 'OTP',
           action: 'CONTINUE',
           phone: msisdn,
@@ -777,6 +778,7 @@ function SubscriptionPage() {
           visitId: visitIdRef.current,
           country,
           operator,
+          campid: campid || undefined,
           fromPage,
           action,
           phone: phoneRef.current,
@@ -804,6 +806,7 @@ function SubscriptionPage() {
         cachePage,
         country,
         operator,
+        campid,
         visitIdRef,
         phoneRef,
         packRef: selectedPackRef,
@@ -823,7 +826,7 @@ function SubscriptionPage() {
       shadow.removeEventListener('click', handleAnchorClick)
       if (otpCleanup) otpCleanup()
     }
-  }, [pageData, country, operator, cachePage])
+  }, [pageData, country, operator, campid, cachePage])
 
   if (!country || !operator) {
     return (
@@ -855,11 +858,23 @@ function SubscriptionPage() {
   }
 
   if (error && !pageData) {
+    const notAvailable =
+      /not available|not active|inactive/i.test(error) ||
+      error === 'This offer is not available'
     return (
-      <div className="flow-runtime-root min-h-screen flex items-center justify-center p-6">
-        <div className="text-center max-w-md">
-          <h1 className="text-lg font-semibold text-slate-900 mb-2">Unable to load</h1>
-          <p className="text-sm text-red-600">{error}</p>
+      <div className="flow-runtime-root min-h-screen flex items-center justify-center p-6 bg-slate-50">
+        <div className="text-center max-w-md bg-white border border-slate-200 rounded-2xl px-8 py-10 shadow-sm">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">
+            {notAvailable ? '🚫' : '⚠️'}
+          </div>
+          <h1 className="text-lg font-semibold text-slate-900 mb-2">
+            {notAvailable ? 'Not available' : 'Unable to load'}
+          </h1>
+          <p className="text-sm text-slate-600 leading-relaxed">
+            {notAvailable
+              ? 'This offer is currently not available. Please try again later or contact your provider.'
+              : error}
+          </p>
         </div>
       </div>
     )

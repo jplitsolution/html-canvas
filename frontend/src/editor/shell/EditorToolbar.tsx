@@ -84,9 +84,9 @@ export function EditorToolbar({
         </Link>
       ) : (
         <Link
-          to="/campaigns"
+          to="/markets"
           className="p-2 rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
-          title="Back to campaigns"
+          title="Back to markets"
         >
           <ArrowLeft className="w-4 h-4" />
         </Link>

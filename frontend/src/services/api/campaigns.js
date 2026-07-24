@@ -45,11 +45,23 @@ function mapCampaign(campaign) {
     pages.find((p) => p.pageType === type)?.hasContent,
   )
 
+  const countryCode = campaign.marketOperator?.country?.code || campaign.countryCode || null
+  const operatorCode = campaign.marketOperator?.code || campaign.operatorCode || null
+  const trackingId =
+    campaign.trackingId ||
+    (countryCode && operatorCode
+      ? `${String(countryCode).toUpperCase()}-${String(operatorCode).toUpperCase()}-${campaign.id}`
+      : null)
+
   return {
     id: String(campaign.id),
     name: campaign.name,
     country: campaign.country,
     operator: campaign.operator,
+    countryCode,
+    operatorCode,
+    operatorId: campaign.operatorId ?? campaign.marketOperator?.id ?? null,
+    trackingId,
     serviceId: campaign.serviceId || '',
     active: Boolean(campaign.active),
     vendorId: campaign.vendorId ?? null,
@@ -57,11 +69,16 @@ function mapCampaign(campaign) {
     pages,
     requiredComplete,
     flowConfig,
-    trackings: campaign.trackings || [],
+    trackings: (campaign.trackings || []).map((t) => ({
+      ...t,
+      active: t.active !== false,
+    })),
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,
   }
 }
+
+export { mapCampaign }
 
 function mapPageContent(page) {
   const data = page?.template?.data || {}
@@ -80,7 +97,7 @@ export async function listCampaigns() {
 }
 
 export async function getCampaign(id) {
-  const campaign = await apiClient(`/campaigns/${id}`)
+  const campaign = await apiClient(`/campaigns/${id}`, { timeout: 45000 })
   return mapCampaign(campaign)
 }
 
@@ -88,6 +105,7 @@ export async function createCampaign(payload) {
   const campaign = await apiClient('/campaigns', {
     method: 'POST',
     body: payload,
+    timeout: 60000,
   })
   return mapCampaign(campaign)
 }
@@ -96,6 +114,7 @@ export async function updateCampaign(id, payload) {
   const campaign = await apiClient(`/campaigns/${id}`, {
     method: 'PATCH',
     body: payload,
+    timeout: 45000,
   })
   return mapCampaign(campaign)
 }
@@ -139,13 +158,19 @@ export function getCampaignPreviewUrl(campaign) {
     operator: campaign.operator,
     step: 'HOME',
   })
-  
+
+  if (campaign.trackingId) {
+    params.set('campid', campaign.trackingId)
+  } else if (campaign.id) {
+    params.set('campid', String(campaign.id))
+  }
+
   if (campaign.trackings && campaign.trackings.length > 0) {
     const t = campaign.trackings[0]
     if (t.vendor?.code) params.set('vid', t.vendor.code)
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
-  
+
   return `/subscription?${params.toString()}`
 }
 
@@ -156,13 +181,19 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
     operator: campaign.operator,
     step: pageType || 'HOME',
   })
-  
+
+  if (campaign.trackingId) {
+    params.set('campid', campaign.trackingId)
+  } else if (campaign.id) {
+    params.set('campid', String(campaign.id))
+  }
+
   if (campaign.trackings && campaign.trackings.length > 0) {
     const t = campaign.trackings[0]
     if (t.vendor?.code) params.set('vid', t.vendor.code)
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
-  
+
   return `/subscription?${params.toString()}`
 }
 

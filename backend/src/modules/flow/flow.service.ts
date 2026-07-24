@@ -23,6 +23,10 @@ import {
 import { ApiConfig } from '../api-config/entities/api-config.entity';
 import { OtpRequest } from '../otp/entities/otp-request.entity';
 import { RedisService } from '../../common/services/redis.service';
+import {
+  isNumericCampid,
+  parseTrackingId,
+} from '../markets/tracking-id.util';
 
 @Injectable()
 export class FlowService {
@@ -44,7 +48,8 @@ export class FlowService {
 
   /**
    * Resolve the campaign for a public flow request. Prefers the explicit
-   * `campid` tracking param, falling back to the legacy country/operator lookup.
+   * `campid` tracking param (composite IN-AIRTEL-12 or legacy numeric),
+   * falling back to the legacy country/operator lookup when unambiguous.
    */
   private async resolveCampaign(input: {
     country: string;
@@ -60,9 +65,18 @@ export class FlowService {
 
     let campaign: Campaign | null = null;
     if (input.campid) {
-      campaign = await this.campaignsService.findByIdForFlow(
-        Number(input.campid),
-      );
+      const parsed = parseTrackingId(input.campid);
+      if (parsed) {
+        campaign = await this.campaignsService.findByTrackingId(
+          parsed.countryCode,
+          parsed.operatorCode,
+          parsed.campaignId,
+        );
+      } else if (isNumericCampid(input.campid)) {
+        campaign = await this.campaignsService.findByIdForFlow(
+          Number(input.campid),
+        );
+      }
     }
     if (!campaign) {
       campaign = await this.campaignsService.findByCountryOperator(
@@ -73,8 +87,17 @@ export class FlowService {
 
     if (campaign) {
       await this.redis.set(cacheKey, campaign, 15);
+      // Always refresh id-keyed cache so tracking.active changes are visible quickly.
+      await this.redis.set(`flow:campaign:id:${campaign.id}`, campaign, 15);
       if (!input.campid) {
-        await this.redis.set(`flow:campaign:id:${campaign.id}`, campaign, 15);
+        // already set above when cacheKey is co-based
+      }
+      if (campaign.trackingId) {
+        await this.redis.set(
+          `flow:campaign:id:${campaign.trackingId}`,
+          campaign,
+          15,
+        );
       }
     }
     return campaign;
@@ -166,8 +189,14 @@ export class FlowService {
       this.logger.warn(
         `Campaign inactive: id=${campaign.id} ${campaign.country}/${campaign.operator}`,
       );
-      throw new ForbiddenException('Campaign is not active');
+      throw new ForbiddenException('This offer is not available');
     }
+
+    await this.assertTrackingAssignmentAvailable(
+      campaign,
+      input.vid,
+      input.affId,
+    );
 
     this.logger.log(`Campaign resolved: id=${campaign.id} active=true`);
 
@@ -388,16 +417,35 @@ export class FlowService {
     action: string;
     phone?: string;
     planId?: string;
+    campid?: string;
   }) {
     this.logger.log(
       `POST transition | visitId=${input.visitId} ${input.country}/${input.operator} ${input.fromPage} → ${input.action} phone=${input.phone || '(empty)'}`,
     );
-    const campaign = await this.campaignsService.findByCountryOperator(
-      input.country,
-      input.operator,
-    );
+
+    let campaign: Campaign | null = null;
+    const visit = await this.analyticsService.getVisit(input.visitId);
+    if (visit?.campaignId) {
+      campaign = await this.campaignsService.findByIdForFlow(visit.campaignId);
+    }
+    if (!campaign) {
+      campaign = await this.resolveCampaign({
+        country: input.country,
+        operator: input.operator,
+        campid: input.campid,
+      });
+    }
     if (!campaign || !campaign.active) {
-      throw new NotFoundException('Campaign not found or inactive');
+      throw new ForbiddenException('This offer is not available');
+    }
+    if (visit?.vidRaw || visit?.vendorId) {
+      await this.assertTrackingAssignmentAvailable(
+        campaign,
+        visit.vidRaw,
+        visit.affRaw,
+        visit.vendorId,
+        visit.affiliateId,
+      );
     }
 
     const apiConfig = await this.apiConfigRepository.findOne({
@@ -743,11 +791,93 @@ export class FlowService {
         `No campaign found for ${input.country} / ${input.operator}`,
       );
     }
+    if (!campaign.active) {
+      throw new ForbiddenException('This offer is not available');
+    }
     const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
     return {
       campaignId: campaign.id,
       entryPage: this.flowEngine.getEntryPage(flowConfig),
     };
+  }
+
+  /**
+   * If the request matches a campaign tracking assignment that is deactivated,
+   * block the funnel with a "not available" response.
+   */
+  private async assertTrackingAssignmentAvailable(
+    campaign: Campaign,
+    vid?: string,
+    affId?: string,
+    vendorId?: number,
+    affiliateId?: number | null,
+  ): Promise<void> {
+    const trackings = campaign.trackings || [];
+    if (trackings.length === 0) return;
+    if (!vid && !affId && vendorId == null) return;
+
+    const vidNorm = vid ? String(vid).trim().toLowerCase() : '';
+    const affNorm = affId ? String(affId).trim().toLowerCase() : '';
+
+    let resolvedVendorId = vendorId;
+    let resolvedAffiliateId =
+      affiliateId === undefined ? undefined : affiliateId;
+
+    // Prefer matching against already-loaded tracking relations by code
+    // (works even when resolveAttribution misses due to code casing).
+    let matched =
+      trackings.find((t) => {
+        const vCode = t.vendor?.code?.trim().toLowerCase() || '';
+        const aCode = t.affiliate?.code?.trim().toLowerCase() || '';
+        if (vidNorm && vCode !== vidNorm) return false;
+        if (affNorm) return aCode === affNorm;
+        return !t.affiliate;
+      }) || null;
+
+    if (!matched && (!resolvedVendorId || resolvedAffiliateId === undefined)) {
+      const attribution = await this.partnersService
+        .resolveAttribution(vid, affId)
+        .catch(() => ({
+          vendorId: undefined,
+          affiliateId: undefined,
+          mismatch: false,
+        }));
+      if (!resolvedVendorId) resolvedVendorId = attribution.vendorId;
+      if (resolvedAffiliateId === undefined) {
+        resolvedAffiliateId = attribution.affiliateId ?? null;
+      }
+    }
+
+    if (!matched && resolvedVendorId) {
+      const exact = trackings.find(
+        (t) =>
+          (t.vendor?.id ?? t.vendorId) === resolvedVendorId &&
+          (t.affiliate?.id ?? t.affiliateId ?? null) ===
+            (resolvedAffiliateId || null),
+      );
+      matched =
+        exact ||
+        trackings.find(
+          (t) =>
+            (t.vendor?.id ?? t.vendorId) === resolvedVendorId &&
+            !(t.affiliate?.id ?? t.affiliateId),
+        ) ||
+        null;
+    }
+
+    if (!matched) return;
+
+    const assignmentActive = matched.active !== false;
+    const vendorActive = matched.vendor?.active !== false;
+    const affiliateActive =
+      !matched.affiliate || matched.affiliate.active !== false;
+
+    if (!assignmentActive || !vendorActive || !affiliateActive) {
+      this.logger.warn(
+        `Tracking assignment unavailable: campaign=${campaign.id} vid=${vid || '-'} aff=${affId || '-'} assignmentActive=${assignmentActive}`,
+      );
+      throw new ForbiddenException('This offer is not available');
+    }
   }
 
   private getActions(pageType: CampaignPageType): string[] {

@@ -224,7 +224,7 @@ function CampaignLogsPage() {
     if (!campaignId) return '—'
     const c = campaigns.find((item) => String(item.id) === String(campaignId))
     if (!c) return `Campaign #${campaignId}`
-    return `${c.country} / ${c.operator} — ${c.name}`
+    return `${c.trackingId || `${c.country} / ${c.operator}`} — ${c.name}`
   }, [campaigns])
 
   useEffect(() => {
@@ -399,7 +399,7 @@ function CampaignLogsPage() {
                 <option value="all">— All Campaigns —</option>
                 {campaigns.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.country} / {c.operator} — {c.name}
+                    {c.trackingId || `${c.country} / ${c.operator}`} — {c.name}
                   </option>
                 ))}
               </select>

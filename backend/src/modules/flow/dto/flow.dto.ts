@@ -85,4 +85,9 @@ export class FlowTransitionDto {
   @IsOptional()
   @IsString()
   planId?: string;
+
+  @ApiPropertyOptional({ description: 'Campaign tracking id (campid)' })
+  @IsOptional()
+  @IsString()
+  campid?: string;
 }

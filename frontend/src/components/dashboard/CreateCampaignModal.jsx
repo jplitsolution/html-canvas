@@ -9,7 +9,6 @@ function CreateCampaignModal({ isOpen, onClose, campaigns = [] }) {
   const [name, setName] = useState('')
   const [country, setCountry] = useState('')
   const [operator, setOperator] = useState('')
-  const [serviceId, setServiceId] = useState('')
   const [copyFromCampaignId, setCopyFromCampaignId] = useState('')
   const [creating, setCreating] = useState(false)
   const createCampaign = useStore((s) => s.createCampaign)
@@ -23,13 +22,11 @@ function CreateCampaignModal({ isOpen, onClose, campaigns = [] }) {
         name: name.trim() || `${country} ${operator}`,
         country: country.trim(),
         operator: operator.trim(),
-        serviceId: serviceId.trim() || undefined,
         copyFromCampaignId: copyFromCampaignId ? Number(copyFromCampaignId) : undefined,
       })
       setName('')
       setCountry('')
       setOperator('')
-      setServiceId('')
       setCopyFromCampaignId('')
       onClose()
       navigate(`/campaigns/${id}`)
@@ -56,10 +53,6 @@ function CreateCampaignModal({ isOpen, onClose, campaigns = [] }) {
             <label className="block text-sm font-medium text-fg mb-1.5">Operator</label>
             <Input value={operator} onChange={(e) => setOperator(e.target.value)} placeholder="Zain" />
           </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-fg mb-1.5">Service ID (optional)</label>
-          <Input value={serviceId} onChange={(e) => setServiceId(e.target.value)} placeholder="zain_svc_01" />
         </div>
         {campaigns.length > 0 && (
           <div>
