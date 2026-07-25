@@ -70,4 +70,47 @@ describe('Priority Chain Execution Logic', () => {
 
     expect(isSubscribed).toBe(false)
   })
+
+  it('throws error when Priority 1 API step has an empty URL', () => {
+    const actions = [
+      { type: 'api', url: '' },
+      { type: 'page', page: 'OTP' },
+    ]
+
+    const runPriorityChain = () => {
+      for (let i = 0; i < actions.length; i++) {
+        const step = actions[i]
+        if (step.type === 'api') {
+          const rawUrl = (step.url || '').trim()
+          if (!rawUrl) {
+            throw new Error(`Priority ${i + 1} Error: API URL is missing in configuration`)
+          }
+        }
+      }
+    }
+
+    expect(runPriorityChain).toThrow('Priority 1 Error: API URL is missing in configuration')
+  })
+
+  it('throws error when Priority 1 API step has incomplete URL like "https://"', () => {
+    const actions = [
+      { type: 'api', url: 'https://' },
+      { type: 'page', page: 'ERROR' },
+    ]
+
+    const runPriorityChain = () => {
+      for (let i = 0; i < actions.length; i++) {
+        const step = actions[i]
+        if (step.type === 'api') {
+          const rawUrl = (step.url || '').trim()
+          const isInvalidUrl = !rawUrl || rawUrl === 'https://' || rawUrl === 'http://' || rawUrl === 'https:///' || rawUrl === 'http:///'
+          if (isInvalidUrl) {
+            throw new Error(`Priority ${i + 1} Error: API URL is missing or incomplete ("${rawUrl}")`)
+          }
+        }
+      }
+    }
+
+    expect(runPriorityChain).toThrow('Priority 1 Error: API URL is missing or incomplete ("https://")')
+  })
 })
