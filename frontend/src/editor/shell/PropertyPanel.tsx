@@ -391,7 +391,7 @@ function ActionChainEditor({
 
   if (actions.length === 0) {
     actions = [
-      { type: 'api', url: 'https://' },
+      { type: 'api', url: '' },
       { type: 'page', page: 'OTP' },
     ]
   }
@@ -511,6 +511,11 @@ function ActionChainEditor({
                   value={step.url || ''}
                   onChange={(e) => updateStep(idx, 'url', e.target.value)}
                 />
+                {(!step.url?.trim() || step.url.trim() === 'https://' || step.url.trim() === 'http://') && (
+                  <p className="text-[10px] text-amber-600 font-medium mt-1">
+                    ⚠️ API URL is required (e.g. https://example.com/api/check)
+                  </p>
+                )}
               </Field>
             )}
 
@@ -522,6 +527,11 @@ function ActionChainEditor({
                   value={step.url || ''}
                   onChange={(e) => updateStep(idx, 'url', e.target.value)}
                 />
+                {!step.url?.trim() && (
+                  <p className="text-[10px] text-amber-600 font-medium mt-1">
+                    ⚠️ URL is required for Priority {idx + 1}
+                  </p>
+                )}
               </Field>
             )}
 
@@ -836,7 +846,7 @@ export function PropertyPanel() {
                         selected.addAttributes({
                           'data-action': 'CHAIN',
                           'data-actions': JSON.stringify([
-                            { type: 'api', url: 'https://' },
+                            { type: 'api', url: '' },
                             { type: 'page', page: 'OTP' },
                           ]),
                           href: '#',
@@ -1135,7 +1145,7 @@ export function PropertyPanel() {
                     selected.addAttributes({
                       'data-action': 'CHAIN',
                       'data-actions': JSON.stringify([
-                        { type: 'api', url: 'https://' },
+                        { type: 'api', url: '' },
                         { type: 'page', page: 'OTP' },
                       ]),
                       href: '#',

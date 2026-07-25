@@ -753,7 +753,23 @@ function SubscriptionPage() {
               const step = actions[i]
               if (step.type === 'api') {
                 const rawUrl = (step.url || '').trim()
-                if (!rawUrl) continue
+                const isInvalidUrl = !rawUrl || rawUrl === 'https://' || rawUrl === 'http://' || rawUrl === 'https:///' || rawUrl === 'http:///'
+                if (isInvalidUrl) {
+                  throw new Error(`Priority ${i + 1} Error: API URL is missing or incomplete ("${rawUrl || ''}")`)
+                }
+
+                // Check for invalid URL format
+                const tempUrl = rawUrl.replace(/\{\{[^}]+\}\}/g, 'placeholder')
+                if (!tempUrl.startsWith('/')) {
+                  try {
+                    const parsed = new URL(tempUrl)
+                    if (!parsed.hostname) {
+                      throw new Error(`Priority ${i + 1} Error: API URL host is missing ("${rawUrl}")`)
+                    }
+                  } catch (e) {
+                    throw new Error(`Priority ${i + 1} Error: Invalid API URL format ("${rawUrl}")`)
+                  }
+                }
 
                 // If phone is missing, we cannot check subscription status yet — proceed to Priority 2 (OTP/CONFIRM page)
                 if ((rawUrl.includes('{{msisdn}}') || rawUrl.includes('{{phone}}')) && !phoneRef.current) {
