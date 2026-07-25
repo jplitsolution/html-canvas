@@ -1,5 +1,4 @@
-.agents
-# frontend
+node_modules/
 frontend/node_modules
 frontend/dist
 Frontend/node_modules

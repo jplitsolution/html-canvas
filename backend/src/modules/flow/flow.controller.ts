@@ -23,7 +23,7 @@ export class FlowController {
     return this.flowService.getPage({
       country: query.country,
       operator: query.operator,
-      pageType: query.page,
+      pageType: query.page || CampaignPageType.HOME,
       // Prefer operator / proxy-injected MSISDN header over query params.
       // Query param is kept only for backward compatibility / local testing.
       phone: headerMsisdn || query.msisdn,

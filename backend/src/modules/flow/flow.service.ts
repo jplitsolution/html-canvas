@@ -234,9 +234,8 @@ export class FlowService {
     const guardMode = this.flowEngine.normalizeMode(campaign.verificationMode);
     // OTP verification is required for legacy provider setups and for the
     // OTP_ONLY / BOTH verification modes. MSISDN_ONLY never gates on OTP.
-    const isOtpEnabled = guardMode
-      ? guardMode === 'OTP_ONLY' || guardMode === 'BOTH'
-      : providerConfigured;
+    const isOtpEnabled =
+      Boolean(providerConfigured) && guardMode === 'OTP_ONLY';
     if (isOtpEnabled) {
       if (resolvedPageType === CampaignPageType.CONFIRM || resolvedPageType === CampaignPageType.THANKYOU) {
         let isVerified = false;
@@ -267,7 +266,7 @@ export class FlowService {
 
           if (subscribed) {
             resolvedPageType = CampaignPageType.THANKYOU;
-          } else {
+          } else if (providerConfigured || (apiConfig && apiConfig.subscriptionApi && apiConfig.subscriptionApi.trim() !== '')) {
             resolvedPageType = phone ? CampaignPageType.OTP : entryPage;
             this.logger.warn(`Route Guard: Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to ${resolvedPageType}`);
           }
@@ -278,17 +277,19 @@ export class FlowService {
         resolvedPageType = entryPage;
       }
       if (resolvedPageType === CampaignPageType.THANKYOU) {
-        const subscribed = await this.partnerApiService.checkSubscription(
-          apiConfig,
-          {
-            phone,
-            serviceId,
-            country: campaign.country,
-            operator: campaign.operator,
-          },
-        ).catch(() => false);
-        if (!subscribed) {
-          resolvedPageType = phone ? CampaignPageType.CONFIRM : entryPage;
+        if (apiConfig && apiConfig.subscriptionApi && apiConfig.subscriptionApi.trim() !== '') {
+          const subscribed = await this.partnerApiService.checkSubscription(
+            apiConfig,
+            {
+              phone,
+              serviceId,
+              country: campaign.country,
+              operator: campaign.operator,
+            },
+          ).catch(() => false);
+          if (!subscribed) {
+            resolvedPageType = phone ? CampaignPageType.CONFIRM : entryPage;
+          }
         }
       }
     }

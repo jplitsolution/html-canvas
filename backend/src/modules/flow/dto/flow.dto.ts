@@ -12,9 +12,10 @@ export class GetFlowPageQueryDto {
   @IsString()
   operator: string;
 
-  @ApiProperty({ enum: CampaignPageType })
+  @ApiPropertyOptional({ enum: CampaignPageType })
+  @IsOptional()
   @IsEnum(CampaignPageType)
-  page: CampaignPageType;
+  page?: CampaignPageType;
 
   @ApiPropertyOptional()
   @IsOptional()
