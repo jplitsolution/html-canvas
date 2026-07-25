@@ -235,7 +235,7 @@ export class FlowService {
     // OTP verification is required for legacy provider setups and for the
     // OTP_ONLY / BOTH verification modes. MSISDN_ONLY never gates on OTP.
     const isOtpEnabled =
-      Boolean(providerConfigured) && guardMode === 'OTP_ONLY';
+      Boolean(providerConfigured) && (guardMode === 'OTP_ONLY' || guardMode === 'BOTH' || !guardMode);
     if (isOtpEnabled) {
       if (resolvedPageType === CampaignPageType.CONFIRM || resolvedPageType === CampaignPageType.THANKYOU) {
         let isVerified = false;
