@@ -752,23 +752,79 @@ function SubscriptionPage() {
             for (let i = 0; i < actions.length; i++) {
               const step = actions[i]
               if (step.type === 'api') {
-                const url = (step.url || '').trim()
-                if (!url) continue
-                const res = await fetch(url, { method: 'GET', mode: 'cors' }).catch((err) => {
-                  throw new Error(`Priority ${i + 1} URL Check Failed: ${err.message || 'Network error'}`)
-                })
-                if (!res.ok) {
-                  throw new Error(`Priority ${i + 1} URL Check Failed (HTTP ${res.status})`)
+                const rawUrl = (step.url || '').trim()
+                if (!rawUrl) continue
+
+                // If phone is missing, we cannot check subscription status yet — proceed to Priority 2 (OTP/CONFIRM page)
+                if ((rawUrl.includes('{{msisdn}}') || rawUrl.includes('{{phone}}')) && !phoneRef.current) {
+                  continue
+                }
+
+                const formattedUrl = rawUrl
+                  .replace(/\{\{msisdn\}\}/gi, phoneRef.current || '')
+                  .replace(/\{\{phone\}\}/gi, phoneRef.current || '')
+                  .replace(/\{\{country\}\}/gi, country || '')
+                  .replace(/\{\{operator\}\}/gi, operator || '')
+
+                let res = null
+                let fetchFailed = false
+                try {
+                  res = await fetch(formattedUrl, { method: 'GET', mode: 'cors' })
+                } catch (err) {
+                  fetchFailed = true
+                }
+
+                if (fetchFailed || !res || !res.ok) {
+                  // Browser CORS or network issue: fallback gracefully to next priority step
+                  continue
+                }
+
+                const json = await res.json().catch(() => null)
+                if (json) {
+                  if (json.responseCode === '500') {
+                    throw new Error(`Priority ${i + 1} Check Failed: ${json.responseMessage || 'Engine error'}`)
+                  }
+                  const nestedData = json.data || json
+                  const status = nestedData.subscriptionStatus || nestedData.currentStatus || json.subscriptionStatus || json.status
+                  const isSubscribed = typeof status === 'string'
+                    ? status.toLowerCase() === 'active'
+                    : Boolean(json.subscribed || json.isSubscribed || json.active || nestedData.subscribed)
+
+                  if (isSubscribed) {
+                    saveSession({
+                      verificationStatus: 'verified',
+                      visitId: visitIdRef.current,
+                      phone: phoneRef.current,
+                      step: 'THANKYOU',
+                    })
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.set('step', 'THANKYOU')
+                      return next
+                    })
+                    await loadPage('THANKYOU')
+                    break
+                  }
                 }
               } else if (step.type === 'page') {
                 const targetPage = (step.page || '').toUpperCase()
                 const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
                 if (VALID_PAGES.includes(targetPage)) {
+                  if (targetPage === 'THANKYOU' || targetPage === 'CONFIRM') {
+                    saveSession({
+                      verificationStatus: 'verified',
+                      visitId: visitIdRef.current,
+                      phone: phoneRef.current,
+                      step: targetPage,
+                    })
+                  }
                   setSearchParams((prev) => {
                     const next = new URLSearchParams(prev)
                     next.set('step', targetPage)
                     return next
                   })
+                  await loadPage(targetPage)
+                  break
                 }
               } else if (step.type === 'flow') {
                 const fromPage = pageDataRef.current?.pageType
@@ -781,6 +837,7 @@ function SubscriptionPage() {
                   phone: phoneRef.current,
                 })
                 cachePage(next)
+                break
               } else if (step.type === 'anchor') {
                 const targetId = step.section
                 if (targetId) {
@@ -791,6 +848,7 @@ function SubscriptionPage() {
                 if (step.url) {
                   window.open(step.url, node.getAttribute('target') || '_self')
                 }
+                break
               }
             }
           } catch (err) {

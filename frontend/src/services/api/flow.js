@@ -41,7 +41,7 @@ export async function prefetchFlowPage(params) {
 }
 
 export async function fetchFlowEntry({ country, operator, campid }) {
-  const params = new URLSearchParams({ country, operator })
+  const params = new URLSearchParams({ country, operator, page: 'HOME' })
   if (campid) params.set('campid', String(campid))
   return apiClient(`/flow/entry?${params.toString()}`, { method: 'GET' })
 }
