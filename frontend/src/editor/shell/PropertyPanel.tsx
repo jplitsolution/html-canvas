@@ -442,7 +442,8 @@ function ActionChainEditor({
       </div>
 
       <p className="text-[11px] text-fg-muted leading-relaxed">
-        Actions execute in order (Priority 1 first). If Step 1 succeeds (200 OK), Step 2 executes. If any step fails, an error is thrown.
+        Steps run in order. API check: if already subscribed → Thank you; otherwise continue to the next step.
+        Use &quot;external&quot; for redirect-only (None mode). Use &quot;flow&quot; to run HE / OTP verification from Flow Builder.
       </p>
 
       <div className="space-y-2.5">
@@ -499,7 +500,7 @@ function ActionChainEditor({
                 <option value="page">Another page in this campaign</option>
                 <option value="external">Another website (URL Redirect)</option>
                 <option value="anchor">Another part of this page (Scroll)</option>
-                <option value="flow">Continue campaign flow (Subscribe)</option>
+                <option value="flow">Continue verification flow (HE / OTP)</option>
               </select>
             </Field>
 
@@ -1171,7 +1172,7 @@ export function PropertyPanel() {
                   update();
                 }}
               >
-                <option value="flow">Continue campaign flow (Subscribe)</option>
+                <option value="flow">Continue verification flow (HE / OTP)</option>
                 <option value="anchor">Another part of this page (Scroll)</option>
                 <option value="page">Another page in this campaign</option>
                 <option value="external">Another website (URL)</option>

@@ -1,22 +1,51 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity';
 
-export type VerificationMode = 'MSISDN_ONLY' | 'OTP_ONLY' | 'BOTH';
+/**
+ * Verification modes (client picks per campaign):
+ * - HEADER_INJECTION — carrier header / ISP resolve (legacy alias: MSISDN_ONLY)
+ * - OTP_ONLY — always OTP after HOME CTA
+ * - BOTH — header injection when available + OTP fallback
+ * - NONE — no HE/OTP routing; HOME uses Priority Chain (API / page / external redirect)
+ */
+export type VerificationMode =
+  | 'HEADER_INJECTION'
+  | 'OTP_ONLY'
+  | 'BOTH'
+  | 'NONE';
 
 export const VERIFICATION_MODES: VerificationMode[] = [
-  'MSISDN_ONLY',
+  'HEADER_INJECTION',
   'OTP_ONLY',
   'BOTH',
+  'NONE',
 ];
+
+/** @deprecated Use HEADER_INJECTION — kept for reading old DB values */
+const LEGACY_MODE_ALIASES: Record<string, VerificationMode> = {
+  MSISDN_ONLY: 'HEADER_INJECTION',
+  NULL: 'NONE',
+};
 
 export type FlowEdgeCondition =
   | 'DEFAULT'
+  | 'HEADER_RESOLVED'
+  | 'HEADER_UNRESOLVED'
+  /** @deprecated Prefer HEADER_RESOLVED */
   | 'MSISDN_RESOLVED'
+  /** @deprecated Prefer HEADER_UNRESOLVED */
   | 'MSISDN_UNRESOLVED'
   | 'OTP_VERIFIED'
   | 'SUBSCRIBED'
   | 'BLOCKED'
   | 'ERROR';
+
+const CONDITION_ALIASES: Record<string, string[]> = {
+  HEADER_RESOLVED: ['HEADER_RESOLVED', 'MSISDN_RESOLVED'],
+  HEADER_UNRESOLVED: ['HEADER_UNRESOLVED', 'MSISDN_UNRESOLVED'],
+  MSISDN_RESOLVED: ['HEADER_RESOLVED', 'MSISDN_RESOLVED'],
+  MSISDN_UNRESOLVED: ['HEADER_UNRESOLVED', 'MSISDN_UNRESOLVED'],
+};
 
 export interface FlowNode {
   id: string;
@@ -60,6 +89,9 @@ export class FlowEngineService {
   normalizeMode(mode?: string | null): VerificationMode | null {
     if (!mode) return null;
     const upper = mode.toUpperCase();
+    if (LEGACY_MODE_ALIASES[upper]) {
+      return LEGACY_MODE_ALIASES[upper];
+    }
     return (VERIFICATION_MODES as string[]).includes(upper)
       ? (upper as VerificationMode)
       : null;
@@ -68,6 +100,7 @@ export class FlowEngineService {
   /**
    * Build a sensible default graph for a given verification mode. Used for new
    * campaigns and as a fallback so the builder always opens with a valid flow.
+   * Trust-first: entry is always HOME.
    */
   getDefaultFlowConfig(mode: VerificationMode = 'BOTH'): FlowConfig {
     const node = (
@@ -75,15 +108,6 @@ export class FlowEngineService {
       x: number,
       y: number,
     ): FlowNode => ({ id: pageType, pageType, position: { x, y } });
-
-    const nodes: FlowNode[] = [
-      node(CampaignPageType.HOME, 40, 160),
-      node(CampaignPageType.OTP, 320, 60),
-      node(CampaignPageType.CONFIRM, 600, 160),
-      node(CampaignPageType.THANKYOU, 880, 100),
-      node(CampaignPageType.BLOCKED, 880, 240),
-      node(CampaignPageType.ERROR, 880, 380),
-    ];
 
     const edge = (
       source: CampaignPageType,
@@ -96,33 +120,72 @@ export class FlowEngineService {
       condition,
     });
 
-    const edges: FlowEdge[] = [];
-
-    if (mode === 'MSISDN_ONLY') {
-      edges.push(edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'MSISDN_RESOLVED'));
-      edges.push(edge(CampaignPageType.HOME, CampaignPageType.ERROR, 'MSISDN_UNRESOLVED'));
-    } else if (mode === 'OTP_ONLY') {
-      edges.push(edge(CampaignPageType.HOME, CampaignPageType.OTP, 'DEFAULT'));
-      edges.push(edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'));
-    } else {
-      // BOTH: resolve to prefill but always require OTP.
-      edges.push(edge(CampaignPageType.HOME, CampaignPageType.OTP, 'DEFAULT'));
-      edges.push(edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'));
+    // Priority Chain only — HOME is enough; client wires external/API on the page.
+    if (mode === 'NONE') {
+      return {
+        version: 1,
+        entryPage: CampaignPageType.HOME,
+        nodes: [node(CampaignPageType.HOME, 40, 160)],
+        edges: [],
+      };
     }
 
-    edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.THANKYOU, 'SUBSCRIBED'));
-    edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'));
+    const nodes: FlowNode[] = [
+      node(CampaignPageType.HOME, 40, 160),
+      node(CampaignPageType.CONFIRM, 600, 160),
+      node(CampaignPageType.THANKYOU, 880, 100),
+      node(CampaignPageType.BLOCKED, 880, 240),
+      node(CampaignPageType.ERROR, 880, 380),
+    ];
+
+    const edges: FlowEdge[] = [];
+
+    if (mode === 'HEADER_INJECTION') {
+      edges.push(
+        edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'HEADER_RESOLVED'),
+      );
+      edges.push(
+        edge(CampaignPageType.HOME, CampaignPageType.ERROR, 'HEADER_UNRESOLVED'),
+      );
+    } else if (mode === 'OTP_ONLY') {
+      nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
+      edges.push(edge(CampaignPageType.HOME, CampaignPageType.OTP, 'DEFAULT'));
+      edges.push(
+        edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'),
+      );
+    } else {
+      // BOTH: after HOME CTA — header resolved → CONFIRM, else → OTP
+      nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
+      edges.push(
+        edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'HEADER_RESOLVED'),
+      );
+      edges.push(
+        edge(CampaignPageType.HOME, CampaignPageType.OTP, 'HEADER_UNRESOLVED'),
+      );
+      edges.push(
+        edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'),
+      );
+    }
+
+    edges.push(
+      edge(CampaignPageType.CONFIRM, CampaignPageType.THANKYOU, 'SUBSCRIBED'),
+    );
+    edges.push(
+      edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'),
+    );
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
 
     return { version: 1, entryPage: CampaignPageType.HOME, nodes, edges };
   }
 
   /**
-   * Resolve which page type opens the funnel. Falls back to HOME, then the
-   * first node in the graph.
+   * Resolve which page type opens the funnel. Trust-first: prefer HOME.
    */
   getEntryPage(config: FlowConfig | null): CampaignPageType {
     if (!config || config.nodes.length === 0) {
+      return CampaignPageType.HOME;
+    }
+    if (config.nodes.some((n) => n.pageType === CampaignPageType.HOME)) {
       return CampaignPageType.HOME;
     }
     if (
@@ -130,9 +193,6 @@ export class FlowEngineService {
       config.nodes.some((n) => n.pageType === config.entryPage)
     ) {
       return config.entryPage;
-    }
-    if (config.nodes.some((n) => n.pageType === CampaignPageType.HOME)) {
-      return CampaignPageType.HOME;
     }
     return config.nodes[0].pageType;
   }
@@ -152,10 +212,20 @@ export class FlowEngineService {
     return reachable;
   }
 
+  private conditionMatches(
+    edgeCondition: string | undefined,
+    wanted: FlowEdgeCondition,
+  ): boolean {
+    const edge = edgeCondition || 'DEFAULT';
+    if (edge === wanted) return true;
+    const aliases = CONDITION_ALIASES[wanted];
+    return aliases ? aliases.includes(edge) : false;
+  }
+
   /**
    * Resolve the next page from the graph given the source page + runtime outcome.
    * Falls back to a DEFAULT edge when no condition-specific edge exists.
-   * Returns null when the graph has no applicable edge (caller applies its own default).
+   * HEADER_* and legacy MSISDN_* conditions are treated as aliases.
    */
   nextPage(
     config: FlowConfig | null,
@@ -168,7 +238,7 @@ export class FlowEngineService {
 
     const outgoing = config.edges.filter((e) => e.source === sourceNode.id);
     const match =
-      outgoing.find((e) => (e.condition || 'DEFAULT') === condition) ||
+      outgoing.find((e) => this.conditionMatches(e.condition, condition)) ||
       outgoing.find((e) => (e.condition || 'DEFAULT') === 'DEFAULT');
     if (!match) return null;
 
@@ -176,15 +246,9 @@ export class FlowEngineService {
     return targetNode ? targetNode.pageType : null;
   }
 
-  /**
-   * Strip nodes (and their edges) that are not reachable from the HOME node.
-   * Required nodes (HOME, CONFIRM, and OTP when mode requires it) are never
-   * removed — if they are unreachable the validate() call that follows will
-   * surface the real error.
-   */
   stripUnreachableNodes(
     config: FlowConfig,
-    mode: VerificationMode,
+    _mode?: VerificationMode | null,
   ): FlowConfig {
     const entryPage = this.getEntryPage(config);
     const entryNode = config.nodes.find((n) => n.pageType === entryPage);
@@ -211,12 +275,9 @@ export class FlowEngineService {
     return { ...config, nodes: filteredNodes, edges: filteredEdges };
   }
 
-  /**
-   * Validate a graph against a verification mode. Returns human-readable errors.
-   */
   validate(
     config: FlowConfig,
-    mode: VerificationMode,
+    mode?: VerificationMode | null,
   ): { ok: boolean; errors: string[] } {
     const errors: string[] = [];
     const pageTypes = new Set(config.nodes.map((n) => n.pageType));
@@ -236,7 +297,11 @@ export class FlowEngineService {
       errors.push(`Verification mode ${mode} requires an OTP page node.`);
     }
 
-    // Every node should be reachable from the configured start page.
+    // NONE: only HOME is required; other pages may be reached via Priority Chain.
+    if (mode === 'NONE') {
+      return { ok: errors.length === 0, errors };
+    }
+
     if (entryNode) {
       const reachable = this.reachableNodeIds(config, entryNode.id);
       const unreachable = config.nodes.filter((n) => !reachable.has(n.id));

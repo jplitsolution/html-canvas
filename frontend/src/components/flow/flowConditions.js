@@ -1,7 +1,7 @@
 export const ALL_CONDITIONS = [
   'DEFAULT',
-  'MSISDN_RESOLVED',
-  'MSISDN_UNRESOLVED',
+  'HEADER_RESOLVED',
+  'HEADER_UNRESOLVED',
   'OTP_VERIFIED',
   'SUBSCRIBED',
   'BLOCKED',
@@ -10,8 +10,11 @@ export const ALL_CONDITIONS = [
 
 const CONDITION_LABELS = {
   DEFAULT: 'Default (next step)',
-  MSISDN_RESOLVED: 'Phone resolved',
-  MSISDN_UNRESOLVED: 'Phone not resolved',
+  HEADER_RESOLVED: 'Header injection OK',
+  HEADER_UNRESOLVED: 'Header injection missing',
+  // Legacy labels (old saved graphs)
+  MSISDN_RESOLVED: 'Header injection OK',
+  MSISDN_UNRESOLVED: 'Header injection missing',
   OTP_VERIFIED: 'OTP verified',
   SUBSCRIBED: 'Subscribed',
   BLOCKED: 'Blocked',
@@ -25,8 +28,15 @@ export function conditionLabel(condition) {
 export function getValidConditions(sourcePageType, verificationMode) {
   switch (sourcePageType) {
     case 'HOME':
-      if (verificationMode === 'MSISDN_ONLY') {
-        return ['MSISDN_RESOLVED', 'MSISDN_UNRESOLVED']
+      if (verificationMode === 'NONE') {
+        return ['DEFAULT']
+      }
+      if (
+        verificationMode === 'HEADER_INJECTION' ||
+        verificationMode === 'MSISDN_ONLY' ||
+        verificationMode === 'BOTH'
+      ) {
+        return ['HEADER_RESOLVED', 'HEADER_UNRESOLVED']
       }
       return ['DEFAULT']
     case 'OTP':

@@ -12,7 +12,17 @@ describe('FlowEngineService', () => {
     it('normalizes valid modes case-insensitively', () => {
       expect(engine.normalizeMode('both')).toBe('BOTH');
       expect(engine.normalizeMode('OTP_ONLY')).toBe('OTP_ONLY');
-      expect(engine.normalizeMode('msisdn_only')).toBe('MSISDN_ONLY');
+      expect(engine.normalizeMode('header_injection')).toBe('HEADER_INJECTION');
+      expect(engine.normalizeMode('none')).toBe('NONE');
+    });
+
+    it('maps legacy MSISDN_ONLY to HEADER_INJECTION', () => {
+      expect(engine.normalizeMode('msisdn_only')).toBe('HEADER_INJECTION');
+      expect(engine.normalizeMode('MSISDN_ONLY')).toBe('HEADER_INJECTION');
+    });
+
+    it('maps legacy NULL to NONE', () => {
+      expect(engine.normalizeMode('NULL')).toBe('NONE');
     });
 
     it('returns null for unknown / empty values', () => {
@@ -40,8 +50,18 @@ describe('FlowEngineService', () => {
   });
 
   describe('getDefaultFlowConfig', () => {
-    it('MSISDN_ONLY routes HOME to CONFIRM on resolved and ERROR on unresolved', () => {
-      const cfg = engine.getDefaultFlowConfig('MSISDN_ONLY');
+    it('HEADER_INJECTION routes HOME to CONFIRM on resolved and ERROR on unresolved', () => {
+      const cfg = engine.getDefaultFlowConfig('HEADER_INJECTION');
+      expect(
+        engine.nextPage(cfg, CampaignPageType.HOME, 'HEADER_RESOLVED'),
+      ).toBe(CampaignPageType.CONFIRM);
+      expect(
+        engine.nextPage(cfg, CampaignPageType.HOME, 'HEADER_UNRESOLVED'),
+      ).toBe(CampaignPageType.ERROR);
+    });
+
+    it('accepts legacy MSISDN_* conditions as aliases of HEADER_*', () => {
+      const cfg = engine.getDefaultFlowConfig('HEADER_INJECTION');
       expect(
         engine.nextPage(cfg, CampaignPageType.HOME, 'MSISDN_RESOLVED'),
       ).toBe(CampaignPageType.CONFIRM);
@@ -60,10 +80,27 @@ describe('FlowEngineService', () => {
       );
     });
 
-    it('BOTH requires OTP (HOME -> OTP by default)', () => {
+    it('BOTH: header OK → CONFIRM, missing → OTP', () => {
       const cfg = engine.getDefaultFlowConfig('BOTH');
-      expect(engine.nextPage(cfg, CampaignPageType.HOME, 'DEFAULT')).toBe(
-        CampaignPageType.OTP,
+      expect(
+        engine.nextPage(cfg, CampaignPageType.HOME, 'HEADER_RESOLVED'),
+      ).toBe(CampaignPageType.CONFIRM);
+      expect(
+        engine.nextPage(cfg, CampaignPageType.HOME, 'HEADER_UNRESOLVED'),
+      ).toBe(CampaignPageType.OTP);
+    });
+
+    it('NONE is HOME-only with no graph edges', () => {
+      const cfg = engine.getDefaultFlowConfig('NONE');
+      expect(cfg.entryPage).toBe(CampaignPageType.HOME);
+      expect(cfg.nodes.map((n) => n.pageType)).toEqual([CampaignPageType.HOME]);
+      expect(cfg.edges).toHaveLength(0);
+    });
+
+    it('HEADER_INJECTION default graph has no OTP node', () => {
+      const cfg = engine.getDefaultFlowConfig('HEADER_INJECTION');
+      expect(cfg.nodes.some((n) => n.pageType === CampaignPageType.OTP)).toBe(
+        false,
       );
     });
 
@@ -79,14 +116,22 @@ describe('FlowEngineService', () => {
         CampaignPageType.ERROR,
       );
     });
+
+    it('entry page is always HOME', () => {
+      expect(engine.getDefaultFlowConfig('BOTH').entryPage).toBe(
+        CampaignPageType.HOME,
+      );
+      expect(engine.getDefaultFlowConfig('HEADER_INJECTION').entryPage).toBe(
+        CampaignPageType.HOME,
+      );
+    });
   });
 
   describe('nextPage', () => {
     it('falls back to a DEFAULT edge when the condition has no specific edge', () => {
       const cfg = engine.getDefaultFlowConfig('OTP_ONLY');
-      // No MSISDN_RESOLVED edge exists in OTP_ONLY; falls back to DEFAULT (OTP).
       expect(
-        engine.nextPage(cfg, CampaignPageType.HOME, 'MSISDN_RESOLVED'),
+        engine.nextPage(cfg, CampaignPageType.HOME, 'HEADER_RESOLVED'),
       ).toBe(CampaignPageType.OTP);
     });
 
@@ -97,8 +142,7 @@ describe('FlowEngineService', () => {
 
   describe('validate', () => {
     it('flags missing OTP node for OTP_ONLY / BOTH', () => {
-      const cfg = engine.getDefaultFlowConfig('MSISDN_ONLY'); // has no OTP edges, but node exists
-      // Remove the OTP node to force the error.
+      const cfg = engine.getDefaultFlowConfig('HEADER_INJECTION');
       cfg.nodes = cfg.nodes.filter((n) => n.pageType !== CampaignPageType.OTP);
       const res = engine.validate(cfg, 'BOTH');
       expect(res.ok).toBe(false);
@@ -107,29 +151,24 @@ describe('FlowEngineService', () => {
 
     it('passes a valid BOTH graph', () => {
       const cfg = engine.getDefaultFlowConfig('BOTH');
-      const res = engine.validate(cfg, 'BOTH');
+      const stripped = engine.stripUnreachableNodes(cfg, 'BOTH');
+      const res = engine.validate(stripped, 'BOTH');
       expect(res.ok).toBe(true);
       expect(res.errors).toHaveLength(0);
     });
 
+    it('passes NONE with only HOME', () => {
+      const cfg = engine.getDefaultFlowConfig('NONE');
+      const res = engine.validate(cfg, 'NONE');
+      expect(res.ok).toBe(true);
+    });
+
     it('flags unreachable nodes from the start page', () => {
       const cfg = engine.getDefaultFlowConfig('BOTH');
-      // Drop all edges so only the start page is reachable.
       cfg.edges = [];
       const res = engine.validate(cfg, 'BOTH');
       expect(res.ok).toBe(false);
       expect(res.errors.join(' ')).toContain('Unreachable from start page');
-    });
-
-    it('allows OTP as the configured start page', () => {
-      const cfg = engine.getDefaultFlowConfig('OTP_ONLY');
-      cfg.entryPage = CampaignPageType.OTP;
-      cfg.edges = cfg.edges.filter(
-        (e) => e.source !== CampaignPageType.HOME && e.target !== CampaignPageType.HOME,
-      );
-      cfg.nodes = cfg.nodes.filter((n) => n.pageType !== CampaignPageType.HOME);
-      const res = engine.validate(cfg, 'OTP_ONLY');
-      expect(res.ok).toBe(true);
     });
   });
 });
