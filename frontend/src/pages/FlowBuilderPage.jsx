@@ -28,9 +28,26 @@ const nodeTypes = { pageNode: PageNode }
 const PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
 
 const VERIFICATION_MODES = [
-  { id: 'MSISDN_ONLY', label: 'MSISDN only', hint: 'Resolve number via ISP/header. If it fails, show Error.' },
-  { id: 'OTP_ONLY', label: 'OTP only', hint: 'Always verify with OTP. No MSISDN resolution.' },
-  { id: 'BOTH', label: 'Both (require both)', hint: 'Resolve number to prefill AND always require OTP.' },
+  {
+    id: 'HEADER_INJECTION',
+    label: 'Header Injection',
+    hint: 'Phone from carrier header / ISP. If missing → Error page.',
+  },
+  {
+    id: 'OTP_ONLY',
+    label: 'OTP only',
+    hint: 'After HOME CTA always go to OTP. No header injection.',
+  },
+  {
+    id: 'BOTH',
+    label: 'Header Injection + OTP',
+    hint: 'HOME first. CTA: header OK → Confirm, else → OTP.',
+  },
+  {
+    id: 'NONE',
+    label: 'None (Priority Chain)',
+    hint: 'No HE/OTP routing. Wire API / page / external redirect on HOME yourself.',
+  },
 ]
 
 function toRfNodes(flowConfig) {
@@ -53,8 +70,14 @@ function toRfEdges(flowConfig) {
   }))
 }
 
+function normalizeModeId(mode) {
+  if (mode === 'MSISDN_ONLY') return 'HEADER_INJECTION'
+  if (mode === 'NULL' || mode === null || mode === undefined || mode === '') return 'BOTH'
+  return mode || 'BOTH'
+}
+
 const DEFAULT_FLOWS = {
-  MSISDN_ONLY: {
+  HEADER_INJECTION: {
     entryPage: 'HOME',
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
@@ -64,12 +87,12 @@ const DEFAULT_FLOWS = {
       { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
     ],
     edges: [
-      { id: 'HOME-MSISDN_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'MSISDN_RESOLVED' },
-      { id: 'HOME-MSISDN_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'MSISDN_UNRESOLVED' },
+      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
+      { id: 'HOME-HEADER_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'HEADER_UNRESOLVED' },
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ]
+    ],
   },
   OTP_ONLY: {
     entryPage: 'HOME',
@@ -87,7 +110,7 @@ const DEFAULT_FLOWS = {
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ]
+    ],
   },
   BOTH: {
     entryPage: 'HOME',
@@ -100,13 +123,21 @@ const DEFAULT_FLOWS = {
       { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
     ],
     edges: [
-      { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
+      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
+      { id: 'HOME-HEADER_UNRESOLVED-OTP', source: 'HOME', target: 'OTP', condition: 'HEADER_UNRESOLVED' },
       { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ]
-  }
+    ],
+  },
+  NONE: {
+    entryPage: 'HOME',
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+    ],
+    edges: [],
+  },
 }
 
 function FlowBuilderPage() {
@@ -153,7 +184,7 @@ function FlowBuilderPage() {
     loadCampaignFlow(id)
       .then((res) => {
         if (cancelled) return
-        setMode(res.verificationMode || 'BOTH')
+        setMode(normalizeModeId(res.verificationMode))
         setEntryPage(res.flowConfig?.entryPage || 'HOME')
         setNodes(toRfNodes(res.flowConfig))
         setEdges(toRfEdges(res.flowConfig))
@@ -402,7 +433,7 @@ function FlowBuilderPage() {
 
     const flowConfig = {
       version: 1,
-      entryPage,
+      entryPage: 'HOME',
       nodes: nodes.map((n) => ({
         id: n.id,
         pageType: n.data.pageType,
@@ -519,22 +550,11 @@ function FlowBuilderPage() {
             <div className="surface-card p-3 shrink-0">
               <h3 className="text-sm font-semibold text-fg mb-1">Start page</h3>
               <p className="text-xs text-fg-muted mb-2">
-                First page users see when they open the subscription link.
+                Trust-first: users always land on HOME (intro). OTP / Confirm come after CTA.
               </p>
-              <select
-                className="w-full text-sm border border-border rounded-md px-2 py-2 bg-bg-base"
-                value={entryPage}
-                onChange={(ev) => setEntryPage(ev.target.value)}
-              >
-                {nodes.map((n) => (
-                  <option key={n.id} value={n.data.pageType}>
-                    {n.data.label}
-                  </option>
-                ))}
-              </select>
-              {nodes.length === 0 && (
-                <p className="text-xs text-fg-muted mt-2">Add a page node first.</p>
-              )}
+              <div className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-muted text-fg font-medium">
+                HOME (locked)
+              </div>
             </div>
 
             {selectedNode && (
@@ -725,6 +745,9 @@ function FlowBuilderPage() {
                   {VERIFICATION_MODES.find((m) => m.id === mode)?.label}
                 </span>
               </summary>
+              <p className="text-[11px] text-fg-muted mt-2 mb-1">
+                Client chooses how this campaign gets the phone number. HOME design stays free — no mandatory Subscribe button.
+              </p>
               <div className="space-y-2 mt-3">
                 {VERIFICATION_MODES.map((m) => (
                   <label
@@ -741,6 +764,9 @@ function FlowBuilderPage() {
                         onChange={() => handleModeChange(m.id)}
                       />
                       {m.label}
+                    </span>
+                    <span className="block text-[10px] text-fg-muted mt-1 pl-5 leading-snug">
+                      {m.hint}
                     </span>
                   </label>
                 ))}

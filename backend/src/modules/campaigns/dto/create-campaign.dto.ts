@@ -122,13 +122,19 @@ export class UpdateCampaignDto {
 
 export class UpdateFlowDto {
   @ApiPropertyOptional({
-    description: 'Verification mode',
-    enum: ['MSISDN_ONLY', 'OTP_ONLY', 'BOTH'],
+    description:
+      'Verification mode: HEADER_INJECTION | OTP_ONLY | BOTH | NONE (legacy MSISDN_ONLY → HEADER_INJECTION)',
+    enum: ['HEADER_INJECTION', 'OTP_ONLY', 'BOTH', 'NONE', 'MSISDN_ONLY'],
   })
   @IsOptional()
   @IsString()
-  @IsIn(['MSISDN_ONLY', 'OTP_ONLY', 'BOTH'])
-  verificationMode?: 'MSISDN_ONLY' | 'OTP_ONLY' | 'BOTH';
+  @IsIn(['HEADER_INJECTION', 'OTP_ONLY', 'BOTH', 'NONE', 'MSISDN_ONLY'])
+  verificationMode?:
+    | 'HEADER_INJECTION'
+    | 'OTP_ONLY'
+    | 'BOTH'
+    | 'NONE'
+    | 'MSISDN_ONLY';
 
   @ApiPropertyOptional({
     description: 'Flow graph: { version, nodes[], edges[] }',

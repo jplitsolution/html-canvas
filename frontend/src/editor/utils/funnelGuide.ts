@@ -7,8 +7,10 @@ export interface FunnelRequirement {
   label: string
   /** Plain-language explanation for non-technical clients */
   why: string
-  /** Substring that must appear in page HTML */
-  match: string
+  /** Substring that must appear in page HTML (legacy single match) */
+  match?: string
+  /** Any of these substrings counts as present */
+  matchAny?: string[]
   /** HTML inserted when the client re-adds this element (from banner or sidebar) */
   snippet: string
   /** Thumbnail key used for the sidebar block card */
@@ -56,26 +58,15 @@ export interface FunnelPageGuide {
 
 export const FUNNEL_PAGE_GUIDES: Partial<Record<FunnelPageType, FunnelPageGuide>> = {
   HOME: {
-    title: 'Subscribe page (Home)',
+    title: 'Home page',
     summary:
-      'User lands here first. When they tap Subscribe (button or image hotspot), the app talks to the server and moves them to Confirm or OTP via Flow Builder.',
+      'User lands here first. Design freely — any button or hotspot can start the flow. Verification mode (HE / OTP / both / none) is chosen in Flow Builder, not by a required Subscribe button.',
     canChange: [
-      'Headlines',
-      'Colors',
-      'Images',
-      'Feature list text',
-      'Button / hotspot label (keep data-action="SUBSCRIBE")',
+      'Everything on this page',
+      'Buttons, images, hotspots',
+      'Priority Chain steps (API / page / flow / external redirect)',
     ],
-    required: [
-      {
-        id: 'subscribe-btn',
-        label: 'Subscribe action',
-        why: 'Starts the subscription funnel. Use a visible button or an invisible image hotspot with Continue campaign flow.',
-        match: 'data-action="SUBSCRIBE"',
-        thumb: 'button',
-        snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
-      },
-    ],
+    required: [],
   },
   OTP: {
     title: 'OTP verification page',
@@ -194,7 +185,15 @@ export function validateFunnelPage(
   if (!guide || !editor) return { ok: true, missing: [], guide }
 
   const html = getPageHtml(editor)
-  const missing = guide.required.filter((req) => !html.includes(req.match))
+  const missing = guide.required.filter((req) => {
+    const needles = req.matchAny?.length
+      ? req.matchAny
+      : req.match
+        ? [req.match]
+        : []
+    if (needles.length === 0) return false
+    return !needles.some((n) => html.includes(n))
+  })
   return { ok: missing.length === 0, missing, guide }
 }
 
@@ -262,12 +261,20 @@ export function getFlowElementInfo(attrs: Record<string, string>): {
   description: string
 } | null {
   const action = attrs['data-action']
+  if (action === 'CHAIN' || attrs['data-actions']) {
+    return {
+      isSystem: true,
+      label: 'Priority Chain CTA (system)',
+      description:
+        'Runs Sequential Action Chain on click (API checks → pages / flow). This replaces the old Subscribe-only action.',
+    }
+  }
   if (action === 'SUBSCRIBE') {
     return {
       isSystem: true,
-      label: 'Subscribe action (system)',
+      label: 'Verification flow CTA (system)',
       description:
-        'Starts the subscription funnel. Works on a button or image hotspot — do not remove data-action="SUBSCRIBE".',
+        'On click: runs HE / OTP routing from Flow Builder mode. Label can be anything — action matters, not the word Subscribe. Optional if Priority Chain already handles navigation.',
     }
   }
   if (action === 'CONFIRM') {

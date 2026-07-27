@@ -104,18 +104,19 @@ export class FlowService {
   }
 
   /**
-   * Verification-mode-aware routing for HOME + SUBSCRIBE.
-   * - MSISDN_ONLY: resolve number (header or ISP API); resolved -> CONFIRM edge, else -> ERROR.
-   * - OTP_ONLY: always route to OTP.
-   * - BOTH: resolve to prefill if possible, but always require OTP.
+   * Verification-mode-aware routing for HOME + SUBSCRIBE (after CTA).
+   * - HEADER_INJECTION: carrier header / ISP; resolved → CONFIRM, else → ERROR
+   * - OTP_ONLY: always OTP
+   * - BOTH: header resolved → CONFIRM, else → OTP
+   * - NONE: no HE/OTP routing (Priority Chain on the page handles navigation)
    */
   private async resolveHomeSubscribeNext(
     mode: VerificationMode,
     flowConfig: ReturnType<FlowEngineService['parseFlowConfig']>,
     campaign: { country: string; operator: string },
     apiConfig: ApiConfig | null,
-    ctx: { phone: string; headerPhoneDetected: boolean; visitId: number },
-  ): Promise<CampaignPageType> {
+    ctx: { phone: string; visitPhone: string; visitId: number },
+  ): Promise<{ nextPage: CampaignPageType; resolvedPhone: string }> {
     const fromGraph = (
       condition: Parameters<FlowEngineService['nextPage']>[2],
       fallback: CampaignPageType,
@@ -123,38 +124,96 @@ export class FlowService {
       this.flowEngine.nextPage(flowConfig, CampaignPageType.HOME, condition) ||
       fallback;
 
-    if (mode === 'MSISDN_ONLY') {
-      let resolved = ctx.headerPhoneDetected || Boolean(ctx.phone);
-      if (!resolved) {
-        const isp = await this.partnerApiService.resolveMsisdn(apiConfig, {
-          country: campaign.country,
-          operator: campaign.operator,
-          hint: ctx.phone,
-        });
-        if (isp) {
-          resolved = true;
-          await this.analyticsService.setVisitPhone(ctx.visitId, isp);
-        }
-      }
-      return resolved
-        ? fromGraph('MSISDN_RESOLVED', CampaignPageType.CONFIRM)
-        : fromGraph('MSISDN_UNRESOLVED', CampaignPageType.ERROR);
+    if (mode === 'NONE') {
+      return {
+        nextPage: CampaignPageType.HOME,
+        resolvedPhone: ctx.phone || ctx.visitPhone || '',
+      };
     }
 
-    if (mode === 'BOTH' && !ctx.headerPhoneDetected && !ctx.phone) {
-      // Attempt to prefill the number, but OTP is still required.
+    let resolvedPhone = (ctx.phone || ctx.visitPhone || '').trim();
+
+    if (mode === 'OTP_ONLY') {
+      return {
+        nextPage: fromGraph('DEFAULT', CampaignPageType.OTP),
+        resolvedPhone,
+      };
+    }
+
+    // HEADER_INJECTION or BOTH — try carrier header / visit phone / ISP resolve
+    let resolved = Boolean(resolvedPhone);
+    if (!resolved) {
       const isp = await this.partnerApiService.resolveMsisdn(apiConfig, {
         country: campaign.country,
         operator: campaign.operator,
         hint: ctx.phone,
       });
       if (isp) {
+        resolved = true;
+        resolvedPhone = isp;
         await this.analyticsService.setVisitPhone(ctx.visitId, isp);
       }
     }
 
-    // OTP_ONLY and BOTH both require OTP.
-    return fromGraph('DEFAULT', CampaignPageType.OTP);
+    if (mode === 'HEADER_INJECTION') {
+      return {
+        nextPage: resolved
+          ? fromGraph('HEADER_RESOLVED', CampaignPageType.CONFIRM)
+          : fromGraph('HEADER_UNRESOLVED', CampaignPageType.ERROR),
+        resolvedPhone,
+      };
+    }
+
+    // BOTH
+    return {
+      nextPage: resolved
+        ? fromGraph('HEADER_RESOLVED', CampaignPageType.CONFIRM)
+        : fromGraph('HEADER_UNRESOLVED', CampaignPageType.OTP),
+      resolvedPhone,
+    };
+  }
+
+  /**
+   * If partner says already subscribed, prefer THANKYOU over CONFIRM.
+   */
+  private async maybeSkipToThankYouIfSubscribed(
+    flowConfig: ReturnType<FlowEngineService['parseFlowConfig']>,
+    apiConfig: ApiConfig | null,
+    campaign: { country: string; operator: string },
+    serviceId: string,
+    phone: string,
+    fromPage: CampaignPageType,
+    nextPage: CampaignPageType,
+  ): Promise<CampaignPageType> {
+    if (nextPage !== CampaignPageType.CONFIRM || !phone) return nextPage;
+    const subscribed = await this.partnerApiService
+      .checkSubscription(apiConfig, {
+        phone,
+        serviceId,
+        country: campaign.country,
+        operator: campaign.operator,
+      })
+      .catch(() => false);
+    if (!subscribed) return nextPage;
+    return (
+      this.flowEngine.nextPage(flowConfig, fromPage, 'SUBSCRIBED') ||
+      this.flowEngine.nextPage(flowConfig, CampaignPageType.CONFIRM, 'SUBSCRIBED') ||
+      CampaignPageType.THANKYOU
+    );
+  }
+
+  /**
+   * Has this visit completed OTP verification for the given phone?
+   */
+  private async hasVerifiedOtp(
+    visitId: number | undefined,
+    phone: string,
+  ): Promise<boolean> {
+    if (!visitId || !phone) return false;
+    const verifiedOtp = await this.otpRepository.findOne({
+      where: { phone, visitId, status: 'verified' },
+    });
+    return Boolean(verifiedOtp);
   }
 
   async getPage(input: {
@@ -229,69 +288,89 @@ export class FlowService {
     let resolvedPageType = input.pageType;
 
     // Enforce Route Guards for page access
-    const providerConfigured =
-      apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '';
-    const guardMode = this.flowEngine.normalizeMode(campaign.verificationMode);
-    // OTP verification is required for legacy provider setups and for the
-    // OTP_ONLY / BOTH verification modes. MSISDN_ONLY never gates on OTP.
-    const isOtpEnabled =
-      Boolean(providerConfigured) && (guardMode === 'OTP_ONLY' || guardMode === 'BOTH' || !guardMode);
-    if (isOtpEnabled) {
-      if (resolvedPageType === CampaignPageType.CONFIRM || resolvedPageType === CampaignPageType.THANKYOU) {
-        let isVerified = false;
-        if (visitId && phone) {
-          const verifiedOtp = await this.otpRepository.findOne({
-            where: {
-              phone,
-              visitId,
-              status: 'verified',
-            },
-          });
-          if (verifiedOtp) {
-            isVerified = true;
-          }
-        }
+    // Legacy rows with empty verificationMode behave like BOTH.
+    const guardMode =
+      this.flowEngine.normalizeMode(campaign.verificationMode) || 'BOTH';
 
+    if (
+      resolvedPageType === CampaignPageType.CONFIRM ||
+      resolvedPageType === CampaignPageType.THANKYOU
+    ) {
+      const isVerified = await this.hasVerifiedOtp(visitId, phone);
+      const hasPhone = Boolean(phone);
+
+      if (guardMode === 'OTP_ONLY') {
+        // CONFIRM / THANKYOU only after OTP (or already subscribed).
         if (!isVerified) {
-          // If already subscribed according to partner API, we can still show THANKYOU
-          const subscribed = await this.partnerApiService.checkSubscription(
-            apiConfig,
-            {
+          const subscribed = await this.partnerApiService
+            .checkSubscription(apiConfig, {
               phone,
               serviceId,
               country: campaign.country,
               operator: campaign.operator,
-            },
-          ).catch(() => false);
+            })
+            .catch(() => false);
 
           if (subscribed) {
             resolvedPageType = CampaignPageType.THANKYOU;
-          } else if (providerConfigured || (apiConfig && apiConfig.subscriptionApi && apiConfig.subscriptionApi.trim() !== '')) {
+          } else {
             resolvedPageType = phone ? CampaignPageType.OTP : entryPage;
-            this.logger.warn(`Route Guard: Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to ${resolvedPageType}`);
+            this.logger.warn(
+              `Route Guard (OTP_ONLY): Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to ${resolvedPageType}`,
+            );
           }
         }
-      }
-    } else {
-      if (resolvedPageType === CampaignPageType.CONFIRM && !phone) {
-        resolvedPageType = entryPage;
-      }
-      if (resolvedPageType === CampaignPageType.THANKYOU) {
-        if (apiConfig && apiConfig.subscriptionApi && apiConfig.subscriptionApi.trim() !== '') {
-          const subscribed = await this.partnerApiService.checkSubscription(
-            apiConfig,
-            {
+      } else if (guardMode === 'BOTH') {
+        // HE-resolved phone OR verified OTP may reach CONFIRM.
+        if (!isVerified && !hasPhone) {
+          resolvedPageType = CampaignPageType.OTP;
+          this.logger.warn(
+            `Route Guard (BOTH): Access to ${input.pageType} blocked for visitId=${visitId || 'n/a'}. Redirecting to OTP`,
+          );
+        } else if (
+          resolvedPageType === CampaignPageType.THANKYOU &&
+          !isVerified
+        ) {
+          const subscribed = await this.partnerApiService
+            .checkSubscription(apiConfig, {
               phone,
               serviceId,
               country: campaign.country,
               operator: campaign.operator,
-            },
-          ).catch(() => false);
+            })
+            .catch(() => false);
           if (!subscribed) {
-            resolvedPageType = phone ? CampaignPageType.CONFIRM : entryPage;
+            resolvedPageType = hasPhone
+              ? CampaignPageType.CONFIRM
+              : CampaignPageType.OTP;
+          }
+        }
+      } else if (guardMode === 'HEADER_INJECTION') {
+        if (resolvedPageType === CampaignPageType.CONFIRM && !hasPhone) {
+          resolvedPageType = entryPage;
+        }
+        if (resolvedPageType === CampaignPageType.THANKYOU) {
+          if (
+            apiConfig?.subscriptionApi &&
+            apiConfig.subscriptionApi.trim() !== ''
+          ) {
+            const subscribed = await this.partnerApiService
+              .checkSubscription(apiConfig, {
+                phone,
+                serviceId,
+                country: campaign.country,
+                operator: campaign.operator,
+              })
+              .catch(() => false);
+            if (!subscribed) {
+              resolvedPageType = hasPhone
+                ? CampaignPageType.CONFIRM
+                : entryPage;
+            }
           }
         }
       }
+      // NONE / null: Priority Chain may deep-link freely — no OTP gate.
     }
 
     if (!visitId) {
@@ -465,54 +544,69 @@ export class FlowService {
         VisitEventType.SUBSCRIBE_CLICK,
       );
 
-      let headerPhoneDetected = false;
+      let visitPhone = '';
       try {
         const visit = await this.analyticsService['visitRepository'].findOne({
           where: { id: input.visitId },
         });
-        if (visit && visit.phone && visit.phone.trim() !== '') {
-          headerPhoneDetected = true;
+        if (visit?.phone?.trim()) {
+          visitPhone = visit.phone.trim();
         }
       } catch (err) {
-        this.logger.error(`Error resolving visit in transition: ${(err as Error).message}`);
+        this.logger.error(
+          `Error resolving visit in transition: ${(err as Error).message}`,
+        );
       }
 
-      let isOtpEnabled = false;
-      if (apiConfig && apiConfig.otpProvider && apiConfig.otpProvider.trim() !== '') {
-        isOtpEnabled = true;
-      }
-
-      const mode = this.flowEngine.normalizeMode(campaign.verificationMode);
+      const mode =
+        this.flowEngine.normalizeMode(campaign.verificationMode) || 'BOTH';
       const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
 
       let nextPage: CampaignPageType;
-      if (mode) {
-        // New engine: verification-mode driven routing (graph-aware).
-        nextPage = await this.resolveHomeSubscribeNext(
+      let resolvedPhone = phone || visitPhone;
+
+      if (mode === 'NONE') {
+        // Priority Chain only — flow SUBSCRIBE is a no-op (stay on HOME).
+        nextPage = CampaignPageType.HOME;
+      } else {
+        const routed = await this.resolveHomeSubscribeNext(
           mode,
           flowConfig,
           campaign,
           apiConfig,
-          { phone, headerPhoneDetected, visitId: input.visitId },
+          { phone, visitPhone, visitId: input.visitId },
         );
-      } else if (isOtpEnabled) {
-        nextPage = headerPhoneDetected ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
-      } else {
-        nextPage = phone ? CampaignPageType.CONFIRM : CampaignPageType.OTP;
+        nextPage = routed.nextPage;
+        resolvedPhone = routed.resolvedPhone || resolvedPhone;
       }
+
+      // Already subscribed → skip CONFIRM
+      nextPage = await this.maybeSkipToThankYouIfSubscribed(
+        flowConfig,
+        apiConfig,
+        campaign,
+        serviceId,
+        resolvedPhone,
+        CampaignPageType.HOME,
+        nextPage,
+      );
 
       const nextStatus =
         nextPage === CampaignPageType.CONFIRM
           ? VisitStatus.CONFIRM_SHOWN
           : nextPage === CampaignPageType.OTP
             ? VisitStatus.OTP_SHOWN
-            : VisitStatus.HOME_SHOWN;
+            : nextPage === CampaignPageType.THANKYOU
+              ? VisitStatus.SUBSCRIBED
+              : nextPage === CampaignPageType.ERROR
+                ? VisitStatus.FAILED
+                : VisitStatus.HOME_SHOWN;
 
       await this.analyticsService.updateVisit(
         input.visitId,
         nextStatus,
         nextPage,
-        phone,
+        resolvedPhone || undefined,
       );
       if (nextPage === CampaignPageType.CONFIRM) {
         await this.analyticsService.logEvent(
@@ -524,9 +618,22 @@ export class FlowService {
           input.visitId,
           VisitEventType.OTP_VIEW,
         );
+      } else if (nextPage === CampaignPageType.THANKYOU) {
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.SUBSCRIBE_SUCCESS,
+          { info: 'Already subscribed after HE resolve' },
+        );
+      } else if (nextPage === CampaignPageType.ERROR) {
+        await this.analyticsService.logEvent(
+          input.visitId,
+          VisitEventType.SUBSCRIBE_FAILED,
+          { info: 'Header injection unresolved' },
+        );
       }
+
       const variables = {
-        phone,
+        phone: resolvedPhone,
         country: campaign.country,
         operator: campaign.operator,
         service_id: serviceId,
@@ -734,25 +841,45 @@ export class FlowService {
       }
 
       const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
-      const nextPage = this.flowEngine.nextPage(
+      let nextPage =
+        this.flowEngine.nextPage(
+          flowConfig,
+          CampaignPageType.OTP,
+          'OTP_VERIFIED',
+        ) || CampaignPageType.CONFIRM;
+
+      nextPage = await this.maybeSkipToThankYouIfSubscribed(
         flowConfig,
+        apiConfig,
+        campaign,
+        serviceId,
+        phone,
         CampaignPageType.OTP,
-        'OTP_VERIFIED',
-      ) || CampaignPageType.CONFIRM;
+        nextPage,
+      );
 
       this.logger.log(`OTP transition verified for visitId=${input.visitId} phone=${phone} → nextPage=${nextPage}`);
 
       await this.analyticsService.logEvent(
         input.visitId,
-        nextPage === CampaignPageType.CONFIRM ? VisitEventType.CONFIRM_VIEW : VisitEventType.HOME_VIEW,
-        { info: 'Transition from OTP verified successfully' }
+        nextPage === CampaignPageType.CONFIRM
+          ? VisitEventType.CONFIRM_VIEW
+          : nextPage === CampaignPageType.THANKYOU
+            ? VisitEventType.SUBSCRIBE_SUCCESS
+            : VisitEventType.HOME_VIEW,
+        {
+          info:
+            nextPage === CampaignPageType.THANKYOU
+              ? 'Already subscribed after OTP'
+              : 'Transition from OTP verified successfully',
+        },
       );
 
       const nextStatus =
         nextPage === CampaignPageType.CONFIRM
           ? VisitStatus.CONFIRM_SHOWN
           : nextPage === CampaignPageType.THANKYOU
-            ? VisitStatus.SUCCESS
+            ? VisitStatus.SUBSCRIBED
             : VisitStatus.HOME_SHOWN;
 
       await this.analyticsService.updateVisit(

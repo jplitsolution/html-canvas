@@ -57,7 +57,7 @@ export class Campaign {
   })
   trackings: CampaignTracking[];
 
-  /** Per-campaign verification policy: MSISDN_ONLY | OTP_ONLY | BOTH (null = legacy). */
+  /** Per-campaign verification: HEADER_INJECTION | OTP_ONLY | BOTH | NONE (legacy MSISDN_ONLY). */
   @Column({ name: 'verification_mode', type: 'varchar', length: 16, nullable: true })
   verificationMode?: string;
 

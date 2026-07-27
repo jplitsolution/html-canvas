@@ -455,6 +455,7 @@ export class CampaignsService {
   ): Promise<{ verificationMode: VerificationMode; flowConfig: FlowConfig }> {
     const campaign = await this.findOne(id, userId);
 
+    // Prefer explicit dto mode (including NONE). Do not silently coerce NONE → BOTH.
     const mode =
       this.flowEngine.normalizeMode(dto.verificationMode) ||
       this.flowEngine.normalizeMode(campaign.verificationMode) ||
@@ -477,6 +478,10 @@ export class CampaignsService {
     }
 
     campaign.verificationMode = mode;
+    // Trust-first invariant: entry is always HOME when HOME exists.
+    if (flowConfig.nodes.some((n) => n.pageType === 'HOME')) {
+      flowConfig.entryPage = 'HOME' as any;
+    }
     campaign.flowConfig = JSON.stringify(flowConfig);
     await this.campaignRepository.save(campaign);
     return { verificationMode: mode, flowConfig };

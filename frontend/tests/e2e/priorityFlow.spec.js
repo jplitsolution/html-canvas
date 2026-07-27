@@ -10,14 +10,14 @@ test('Full E2E: Priority Flow Subscribe button navigates to THANKYOU and Stays s
   const token = loginResult.data.accessToken
   const authHeaders = { Authorization: `Bearer ${token}` }
 
-  // Step 2: Update campaign 8 flow mode to MSISDN_ONLY so OTP route guard allows direct THANKYOU page
+  // Step 2: Update campaign 8 flow mode to HEADER_INJECTION so OTP route guard allows direct THANKYOU page
   const flowConfigRes = await request.get('http://localhost:3000/api/campaigns/8/flow', { headers: authHeaders })
   if (flowConfigRes.ok()) {
     const flowConfigData = await flowConfigRes.json()
     await request.put('http://localhost:3000/api/campaigns/8/flow', {
       headers: authHeaders,
       data: {
-        verificationMode: 'MSISDN_ONLY',
+        verificationMode: 'HEADER_INJECTION',
         flowConfig: flowConfigData.data?.flowConfig || flowConfigData.flowConfig
       }
     })
