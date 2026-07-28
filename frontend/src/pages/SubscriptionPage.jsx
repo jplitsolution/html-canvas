@@ -740,21 +740,39 @@ function SubscriptionPage() {
         try {
           actions = JSON.parse(node.getAttribute('data-actions') || '[]')
         } catch (e) {
-          console.error('Invalid data-actions JSON:', e)
+          console.error('[Priority Chain] FAIL — Invalid data-actions JSON:', e)
         }
 
         if (actions.length > 0) {
+          console.groupCollapsed(
+            `%c[Priority Chain] START — ${actions.length} step(s)`,
+            'color:#6366f1;font-weight:bold',
+          )
+          console.log('Button label:', (node.textContent || '').trim().slice(0, 80) || '(no label)')
+          console.table(
+            actions.map((s, idx) => ({
+              priority: idx + 1,
+              type: s.type,
+              url: s.url || '',
+              page: s.page || '',
+              section: s.section || '',
+            })),
+          )
+
           transitionLockRef.current = true
           setTransitioning(true)
           setError('')
 
+          let chainOutcome = 'NO_MATCH'
           try {
             for (let i = 0; i < actions.length; i++) {
               const step = actions[i]
+              const tag = `Priority ${i + 1} (${step.type})`
               if (step.type === 'api') {
                 const rawUrl = (step.url || '').trim()
                 const isInvalidUrl = !rawUrl || rawUrl === 'https://' || rawUrl === 'http://' || rawUrl === 'https:///' || rawUrl === 'http:///'
                 if (isInvalidUrl) {
+                  console.error(`[Priority Chain] ${tag} FAIL — API URL missing/incomplete:`, rawUrl || '(empty)')
                   throw new Error(`Priority ${i + 1} Error: API URL is missing or incomplete ("${rawUrl || ''}")`)
                 }
 
@@ -764,15 +782,19 @@ function SubscriptionPage() {
                   try {
                     const parsed = new URL(tempUrl)
                     if (!parsed.hostname) {
+                      console.error(`[Priority Chain] ${tag} FAIL — API URL host missing:`, rawUrl)
                       throw new Error(`Priority ${i + 1} Error: API URL host is missing ("${rawUrl}")`)
                     }
                   } catch (e) {
+                    if (e.message?.startsWith('Priority ')) throw e
+                    console.error(`[Priority Chain] ${tag} FAIL — Invalid API URL format:`, rawUrl)
                     throw new Error(`Priority ${i + 1} Error: Invalid API URL format ("${rawUrl}")`)
                   }
                 }
 
                 // If phone is missing, we cannot check subscription status yet — proceed to Priority 2 (OTP/CONFIRM page)
                 if ((rawUrl.includes('{{msisdn}}') || rawUrl.includes('{{phone}}')) && !phoneRef.current) {
+                  console.warn(`[Priority Chain] ${tag} SKIP — phone/msisdn not available yet → next step`)
                   continue
                 }
 
@@ -782,22 +804,31 @@ function SubscriptionPage() {
                   .replace(/\{\{country\}\}/gi, country || '')
                   .replace(/\{\{operator\}\}/gi, operator || '')
 
+                console.log(`[Priority Chain] ${tag} calling:`, formattedUrl)
+
                 let res = null
                 let fetchFailed = false
+                let fetchError = null
                 try {
                   res = await fetch(formattedUrl, { method: 'GET', mode: 'cors' })
                 } catch (err) {
                   fetchFailed = true
+                  fetchError = err
                 }
 
                 if (fetchFailed || !res || !res.ok) {
                   // Browser CORS or network issue: fallback gracefully to next priority step
+                  console.warn(
+                    `[Priority Chain] ${tag} FAIL (network/CORS/HTTP) → next step`,
+                    fetchFailed ? fetchError : { status: res?.status, statusText: res?.statusText },
+                  )
                   continue
                 }
 
                 const json = await res.json().catch(() => null)
                 if (json) {
                   if (json.responseCode === '500') {
+                    console.error(`[Priority Chain] ${tag} FAIL — engine error:`, json.responseMessage || json)
                     throw new Error(`Priority ${i + 1} Check Failed: ${json.responseMessage || 'Engine error'}`)
                   }
                   const nestedData = json.data || json
@@ -806,7 +837,19 @@ function SubscriptionPage() {
                     ? status.toLowerCase() === 'active'
                     : Boolean(json.subscribed || json.isSubscribed || json.active || nestedData.subscribed)
 
+                  console.log(`[Priority Chain] ${tag} response:`, {
+                    status,
+                    isSubscribed,
+                    responseCode: json.responseCode,
+                    body: json,
+                  })
+
                   if (isSubscribed) {
+                    console.log(
+                      `%c[Priority Chain] ${tag} PASS — already subscribed → THANKYOU`,
+                      'color:#16a34a;font-weight:bold',
+                    )
+                    chainOutcome = 'PASS_THANKYOU'
                     saveSession({
                       verificationStatus: 'verified',
                       visitId: visitIdRef.current,
@@ -821,11 +864,19 @@ function SubscriptionPage() {
                     await loadPage('THANKYOU')
                     break
                   }
+                  console.warn(`[Priority Chain] ${tag} FAIL — not subscribed → next step`)
+                } else {
+                  console.warn(`[Priority Chain] ${tag} FAIL — empty/invalid JSON → next step`)
                 }
               } else if (step.type === 'page') {
                 const targetPage = (step.page || '').toUpperCase()
                 const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
                 if (VALID_PAGES.includes(targetPage)) {
+                  console.log(
+                    `%c[Priority Chain] ${tag} PASS — navigate to ${targetPage}`,
+                    'color:#16a34a;font-weight:bold',
+                  )
+                  chainOutcome = `PASS_PAGE_${targetPage}`
                   if (targetPage === 'THANKYOU' || targetPage === 'CONFIRM') {
                     saveSession({
                       verificationStatus: 'verified',
@@ -842,7 +893,13 @@ function SubscriptionPage() {
                   await loadPage(targetPage)
                   break
                 }
+                console.error(`[Priority Chain] ${tag} FAIL — invalid page:`, step.page)
               } else if (step.type === 'flow') {
+                console.log(
+                  `%c[Priority Chain] ${tag} PASS — continue HE / OTP verification flow`,
+                  'color:#16a34a;font-weight:bold',
+                )
+                chainOutcome = 'PASS_FLOW'
                 const fromPage = pageDataRef.current?.pageType
                 const next = await transitionFlow({
                   visitId: visitIdRef.current,
@@ -858,18 +915,48 @@ function SubscriptionPage() {
                 const targetId = step.section
                 if (targetId) {
                   const targetEl = shadow.getElementById(targetId)
-                  if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  if (targetEl) {
+                    console.log(
+                      `%c[Priority Chain] ${tag} PASS — scroll to #${targetId}`,
+                      'color:#16a34a;font-weight:bold',
+                    )
+                    chainOutcome = `PASS_ANCHOR_${targetId}`
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                  } else {
+                    console.warn(`[Priority Chain] ${tag} FAIL — section #${targetId} not found`)
+                  }
+                } else {
+                  console.warn(`[Priority Chain] ${tag} FAIL — no section id`)
                 }
               } else if (step.type === 'external') {
                 if (step.url) {
+                  console.log(
+                    `%c[Priority Chain] ${tag} PASS — redirect to ${step.url}`,
+                    'color:#16a34a;font-weight:bold',
+                  )
+                  chainOutcome = 'PASS_EXTERNAL'
                   window.open(step.url, node.getAttribute('target') || '_self')
+                } else {
+                  console.error(`[Priority Chain] ${tag} FAIL — external URL missing`)
                 }
                 break
+              } else {
+                console.warn(`[Priority Chain] ${tag} SKIP — unknown type:`, step.type)
               }
             }
+            if (chainOutcome === 'NO_MATCH') {
+              console.warn('[Priority Chain] END — no step completed navigation (all API checks failed / skipped)')
+            } else {
+              console.log(
+                `%c[Priority Chain] END — ${chainOutcome}`,
+                'color:#16a34a;font-weight:bold',
+              )
+            }
           } catch (err) {
+            console.error('%c[Priority Chain] FAIL — chain aborted', 'color:#dc2626;font-weight:bold', err)
             setError(err.message || 'Action chain execution failed')
           } finally {
+            console.groupEnd()
             setTransitioning(false)
             transitionLockRef.current = false
           }
