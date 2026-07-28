@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
-import { getFlowElementInfo } from '../utils/funnelGuide';
+import { describeClickBehavior, getFlowElementInfo } from '../utils/funnelGuide';
 import { getLinkText, getTextContent, setLinkText, setTextContent } from '../utils/textContent';
 import { getSectionAnchorId, setSectionAnchorId, listSectionAnchorsOnPage, ANCHOR_PRESETS } from '../utils/sectionAnchor';
 import { mountAdvancedPanels, ensureComponentStylable } from '../utils/mountAdvancedPanels';
@@ -444,6 +444,7 @@ function ActionChainEditor({
       <p className="text-[11px] text-fg-muted leading-relaxed">
         Steps run in order. API check: if already subscribed → Thank you; otherwise continue to the next step.
         Use &quot;external&quot; for redirect-only (None mode). Use &quot;flow&quot; to run HE / OTP verification from Flow Builder.
+        On preview/live, open the browser console — each priority prints PASS / FAIL / SKIP.
       </p>
 
       <div className="space-y-2.5">
@@ -659,7 +660,18 @@ export function PropertyPanel() {
 
   const selected = editor?.getSelected() as Component | null;
   const kind = editor && selected ? getComponentKind(selected) : 'none';
-  const flowInfo = selected ? getFlowElementInfo((selected.getAttributes?.() || {}) as Record<string, string>) : null;
+  const selectedAttrs = (selected?.getAttributes?.() || {}) as Record<string, string>;
+  const flowInfo = selected ? getFlowElementInfo(selectedAttrs) : null;
+  const clickDetails =
+    selected && (kind === 'button' || kind === 'hotspot' || kind === 'link' || flowInfo)
+      ? flowInfo?.onClick?.length
+        ? flowInfo.onClick
+        : describeClickBehavior(selectedAttrs)
+      : null;
+  const showClickDestinationEditor =
+    kind === 'button' || kind === 'hotspot'
+      ? !flowInfo || flowInfo.editableActions
+      : false;
 
   useLayoutEffect(() => {
     setAnchorError(null);
@@ -733,13 +745,66 @@ export function PropertyPanel() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {flowInfo && (
-          <div className="rounded-lg border border-warning/40 bg-warning-muted/40 p-3 space-y-1">
+        {(flowInfo || clickDetails) && (
+          <div
+            className={`rounded-lg border p-3 space-y-2 ${
+              flowInfo
+                ? 'border-warning/40 bg-warning-muted/40'
+                : 'border-indigo-200 bg-indigo-50/30'
+            }`}
+          >
             <p className="text-xs font-semibold text-fg flex items-center gap-1.5">
-              <span className="inline-block w-2 h-2 rounded-full bg-warning" />
-              {flowInfo.label}
+              <span
+                className={`inline-block w-2 h-2 rounded-full ${
+                  flowInfo ? 'bg-warning' : 'bg-indigo-500'
+                }`}
+              />
+              {flowInfo?.label || 'What this does on click'}
             </p>
-            <p className="text-[11px] text-fg-muted leading-relaxed">{flowInfo.description}</p>
+            {flowInfo?.description && (
+              <p className="text-[11px] text-fg-muted leading-relaxed">{flowInfo.description}</p>
+            )}
+            {clickDetails && clickDetails.length > 0 && (
+              <div className="rounded-md border border-border/60 bg-bg-elevated/70 p-2 space-y-1.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-muted">
+                  On click — full detail
+                </p>
+                <ol className="list-decimal pl-4 space-y-1">
+                  {clickDetails.map((line, idx) => (
+                    <li key={idx} className="text-[11px] text-fg leading-relaxed">
+                      {line}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
+            {flowInfo?.steps && flowInfo.steps.length > 0 && (
+              <div className="rounded-md border border-border/60 bg-bg-elevated/70 p-2 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-fg-muted">
+                  Priority steps configured
+                </p>
+                <ul className="space-y-1">
+                  {flowInfo.steps.map((step, idx) => (
+                    <li
+                      key={idx}
+                      className="text-[11px] text-fg flex flex-wrap gap-x-1.5 gap-y-0.5"
+                    >
+                      <span className="font-semibold text-indigo-600">#{idx + 1}</span>
+                      <span className="font-mono text-[10px] bg-indigo-50 text-indigo-700 px-1 rounded">
+                        {step.type}
+                      </span>
+                      <span className="text-fg-muted break-all">
+                        {step.type === 'api' && (step.url || '(no URL)')}
+                        {step.type === 'page' && (step.page || '(no page)')}
+                        {step.type === 'external' && (step.url || '(no URL)')}
+                        {step.type === 'anchor' && `#${step.section || ''}`}
+                        {step.type === 'flow' && 'HE / OTP verification'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         )}
 
@@ -828,7 +893,7 @@ export function PropertyPanel() {
                 }}
               />
             </Field>
-            {!flowInfo && (
+            {showClickDestinationEditor && (
               <>
                 <Field label="When clicked, go to">
                   <select
@@ -836,6 +901,7 @@ export function PropertyPanel() {
                     value={(() => {
                       const attrs = selected.getAttributes() || {};
                       if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain';
+                      if (attrs['data-action'] === 'SUBSCRIBE') return 'flow';
                       const href = attrs.href || '';
                       if (href.startsWith('#')) return 'anchor';
                       if (href.startsWith('http://') || href.startsWith('https://')) return 'external';
@@ -852,6 +918,9 @@ export function PropertyPanel() {
                           ]),
                           href: '#',
                         });
+                      } else if (next === 'flow') {
+                        selected.removeAttributes('data-actions');
+                        selected.addAttributes({ 'data-action': 'SUBSCRIBE', href: '#' });
                       } else if (next === 'anchor') {
                         selected.removeAttributes('data-action');
                         selected.removeAttributes('data-actions');
@@ -869,6 +938,7 @@ export function PropertyPanel() {
                       update();
                     }}
                   >
+                    <option value="flow">Continue verification flow (HE / OTP)</option>
                     <option value="anchor">Another part of this page</option>
                     <option value="page">Another page in this campaign</option>
                     <option value="external">Another website</option>
@@ -882,14 +952,25 @@ export function PropertyPanel() {
                   const type =
                     attrs['data-action'] === 'CHAIN' || attrs['data-actions']
                       ? 'chain'
-                      : href.startsWith('#')
-                        ? 'anchor'
-                        : href.startsWith('http://') || href.startsWith('https://')
-                          ? 'external'
-                          : 'page';
+                      : attrs['data-action'] === 'SUBSCRIBE'
+                        ? 'flow'
+                        : href.startsWith('#')
+                          ? 'anchor'
+                          : href.startsWith('http://') || href.startsWith('https://')
+                            ? 'external'
+                            : 'page';
 
                   if (type === 'chain') {
                     return <ActionChainEditor selected={selected} editor={editor} update={update} />;
+                  }
+
+                  if (type === 'flow') {
+                    return (
+                      <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
+                        Starts the subscription funnel on preview/live. Next page comes from Flow Builder
+                        (OTP, Confirm, etc.). Open DevTools console on preview to see PASS / FAIL logs.
+                      </p>
+                    );
                   }
 
                   if (type === 'anchor') {

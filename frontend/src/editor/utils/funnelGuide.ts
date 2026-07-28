@@ -255,33 +255,128 @@ export function insertFunnelPart(editor: Editor | null, snippet: string): void {
   }
 }
 
-export function getFlowElementInfo(attrs: Record<string, string>): {
+export interface FlowActionStep {
+  type: 'api' | 'page' | 'external' | 'anchor' | 'flow' | string
+  url?: string
+  page?: string
+  section?: string
+}
+
+export interface FlowElementInfo {
   isSystem: boolean
+  /** When true, keep showing Action Chain / click destination editors */
+  editableActions: boolean
   label: string
   description: string
-} | null {
+  /** Plain-language lines of what happens on click (shown in editor) */
+  onClick: string[]
+  steps?: FlowActionStep[]
+}
+
+function parseActionSteps(raw: string | undefined): FlowActionStep[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function describeActionStep(step: FlowActionStep, index: number): string {
+  const n = index + 1
+  switch (step.type) {
+    case 'api':
+      return `Priority ${n}: Call API “${step.url || '(no URL)'}”. If already subscribed → Thank You. If fail / not subscribed → next priority.`
+    case 'page':
+      return `Priority ${n}: Open campaign page “${(step.page || '').toUpperCase() || '(none)'}”.`
+    case 'external':
+      return `Priority ${n}: Redirect to website “${step.url || '(no URL)'}”.`
+    case 'anchor':
+      return `Priority ${n}: Scroll to section “#${step.section || ''}” on this page.`
+    case 'flow':
+      return `Priority ${n}: Continue verification flow (HE / OTP) from Flow Builder settings.`
+    default:
+      return `Priority ${n}: Unknown action “${step.type}”.`
+  }
+}
+
+/** Human-readable summary of what this element does when the user clicks it. */
+export function describeClickBehavior(attrs: Record<string, string>): string[] {
   const action = attrs['data-action']
   if (action === 'CHAIN' || attrs['data-actions']) {
+    const steps = parseActionSteps(attrs['data-actions'])
+    if (steps.length === 0) {
+      return ['Priority Chain is set, but no steps configured yet. Add steps below.']
+    }
+    return [
+      'On click this runs a Sequential Action Chain (highest priority first):',
+      ...steps.map(describeActionStep),
+    ]
+  }
+  if (action === 'SUBSCRIBE') {
+    return [
+      'On click: starts verification (HE / OTP) using Flow Builder mode.',
+      'Button label can be anything — the action is what matters.',
+    ]
+  }
+  if (action === 'CONFIRM') {
+    return [
+      'On click: confirms the selected pack and triggers billing on the server.',
+      'Do not delete this button — only change the label / style if needed.',
+    ]
+  }
+  if (attrs['data-otp-action'] === 'send') {
+    return ['On click: sends an SMS OTP to the phone number entered above.']
+  }
+  if (attrs['data-otp-action'] === 'verify') {
+    return ['On click: verifies the OTP with the server and continues the subscription flow.']
+  }
+
+  const href = attrs.href || ''
+  if (href.startsWith('#')) {
+    return [`On click: scroll to section “${href}” on this page.`]
+  }
+  if (href.startsWith('http://') || href.startsWith('https://')) {
+    return [`On click: open website “${href}”.`]
+  }
+  if (href && href !== '#') {
+    return [`On click: go to campaign page “${href.toUpperCase()}”.`]
+  }
+  return ['On click: no destination configured yet.']
+}
+
+export function getFlowElementInfo(attrs: Record<string, string>): FlowElementInfo | null {
+  const action = attrs['data-action']
+  if (action === 'CHAIN' || attrs['data-actions']) {
+    const steps = parseActionSteps(attrs['data-actions'])
     return {
       isSystem: true,
-      label: 'Priority Chain CTA (system)',
+      editableActions: true,
+      label: 'Priority Chain CTA',
       description:
         'Runs Sequential Action Chain on click (API checks → pages / flow). This replaces the old Subscribe-only action.',
+      onClick: describeClickBehavior(attrs),
+      steps,
     }
   }
   if (action === 'SUBSCRIBE') {
     return {
       isSystem: true,
-      label: 'Verification flow CTA (system)',
+      editableActions: true,
+      label: 'Verification flow CTA',
       description:
         'On click: runs HE / OTP routing from Flow Builder mode. Label can be anything — action matters, not the word Subscribe. Optional if Priority Chain already handles navigation.',
+      onClick: describeClickBehavior(attrs),
     }
   }
   if (action === 'CONFIRM') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'Confirm button (system)',
       description: 'Completes billing. You can change the label — do not delete this button.',
+      onClick: describeClickBehavior(attrs),
     }
   }
 
@@ -289,15 +384,19 @@ export function getFlowElementInfo(attrs: Record<string, string>): {
   if (otpAction === 'send') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'Send OTP button (system)',
       description: 'Sends SMS code. Do not delete.',
+      onClick: describeClickBehavior(attrs),
     }
   }
   if (otpAction === 'verify') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'Verify OTP button (system)',
       description: 'Verifies the code with server. Do not delete.',
+      onClick: describeClickBehavior(attrs),
     }
   }
 
@@ -305,39 +404,49 @@ export function getFlowElementInfo(attrs: Record<string, string>): {
   if (otpField === 'phone') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'Phone input (system)',
       description: 'Required for OTP flow. Style it freely — do not delete.',
+      onClick: ['Not a button — user types their mobile number here.'],
     }
   }
   if (otpField === 'otp') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'OTP input (system)',
       description: 'Where user enters SMS code. Do not delete.',
+      onClick: ['Not a button — user types the SMS code here.'],
     }
   }
 
   if (attrs['data-otp-slot']) {
     return {
       isSystem: true,
+      editableActions: false,
       label: `${attrs['data-otp-slot'] === 'error' ? 'Error' : 'Status'} message area (system)`,
       description: 'App shows messages here. Can be invisible but must stay on the page.',
+      onClick: ['Not clickable — the app writes status / error text into this area.'],
     }
   }
 
   if (attrs['data-pack']) {
     return {
       isSystem: true,
+      editableActions: false,
       label: `Pack option: ${attrs['data-pack']} (system)`,
       description: 'User picks subscription pack. Do not remove pack buttons.',
+      onClick: [`On click: selects the “${attrs['data-pack']}” pack before Confirm.`],
     }
   }
 
   if (attrs['data-flow-pack-picker'] !== undefined || attrs['data-flow-pack-picker'] === '') {
     return {
       isSystem: true,
+      editableActions: false,
       label: 'Pack picker (system)',
       description: 'Contains daily / weekly / monthly options.',
+      onClick: ['Container for pack option buttons (daily / weekly / monthly).'],
     }
   }
 

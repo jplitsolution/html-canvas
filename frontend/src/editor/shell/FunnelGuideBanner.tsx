@@ -15,7 +15,35 @@ export function FunnelGuideBanner({ pageType }: FunnelGuideBannerProps) {
   useEffect(() => {
     if (!editor || !pageType) return
 
-    const refresh = () => setStatus(validateFunnelPage(editor, pageType))
+    let lastKey = ''
+
+    const refresh = () => {
+      const next = validateFunnelPage(editor, pageType)
+      setStatus(next)
+
+      const key = `${next.ok}:${next.missing.map((m) => m.id).join(',')}`
+      if (key === lastKey) return
+      lastKey = key
+
+      if (next.ok) {
+        console.log(
+          `%c[Funnel Check] PASS — ${pageType}`,
+          'color:#16a34a;font-weight:bold',
+          next.guide?.required?.length
+            ? { required: next.guide.required.map((r) => r.label), missing: [] }
+            : { note: 'No required parts on this page' },
+        )
+      } else {
+        console.warn(
+          `%c[Funnel Check] FAIL — ${pageType}`,
+          'color:#dc2626;font-weight:bold',
+          {
+            missing: next.missing.map((m) => ({ id: m.id, label: m.label, why: m.why })),
+            required: next.guide?.required?.map((r) => r.label) || [],
+          },
+        )
+      }
+    }
 
     refresh()
     editor.on('component:add', refresh)
