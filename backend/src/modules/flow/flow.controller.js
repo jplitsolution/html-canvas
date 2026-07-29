@@ -4,6 +4,22 @@ import { FlowService } from './flow.service';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity';
 import { PublicRateLimitGuard } from '../../common/guards/public-rate-limit.guard';
 
+function extractHeaderMsisdn(headers) {
+  if (!headers) return '';
+  const candidate =
+    headers['x-msisdn'] ||
+    headers['x-msisdn-number'] ||
+    headers['msisdn'] ||
+    headers['x-up-calling-line-id'] ||
+    headers['x-fh-msisdn'] ||
+    headers['user-identity-forward-msisdn'] ||
+    headers['http-msisdn'] ||
+    headers['x-network-info'] ||
+    headers['x-operator-msisdn'] ||
+    '';
+  return Array.isArray(candidate) ? candidate[0] : String(candidate || '');
+}
+
 @ApiTags('Public Flow')
 @Controller('flow')
 export class FlowController {
@@ -11,16 +27,29 @@ export class FlowController {
     this.flowService = flowService;
   }
 
+  @Get('detect-msisdn')
+  @ApiOperation({ summary: 'Detect MSISDN from incoming ISP headers and check subscription status' })
+  async detectMsisdn(@Query() query, @Req() req) {
+    const headerPhone = extractHeaderMsisdn(req.headers);
+    return this.flowService.detectMsisdn({
+      country: query.country,
+      operator: query.operator,
+      campid: query.campid,
+      phone: headerPhone || query.msisdn || query.phone,
+      ipAddress:
+        req.headers['x-forwarded-for'] ||
+        req.socket?.remoteAddress ||
+        '',
+      userAgent: req.headers['user-agent'] || '',
+    });
+  }
+
   @Get('page')
   @ApiOperation({
     summary: 'Resolve campaign page by country, operator, and step',
   })
   async getPage(@Query() query, @Req() req) {
-    const headerMsisdn =
-      req.headers['x-msisdn'] ||
-      req.headers['x-msisdn-number'] ||
-      req.headers['msisdn'] ||
-      '';
+    const headerMsisdn = extractHeaderMsisdn(req.headers);
     return this.flowService.getPage({
       country: query.country,
       operator: query.operator,

@@ -12,6 +12,7 @@ import { ApiConfig } from '../api-config/entities/api-config.entity.js';
 import { OtpRequest } from '../otp/entities/otp-request.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { isNumericCampid, parseTrackingId } from '../markets/tracking-id.util.js';
+import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 
 export const createFlowService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
@@ -56,12 +57,16 @@ export const createFlowService = () => {
     subscriptionUrl,
   ) => {
     const page = campaign.pages.find((p) => p.pageType === pageType);
-    if (!page?.template) {
-      const err = new Error(`Page ${pageType} not configured`);
-      err.statusCode = 404;
-      throw err;
+    let templateData = page?.template?.data;
+    if (!templateData) {
+      try {
+        templateData = getDefaultFunnelPageData(pageType);
+      } catch {
+        const err = new Error(`Page ${pageType} not configured`);
+        err.statusCode = 404;
+        throw err;
+      }
     }
-    const templateData = page.template.data || {};
     const resolvedPack = pack ? normalizePack(pack) : undefined;
     const resolvedSubscriptionUrl =
       subscriptionUrl ||
@@ -76,7 +81,7 @@ export const createFlowService = () => {
         flowEngineService.parseFlowConfig(campaign.flowConfig),
       ),
       status: status || pageType,
-      templateId: page.templateId,
+      templateId: page?.templateId || null,
       html: variableResolverService.replaceVariables(
         templateData.html || '',
         variables,
@@ -930,6 +935,67 @@ export const createFlowService = () => {
     throw err;
   };
 
+  const detectMsisdn = async (input) => {
+    let rawPhone = (input.phone || '').trim();
+    const campaign = await resolveCampaign(input).catch(() => null);
+    let apiConfig = null;
+    let serviceId = '';
+
+    if (campaign?.partnerId) {
+      const partner = await partnersService.findById(campaign.partnerId).catch(() => null);
+      if (partner?.apiConfigId) {
+        apiConfig = await getApiConfigRepo().findOne({
+          where: { id: partner.apiConfigId },
+        }).catch(() => null);
+      }
+      serviceId = partner?.serviceId || '';
+    }
+
+    if (!rawPhone && apiConfig?.resolveMsisdnUrl) {
+      const ispPhone = await partnerApiService.resolveMsisdn(apiConfig, {
+        country: input.country || campaign?.country,
+        operator: input.operator || campaign?.operator,
+        hint: input.phone,
+      }).catch(() => null);
+      if (ispPhone) {
+        rawPhone = ispPhone;
+      }
+    }
+
+    let subscribed = false;
+    let blocked = false;
+    let blockReason = null;
+
+    if (rawPhone && apiConfig) {
+      const [subRes, blockRes] = await Promise.all([
+        partnerApiService.checkSubscription(apiConfig, {
+          phone: rawPhone,
+          serviceId,
+          country: input.country || campaign?.country,
+          operator: input.operator || campaign?.operator,
+        }).catch(() => false),
+        partnerApiService.checkBlocked(apiConfig, {
+          phone: rawPhone,
+        }).catch(() => ({ blocked: false })),
+      ]);
+
+      subscribed = Boolean(subRes);
+      blocked = Boolean(blockRes?.blocked);
+      blockReason = blockRes?.reason || null;
+    }
+
+    return {
+      phone: rawPhone,
+      hasMsisdn: Boolean(rawPhone),
+      subscribed,
+      blocked,
+      blockReason,
+      country: input.country || campaign?.country,
+      operator: input.operator || campaign?.operator,
+      campaignId: campaign?.id || null,
+    };
+  };
+
   const getFlowEntry = async (input) => {
     const campaign = await resolveCampaign(input);
     if (!campaign) {
@@ -957,6 +1023,7 @@ export const createFlowService = () => {
     getPage,
     transition,
     getFlowEntry,
+    detectMsisdn,
     assertTrackingAssignmentAvailable,
     getActions,
     normalizePack,

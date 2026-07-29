@@ -10,6 +10,8 @@
  * 6. localhost dev fallback (development only)
  */
 
+import { detectMsisdnApi } from '../api/flow'
+
 const URL_KEYS = ['msisdn', 'phone', 'mobile', 'mob', 'MSISDN']
 const STORAGE_KEYS = ['templatecraft_msisdn', 'msisdn', 'phone', 'mobile']
 
@@ -55,16 +57,21 @@ export function persistPhone(phone) {
 }
 
 /**
- * Replace this function body when you receive operator / header-enrichment code.
- *
- * @example
- * export async function resolvePhoneFromOperator() {
- *   const response = await fetch('https://operator-api.example/msisdn', { credentials: 'include' })
- *   const data = await response.json()
- *   return normalizeMsisdn(data.msisdn)
- * }
+ * Resolves phone number from operator header enrichment API.
  */
-export async function resolvePhoneFromOperator() {
+export async function resolvePhoneFromOperator(context = {}) {
+  try {
+    const res = await detectMsisdnApi(context)
+    if (res && res.phone) {
+      return {
+        phone: normalizeMsisdn(res.phone),
+        subscribed: res.subscribed,
+        blocked: res.blocked,
+      }
+    }
+  } catch (err) {
+    console.warn('[resolvePhoneFromOperator] detection failed:', err)
+  }
   return null
 }
 
@@ -82,17 +89,15 @@ async function resolveCustomHook() {
 }
 
 function resolveDevFallback() {
-  // Keep URLs clean and ensure the OTP gate appears when MSISDN
-  // isn't truly available. If you need a dev override, pass it
-  // explicitly via URL (?msisdn=...) or storage.
   return ''
 }
 
 /**
  * @param {URLSearchParams} searchParams
- * @returns {Promise<{ phone: string, source: string }>}
+ * @param {Object} [context]
+ * @returns {Promise<{ phone: string, source: string, subscribed?: boolean, blocked?: boolean }>}
  */
-export async function resolvePhoneNumber(searchParams) {
+export async function resolvePhoneNumber(searchParams, context = {}) {
   const fromUrl = resolvePhoneFromUrl(searchParams)
   if (fromUrl) {
     persistPhone(fromUrl)
@@ -105,10 +110,16 @@ export async function resolvePhoneNumber(searchParams) {
     return { phone: fromCustom, source: 'custom' }
   }
 
-  const fromOperator = normalizeMsisdn(await resolvePhoneFromOperator())
-  if (fromOperator) {
-    persistPhone(fromOperator)
-    return { phone: fromOperator, source: 'operator' }
+  const operatorRes = await resolvePhoneFromOperator(context)
+  if (operatorRes && operatorRes.phone) {
+    const phone = normalizeMsisdn(operatorRes.phone)
+    persistPhone(phone)
+    return {
+      phone,
+      source: 'operator',
+      subscribed: operatorRes.subscribed,
+      blocked: operatorRes.blocked,
+    }
   }
 
   const fromStorage = resolvePhoneFromStorage()

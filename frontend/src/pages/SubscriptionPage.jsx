@@ -465,7 +465,7 @@ function SubscriptionPage() {
     let cancelled = false
     setPhoneResolving(true)
 
-    resolvePhoneNumber(new URLSearchParams(window.location.search)).then(({ phone: resolved }) => {
+    resolvePhoneNumber(new URLSearchParams(window.location.search), { country, operator, campid }).then(({ phone: resolved }) => {
       if (cancelled) return
       if (resolved) {
         phoneRef.current = resolved
