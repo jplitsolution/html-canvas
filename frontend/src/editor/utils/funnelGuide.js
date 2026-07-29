@@ -1,4 +1,4 @@
-// Reusable snippet fragments (kept in sync with backend/src/database/seed/default-funnel-pages.ts)
+// Reusable snippet fragments (kept in sync with backend/src/database/seed/default-funnel-pages.js)
 const phoneFieldSnippet = `
     <div style="text-align:left;margin-bottom:12px;">
       <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
