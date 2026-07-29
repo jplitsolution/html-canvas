@@ -1,46 +1,64 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index,
-} from 'typeorm';
-import { Vendor } from './vendor.entity';
+import { EntitySchema } from 'typeorm';
 
-@Entity('affiliates')
-@Index(['userId', 'code'], { unique: true })
-export class Affiliate {
-  @PrimaryGeneratedColumn()
-  id;
+export class Affiliate {}
 
-  @Index()
-  @Column({ name: 'vendor_id' })
-  vendorId;
-
-  @ManyToOne(() => Vendor, (vendor) => vendor.affiliates, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'vendor_id' })
-  vendor;
-
-  @Column()
-  name;
-
-  @Column()
-  code;
-
-  @Column({ name: 'user_id' })
-  userId;
-
-  @Column({ default: true })
-  active;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt;
-}
+export const AffiliateSchema = new EntitySchema({
+  name: 'Affiliate',
+  target: Affiliate,
+  tableName: 'affiliates',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    vendorId: {
+      name: 'vendor_id',
+      type: 'int',
+    },
+    name: {
+      type: 'varchar',
+    },
+    code: {
+      type: 'varchar',
+    },
+    userId: {
+      name: 'user_id',
+      type: 'int',
+    },
+    active: {
+      type: 'boolean',
+      default: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+  relations: {
+    vendor: {
+      type: 'many-to-one',
+      target: 'Vendor',
+      inverseSide: 'affiliates',
+      joinColumn: { name: 'vendor_id' },
+      onDelete: 'CASCADE',
+    },
+  },
+  indices: [
+    {
+      name: 'IDX_AFFILIATE_USER_CODE',
+      unique: true,
+      columns: ['userId', 'code'],
+    },
+    {
+      name: 'IDX_AFFILIATE_VENDOR_ID',
+      columns: ['vendorId'],
+    },
+  ],
+});

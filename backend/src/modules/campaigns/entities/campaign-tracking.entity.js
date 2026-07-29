@@ -1,46 +1,60 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  ManyToOne,
-  JoinColumn,
-  CreateDateColumn,
-  Column,
-} from 'typeorm';
-import { Campaign } from './campaign.entity';
-import { Vendor } from '../../partners/entities/vendor.entity';
-import { Affiliate } from '../../partners/entities/affiliate.entity';
+import { EntitySchema } from 'typeorm';
 
-@Entity('campaign_trackings')
-export class CampaignTracking {
-  @PrimaryGeneratedColumn()
-  id;
+export class CampaignTracking {}
 
-  @Column({ name: 'campaign_id' })
-  campaignId;
-
-  @ManyToOne(() => Campaign, (campaign) => campaign.trackings, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'campaign_id' })
-  campaign;
-
-  @Column({ name: 'vendor_id' })
-  vendorId;
-
-  @ManyToOne(() => Vendor, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'vendor_id' })
-  vendor;
-
-  @Column({ name: 'affiliate_id', nullable: true })
-  affiliateId;
-
-  @ManyToOne(() => Affiliate, { onDelete: 'CASCADE', nullable: true })
-  @JoinColumn({ name: 'affiliate_id' })
-  affiliate;
-
-  @Column({ default: true })
-  active;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-}
+export const CampaignTrackingSchema = new EntitySchema({
+  name: 'CampaignTracking',
+  target: CampaignTracking,
+  tableName: 'campaign_trackings',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    campaignId: {
+      name: 'campaign_id',
+      type: 'int',
+    },
+    vendorId: {
+      name: 'vendor_id',
+      type: 'int',
+    },
+    affiliateId: {
+      name: 'affiliate_id',
+      type: 'int',
+      nullable: true,
+    },
+    active: {
+      type: 'boolean',
+      default: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+  },
+  relations: {
+    campaign: {
+      type: 'many-to-one',
+      target: 'Campaign',
+      inverseSide: 'trackings',
+      joinColumn: { name: 'campaign_id' },
+      onDelete: 'CASCADE',
+    },
+    vendor: {
+      type: 'many-to-one',
+      target: 'Vendor',
+      joinColumn: { name: 'vendor_id' },
+      onDelete: 'CASCADE',
+    },
+    affiliate: {
+      type: 'many-to-one',
+      target: 'Affiliate',
+      joinColumn: { name: 'affiliate_id' },
+      onDelete: 'CASCADE',
+      nullable: true,
+    },
+  },
+});

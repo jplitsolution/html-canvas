@@ -1,42 +1,31 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  ForbiddenException,
-  Inject,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Country } from './entities/country.entity';
-import { Operator } from './entities/operator.entity';
-import { Campaign } from '../campaigns/entities/campaign.entity';
-import {
-  buildTrackingId,
-  normalizeCode,
-} from './tracking-id.util';
+import { getRepository } from '../../database/index.js';
+import { Country } from './entities/country.entity.js';
+import { Operator } from './entities/operator.entity.js';
+import { Campaign } from '../campaigns/entities/campaign.entity.js';
+import { buildTrackingId, normalizeCode } from './tracking-id.util.js';
 
-@Injectable()
-export class MarketsService {
-  constructor(
-    @InjectRepository(Country)
-    countryRepository,
-    @InjectRepository(Operator)
-    operatorRepository,
-    @InjectRepository(Campaign)
-    campaignRepository,
-  ) {
-    this.countryRepository = countryRepository;
-    this.operatorRepository = operatorRepository;
-    this.campaignRepository = campaignRepository;
-  }
+export const createMarketsService = () => {
+  const getCountryRepo = () => getRepository(Country);
+  const getOperatorRepo = () => getRepository(Operator);
+  const getCampaignRepo = () => getRepository(Campaign);
 
-  async listMarkets(userId) {
-    const operators = await this.operatorRepository.find({
+  const attachTrackingId = (campaign, countryCode, operatorCode) => {
+    const cc = countryCode || campaign.marketOperator?.country?.code || '';
+    const oc = operatorCode || campaign.marketOperator?.code || '';
+    if (cc && oc && campaign.id) {
+      campaign.trackingId = buildTrackingId(cc, oc, campaign.id);
+    }
+    return campaign;
+  };
+
+  const listMarkets = async (userId) => {
+    const operators = await getOperatorRepo().find({
       where: { userId },
       relations: { country: true },
       order: { updatedAt: 'DESC' },
     });
 
-    const counts = await this.campaignRepository
+    const counts = await getCampaignRepo()
       .createQueryBuilder('c')
       .select('c.operatorId', 'operatorId')
       .addSelect('COUNT(*)', 'cnt')
@@ -58,24 +47,23 @@ export class MarketsService {
       operatorCode: op.code,
       campaignCount: countMap.get(op.id) || 0,
     }));
-  }
+  };
 
-  async createMarket(
-    dto,
-    userId,
-  ) {
+  const createMarket = async (dto, userId) => {
     const countryCode = normalizeCode(dto.countryCode);
     const operatorCode = normalizeCode(dto.operatorCode);
     if (!countryCode || !operatorCode) {
-      throw new ConflictException('countryCode and operatorCode are required');
+      const err = new Error('countryCode and operatorCode are required');
+      err.statusCode = 409;
+      throw err;
     }
 
-    let country = await this.countryRepository.findOne({
+    let country = await getCountryRepo().findOne({
       where: { userId, code: countryCode },
     });
     if (!country) {
-      country = await this.countryRepository.save(
-        this.countryRepository.create({
+      country = await getCountryRepo().save(
+        getCountryRepo().create({
           name: dto.countryName.trim(),
           code: countryCode,
           userId,
@@ -83,18 +71,18 @@ export class MarketsService {
       );
     }
 
-    const existingOp = await this.operatorRepository.findOne({
+    const existingOp = await getOperatorRepo().findOne({
       where: { countryId: country.id, code: operatorCode },
       relations: { country: true },
     });
     if (existingOp) {
-      throw new ConflictException(
-        `Market already exists for ${country.code} / ${operatorCode}`,
-      );
+      const err = new Error(`Market already exists for ${country.code} / ${operatorCode}`);
+      err.statusCode = 409;
+      throw err;
     }
 
-    const operator = await this.operatorRepository.save(
-      this.operatorRepository.create({
+    const operator = await getOperatorRepo().save(
+      getOperatorRepo().create({
         name: dto.operatorName.trim(),
         code: operatorCode,
         countryId: country.id,
@@ -111,45 +99,41 @@ export class MarketsService {
       operatorCode: operator.code,
       campaignCount: 0,
     };
-  }
+  };
 
-  async findMarketByCodes(
-    countryCode,
-    operatorCode,
-    userId,
-  ) {
+  const findMarketByCodes = async (countryCode, operatorCode, userId) => {
     const cc = normalizeCode(countryCode);
     const oc = normalizeCode(operatorCode);
 
-    const country = await this.countryRepository.findOne({
+    const country = await getCountryRepo().findOne({
       where: { userId, code: cc },
     });
     if (!country) {
-      throw new NotFoundException(`Country ${cc} not found`);
+      const err = new Error(`Country ${cc} not found`);
+      err.statusCode = 404;
+      throw err;
     }
 
-    const operator = await this.operatorRepository.findOne({
+    const operator = await getOperatorRepo().findOne({
       where: { countryId: country.id, code: oc, userId },
       relations: { country: true },
     });
     if (!operator) {
-      throw new NotFoundException(`Operator ${oc} not found for ${cc}`);
+      const err = new Error(`Operator ${oc} not found for ${cc}`);
+      err.statusCode = 404;
+      throw err;
     }
 
     return { country, operator };
-  }
+  };
 
-  async getMarket(
-    countryCode,
-    operatorCode,
-    userId,
-  ) {
-    const { country, operator } = await this.findMarketByCodes(
+  const getMarket = async (countryCode, operatorCode, userId) => {
+    const { country, operator } = await findMarketByCodes(
       countryCode,
       operatorCode,
       userId,
     );
-    const campaignCount = await this.campaignRepository.count({
+    const campaignCount = await getCampaignRepo().count({
       where: { operatorId: operator.id, userId },
     });
     return {
@@ -161,20 +145,16 @@ export class MarketsService {
       operatorCode: operator.code,
       campaignCount,
     };
-  }
+  };
 
-  async listCampaignsForMarket(
-    countryCode,
-    operatorCode,
-    userId,
-  ) {
-    const { country, operator } = await this.findMarketByCodes(
+  const listCampaignsForMarket = async (countryCode, operatorCode, userId) => {
+    const { country, operator } = await findMarketByCodes(
       countryCode,
       operatorCode,
       userId,
     );
 
-    const campaigns = await this.campaignRepository.find({
+    const campaigns = await getCampaignRepo().find({
       where: { operatorId: operator.id, userId },
       relations: {
         pages: { template: true },
@@ -185,7 +165,7 @@ export class MarketsService {
     });
 
     return campaigns.map((c) => {
-      const withId = this.attachTrackingId(c, country.code, operator.code);
+      const withId = attachTrackingId(c, country.code, operator.code);
       if (withId.pages) {
         withId.pages = withId.pages.map((page) => {
           if (page.template?.data) {
@@ -201,19 +181,23 @@ export class MarketsService {
       }
       return withId;
     });
-  }
+  };
 
-  async resolveOperatorForCreate(input) {
+  const resolveOperatorForCreate = async (input) => {
     if (input.operatorId) {
-      const operator = await this.operatorRepository.findOne({
-        where: { id: input.operatorId },
+      const operator = await getOperatorRepo().findOne({
+        where: { id: parseInt(input.operatorId, 10) },
         relations: { country: true },
       });
       if (!operator) {
-        throw new NotFoundException(`Operator ${input.operatorId} not found`);
+        const err = new Error(`Operator ${input.operatorId} not found`);
+        err.statusCode = 404;
+        throw err;
       }
       if (operator.userId !== input.userId) {
-        throw new ForbiddenException('You do not have access to this market');
+        const err = new Error('You do not have access to this market');
+        err.statusCode = 403;
+        throw err;
       }
       return { country: operator.country, operator };
     }
@@ -221,17 +205,17 @@ export class MarketsService {
     const countryCode = normalizeCode(input.countryCode || '');
     const operatorCode = normalizeCode(input.operatorCode || '');
     if (!countryCode || !operatorCode) {
-      throw new ConflictException(
-        'operatorId or countryCode+operatorCode is required',
-      );
+      const err = new Error('operatorId or countryCode+operatorCode is required');
+      err.statusCode = 409;
+      throw err;
     }
 
-    let country = await this.countryRepository.findOne({
+    let country = await getCountryRepo().findOne({
       where: { userId: input.userId, code: countryCode },
     });
     if (!country) {
-      country = await this.countryRepository.save(
-        this.countryRepository.create({
+      country = await getCountryRepo().save(
+        getCountryRepo().create({
           name: (input.countryName || countryCode).trim(),
           code: countryCode,
           userId: input.userId,
@@ -239,7 +223,7 @@ export class MarketsService {
       );
     }
 
-    let operator = await this.operatorRepository.findOne({
+    let operator = await getOperatorRepo().findOne({
       where: {
         countryId: country.id,
         code: operatorCode,
@@ -248,8 +232,8 @@ export class MarketsService {
       relations: { country: true },
     });
     if (!operator) {
-      operator = await this.operatorRepository.save(
-        this.operatorRepository.create({
+      operator = await getOperatorRepo().save(
+        getOperatorRepo().create({
           name: (input.operatorName || operatorCode).trim(),
           code: operatorCode,
           countryId: country.id,
@@ -260,21 +244,17 @@ export class MarketsService {
     }
 
     return { country, operator };
-  }
+  };
 
-  attachTrackingId(
-    campaign,
-    countryCode,
-    operatorCode,
-  ) {
-    const cc =
-      countryCode ||
-      campaign.marketOperator?.country?.code ||
-      '';
-    const oc = operatorCode || campaign.marketOperator?.code || '';
-    if (cc && oc && campaign.id) {
-      campaign.trackingId = buildTrackingId(cc, oc, campaign.id);
-    }
-    return campaign;
-  }
-}
+  return {
+    listMarkets,
+    createMarket,
+    findMarketByCodes,
+    getMarket,
+    listCampaignsForMarket,
+    resolveOperatorForCreate,
+    attachTrackingId,
+  };
+};
+
+export const marketsService = createMarketsService();

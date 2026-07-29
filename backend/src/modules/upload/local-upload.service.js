@@ -1,51 +1,15 @@
-import { Injectable, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { mkdir, writeFile } from 'fs/promises';
 import { join } from 'path';
 import { randomUUID } from 'crypto';
+import getConfig from '../../config/configuration.js';
 
-@Injectable()
-export class LocalUploadService {
-  constructor(@Inject(ConfigService) configService) {
-    this.configService = configService;
-    this.uploadDir =
-      this.configService.get('uploads.localDir') ||
-      join(process.cwd(), 'uploads');
-    this.publicPath =
-      this.configService.get('uploads.publicPath') || '/api/media';
-    this.prefix = (
-      this.configService.get('uploads.prefix') || 'templatecraft'
-    ).replace(/^\/+|\/+$/g, '');
-  }
+export const createLocalUploadService = () => {
+  const config = getConfig();
+  const uploadDir = config.uploads?.localDir || join(process.cwd(), 'uploads');
+  const publicPath = config.uploads?.publicPath || '/api/media';
+  const prefix = (config.uploads?.prefix || 'templatecraft').replace(/^\/+|\/+$/g, '');
 
-  async uploadImage(file) {
-    if (!file?.buffer?.length) {
-      throw new Error('No file provided');
-    }
-
-    const ext =
-      this.extensionFromMime(file.mimetype) ||
-      this.extensionFromName(file.originalname) ||
-      'jpg';
-    const key = `${this.prefix}/${Date.now()}-${randomUUID()}.${ext}`;
-    const absolutePath = join(this.uploadDir, key);
-
-    await mkdir(join(this.uploadDir, this.prefix), { recursive: true });
-    await writeFile(absolutePath, file.buffer);
-
-    return {
-      url: `${this.publicPath}/${key}`,
-      key,
-      format: ext,
-      bytes: file.size,
-    };
-  }
-
-  getUploadDir() {
-    return this.uploadDir;
-  }
-
-  extensionFromMime(mime) {
+  const extensionFromMime = (mime) => {
     const map = {
       'image/jpeg': 'jpg',
       'image/jpg': 'jpg',
@@ -56,10 +20,40 @@ export class LocalUploadService {
       'image/avif': 'avif',
     };
     return map[mime] || null;
-  }
+  };
 
-  extensionFromName(name) {
+  const extensionFromName = (name) => {
     const match = name?.match(/\.([a-zA-Z0-9]+)$/);
     return match ? match[1].toLowerCase() : null;
-  }
-}
+  };
+
+  const uploadImage = async (file) => {
+    if (!file?.buffer?.length) {
+      throw new Error('No file provided');
+    }
+
+    const ext =
+      extensionFromMime(file.mimetype) ||
+      extensionFromName(file.filename || file.originalname) ||
+      'jpg';
+    const key = `${prefix}/${Date.now()}-${randomUUID()}.${ext}`;
+    const absolutePath = join(uploadDir, key);
+
+    await mkdir(join(uploadDir, prefix), { recursive: true });
+    await writeFile(absolutePath, file.buffer);
+
+    return {
+      url: `${publicPath}/${key}`,
+      key,
+      format: ext,
+      bytes: file.buffer.length || file.size || 0,
+    };
+  };
+
+  return {
+    uploadImage,
+    getUploadDir: () => uploadDir,
+  };
+};
+
+export const localUploadService = createLocalUploadService();

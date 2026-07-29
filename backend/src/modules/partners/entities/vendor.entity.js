@@ -1,38 +1,54 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  OneToMany,
-  Index,
-} from 'typeorm';
-import { Affiliate } from './affiliate.entity';
+import { EntitySchema } from 'typeorm';
 
-@Entity('vendors')
-@Index(['userId', 'code'], { unique: true })
-export class Vendor {
-  @PrimaryGeneratedColumn()
-  id;
+export class Vendor {}
 
-  @Column()
-  name;
-
-  @Column()
-  code;
-
-  @Column({ name: 'user_id' })
-  userId;
-
-  @Column({ default: true })
-  active;
-
-  @OneToMany(() => Affiliate, (affiliate) => affiliate.vendor)
-  affiliates;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt;
-}
+export const VendorSchema = new EntitySchema({
+  name: 'Vendor',
+  target: Vendor,
+  tableName: 'vendors',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    name: {
+      type: 'varchar',
+    },
+    code: {
+      type: 'varchar',
+    },
+    userId: {
+      name: 'user_id',
+      type: 'int',
+    },
+    active: {
+      type: 'boolean',
+      default: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+  relations: {
+    affiliates: {
+      type: 'one-to-many',
+      target: 'Affiliate',
+      inverseSide: 'vendor',
+    },
+  },
+  indices: [
+    {
+      name: 'IDX_VENDOR_USER_CODE',
+      unique: true,
+      columns: ['userId', 'code'],
+    },
+  ],
+});

@@ -1,22 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Template } from './entities/template.entity';
+import { getRepository } from '../../database/index.js';
+import { Template } from './entities/template.entity.js';
 
-@Injectable()
-export class TemplatesService {
-  constructor(
-    @InjectRepository(Template)
-    templateRepository,
-  ) {
-    this.templateRepository = templateRepository;
-  }
+export const createTemplatesService = () => {
+  const getRepo = () => getRepository(Template);
 
-  async findAllPrebuilt() {
-    const templates = await this.templateRepository.find({
+  const findAllPrebuilt = async () => {
+    const templates = await getRepo().find({
       where: { isPrebuilt: true },
       order: { createdAt: 'DESC' },
     });
@@ -29,10 +18,10 @@ export class TemplatesService {
       }
       return template;
     });
-  }
+  };
 
-  async findUserTemplates(userId) {
-    const templates = await this.templateRepository.find({
+  const findUserTemplates = async (userId) => {
+    const templates = await getRepo().find({
       where: { userId, isPrebuilt: false },
       order: { updatedAt: 'DESC' },
     });
@@ -45,37 +34,51 @@ export class TemplatesService {
       }
       return template;
     });
-  }
+  };
 
-  async findOne(id, userId) {
-    const template = await this.templateRepository.findOne({ where: { id } });
+  const findOne = async (id, userId) => {
+    const template = await getRepo().findOne({ where: { id: parseInt(id, 10) } });
     if (!template) {
-      throw new NotFoundException(`Template with ID ${id} not found`);
+      const err = new Error(`Template with ID ${id} not found`);
+      err.statusCode = 404;
+      throw err;
     }
 
     if (!template.isPrebuilt && template.userId !== userId) {
-      throw new ForbiddenException(
-        'You do not have permission to access this template',
-      );
+      const err = new Error('You do not have permission to access this template');
+      err.statusCode = 403;
+      throw err;
     }
 
     return template;
-  }
+  };
 
-  async create(createTemplateDto, userId) {
-    const template = this.templateRepository.create({
+  const create = async (createTemplateDto, userId) => {
+    const template = getRepo().create({
       ...createTemplateDto,
       userId,
       isPrebuilt: userId ? (createTemplateDto.isPrebuilt ?? false) : true,
     });
-    return this.templateRepository.save(template);
-  }
+    return getRepo().save(template);
+  };
 
-  async remove(id, userId) {
-    const template = await this.findOne(id, userId);
+  const remove = async (id, userId) => {
+    const template = await findOne(id, userId);
     if (template.isPrebuilt) {
-      throw new ForbiddenException('Cannot delete prebuilt system templates');
+      const err = new Error('Cannot delete prebuilt system templates');
+      err.statusCode = 403;
+      throw err;
     }
-    await this.templateRepository.remove(template);
-  }
-}
+    await getRepo().remove(template);
+  };
+
+  return {
+    findAllPrebuilt,
+    findUserTemplates,
+    findOne,
+    create,
+    remove,
+  };
+};
+
+export const templatesService = createTemplatesService();

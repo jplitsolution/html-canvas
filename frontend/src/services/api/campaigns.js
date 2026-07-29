@@ -152,7 +152,7 @@ export async function applyCampaignDefaults(id) {
   return mapCampaign(campaign)
 }
 
-export function getCampaignPreviewUrl(campaign) {
+export function getCampaignPreviewUrl(campaign, options = {}) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
@@ -171,11 +171,16 @@ export function getCampaignPreviewUrl(campaign) {
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
 
+  const mode = campaign.verificationMode || campaign.verification_mode
+  if (options.withMsisdn || mode === 'HEADER_INJECTION' || mode === 'MSISDN_ONLY') {
+    params.set('msisdn', options.msisdn || '919876543210')
+  }
+
   return `/subscription?${params.toString()}`
 }
 
 /** Open live funnel preview for a specific campaign page (HOME, OTP, CONFIRM, …) */
-export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
+export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options = {}) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
@@ -192,6 +197,11 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
     const t = campaign.trackings[0]
     if (t.vendor?.code) params.set('vid', t.vendor.code)
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
+  }
+
+  const mode = campaign.verificationMode || campaign.verification_mode
+  if (options.withMsisdn || mode === 'HEADER_INJECTION' || mode === 'MSISDN_ONLY') {
+    params.set('msisdn', options.msisdn || '919876543210')
   }
 
   return `/subscription?${params.toString()}`

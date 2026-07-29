@@ -1,176 +1,160 @@
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Inject,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Vendor } from './entities/vendor.entity';
-import { Affiliate } from './entities/affiliate.entity';
+import { getRepository } from '../../database/index.js';
+import { Vendor } from './entities/vendor.entity.js';
+import { Affiliate } from './entities/affiliate.entity.js';
 
-@Injectable()
-export class PartnersService {
-  constructor(
-    @InjectRepository(Vendor)
-    vendorRepository,
-    @InjectRepository(Affiliate)
-    affiliateRepository,
-  ) {
-    this.vendorRepository = vendorRepository;
-    this.affiliateRepository = affiliateRepository;
-  }
+export const createPartnersService = () => {
+  const getVendorRepo = () => getRepository(Vendor);
+  const getAffiliateRepo = () => getRepository(Affiliate);
 
-  normalizeCode(code) {
-    return code.trim().toLowerCase();
-  }
+  const normalizeCode = (code) => code.trim().toLowerCase();
 
-  async listVendors(userId) {
-    return this.vendorRepository.find({
+  const listVendors = async (userId) => {
+    return getVendorRepo().find({
       where: { userId },
       relations: { affiliates: true },
       order: { createdAt: 'DESC' },
     });
-  }
+  };
 
-  async getVendor(id, userId) {
-    const vendor = await this.vendorRepository.findOne({
-      where: { id, userId },
+  const getVendor = async (id, userId) => {
+    const vendor = await getVendorRepo().findOne({
+      where: { id: parseInt(id, 10), userId },
       relations: { affiliates: true },
     });
     if (!vendor) {
-      throw new NotFoundException(`Vendor ${id} not found`);
+      const err = new Error(`Vendor ${id} not found`);
+      err.statusCode = 404;
+      throw err;
     }
     return vendor;
-  }
+  };
 
-  async createVendor(dto, userId) {
-    const code = this.normalizeCode(dto.code);
-    const existing = await this.vendorRepository.findOne({
+  const createVendor = async (dto, userId) => {
+    const code = normalizeCode(dto.code);
+    const existing = await getVendorRepo().findOne({
       where: { userId, code },
     });
     if (existing) {
-      throw new ConflictException(`Vendor code "${code}" already exists`);
+      const err = new Error(`Vendor code "${code}" already exists`);
+      err.statusCode = 409;
+      throw err;
     }
-    const vendor = this.vendorRepository.create({
+    const vendor = getVendorRepo().create({
       name: dto.name.trim(),
       code,
       userId,
       active: dto.active ?? true,
     });
-    return this.vendorRepository.save(vendor);
-  }
+    return getVendorRepo().save(vendor);
+  };
 
-  async updateVendor(
-    id,
-    dto,
-    userId,
-  ) {
-    const vendor = await this.getVendor(id, userId);
+  const updateVendor = async (id, dto, userId) => {
+    const vendor = await getVendor(id, userId);
     if (dto.code !== undefined) {
-      const code = this.normalizeCode(dto.code);
+      const code = normalizeCode(dto.code);
       if (code !== vendor.code) {
-        const clash = await this.vendorRepository.findOne({
+        const clash = await getVendorRepo().findOne({
           where: { userId, code },
         });
         if (clash) {
-          throw new ConflictException(`Vendor code "${code}" already exists`);
+          const err = new Error(`Vendor code "${code}" already exists`);
+          err.statusCode = 409;
+          throw err;
         }
       }
       vendor.code = code;
     }
     if (dto.name !== undefined) vendor.name = dto.name.trim();
     if (dto.active !== undefined) vendor.active = dto.active;
-    return this.vendorRepository.save(vendor);
-  }
+    return getVendorRepo().save(vendor);
+  };
 
-  async removeVendor(id, userId) {
-    const vendor = await this.getVendor(id, userId);
+  const removeVendor = async (id, userId) => {
+    const vendor = await getVendor(id, userId);
     vendor.active = false;
-    await this.vendorRepository.save(vendor);
-  }
+    await getVendorRepo().save(vendor);
+  };
 
-  async listAffiliates(vendorId, userId) {
-    await this.getVendor(vendorId, userId);
-    return this.affiliateRepository.find({
-      where: { vendorId, userId },
+  const listAffiliates = async (vendorId, userId) => {
+    await getVendor(vendorId, userId);
+    return getAffiliateRepo().find({
+      where: { vendorId: parseInt(vendorId, 10), userId },
       order: { createdAt: 'DESC' },
     });
-  }
+  };
 
-  async createAffiliate(
-    dto,
-    userId,
-  ) {
-    await this.getVendor(dto.vendorId, userId);
-    const code = this.normalizeCode(dto.code);
-    const existing = await this.affiliateRepository.findOne({
+  const createAffiliate = async (dto, userId) => {
+    await getVendor(dto.vendorId, userId);
+    const code = normalizeCode(dto.code);
+    const existing = await getAffiliateRepo().findOne({
       where: { userId, code },
     });
     if (existing) {
-      throw new ConflictException(`Affiliate code "${code}" already exists`);
+      const err = new Error(`Affiliate code "${code}" already exists`);
+      err.statusCode = 409;
+      throw err;
     }
-    const affiliate = this.affiliateRepository.create({
+    const affiliate = getAffiliateRepo().create({
       name: dto.name.trim(),
       code,
       vendorId: dto.vendorId,
       userId,
       active: dto.active ?? true,
     });
-    return this.affiliateRepository.save(affiliate);
-  }
+    return getAffiliateRepo().save(affiliate);
+  };
 
-  async updateAffiliate(
-    id,
-    dto,
-    userId,
-  ) {
-    const affiliate = await this.affiliateRepository.findOne({
-      where: { id, userId },
+  const updateAffiliate = async (id, dto, userId) => {
+    const affiliate = await getAffiliateRepo().findOne({
+      where: { id: parseInt(id, 10), userId },
     });
     if (!affiliate) {
-      throw new NotFoundException(`Affiliate ${id} not found`);
+      const err = new Error(`Affiliate ${id} not found`);
+      err.statusCode = 404;
+      throw err;
     }
     if (dto.code !== undefined) {
-      const code = this.normalizeCode(dto.code);
+      const code = normalizeCode(dto.code);
       if (code !== affiliate.code) {
-        const clash = await this.affiliateRepository.findOne({
+        const clash = await getAffiliateRepo().findOne({
           where: { userId, code },
         });
         if (clash) {
-          throw new ConflictException(`Affiliate code "${code}" already exists`);
+          const err = new Error(`Affiliate code "${code}" already exists`);
+          err.statusCode = 409;
+          throw err;
         }
       }
       affiliate.code = code;
     }
     if (dto.name !== undefined) affiliate.name = dto.name.trim();
     if (dto.active !== undefined) affiliate.active = dto.active;
-    return this.affiliateRepository.save(affiliate);
-  }
+    return getAffiliateRepo().save(affiliate);
+  };
 
-  async removeAffiliate(id, userId) {
-    const affiliate = await this.affiliateRepository.findOne({
-      where: { id, userId },
+  const removeAffiliate = async (id, userId) => {
+    const affiliate = await getAffiliateRepo().findOne({
+      where: { id: parseInt(id, 10), userId },
     });
     if (!affiliate) {
-      throw new NotFoundException(`Affiliate ${id} not found`);
+      const err = new Error(`Affiliate ${id} not found`);
+      err.statusCode = 404;
+      throw err;
     }
     affiliate.active = false;
-    await this.affiliateRepository.save(affiliate);
-  }
+    await getAffiliateRepo().save(affiliate);
+  };
 
-  async resolveAttribution(
-    vidCode,
-    affCode,
-  ) {
+  const resolveAttribution = async (vidCode, affCode) => {
     let vendorId;
     let affiliateId;
     let mismatch = false;
 
-    const normalizedVid = vidCode ? this.normalizeCode(vidCode) : '';
-    const normalizedAff = affCode ? this.normalizeCode(affCode) : '';
+    const normalizedVid = vidCode ? normalizeCode(vidCode) : '';
+    const normalizedAff = affCode ? normalizeCode(affCode) : '';
 
     if (normalizedVid) {
-      const vendor = await this.vendorRepository
+      const vendor = await getVendorRepo()
         .createQueryBuilder('v')
         .where('LOWER(v.code) = :code', { code: normalizedVid })
         .getOne();
@@ -178,7 +162,7 @@ export class PartnersService {
     }
 
     if (normalizedAff) {
-      const affiliate = await this.affiliateRepository
+      const affiliate = await getAffiliateRepo()
         .createQueryBuilder('a')
         .where('LOWER(a.code) = :code', { code: normalizedAff })
         .getOne();
@@ -193,5 +177,21 @@ export class PartnersService {
     }
 
     return { vendorId, affiliateId, mismatch };
-  }
-}
+  };
+
+  return {
+    normalizeCode,
+    listVendors,
+    getVendor,
+    createVendor,
+    updateVendor,
+    removeVendor,
+    listAffiliates,
+    createAffiliate,
+    updateAffiliate,
+    removeAffiliate,
+    resolveAttribution,
+  };
+};
+
+export const partnersService = createPartnersService();

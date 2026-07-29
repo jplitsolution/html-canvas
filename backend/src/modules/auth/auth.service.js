@@ -1,23 +1,12 @@
-import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { UsersService } from '../users/users.service';
 import * as bcrypt from 'bcrypt';
+import { usersService } from '../users/users.service.js';
 
-@Injectable()
-export class AuthService {
-  constructor(
-    @Inject(UsersService) usersService,
-    @Inject(JwtService) jwtService,
-  ) {
-    this.usersService = usersService;
-    this.jwtService = jwtService;
-  }
-
-  async register(registerDto) {
+export const createAuthService = (uService = usersService) => {
+  const register = async (registerDto) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(registerDto.password, salt);
 
-    const user = await this.usersService.create({
+    const user = await uService.create({
       email: registerDto.email,
       name: registerDto.name,
       password: hashedPassword,
@@ -26,51 +15,70 @@ export class AuthService {
     const result = { ...user };
     delete result.password;
     return result;
-  }
+  };
 
-  async validateUser(loginDto) {
-    const user = await this.usersService.findByEmailWithPassword(
-      loginDto.email,
-    );
+  const validateUser = async (loginDto) => {
+    const user = await uService.findByEmailWithPassword(loginDto.email);
     if (!user || !user.password) {
-      throw new UnauthorizedException('Invalid credentials');
+      const err = new Error('Invalid credentials');
+      err.statusCode = 401;
+      throw err;
     }
 
     const isMatch = await bcrypt.compare(loginDto.password, user.password);
     if (!isMatch) {
-      throw new UnauthorizedException('Invalid credentials');
+      const err = new Error('Invalid credentials');
+      err.statusCode = 401;
+      throw err;
     }
 
     const result = { ...user };
     delete result.password;
     return result;
-  }
+  };
 
-  async changePassword(userId, oldPassword, newPassword) {
-    const user = await this.usersService.findById(userId);
+  const changePassword = async (userId, oldPassword, newPassword) => {
+    const user = await uService.findById(userId);
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      const err = new Error('User not found');
+      err.statusCode = 401;
+      throw err;
     }
 
-    const userWithPassword = await this.usersService.findByEmailWithPassword(user.email);
+    const userWithPassword = await uService.findByEmailWithPassword(user.email);
     if (!userWithPassword || !userWithPassword.password) {
-      throw new UnauthorizedException('Invalid current password');
+      const err = new Error('Invalid current password');
+      err.statusCode = 401;
+      throw err;
     }
+
     const isMatch = await bcrypt.compare(oldPassword, userWithPassword.password);
     if (!isMatch) {
-      throw new UnauthorizedException('Invalid current password');
+      const err = new Error('Invalid current password');
+      err.statusCode = 401;
+      throw err;
     }
 
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(newPassword, salt);
-    await this.usersService.updatePassword(userId, hashedPassword);
-  }
+    await uService.updatePassword(userId, hashedPassword);
+  };
 
-  login(user) {
+  const login = (user, jwtSignFn) => {
     const payload = { email: user.email, sub: user.id };
+    const accessToken = jwtSignFn ? jwtSignFn(payload) : null;
     return {
       user,
-      accessToken: this.jwtService.sign(payload),
+      accessToken,
     };
-  }
-}
+  };
+
+  return {
+    register,
+    validateUser,
+    changePassword,
+    login,
+  };
+};
+
+export const authService = createAuthService();

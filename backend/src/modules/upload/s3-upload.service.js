@@ -1,75 +1,28 @@
-import { Injectable, BadRequestException, Inject } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
+import getConfig from '../../config/configuration.js';
 
-@Injectable()
-export class S3UploadService {
-  constructor(@Inject(ConfigService) configService) {
-    this.configService = configService;
-    const region = this.configService.get('aws.region') || 'ap-south-1';
-    const accessKeyId = this.configService.get('aws.accessKeyId');
-    const secretAccessKey = this.configService.get(
-      'aws.secretAccessKey',
-    );
+export const createS3UploadService = () => {
+  const config = getConfig();
+  const region = config.aws?.region || 'ap-south-1';
+  const accessKeyId = config.aws?.accessKeyId;
+  const secretAccessKey = config.aws?.secretAccessKey;
 
-    this.bucket = this.configService.get('aws.s3Bucket') || '';
-    this.cloudfrontUrl = (
-      this.configService.get('aws.cloudfrontUrl') || ''
-    ).replace(/\/$/, '');
-    this.prefix = (
-      this.configService.get('aws.s3Prefix') || 'templatecraft'
-    ).replace(/^\/+|\/+$/g, '');
+  const bucket = config.aws?.s3Bucket || '';
+  const cloudfrontUrl = (config.aws?.cloudfrontUrl || '').replace(/\/$/, '');
+  const prefix = (config.aws?.s3Prefix || 'templatecraft').replace(/^\/+|\/+$/g, '');
 
-    this.client =
-      this.bucket && accessKeyId && secretAccessKey
-        ? new S3Client({
-            region,
-            credentials: { accessKeyId, secretAccessKey },
-          })
-        : null;
-  }
+  const client =
+    bucket && accessKeyId && secretAccessKey
+      ? new S3Client({
+          region,
+          credentials: { accessKeyId, secretAccessKey },
+        })
+      : null;
 
-  isConfigured() {
-    return !!(this.client && this.bucket && this.cloudfrontUrl);
-  }
+  const isConfigured = () => !!(client && bucket && cloudfrontUrl);
 
-  async uploadImage(file) {
-    if (!this.client || !this.bucket || !this.cloudfrontUrl) {
-      throw new BadRequestException(
-        'CloudFront/S3 upload is not configured. Set AWS_S3_BUCKET, AWS_CLOUDFRONT_URL, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.',
-      );
-    }
-
-    if (!file?.buffer?.length) {
-      throw new BadRequestException('No file provided');
-    }
-
-    const ext =
-      this.extensionFromMime(file.mimetype) ||
-      this.extensionFromName(file.originalname) ||
-      'jpg';
-    const key = `${this.prefix}/${Date.now()}-${randomUUID()}.${ext}`;
-
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        CacheControl: 'public, max-age=31536000, immutable',
-      }),
-    );
-
-    return {
-      url: `${this.cloudfrontUrl}/${key}`,
-      key,
-      format: ext,
-      bytes: file.size,
-    };
-  }
-
-  extensionFromMime(mime) {
+  const extensionFromMime = (mime) => {
     const map = {
       'image/jpeg': 'jpg',
       'image/jpg': 'jpg',
@@ -80,10 +33,56 @@ export class S3UploadService {
       'image/avif': 'avif',
     };
     return map[mime] || null;
-  }
+  };
 
-  extensionFromName(name) {
+  const extensionFromName = (name) => {
     const match = name?.match(/\.([a-zA-Z0-9]+)$/);
     return match ? match[1].toLowerCase() : null;
-  }
-}
+  };
+
+  const uploadImage = async (file) => {
+    if (!client || !bucket || !cloudfrontUrl) {
+      const err = new Error(
+        'CloudFront/S3 upload is not configured. Set AWS_S3_BUCKET, AWS_CLOUDFRONT_URL, AWS_ACCESS_KEY_ID, and AWS_SECRET_ACCESS_KEY.',
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (!file?.buffer?.length) {
+      const err = new Error('No file provided');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const ext =
+      extensionFromMime(file.mimetype) ||
+      extensionFromName(file.filename || file.originalname) ||
+      'jpg';
+    const key = `${prefix}/${Date.now()}-${randomUUID()}.${ext}`;
+
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucket,
+        Key: key,
+        Body: file.buffer,
+        ContentType: file.mimetype,
+        CacheControl: 'public, max-age=31536000, immutable',
+      }),
+    );
+
+    return {
+      url: `${cloudfrontUrl}/${key}`,
+      key,
+      format: ext,
+      bytes: file.buffer.length || file.size || 0,
+    };
+  };
+
+  return {
+    isConfigured,
+    uploadImage,
+  };
+};
+
+export const s3UploadService = createS3UploadService();

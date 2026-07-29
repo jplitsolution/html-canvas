@@ -1,90 +1,112 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  ConflictException,
-  BadRequestException,
-  Logger,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Campaign } from './entities/campaign.entity';
-import {
-  ALL_CAMPAIGN_PAGE_TYPES,
-  CampaignPage,
-  REQUIRED_CAMPAIGN_PAGE_TYPES,
-} from './entities/campaign-page.entity';
-import { Template } from '../templates/entities/template.entity';
-import { ApiConfig } from '../api-config/entities/api-config.entity';
-import { CampaignTracking } from './entities/campaign-tracking.entity';
-import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages';
-import {
-  FlowEngineService,
-} from '../flow/flow-engine.service';
-import { MarketsService } from '../markets/markets.service';
-import {
-  buildTrackingId,
-  deriveCountryCode,
-  deriveOperatorCode,
-} from '../markets/tracking-id.util';
-import { RedisService } from '../../common/services/redis.service';
+import { getRepository } from '../../database/index.js';
+import { Campaign } from './entities/campaign.entity.js';
+import { ALL_CAMPAIGN_PAGE_TYPES, CampaignPage, REQUIRED_CAMPAIGN_PAGE_TYPES } from './entities/campaign-page.entity.js';
+import { Template } from '../templates/entities/template.entity.js';
+import { ApiConfig } from '../api-config/entities/api-config.entity.js';
+import { CampaignTracking } from './entities/campaign-tracking.entity.js';
+import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
+import { flowEngineService } from '../flow/flow-engine.service.js';
+import { marketsService } from '../markets/markets.service.js';
+import { buildTrackingId, deriveCountryCode, deriveOperatorCode } from '../markets/tracking-id.util.js';
+import { redisService } from '../../common/services/redis.service.js';
 
-@Injectable()
-export class CampaignsService {
-  logger = new Logger(CampaignsService.name);
-  flowEngine = new FlowEngineService();
+export const createCampaignsService = () => {
+  const getCampaignRepo = () => getRepository(Campaign);
+  const getCampaignPageRepo = () => getRepository(CampaignPage);
+  const getTemplateRepo = () => getRepository(Template);
+  const getApiConfigRepo = () => getRepository(ApiConfig);
+  const getTrackingRepo = () => getRepository(CampaignTracking);
 
-  constructor(
-    @InjectRepository(Campaign)
-    campaignRepository,
-    @InjectRepository(CampaignPage)
-    campaignPageRepository,
-    @InjectRepository(Template)
-    templateRepository,
-    @InjectRepository(ApiConfig)
-    apiConfigRepository,
-    @InjectRepository(CampaignTracking)
-    trackingRepository,
-    @Inject(forwardRef(() => MarketsService))
-    marketsService,
-    @Inject(RedisService)
-    redis,
-  ) {
-    this.campaignRepository = campaignRepository;
-    this.campaignPageRepository = campaignPageRepository;
-    this.templateRepository = templateRepository;
-    this.apiConfigRepository = apiConfigRepository;
-    this.trackingRepository = trackingRepository;
-    this.marketsService = marketsService;
-    this.redis = redis;
-  }
+  const normalize = (value) => value.trim();
 
-  async invalidateFlowCampaignCache(campaign) {
-    const keys = [
-      `flow:campaign:id:${campaign.id}`,
-      campaign.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
-      `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`,
-    ].filter(Boolean);
-    await Promise.all(keys.map((k) => this.redis.del(k)));
-  }
-
-  normalize(value) {
-    return value.trim();
-  }
-
-  withTrackingId(campaign) {
+  const withTrackingId = (campaign) => {
     const cc = campaign.marketOperator?.country?.code;
     const oc = campaign.marketOperator?.code;
     if (cc && oc) {
       campaign.trackingId = buildTrackingId(cc, oc, campaign.id);
     }
     return campaign;
-  }
+  };
 
-  async findAll(userId) {
-    const campaigns = await this.campaignRepository.find({
+  const pageHasContent = (page) => {
+    const html = page.template?.data?.html;
+    return typeof html === 'string' && html.trim().length > 0;
+  };
+
+  const sanitizeCampaignListItem = (campaign) => {
+    if (campaign.pages) {
+      campaign.pages = campaign.pages.map((page) => {
+        if (page.template?.data) {
+          page.template.data = {
+            ...page.template.data,
+            projectData: undefined,
+            html: page.template.data.html ? '[saved]' : '',
+            css: page.template.data.css ? '[saved]' : '',
+          };
+        }
+        return page;
+      });
+    }
+    return campaign;
+  };
+
+  const invalidateFlowCampaignCache = async (campaign) => {
+    const keys = [
+      `flow:campaign:id:${campaign.id}`,
+      campaign.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
+      `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`,
+    ].filter(Boolean);
+    await Promise.all(keys.map((k) => redisService.del(k)));
+  };
+
+  const ensureCampaignPages = async (campaign) => {
+    const existingPageTypes = new Set(
+      (campaign.pages || []).map((p) => p.pageType),
+    );
+
+    for (const pageType of ALL_CAMPAIGN_PAGE_TYPES) {
+      if (!existingPageTypes.has(pageType)) {
+        try {
+          const template = await getTemplateRepo().save(
+            getTemplateRepo().create({
+              name: `${campaign.name} - ${pageType}`,
+              data: getDefaultFunnelPageData(pageType),
+              userId: campaign.userId,
+              isPrebuilt: false,
+            }),
+          );
+
+          const newPage = await getCampaignPageRepo().save(
+            getCampaignPageRepo().create({
+              campaignId: campaign.id,
+              pageType,
+              templateId: template.id,
+            }),
+          );
+
+          newPage.template = template;
+          if (!campaign.pages) {
+            campaign.pages = [];
+          }
+          campaign.pages.push(newPage);
+        } catch (err) {
+          const dbPage = await getCampaignPageRepo().findOne({
+            where: { campaignId: campaign.id, pageType },
+            relations: { template: true },
+          });
+          if (dbPage) {
+            if (!campaign.pages) {
+              campaign.pages = [];
+            }
+            campaign.pages.push(dbPage);
+          }
+        }
+      }
+    }
+  };
+
+  const findAll = async (userId) => {
+    const campaigns = await getCampaignRepo().find({
       where: { userId },
       relations: {
         pages: { template: true },
@@ -94,13 +116,13 @@ export class CampaignsService {
       order: { updatedAt: 'DESC' },
     });
     return campaigns.map((c) =>
-      this.sanitizeCampaignListItem(this.withTrackingId(c)),
+      sanitizeCampaignListItem(withTrackingId(c)),
     );
-  }
+  };
 
-  async findOne(id, userId) {
-    const campaign = await this.campaignRepository.findOne({
-      where: { id },
+  const findOne = async (id, userId) => {
+    const campaign = await getCampaignRepo().findOne({
+      where: { id: parseInt(id, 10) },
       relations: {
         pages: { template: true },
         trackings: { vendor: true, affiliate: true },
@@ -108,25 +130,24 @@ export class CampaignsService {
       },
     });
     if (!campaign) {
-      throw new NotFoundException(`Campaign with ID ${id} not found`);
+      const err = new Error(`Campaign with ID ${id} not found`);
+      err.statusCode = 404;
+      throw err;
     }
     if (campaign.userId !== userId) {
-      throw new ForbiddenException(
-        'You do not have permission to access this campaign',
-      );
+      const err = new Error('You do not have permission to access this campaign');
+      err.statusCode = 403;
+      throw err;
     }
-    await this.ensureCampaignPages(campaign);
-    return this.sanitizeCampaignListItem(this.withTrackingId(campaign));
-  }
+    await ensureCampaignPages(campaign);
+    return sanitizeCampaignListItem(withTrackingId(campaign));
+  };
 
-  async findByCountryOperator(
-    country,
-    operator,
-  ) {
-    const normalizedCountry = this.normalize(country);
-    const normalizedOperator = this.normalize(operator);
+  const findByCountryOperator = async (country, operator) => {
+    const normalizedCountry = normalize(country);
+    const normalizedOperator = normalize(operator);
 
-    const campaigns = await this.campaignRepository
+    const campaigns = await getCampaignRepo()
       .createQueryBuilder('campaign')
       .leftJoinAndSelect('campaign.pages', 'pages')
       .leftJoinAndSelect('pages.template', 'template')
@@ -153,24 +174,21 @@ export class CampaignsService {
       if (actives.length === 1) {
         campaign = actives[0];
       } else {
-        this.logger.warn(
-          `Ambiguous country/operator lookup for ${normalizedCountry}/${normalizedOperator}: ${campaigns.length} campaigns — require campid`,
-        );
         return null;
       }
     }
 
     if (campaign) {
-      await this.ensureCampaignPages(campaign);
-      return this.withTrackingId(campaign);
+      await ensureCampaignPages(campaign);
+      return withTrackingId(campaign);
     }
     return null;
-  }
+  };
 
-  async findByIdForFlow(id) {
-    if (!id || Number.isNaN(id)) return null;
-    const campaign = await this.campaignRepository.findOne({
-      where: { id },
+  const findByIdForFlow = async (id) => {
+    if (!id || Number.isNaN(Number(id))) return null;
+    const campaign = await getCampaignRepo().findOne({
+      where: { id: parseInt(id, 10) },
       relations: {
         pages: { template: true },
         trackings: { vendor: true, affiliate: true },
@@ -178,18 +196,14 @@ export class CampaignsService {
       },
     });
     if (campaign) {
-      await this.ensureCampaignPages(campaign);
-      return this.withTrackingId(campaign);
+      await ensureCampaignPages(campaign);
+      return withTrackingId(campaign);
     }
     return null;
-  }
+  };
 
-  async findByTrackingId(
-    countryCode,
-    operatorCode,
-    campaignId,
-  ) {
-    const campaign = await this.findByIdForFlow(campaignId);
+  const findByTrackingId = async (countryCode, operatorCode, campaignId) => {
+    const campaign = await findByIdForFlow(campaignId);
     if (!campaign) return null;
     const cc = campaign.marketOperator?.country?.code?.toUpperCase();
     const oc = campaign.marketOperator?.code?.toUpperCase();
@@ -198,72 +212,15 @@ export class CampaignsService {
         cc !== countryCode.toUpperCase() ||
         oc !== operatorCode.toUpperCase()
       ) {
-        this.logger.warn(
-          `Tracking id mismatch: expected ${cc}-${oc}-${campaignId}, got ${countryCode}-${operatorCode}-${campaignId}`,
-        );
         return null;
       }
     }
     return campaign;
-  }
+  };
 
-  async ensureCampaignPages(campaign) {
-    const existingPageTypes = new Set(
-      (campaign.pages || []).map((p) => p.pageType),
-    );
-
-    for (const pageType of ALL_CAMPAIGN_PAGE_TYPES) {
-      if (!existingPageTypes.has(pageType)) {
-        try {
-          const template = await this.templateRepository.save(
-            this.templateRepository.create({
-              name: `${campaign.name} - ${pageType}`,
-              data: getDefaultFunnelPageData(pageType),
-              userId: campaign.userId,
-              isPrebuilt: false,
-            }),
-          );
-
-          const newPage = await this.campaignPageRepository.save(
-            this.campaignPageRepository.create({
-              campaignId: campaign.id,
-              pageType,
-              templateId: template.id,
-            }),
-          );
-
-          newPage.template = template;
-          if (!campaign.pages) {
-            campaign.pages = [];
-          }
-          campaign.pages.push(newPage);
-          this.logger.log(
-            `Auto-created missing page type ${pageType} for campaign ${campaign.id}`,
-          );
-        } catch (err) {
-          this.logger.warn(
-            `Failed to auto-create page type ${pageType} for campaign ${campaign.id}: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
-          const dbPage = await this.campaignPageRepository.findOne({
-            where: { campaignId: campaign.id, pageType },
-            relations: { template: true },
-          });
-          if (dbPage) {
-            if (!campaign.pages) {
-              campaign.pages = [];
-            }
-            campaign.pages.push(dbPage);
-          }
-        }
-      }
-    }
-  }
-
-  async create(dto, userId) {
+  const create = async (dto, userId) => {
     const { country, operator } =
-      await this.marketsService.resolveOperatorForCreate({
+      await marketsService.resolveOperatorForCreate({
         userId,
         operatorId: dto.operatorId,
         countryCode:
@@ -276,35 +233,37 @@ export class CampaignsService {
         operatorName: dto.operator,
       });
 
-    const countryName = this.normalize(dto.country || country.name);
-    const operatorName = this.normalize(dto.operator || operator.name);
+    const countryName = normalize(dto.country || country.name);
+    const operatorName = normalize(dto.operator || operator.name);
 
-    const nameConflict = await this.campaignRepository.findOne({
+    const nameConflict = await getCampaignRepo().findOne({
       where: { operatorId: operator.id, name: dto.name.trim() },
     });
     if (nameConflict) {
-      throw new ConflictException(
+      const err = new Error(
         `Campaign "${dto.name.trim()}" already exists for ${country.code} / ${operator.code}`,
       );
+      err.statusCode = 409;
+      throw err;
     }
 
     let sourcePages = [];
     if (dto.copyFromCampaignId) {
-      const source = await this.campaignRepository.findOne({
-        where: { id: dto.copyFromCampaignId, userId },
+      const source = await getCampaignRepo().findOne({
+        where: { id: parseInt(dto.copyFromCampaignId, 10), userId },
         relations: { pages: { template: true } },
       });
       if (!source) {
-        throw new NotFoundException(
-          `Source campaign ${dto.copyFromCampaignId} not found`,
-        );
+        const err = new Error(`Source campaign ${dto.copyFromCampaignId} not found`);
+        err.statusCode = 404;
+        throw err;
       }
       sourcePages = source.pages || [];
     }
 
     const defaultMode = 'BOTH';
-    const campaign = await this.campaignRepository.save(
-      this.campaignRepository.create({
+    const campaign = await getCampaignRepo().save(
+      getCampaignRepo().create({
         name: dto.name.trim(),
         country: countryName,
         operator: operatorName,
@@ -314,7 +273,7 @@ export class CampaignsService {
         active: false,
         verificationMode: defaultMode,
         flowConfig: JSON.stringify(
-          this.flowEngine.getDefaultFlowConfig(defaultMode),
+          flowEngineService.getDefaultFlowConfig(defaultMode),
         ),
       }),
     );
@@ -324,8 +283,8 @@ export class CampaignsService {
       let template;
 
       if (sourcePage?.template) {
-        template = await this.templateRepository.save(
-          this.templateRepository.create({
+        template = await getTemplateRepo().save(
+          getTemplateRepo().create({
             name: `${campaign.name} - ${pageType}`,
             data: { ...sourcePage.template.data },
             userId,
@@ -333,8 +292,8 @@ export class CampaignsService {
           }),
         );
       } else {
-        template = await this.templateRepository.save(
-          this.templateRepository.create({
+        template = await getTemplateRepo().save(
+          getTemplateRepo().create({
             name: `${campaign.name} - ${pageType}`,
             data: getDefaultFunnelPageData(pageType),
             userId,
@@ -343,8 +302,8 @@ export class CampaignsService {
         );
       }
 
-      await this.campaignPageRepository.save(
-        this.campaignPageRepository.create({
+      await getCampaignPageRepo().save(
+        getCampaignPageRepo().create({
           campaignId: campaign.id,
           pageType,
           templateId: template.id,
@@ -352,20 +311,14 @@ export class CampaignsService {
       );
     }
 
-    return this.sanitizeCampaignListItem(
-      await this.findOne(campaign.id, userId),
-    );
-  }
+    return sanitizeCampaignListItem(await findOne(campaign.id, userId));
+  };
 
-  async update(
-    id,
-    dto,
-    userId,
-  ) {
-    const campaign = await this.findOne(id, userId);
+  const update = async (id, dto, userId) => {
+    const campaign = await findOne(id, userId);
 
     if (dto.active === true) {
-      const flowConfig = this.flowEngine.parseFlowConfig(campaign.flowConfig);
+      const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
       const requiredTypes =
         flowConfig && flowConfig.nodes
           ? flowConfig.nodes.map((n) => n.pageType)
@@ -373,12 +326,14 @@ export class CampaignsService {
 
       const missing = requiredTypes.filter((type) => {
         const page = campaign.pages.find((p) => p.pageType === type);
-        return !page || !this.pageHasContent(page);
+        return !page || !pageHasContent(page);
       });
       if (missing.length > 0) {
-        throw new BadRequestException(
+        const err = new Error(
           `Cannot activate campaign. Missing content for: ${missing.join(', ')}`,
         );
+        err.statusCode = 400;
+        throw err;
       }
     }
 
@@ -386,9 +341,9 @@ export class CampaignsService {
     if (dto.serviceId !== undefined) campaign.serviceId = dto.serviceId;
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
-      await this.trackingRepository.delete({ campaignId: campaign.id });
+      await getTrackingRepo().delete({ campaignId: campaign.id });
       if (dto.trackings && dto.trackings.length > 0) {
-        await this.trackingRepository.insert(
+        await getTrackingRepo().insert(
           dto.trackings.map((t) => ({
             campaignId: campaign.id,
             vendorId: Number(t.vendorId),
@@ -402,9 +357,9 @@ export class CampaignsService {
         );
       }
     } else if (dto.vendorIds !== undefined) {
-      await this.trackingRepository.delete({ campaignId: campaign.id });
+      await getTrackingRepo().delete({ campaignId: campaign.id });
       if (dto.vendorIds && dto.vendorIds.length > 0) {
-        await this.trackingRepository.insert(
+        await getTrackingRepo().insert(
           dto.vendorIds.map((vid) => ({
             campaignId: campaign.id,
             vendorId: Number(vid),
@@ -416,53 +371,43 @@ export class CampaignsService {
     }
 
     delete campaign.trackings;
-    await this.campaignRepository.save(campaign);
-    const refreshed = this.sanitizeCampaignListItem(
-      await this.findOne(id, userId),
-    );
-    await this.invalidateFlowCampaignCache(refreshed);
+    await getCampaignRepo().save(campaign);
+    const refreshed = sanitizeCampaignListItem(await findOne(id, userId));
+    await invalidateFlowCampaignCache(refreshed);
     return refreshed;
-  }
+  };
 
-  async getFlow(
-    id,
-    userId,
-  ) {
-    const campaign = await this.findOne(id, userId);
+  const getFlow = async (id, userId) => {
+    const campaign = await findOne(id, userId);
     const mode =
-      this.flowEngine.normalizeMode(campaign.verificationMode) || 'BOTH';
+      flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
     const flowConfig =
-      this.flowEngine.parseFlowConfig(campaign.flowConfig) ||
-      this.flowEngine.getDefaultFlowConfig(mode);
+      flowEngineService.parseFlowConfig(campaign.flowConfig) ||
+      flowEngineService.getDefaultFlowConfig(mode);
     return { verificationMode: mode, flowConfig };
-  }
+  };
 
-  async updateFlow(
-    id,
-    dto,
-    userId,
-  ) {
-    const campaign = await this.findOne(id, userId);
+  const updateFlow = async (id, dto, userId) => {
+    const campaign = await findOne(id, userId);
 
     const mode =
-      this.flowEngine.normalizeMode(dto.verificationMode) ||
-      this.flowEngine.normalizeMode(campaign.verificationMode) ||
+      flowEngineService.normalizeMode(dto.verificationMode) ||
+      flowEngineService.normalizeMode(campaign.verificationMode) ||
       'BOTH';
 
     let flowConfig;
     if (dto.flowConfig) {
-      flowConfig = this.flowEngine.stripUnreachableNodes(
-        dto.flowConfig,
-        mode,
-      );
-      const { ok, errors } = this.flowEngine.validate(flowConfig, mode);
+      flowConfig = flowEngineService.stripUnreachableNodes(dto.flowConfig, mode);
+      const { ok, errors } = flowEngineService.validate(flowConfig, mode);
       if (!ok) {
-        throw new BadRequestException(`Invalid flow: ${errors.join(' ')}`);
+        const err = new Error(`Invalid flow: ${errors.join(' ')}`);
+        err.statusCode = 400;
+        throw err;
       }
     } else {
       flowConfig =
-        this.flowEngine.parseFlowConfig(campaign.flowConfig) ||
-        this.flowEngine.getDefaultFlowConfig(mode);
+        flowEngineService.parseFlowConfig(campaign.flowConfig) ||
+        flowEngineService.getDefaultFlowConfig(mode);
     }
 
     campaign.verificationMode = mode;
@@ -470,71 +415,62 @@ export class CampaignsService {
       flowConfig.entryPage = 'HOME';
     }
     campaign.flowConfig = JSON.stringify(flowConfig);
-    await this.campaignRepository.save(campaign);
+    await getCampaignRepo().save(campaign);
     return { verificationMode: mode, flowConfig };
-  }
+  };
 
-  async remove(id, userId) {
-    const campaign = await this.findOne(id, userId);
+  const remove = async (id, userId) => {
+    const campaign = await findOne(id, userId);
     campaign.active = false;
-    await this.campaignRepository.save(campaign);
-  }
+    await getCampaignRepo().save(campaign);
+  };
 
-  async applyDefaultTemplates(
-    id,
-    userId,
-    onlyEmpty = true,
-  ) {
-    const campaign = await this.findOne(id, userId);
+  const applyDefaultTemplates = async (id, userId, onlyEmpty = true) => {
+    const campaign = await findOne(id, userId);
 
     for (const page of campaign.pages) {
-      const hasContent = this.pageHasContent(page);
+      const hasContent = pageHasContent(page);
       if (onlyEmpty && hasContent) continue;
       if (!page.templateId) continue;
 
-      const template = await this.templateRepository.findOne({
+      const template = await getTemplateRepo().findOne({
         where: { id: page.templateId },
       });
       if (!template) continue;
 
       template.data = getDefaultFunnelPageData(page.pageType);
-      await this.templateRepository.save(template);
+      await getTemplateRepo().save(template);
     }
 
-    return this.findOne(id, userId);
-  }
+    return findOne(id, userId);
+  };
 
-  async getPage(
-    campaignId,
-    pageType,
-    userId,
-  ) {
-    const campaign = await this.findOne(campaignId, userId);
+  const getPage = async (campaignId, pageType, userId) => {
+    const campaign = await findOne(campaignId, userId);
     const page = campaign.pages.find((p) => p.pageType === pageType);
     if (!page) {
-      throw new NotFoundException(
-        `Page type ${pageType} not found for campaign`,
-      );
+      const err = new Error(`Page type ${pageType} not found for campaign`);
+      err.statusCode = 404;
+      throw err;
     }
     return page;
-  }
+  };
 
-  async updatePageContent(
-    campaignId,
-    pageType,
-    dto,
-    userId,
-  ) {
-    const page = await this.getPage(campaignId, pageType, userId);
+  const updatePageContent = async (campaignId, pageType, dto, userId) => {
+    const page = await getPage(campaignId, pageType, userId);
     if (!page.templateId) {
-      throw new NotFoundException('Template not linked to this page');
+      const err = new Error('Template not linked to this page');
+      err.statusCode = 404;
+      throw err;
     }
 
-    const template = await this.templateRepository.findOne({
+    const template = await getTemplateRepo().findOne({
       where: { id: page.templateId },
     });
     if (!template) {
-      throw new NotFoundException('Template not found');
+      const err = new Error('Template not found');
+      err.statusCode = 404;
+      throw err;
     }
 
     const data = { ...(template.data || {}) };
@@ -544,56 +480,52 @@ export class CampaignsService {
     data.editor = 'grapesjs';
 
     template.data = data;
-    await this.templateRepository.save(template);
+    await getTemplateRepo().save(template);
 
-    return this.getPage(campaignId, pageType, userId);
-  }
+    return getPage(campaignId, pageType, userId);
+  };
 
-  async getApiConfig(
-    campaignId,
-    userId,
-  ) {
-    await this.findOne(campaignId, userId);
-    return this.apiConfigRepository.findOne({ where: { campaignId } });
-  }
+  const getApiConfig = async (campaignId, userId) => {
+    await findOne(campaignId, userId);
+    return getApiConfigRepo().findOne({ where: { campaignId: parseInt(campaignId, 10) } });
+  };
 
-  async upsertApiConfig(
-    campaignId,
-    payload,
-    userId,
-  ) {
-    await this.findOne(campaignId, userId);
+  const upsertApiConfig = async (campaignId, payload, userId) => {
+    await findOne(campaignId, userId);
 
-    let config = await this.apiConfigRepository.findOne({
-      where: { campaignId },
+    let config = await getApiConfigRepo().findOne({
+      where: { campaignId: parseInt(campaignId, 10) },
     });
     if (!config) {
-      config = this.apiConfigRepository.create({ campaignId, ...payload });
+      config = getApiConfigRepo().create({ campaignId: parseInt(campaignId, 10), ...payload });
     } else {
       Object.assign(config, payload);
     }
-    return this.apiConfigRepository.save(config);
-  }
+    return getApiConfigRepo().save(config);
+  };
 
-  pageHasContent(page) {
-    const html = page.template?.data?.html;
-    return typeof html === 'string' && html.trim().length > 0;
-  }
+  return {
+    findAll,
+    findOne,
+    findByCountryOperator,
+    findByIdForFlow,
+    findByTrackingId,
+    ensureCampaignPages,
+    create,
+    update,
+    getFlow,
+    updateFlow,
+    remove,
+    applyDefaultTemplates,
+    getPage,
+    updatePageContent,
+    getApiConfig,
+    upsertApiConfig,
+    pageHasContent,
+    sanitizeCampaignListItem,
+    withTrackingId,
+    invalidateFlowCampaignCache,
+  };
+};
 
-  sanitizeCampaignListItem(campaign) {
-    if (campaign.pages) {
-      campaign.pages = campaign.pages.map((page) => {
-        if (page.template?.data) {
-          page.template.data = {
-            ...page.template.data,
-            projectData: undefined,
-            html: page.template.data.html ? '[saved]' : '',
-            css: page.template.data.css ? '[saved]' : '',
-          };
-        }
-        return page;
-      });
-    }
-    return campaign;
-  }
-}
+export const campaignsService = createCampaignsService();

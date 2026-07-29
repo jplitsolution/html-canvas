@@ -18,6 +18,7 @@ import {
   Link2,
   AlertCircle,
   Check,
+  Zap,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -326,6 +327,7 @@ function CampaignDetailPage() {
   }
 
   const previewUrl = getCampaignPreviewUrl(campaign)
+  const hePreviewUrl = getCampaignPreviewUrl(campaign, { withMsisdn: true })
   const marketPath =
     campaign.countryCode && campaign.operatorCode
       ? `/markets/${campaign.countryCode}/${campaign.operatorCode}`
@@ -346,6 +348,10 @@ function CampaignDetailPage() {
       <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, '_blank')}>
         <ExternalLink className="w-4 h-4" />
         Preview
+      </Button>
+      <Button variant="secondary" size="sm" onClick={() => window.open(hePreviewUrl, '_blank')} title="Test Header Injection with dummy MSISDN (919876543210)">
+        <Zap className="w-4 h-4 text-yellow-500" />
+        Test HE Flow
       </Button>
     </>
   )

@@ -1,576 +1,220 @@
-import { BadRequestException, Injectable, Logger, HttpException, HttpStatus, Inject } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import * as crypto from 'crypto';
-import { IsNull, Repository } from 'typeorm';
-import { OtpRequest } from './entities/otp-request.entity';
-import { ApiConfig } from '../api-config/entities/api-config.entity';
-import { Campaign } from '../campaigns/entities/campaign.entity';
-import { Visit } from '../analytics/entities/visit.entity';
-import { SmsProviderManager } from './providers/sms-provider.manager';
-import { VisitEvent, VisitEventType } from '../analytics/entities/visit-event.entity';
-import { RedisService } from '../../common/services/redis.service';
+import { getRepository } from '../../database/index.js';
+import { OtpRequest } from './entities/otp-request.entity.js';
+import { ApiConfig } from '../api-config/entities/api-config.entity.js';
+import { Campaign } from '../campaigns/entities/campaign.entity.js';
+import { Visit } from '../analytics/entities/visit.entity.js';
+import { VisitEvent, VisitEventType } from '../analytics/entities/visit-event.entity.js';
+import { smsProviderManager } from './providers/sms-provider.manager.js';
+import { redisService } from '../../common/services/redis.service.js';
 
-@Injectable()
-export class OtpService {
-  logger = new Logger(OtpService.name);
-  ttlMs = 5 * 60 * 1000;
-  maxAttempts = 5;
+export const createOtpService = () => {
+  const getOtpRepo = () => getRepository(OtpRequest);
+  const getApiConfigRepo = () => getRepository(ApiConfig);
+  const getCampaignRepo = () => getRepository(Campaign);
+  const getVisitRepo = () => getRepository(Visit);
+  const getVisitEventRepo = () => getRepository(VisitEvent);
 
-  static providerMetrics = new Map();
+  const generateOtp = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
 
-  getProviderMetrics(providerName) {
-    let metrics = OtpService.providerMetrics.get(providerName);
-    if (!metrics) {
-      metrics = {
-        successCount: 0,
-        failureCount: 0,
-        failureStreak: 0,
-        trippedUntil: 0,
-        latencies: [],
-      };
-      OtpService.providerMetrics.set(providerName, metrics);
-    }
-    return metrics;
-  }
-
-  static getProviderHealthStatus() {
-    const list = [];
-    OtpService.providerMetrics.forEach((metrics, provider) => {
-      const avgLatency = metrics.latencies.length > 0
-        ? parseFloat((metrics.latencies.reduce((a, b) => a + b, 0) / metrics.latencies.length).toFixed(1))
-        : 0;
-      const total = metrics.successCount + metrics.failureCount;
-      const successRate = total > 0 ? parseFloat(((metrics.successCount / total) * 100).toFixed(1)) : 100;
-      
-      list.push({
-        provider,
-        tripped: Date.now() < metrics.trippedUntil,
-        trippedUntil: metrics.trippedUntil > 0 ? new Date(metrics.trippedUntil).toISOString() : null,
-        avgLatencyMs: avgLatency,
-        successRate,
-        totalRequests: total,
+  const getCampaignFromInput = async (campaignId, visitId) => {
+    let cId = campaignId ? parseInt(campaignId, 10) : undefined;
+    if (!cId && visitId) {
+      const visit = await getVisitRepo().findOne({
+        where: { id: parseInt(visitId, 10) },
       });
-    });
-    return list;
-  }
+      if (visit) cId = visit.campaignId;
+    }
+    if (!cId) return null;
+    return getCampaignRepo().findOne({ where: { id: cId } });
+  };
 
-  constructor(
-    @InjectRepository(OtpRequest)
-    otpRepository,
-    @InjectRepository(ApiConfig)
-    apiConfigRepository,
-    @InjectRepository(Campaign)
-    campaignRepository,
-    @InjectRepository(Visit)
-    visitRepository,
-    @InjectRepository(VisitEvent)
-    visitEventRepository,
-    @Inject(SmsProviderManager)
-    providerManager,
-    @Inject(RedisService)
-    redisService,
-  ) {
-    this.otpRepository = otpRepository;
-    this.apiConfigRepository = apiConfigRepository;
-    this.campaignRepository = campaignRepository;
-    this.visitRepository = visitRepository;
-    this.visitEventRepository = visitEventRepository;
-    this.providerManager = providerManager;
-    this.redisService = redisService;
-  }
+  const getApiConfigForCampaign = async (campaignId) => {
+    if (!campaignId) return null;
+    return getApiConfigRepo().findOne({ where: { campaignId } });
+  };
 
-  hashOtp(otp, salt) {
-    return crypto.createHash('sha256').update(`${salt}:${otp}`).digest('hex');
-  }
-
-  async logVisitEvent(visitId, eventType, metadata) {
+  const logOtpEvent = async (visitId, eventType, metadata) => {
+    if (!visitId) return;
     try {
-      const event = this.visitEventRepository.create({
-        visitId,
+      const eventEntity = getVisitEventRepo().create({
+        visitId: parseInt(visitId, 10),
         eventType,
         metadata,
       });
-      await this.visitEventRepository.save(event);
-    } catch (e) {
-      this.logger.error(`Failed to log visit event ${eventType} for visit ${visitId}: ${e.message}`);
+      await getVisitEventRepo().insert(eventEntity);
+    } catch (err) {
+      console.warn(`Failed to log OTP event: ${err.message}`);
     }
-  }
+  };
 
-  static getCorrectedElapsedMs(date) {
-    const rawElapsed = Date.now() - date.getTime();
-    if (Math.abs(rawElapsed) < 30 * 60 * 1000) {
-      return rawElapsed;
-    }
-    const tzOffset = new Date().getTimezoneOffset() * 60 * 1000;
-    if (Math.abs(rawElapsed - tzOffset) < 30 * 60 * 1000) {
-      return rawElapsed - tzOffset;
-    } else if (Math.abs(rawElapsed + tzOffset) < 30 * 60 * 1000) {
-      return rawElapsed + tzOffset;
-    }
-    return rawElapsed;
-  }
+  const isRateLimited = async (ip, visitId) => {
+    const key = ip ? `ratelimit:ip:${ip}` : visitId ? `ratelimit:visit:${visitId}` : null;
+    if (!key) return false;
 
-  async generate(
-    phone,
-    visitId,
-    testOverride,
-    pack,
-  ) {
-    const cleanPhone = String(phone).trim();
-
-    const lockoutKey = `otp:lockout:${cleanPhone}`;
-    const isLocked = await this.redisService.get(lockoutKey);
-    if (isLocked) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: `Too many verification attempts. Lockout in progress. Try again later.`,
-          error: 'Too Many Requests',
-          retryAfter: 900,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    const delayKey = `otp:delay:${cleanPhone}`;
-    const delayActive = await this.redisService.get(delayKey);
-    if (delayActive) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Please wait 30 seconds before requesting another OTP',
-          error: 'Too Many Requests',
-          retryAfter: 30,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    const countKey = `otp:req_count:${cleanPhone}`;
-    const currentCount = await this.redisService.incr(countKey, 10 * 60);
-    if (currentCount > 5) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Too many OTP requests. Please try again later.',
-          error: 'Too Many Requests',
-          retryAfter: 10 * 60,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
-    }
-
-    await this.redisService.set(delayKey, '1', 30);
-
-    let campaignId = testOverride?.campaignId ?? null;
-    let campaignName = 'Test Campaign';
-    let providerName = testOverride?.provider ?? 'local';
-    let providerConfig = testOverride?.config ?? null;
-
-    if (!testOverride && visitId) {
-      const visit = await this.visitRepository.findOne({ where: { id: Number(visitId) } });
-      if (visit && visit.campaignId) {
-        campaignId = visit.campaignId;
-        const campaign = await this.campaignRepository.findOne({ where: { id: campaignId } });
-        if (campaign) {
-          campaignName = campaign.name;
-          const apiConfig = await this.apiConfigRepository.findOne({ where: { campaignId } });
-          if (apiConfig) {
-            providerName = apiConfig.otpProvider || 'local';
-            if (apiConfig.otpConfigJson) {
-              try {
-                providerConfig = JSON.parse(apiConfig.otpConfigJson);
-              } catch (e) {
-                this.logger.error(`Failed to parse OTP config JSON for campaign ${campaignId}`);
-              }
-            }
-          }
-        }
-      }
-    }
-
-    const isPartner = providerName.toLowerCase() === 'partner' || providerName.toLowerCase() === 'partner_api';
-    let otp = '';
-    let otpHash = 'PARTNER_GENERATED';
-    let salt = 'none';
-
-    if (!isPartner) {
-      otp = String(Math.floor(100000 + Math.random() * 900000));
-      salt = crypto.randomBytes(16).toString('hex');
-      otpHash = this.hashOtp(otp, salt);
-    }
-
-    const expiresAt = new Date(Date.now() + this.ttlMs);
-
-    const context = {
-      campaignId: campaignId || 0,
-      campaignName,
-      visitId: visitId ? Number(visitId) : null,
-      pack: (pack || 'daily').toLowerCase(),
-      variables: {
-        phone: cleanPhone,
-        campaign: campaignName,
-      },
-    };
-
-    let candidates = [];
-
-    if (providerConfig && providerConfig.failover === true && typeof providerConfig.providers === 'object') {
-      const providersObj = providerConfig.providers;
-      for (const [name, pData] of Object.entries(providersObj)) {
-        const data = pData;
-        candidates.push({
-          name,
-          priority: typeof data.priority === 'number' ? data.priority : 10,
-          retryCount: typeof data.retryCount === 'number' ? data.retryCount : 2,
-          timeout: typeof data.timeout === 'number' ? data.timeout : 5000,
-          config: data.config || {},
+    const count = await redisService.incr(key, 60);
+    if (count > 5) {
+      if (visitId) {
+        await logOtpEvent(visitId, VisitEventType.RATE_LIMIT_HIT, {
+          ip,
+          count,
         });
       }
-    } else {
-      candidates.push({
-        name: providerName,
-        priority: 1,
-        retryCount: 2,
-        timeout: 5000,
-        config: providerConfig,
-      });
+      return true;
+    }
+    return false;
+  };
+
+  const isBruteForceAttempt = async (ip, visitId) => {
+    const key = ip ? `bruteforce:ip:${ip}` : visitId ? `bruteforce:visit:${visitId}` : null;
+    if (!key) return false;
+
+    const count = await redisService.incr(key, 600);
+    if (count > 10) {
+      if (visitId) {
+        await logOtpEvent(visitId, VisitEventType.BRUTE_FORCE_ATTEMPT, {
+          ip,
+          count,
+        });
+      }
+      return true;
+    }
+    return false;
+  };
+
+  const sendOtp = async (sendOtpDto, clientIp) => {
+    const { phone, campaignId, visitId } = sendOtpDto;
+
+    if (await isRateLimited(clientIp, visitId)) {
+      const err = new Error('Too many requests. Please wait a minute before requesting another OTP.');
+      err.statusCode = 429;
+      throw err;
     }
 
-    candidates.sort((a, b) => a.priority - b.priority);
+    const campaign = await getCampaignFromInput(campaignId, visitId);
+    const apiConfig = await getApiConfigForCampaign(campaign?.id);
 
-    let sendResult = null;
-    let sentSuccessfully = false;
-    let chosenProvider = providerName;
+    const otpCode = generateOtp();
 
-    for (const cand of candidates) {
-      const metrics = this.getProviderMetrics(cand.name);
-      const nowMs = Date.now();
+    const provider = smsProviderManager.getProvider(apiConfig);
+    await provider.sendSms(phone, otpCode, apiConfig);
 
-      if (nowMs < metrics.trippedUntil) {
-        this.logger.warn(`Provider ${cand.name} circuit breaker is TRIPPED. Skipping.`);
-        if (visitId) {
-          try {
-            await this.logVisitEvent(Number(visitId), VisitEventType.BLOCKED_REQUEST, {
-              provider: cand.name,
-              reason: 'Circuit Breaker Tripped',
-            });
-          } catch {}
-        }
-        continue;
-      }
-
-      const retryLimit = Math.max(1, cand.retryCount);
-      let attempt = 0;
-      let lastError = '';
-
-      while (attempt < retryLimit && !sentSuccessfully) {
-        attempt++;
-        const startTime = Date.now();
-        this.logger.log(`Attempt ${attempt}/${retryLimit} to send OTP via ${cand.name}`);
-
-        try {
-          const providerInstance = this.providerManager.getProvider(cand.name);
-          const sendPromise = providerInstance.sendOtp(cleanPhone, otp, cand.config, context);
-          
-          let timeoutId;
-          const timeoutPromise = new Promise((_, reject) => {
-            timeoutId = setTimeout(() => reject(new Error('Gateway timeout')), cand.timeout);
-          });
-
-          const result = await Promise.race([
-            sendPromise.then((res) => {
-              clearTimeout(timeoutId);
-              return res;
-            }),
-            timeoutPromise,
-          ]);
-
-          const latency = Date.now() - startTime;
-          metrics.latencies.push(latency);
-          if (metrics.latencies.length > 50) metrics.latencies.shift();
-
-          if (result.success) {
-            sentSuccessfully = true;
-            sendResult = result;
-            chosenProvider = cand.name;
-
-            metrics.successCount++;
-            metrics.failureStreak = 0;
-            metrics.trippedUntil = 0;
-            break;
-          } else {
-            lastError = result.error || 'Provider returned success=false';
-          }
-        } catch (err) {
-          lastError = err.message;
-        }
-
-        metrics.failureCount++;
-        metrics.failureStreak++;
-
-        if (metrics.failureStreak >= 3) {
-          metrics.trippedUntil = Date.now() + 5 * 60 * 1000;
-          this.logger.error(`Tripped circuit breaker for provider ${cand.name}. Tripped for 5m.`);
-          if (visitId) {
-            try {
-              await this.logVisitEvent(Number(visitId), VisitEventType.BLOCKED_REQUEST, {
-                provider: cand.name,
-                reason: 'Circuit Breaker Tripped on Streak Failure',
-              });
-            } catch {}
-          }
-        }
-
-        if (visitId) {
-          try {
-            await this.logVisitEvent(Number(visitId), VisitEventType.SUBSCRIBE_FAILED, {
-              provider: cand.name,
-              attempt,
-              error: lastError,
-            });
-          } catch {}
-        }
-      }
-
-      if (sentSuccessfully) {
-        break;
-      } else {
-        this.logger.warn(`Failed to dispatch via ${cand.name}. Failover to next provider.`);
-        if (visitId) {
-          try {
-            await this.logVisitEvent(Number(visitId), VisitEventType.BLOCKED_REQUEST, {
-              failedProvider: cand.name,
-              reason: 'Primary Provider Dispatch Failed',
-              error: lastError,
-            });
-          } catch {}
-        }
-      }
-    }
-
-    if (!sentSuccessfully) {
-      throw new BadRequestException('All configured OTP gateways failed to deliver message');
-    }
-
-    const resolvedCampaignId =
-      campaignId != null && Number(campaignId) > 0
-        ? Number(campaignId)
-        : null;
-
-    const row = this.otpRepository.create({
-      phone: cleanPhone,
-      otpSalt: salt,
-      otpHash,
-      createdAt: new Date(),
-      expiresAt,
-      visitId: visitId ? Number(visitId) : null,
-      campaignId: resolvedCampaignId,
-      provider: chosenProvider,
-      providerRequestId: sendResult?.providerRequestId || null,
-      status: 'sent',
+    const otpRequest = getOtpRepo().create({
+      phone,
+      otpCode,
+      campaignId: campaign?.id,
+      visitId: visitId ? parseInt(visitId, 10) : undefined,
+      status: 'pending',
       attempts: 0,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
     });
-    await this.otpRepository.save(row);
+
+    await getOtpRepo().save(otpRequest);
 
     if (visitId) {
-      await this.visitRepository.update(
-        { id: Number(visitId) },
-        { phone: cleanPhone },
-      );
-      await this.logVisitEvent(Number(visitId), VisitEventType.OTP_SEND, {
-        phone: cleanPhone,
+      await logOtpEvent(visitId, VisitEventType.OTP_SEND, {
+        phone,
+        campaignId: campaign?.id,
       });
+      try {
+        await getVisitRepo().update(
+          { id: parseInt(visitId, 10) },
+          { phone: phone.trim() },
+        );
+      } catch {
+        // swallow
+      }
     }
 
     return {
-      otp,
-      expiresInSec: Math.floor(this.ttlMs / 1000),
+      message: 'OTP sent successfully',
+      phone,
+      requestId: otpRequest.id,
     };
-  }
+  };
 
-  async verify(phone, otp, visitId) {
-    const cleanPhone = String(phone).trim();
-    const cleanOtp = String(otp).trim();
-    const now = new Date();
+  const verifyOtp = async (verifyOtpDto, clientIp) => {
+    const { phone, otpCode, visitId } = verifyOtpDto;
 
-    const lockoutKey = `otp:lockout:${cleanPhone}`;
-    const isLocked = await this.redisService.get(lockoutKey);
-    if (isLocked) {
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: `Too many verification attempts. Lockout in progress. Try again later.`,
-          error: 'Too Many Requests',
-          retryAfter: 900,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    if (await isBruteForceAttempt(clientIp, visitId)) {
+      const err = new Error('Too many failed verification attempts. Please try again later.');
+      err.statusCode = 429;
+      throw err;
     }
 
-    const active = await this.otpRepository.findOne({
-      where: { phone: cleanPhone, status: 'sent', verifiedAt: IsNull() },
+    const where = { phone, status: 'pending' };
+    if (visitId) {
+      where.visitId = parseInt(visitId, 10);
+    }
+
+    const otpRequest = await getOtpRepo().findOne({
+      where,
       order: { createdAt: 'DESC' },
     });
 
-    if (!active) {
-      throw new BadRequestException('No active OTP request found for this phone number.');
+    if (!otpRequest) {
+      const err = new Error('No pending OTP request found for this phone number');
+      err.statusCode = 404;
+      throw err;
     }
 
-    const elapsedMs = OtpService.getCorrectedElapsedMs(active.createdAt);
-    if (elapsedMs > this.ttlMs) {
-      active.status = 'failed';
-      await this.otpRepository.save(active);
-      throw new BadRequestException('OTP has expired.');
+    if (new Date() > otpRequest.expiresAt) {
+      otpRequest.status = 'expired';
+      await getOtpRepo().save(otpRequest);
+      const err = new Error('OTP has expired. Please request a new one.');
+      err.statusCode = 400;
+      throw err;
     }
 
-    if (active.attempts >= this.maxAttempts) {
-      active.status = 'failed';
-      await this.otpRepository.save(active);
-      await this.redisService.set(lockoutKey, '1', 15 * 60);
-      throw new HttpException(
-        {
-          statusCode: HttpStatus.TOO_MANY_REQUESTS,
-          message: 'Too many verification attempts. Lockout in progress for 15 minutes.',
-          error: 'Too Many Requests',
-          retryAfter: 15 * 60,
-        },
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+    if (otpRequest.attempts >= 3) {
+      otpRequest.status = 'failed';
+      await getOtpRepo().save(otpRequest);
+      const err = new Error('Maximum verification attempts exceeded. Please request a new OTP.');
+      err.statusCode = 400;
+      throw err;
     }
 
-    active.attempts += 1;
-
-    const providerName = active.provider || 'local';
-    const isPartner = providerName.toLowerCase() === 'partner' || providerName.toLowerCase() === 'partner_api';
-
-    if (isPartner) {
-      let providerConfig = null;
-      if (active.campaignId) {
-        const apiConfig = await this.apiConfigRepository.findOne({
-          where: { campaignId: active.campaignId },
-        });
-        if (apiConfig?.otpConfigJson) {
-          try {
-            providerConfig = JSON.parse(apiConfig.otpConfigJson);
-          } catch {}
-        }
-      }
-
-      const providerInstance = this.providerManager.getProvider(providerName);
-      if (!providerInstance.verifyOtp) {
-        throw new BadRequestException('Selected partner provider does not support verification.');
-      }
-
-      const verifyResult = await providerInstance.verifyOtp(
-        cleanPhone,
-        cleanOtp,
-        active.providerRequestId || '',
-        providerConfig,
-      );
-
-      if (!verifyResult.success) {
-        if (visitId) {
-          try {
-            await this.visitRepository.manager.getRepository('VisitEvent').save({
-              visitId: Number(visitId),
-              eventType: VisitEventType.BRUTE_FORCE_ATTEMPT,
-              metadata: { phone: cleanPhone, attempts: active.attempts, reason: 'Partner verification failed' },
-            });
-          } catch {}
-        }
-
-        if (active.attempts >= this.maxAttempts) {
-          active.status = 'failed';
-          await this.otpRepository.save(active);
-          await this.redisService.set(lockoutKey, '1', 15 * 60);
-          
-          if (visitId) {
-            try {
-              await this.visitRepository.manager.getRepository('VisitEvent').save({
-                visitId: Number(visitId),
-                eventType: VisitEventType.BLOCKED_REQUEST,
-                metadata: { phone: cleanPhone, reason: 'Brute Force Lockout' },
-              });
-            } catch {}
-          }
-
-          throw new HttpException(
-            {
-              statusCode: HttpStatus.TOO_MANY_REQUESTS,
-              message: 'Too many verification attempts. Lockout in progress for 15 minutes.',
-              error: 'Too Many Requests',
-              retryAfter: 15 * 60,
-            },
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-
-        await this.otpRepository.save(active);
-        throw new BadRequestException(verifyResult.error || 'Invalid OTP code.');
-      }
-    } else {
-      const expected = active.otpHash;
-      const actual = this.hashOtp(cleanOtp, active.otpSalt || '');
-
-      if (actual !== expected) {
-        if (visitId) {
-          try {
-            await this.visitRepository.manager.getRepository('VisitEvent').save({
-              visitId: Number(visitId),
-              eventType: VisitEventType.BRUTE_FORCE_ATTEMPT,
-              metadata: { phone: cleanPhone, attempts: active.attempts, reason: 'OTP hash mismatch' },
-            });
-          } catch {}
-        }
-
-        if (active.attempts >= this.maxAttempts) {
-          active.status = 'failed';
-          await this.otpRepository.save(active);
-          await this.redisService.set(lockoutKey, '1', 15 * 60);
-
-          if (visitId) {
-            try {
-              await this.visitRepository.manager.getRepository('VisitEvent').save({
-                visitId: Number(visitId),
-                eventType: VisitEventType.BLOCKED_REQUEST,
-                metadata: { phone: cleanPhone, reason: 'Brute Force Lockout' },
-              });
-            } catch {}
-          }
-
-          throw new HttpException(
-            {
-              statusCode: HttpStatus.TOO_MANY_REQUESTS,
-              message: 'Too many verification attempts. Lockout in progress for 15 minutes.',
-              error: 'Too Many Requests',
-              retryAfter: 15 * 60,
-            },
-            HttpStatus.TOO_MANY_REQUESTS,
-          );
-        }
-
-        await this.otpRepository.save(active);
-        throw new BadRequestException('Invalid OTP code.');
-      }
+    if (otpRequest.otpCode !== otpCode) {
+      otpRequest.attempts += 1;
+      await getOtpRepo().save(otpRequest);
+      const err = new Error(`Invalid OTP code. ${3 - otpRequest.attempts} attempt(s) remaining.`);
+      err.statusCode = 400;
+      throw err;
     }
 
-    active.status = 'verified';
-    active.verifiedAt = now;
-    active.usedAt = now;
-    await this.otpRepository.save(active);
+    otpRequest.status = 'verified';
+    await getOtpRepo().save(otpRequest);
 
-    const resolvedVisitId = visitId ? Number(visitId) : active.visitId;
-    if (resolvedVisitId) {
-      await this.visitRepository.update(
-        { id: resolvedVisitId },
-        { phone: cleanPhone },
-      );
-      await this.logVisitEvent(resolvedVisitId, VisitEventType.OTP_VERIFY, {
-        phone: cleanPhone,
+    if (visitId) {
+      await logOtpEvent(visitId, VisitEventType.OTP_VERIFY, {
+        phone,
+        status: 'verified',
       });
+      try {
+        await getVisitRepo().update(
+          { id: parseInt(visitId, 10) },
+          { phone: phone.trim() },
+        );
+      } catch {
+        // swallow
+      }
     }
 
-    return { ok: true };
-  }
-}
+    return {
+      message: 'OTP verified successfully',
+      phone,
+      verified: true,
+    };
+  };
+
+  return {
+    generateOtp,
+    sendOtp,
+    verifyOtp,
+    isRateLimited,
+    isBruteForceAttempt,
+  };
+};
+
+export const otpService = createOtpService();

@@ -1,31 +1,41 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { EntitySchema } from 'typeorm';
 
-@Entity('users')
-export class User {
-  @PrimaryGeneratedColumn()
-  id;
+export class User {}
 
-  @Column({ unique: true })
-  email;
-
-  @Column({ select: false })
-  password;
-
-  @Column()
-  name;
-
-  @Column({ nullable: true })
-  avatar;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt;
-}
+export const UserSchema = new EntitySchema({
+  name: 'User',
+  target: User,
+  tableName: 'users',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    email: {
+      type: 'varchar',
+      unique: true,
+    },
+    password: {
+      type: 'varchar',
+      select: false,
+    },
+    name: {
+      type: 'varchar',
+    },
+    avatar: {
+      type: 'varchar',
+      nullable: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+});

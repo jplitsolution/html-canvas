@@ -1,28 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
 import axios from 'axios';
 
-@Injectable()
-export class Msg91Provider {
-  logger = new Logger(Msg91Provider.name);
-
-  async sendOtp(
-    phone,
-    otp,
-    config,
-    context,
-  ) {
+export const msg91Provider = {
+  sendOtp: async (phone, otp, config, context) => {
     const authKey = config?.authKey || config?.authkey || config?.auth_key;
     const templateId = config?.templateId || config?.template_id;
     const sender = config?.sender || 'MSG91';
 
     if (!authKey || !templateId) {
       const errorMsg = 'MSG91 credentials missing (authKey or templateId)';
-      this.logger.error(errorMsg);
+      console.error(errorMsg);
       return { success: false, error: errorMsg };
     }
 
     try {
-      this.logger.log(`Sending MSG91 OTP to ${phone}`);
+      console.log(`Sending MSG91 OTP to ${phone}`);
       const response = await axios.post(
         'https://control.msg91.com/api/v5/otp',
         {
@@ -33,7 +24,7 @@ export class Msg91Provider {
         },
         {
           headers: {
-            'authkey': authKey,
+            authkey: authKey,
             'Content-Type': 'application/json',
           },
           timeout: 6000,
@@ -48,13 +39,13 @@ export class Msg91Provider {
         };
       } else {
         const errMsg = data?.message || JSON.stringify(data);
-        this.logger.error(`MSG91 API error: ${errMsg}`);
+        console.error(`MSG91 API error: ${errMsg}`);
         return { success: false, error: `MSG91 Error: ${errMsg}` };
       }
     } catch (error) {
       const errorMsg = error.response?.data?.message || error.message;
-      this.logger.error(`MSG91 send failed: ${errorMsg}`);
+      console.error(`MSG91 send failed: ${errorMsg}`);
       return { success: false, error: `MSG91 Error: ${errorMsg}` };
     }
-  }
-}
+  },
+};
