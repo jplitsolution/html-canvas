@@ -14,6 +14,14 @@ export const createUploadService = () => {
     return !!(cloudName && apiKey && apiSecret);
   };
 
+  if (isCloudinaryConfigured()) {
+    cloudinary.config({
+      cloud_name: config.cloudinary.cloudName,
+      api_key: config.cloudinary.apiKey,
+      api_secret: config.cloudinary.apiSecret,
+    });
+  }
+
   const allowLocalFallback = () => {
     return config.environment !== 'production';
   };

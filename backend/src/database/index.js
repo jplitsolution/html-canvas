@@ -14,6 +14,7 @@ import { VisitSchema } from '../modules/analytics/entities/visit.entity.js';
 import { VisitEventSchema } from '../modules/analytics/entities/visit-event.entity.js';
 import getConfig from '../config/configuration.js';
 
+/** @type {DataSource | null} */
 let dataSource = null;
 
 export const entities = [
@@ -33,7 +34,7 @@ export const entities = [
 ];
 
 export const initDatabase = async () => {
-  if (dataSource && dataSource.isInitialized) {
+  if (dataSource?.isInitialized) {
     return dataSource;
   }
 
@@ -57,7 +58,7 @@ export const initDatabase = async () => {
 };
 
 export const getDataSource = () => {
-  if (!dataSource || !dataSource.isInitialized) {
+  if (!dataSource?.isInitialized) {
     throw new Error('Database DataSource has not been initialized yet.');
   }
   return dataSource;

@@ -53,4 +53,8 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
   },
+  archiveRetentionDays: parseInt(
+    process.env.ARCHIVE_RETENTION_DAYS || '30',
+    10,
+  ),
 });

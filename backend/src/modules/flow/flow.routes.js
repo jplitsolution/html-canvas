@@ -1,5 +1,6 @@
 import { flowService } from './flow.service.js';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
+import { publicRateLimit } from '../../common/guards/public-rate-limit.guard.js';
 
 function extractHeaderMsisdn(headers) {
   if (!headers) return '';
@@ -68,7 +69,7 @@ export async function flowRoutes(fastify, options) {
     });
   });
 
-  fastify.post('/transition', async (request, reply) => {
+  fastify.post('/transition', { preHandler: publicRateLimit }, async (request, reply) => {
     const body = request.body || {};
     return flowService.transition({
       visitId: body.visitId,

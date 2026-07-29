@@ -3,6 +3,8 @@ import { initDatabase } from './database/index.js';
 import { seedPrebuiltTemplates } from './database/seed/templates-seed.service.js';
 import { createApp } from './app.js';
 import getConfig from './config/configuration.js';
+import { searchService } from './modules/search/search.service.js';
+import { startAnalyticsScheduler } from './modules/analytics/analytics.scheduler.js';
 
 const start = async () => {
   try {
@@ -15,6 +17,9 @@ const start = async () => {
 
     console.log('Seeding prebuilt templates...');
     await seedPrebuiltTemplates();
+
+    await searchService.init();
+    startAnalyticsScheduler();
 
     const app = await createApp();
 

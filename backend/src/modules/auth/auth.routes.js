@@ -1,4 +1,5 @@
 import { authService } from './auth.service.js';
+import { usersService } from '../users/users.service.js';
 
 export async function authRoutes(fastify, options) {
   fastify.post('/register', async (request, reply) => {
@@ -30,7 +31,14 @@ export async function authRoutes(fastify, options) {
     '/me',
     { onRequest: [fastify.authenticate] },
     async (request, reply) => {
-      return request.user;
+      const user = await usersService.findById(request.user.id);
+      if (!user) {
+        reply.status(404);
+        return { statusCode: 404, message: 'User not found' };
+      }
+      const result = { ...user };
+      delete result.password;
+      return result;
     },
   );
 

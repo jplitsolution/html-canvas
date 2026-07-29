@@ -21,8 +21,8 @@ export async function templatesRoutes(fastify, options) {
       const token = authHeader.substring(7);
       try {
         const payload = fastify.jwt.decode(token);
-        if (payload && typeof payload.sub === 'number') {
-          userId = payload.sub;
+        if (payload && payload.sub != null) {
+          userId = Number(payload.sub);
         }
       } catch {
         // Ignore token parse error

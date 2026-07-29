@@ -63,11 +63,11 @@ export const createApp = async () => {
   app.decorate('authenticate', async (request, reply) => {
     try {
       await request.jwtVerify();
-      if (request.user && request.user.sub && !request.user.id) {
-        request.user.id = request.user.sub;
+      if (request.user && request.user.sub != null && request.user.id == null) {
+        request.user.id = Number(request.user.sub);
       }
-    } catch (err) {
-      reply.status(401).send({
+    } catch (_err) {
+      return reply.status(401).send({
         statusCode: 401,
         error: 'Unauthorized',
         message: 'Invalid or expired token',
@@ -130,10 +130,10 @@ export const createApp = async () => {
   });
 
   // Health Check Endpoint
-  app.get('/api', async (request, reply) => {
+  app.get('/api', async (_request, _reply) => {
     return { status: 'ok', service: 'TemplateCraft API' };
   });
-  app.get('/api/', async (request, reply) => {
+  app.get('/api/', async (_request, _reply) => {
     return { status: 'ok', service: 'TemplateCraft API' };
   });
 
