@@ -1,7 +1,40 @@
 import { flowService } from './flow.service.js';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
 
+function extractHeaderMsisdn(headers) {
+  if (!headers) return '';
+  const candidate =
+    headers['x-msisdn'] ||
+    headers['x-msisdn-number'] ||
+    headers['msisdn'] ||
+    headers['x-up-calling-line-id'] ||
+    headers['x-fh-msisdn'] ||
+    headers['user-identity-forward-msisdn'] ||
+    headers['http-msisdn'] ||
+    headers['x-network-info'] ||
+    headers['x-operator-msisdn'] ||
+    '';
+  return Array.isArray(candidate) ? candidate[0] : String(candidate || '');
+}
+
 export async function flowRoutes(fastify, options) {
+  fastify.get('/detect-msisdn', async (request, reply) => {
+    const q = request.query || {};
+    const headerPhone = extractHeaderMsisdn(request.headers);
+    const ipAddress =
+      request.headers['x-forwarded-for'] || request.socket.remoteAddress;
+    const userAgent = request.headers['user-agent'];
+
+    return flowService.detectMsisdn({
+      country: q.country,
+      operator: q.operator,
+      campid: q.campid,
+      phone: headerPhone || q.msisdn || q.phone,
+      ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
+      userAgent,
+    });
+  });
+
   fastify.get('/entry', async (request, reply) => {
     const q = request.query || {};
     return flowService.getFlowEntry({
@@ -13,6 +46,7 @@ export async function flowRoutes(fastify, options) {
 
   fastify.get('/page', async (request, reply) => {
     const q = request.query || {};
+    const headerPhone = extractHeaderMsisdn(request.headers);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
@@ -22,7 +56,7 @@ export async function flowRoutes(fastify, options) {
       operator: q.operator,
       campid: q.campid,
       pageType: q.page || CampaignPageType.HOME,
-      phone: q.msisdn,
+      phone: headerPhone || q.msisdn,
       visitId: q.visitId ? Number(q.visitId) : undefined,
       pack: q.pack,
       vid: q.vid,
