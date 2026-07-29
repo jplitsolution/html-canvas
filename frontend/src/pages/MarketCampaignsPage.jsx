@@ -9,6 +9,7 @@ import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/common/Modal'
 import useStore from '../store/useStore'
 import * as marketsApi from '../services/api/markets'
+import { campaignDetailPath } from '../utils/routes'
 
 function CreateMarketCampaignModal({
   isOpen,
@@ -39,7 +40,7 @@ function CreateMarketCampaignModal({
       setCopyFromCampaignId('')
       onClose()
       onCreated?.(campaign)
-      navigate(`/campaigns/${campaign.id}`)
+      navigate(campaignDetailPath(countryCode, operatorCode, campaign.id))
     } catch (err) {
       addToast(err.message || 'Failed to create campaign', 'error')
     } finally {
@@ -243,7 +244,9 @@ function MarketCampaignsPage() {
                   <tr
                     key={campaign.id}
                     className="cursor-pointer"
-                    onClick={() => navigate(`/campaigns/${campaign.id}`)}
+                    onClick={() =>
+                      navigate(campaignDetailPath(countryCode, operatorCode, campaign.id))
+                    }
                   >
                     <td className="col-text font-medium">{campaign.name}</td>
                     <td className="col-text">

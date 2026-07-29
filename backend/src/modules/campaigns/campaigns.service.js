@@ -173,8 +173,20 @@ export const createCampaignsService = () => {
       const actives = campaigns.filter((c) => c.active);
       if (actives.length === 1) {
         campaign = actives[0];
+      } else if (actives.length > 1) {
+        // Multiple active campaigns in same market — prefer most recently updated.
+        // Callers with campid still resolve uniquely via findByTrackingId.
+        campaign = [...actives].sort(
+          (a, b) =>
+            new Date(b.updatedAt || 0).getTime() -
+            new Date(a.updatedAt || 0).getTime(),
+        )[0];
       } else {
-        return null;
+        campaign = [...campaigns].sort(
+          (a, b) =>
+            new Date(b.updatedAt || 0).getTime() -
+            new Date(a.updatedAt || 0).getTime(),
+        )[0];
       }
     }
 
@@ -339,6 +351,9 @@ export const createCampaignsService = () => {
 
     if (dto.name !== undefined) campaign.name = dto.name.trim();
     if (dto.serviceId !== undefined) campaign.serviceId = dto.serviceId;
+    if (dto.cgRedirectUrl !== undefined) {
+      campaign.cgRedirectUrl = dto.cgRedirectUrl?.trim() || null;
+    }
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });
@@ -446,13 +461,43 @@ export const createCampaignsService = () => {
   };
 
   const getPage = async (campaignId, pageType, userId) => {
-    const campaign = await findOne(campaignId, userId);
-    const page = campaign.pages.find((p) => p.pageType === pageType);
+    // Use unsanitized campaign so editor gets real html/css/projectData
+    // (findOne strips content to "[saved]" for list payloads).
+    const campaign = await getCampaignRepo().findOne({
+      where: { id: parseInt(campaignId, 10) },
+      relations: {
+        pages: { template: true },
+        marketOperator: { country: true },
+      },
+    });
+    if (!campaign) {
+      const err = new Error(`Campaign with ID ${campaignId} not found`);
+      err.statusCode = 404;
+      throw err;
+    }
+    if (campaign.userId !== userId) {
+      const err = new Error('You do not have permission to access this campaign');
+      err.statusCode = 403;
+      throw err;
+    }
+
+    await ensureCampaignPages(campaign);
+
+    const page = (campaign.pages || []).find((p) => p.pageType === pageType);
     if (!page) {
       const err = new Error(`Page type ${pageType} not found for campaign`);
       err.statusCode = 404;
       throw err;
     }
+
+    // Always reload template fresh in case ensureCampaignPages just created it
+    if (page.templateId) {
+      const template = await getTemplateRepo().findOne({
+        where: { id: page.templateId },
+      });
+      if (template) page.template = template;
+    }
+
     return page;
   };
 
@@ -493,13 +538,31 @@ export const createCampaignsService = () => {
   const upsertApiConfig = async (campaignId, payload, userId) => {
     await findOne(campaignId, userId);
 
+    const allowed = {
+      blocklistApi: payload.blocklistApi,
+      subscriptionApi: payload.subscriptionApi,
+      subscribeApi: payload.subscribeApi,
+      headersJson: payload.headersJson,
+      otpConfigJson: payload.otpConfigJson,
+      resolveMsisdnUrl: payload.resolveMsisdnUrl,
+      heProvider: payload.heProvider,
+      heConfigJson: payload.heConfigJson,
+    };
+    // Strip undefined so we don't wipe fields the client omitted
+    Object.keys(allowed).forEach((k) => {
+      if (allowed[k] === undefined) delete allowed[k];
+    });
+
     let config = await getApiConfigRepo().findOne({
       where: { campaignId: parseInt(campaignId, 10) },
     });
     if (!config) {
-      config = getApiConfigRepo().create({ campaignId: parseInt(campaignId, 10), ...payload });
+      config = getApiConfigRepo().create({
+        campaignId: parseInt(campaignId, 10),
+        ...allowed,
+      });
     } else {
-      Object.assign(config, payload);
+      Object.assign(config, allowed);
     }
     return getApiConfigRepo().save(config);
   };

@@ -44,6 +44,7 @@ export const createPartnersService = () => {
       code,
       userId,
       active: dto.active ?? true,
+      postbackUrl: dto.postbackUrl?.trim() || null,
     });
     return getVendorRepo().save(vendor);
   };
@@ -66,6 +67,9 @@ export const createPartnersService = () => {
     }
     if (dto.name !== undefined) vendor.name = dto.name.trim();
     if (dto.active !== undefined) vendor.active = dto.active;
+    if (dto.postbackUrl !== undefined) {
+      vendor.postbackUrl = dto.postbackUrl?.trim() || null;
+    }
     return getVendorRepo().save(vendor);
   };
 
@@ -100,6 +104,7 @@ export const createPartnersService = () => {
       vendorId: dto.vendorId,
       userId,
       active: dto.active ?? true,
+      postbackUrl: dto.postbackUrl?.trim() || null,
     });
     return getAffiliateRepo().save(affiliate);
   };
@@ -129,6 +134,9 @@ export const createPartnersService = () => {
     }
     if (dto.name !== undefined) affiliate.name = dto.name.trim();
     if (dto.active !== undefined) affiliate.active = dto.active;
+    if (dto.postbackUrl !== undefined) {
+      affiliate.postbackUrl = dto.postbackUrl?.trim() || null;
+    }
     return getAffiliateRepo().save(affiliate);
   };
 

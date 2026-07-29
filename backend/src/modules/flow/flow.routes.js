@@ -61,8 +61,8 @@ export async function flowRoutes(fastify, options) {
       visitId: q.visitId ? Number(q.visitId) : undefined,
       pack: q.pack,
       vid: q.vid,
-      affId: q.affId,
-      clickId: q.clickId,
+      affId: q.affId || q.aff_id,
+      clickId: q.clickId || q.click_id || q.rcid,
       landingUrl: q.landingUrl || request.url,
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
@@ -80,6 +80,9 @@ export async function flowRoutes(fastify, options) {
       country: body.country,
       operator: body.operator,
       campid: body.campid,
+      clickId: body.clickId || body.click_id || body.rcid,
+      vid: body.vid,
+      affId: body.affId || body.aff_id,
     });
   });
 }

@@ -50,6 +50,12 @@ export const CampaignSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
+    cgRedirectUrl: {
+      name: 'cg_redirect_url',
+      type: 'varchar',
+      length: 1024,
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

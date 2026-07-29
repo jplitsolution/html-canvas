@@ -16,6 +16,10 @@ import VendorsPage from '../pages/VendorsPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
 
+function Protected({ children }) {
+  return <RequireAuth>{children}</RequireAuth>
+}
+
 function App() {
   return (
     <GlobalErrorBoundary name="App">
@@ -27,74 +31,34 @@ function App() {
           <main id="main-content">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
-              <Route
-                path="/markets"
-                element={
-                  <RequireAuth>
-                    <MarketsPage />
-                  </RequireAuth>
-                }
-              />
+
+              <Route path="/markets" element={<Protected><MarketsPage /></Protected>} />
               <Route
                 path="/markets/:countryCode/:operatorCode"
-                element={
-                  <RequireAuth>
-                    <MarketCampaignsPage />
-                  </RequireAuth>
-                }
+                element={<Protected><MarketCampaignsPage /></Protected>}
               />
               <Route
-                path="/campaigns"
-                element={<Navigate to="/markets" replace />}
+                path="/markets/:countryCode/:operatorCode/campaigns/:id"
+                element={<Protected><CampaignDetailPage /></Protected>}
               />
               <Route
-                path="/analytics"
-                element={
-                  <RequireAuth>
-                    <CampaignLogsPage />
-                  </RequireAuth>
-                }
+                path="/markets/:countryCode/:operatorCode/campaigns/:id/edit/:pageType"
+                element={<Protected><CampaignBuilder /></Protected>}
               />
               <Route
-                path="/vendors"
-                element={
-                  <RequireAuth>
-                    <VendorsPage />
-                  </RequireAuth>
-                }
+                path="/markets/:countryCode/:operatorCode/campaigns/:id/flow"
+                element={<Protected><FlowBuilderPage /></Protected>}
               />
-              <Route
-                path="/profile"
-                element={
-                  <RequireAuth>
-                    <ProfilePage />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/campaigns/:id"
-                element={
-                  <RequireAuth>
-                    <CampaignDetailPage />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/campaigns/:id/flow"
-                element={
-                  <RequireAuth>
-                    <FlowBuilderPage />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/campaigns/:id/edit/:pageType"
-                element={
-                  <RequireAuth>
-                    <CampaignBuilder />
-                  </RequireAuth>
-                }
-              />
+
+              {/* Legacy flat campaign URLs — still work */}
+              <Route path="/campaigns" element={<Navigate to="/markets" replace />} />
+              <Route path="/campaigns/:id" element={<Protected><CampaignDetailPage /></Protected>} />
+              <Route path="/campaigns/:id/edit/:pageType" element={<Protected><CampaignBuilder /></Protected>} />
+              <Route path="/campaigns/:id/flow" element={<Protected><FlowBuilderPage /></Protected>} />
+
+              <Route path="/analytics" element={<Protected><CampaignLogsPage /></Protected>} />
+              <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
+              <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/" element={<Navigate to="/markets" replace />} />
               <Route path="*" element={<Navigate to="/markets" replace />} />

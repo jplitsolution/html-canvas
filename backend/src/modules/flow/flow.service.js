@@ -9,14 +9,14 @@ import { VisitEventType } from '../analytics/entities/visit-event.entity.js';
 import { variableResolverService } from '../../common/services/variable-resolver.service.js';
 import { flowEngineService } from './flow-engine.service.js';
 import { ApiConfig } from '../api-config/entities/api-config.entity.js';
-import { OtpRequest } from '../otp/entities/otp-request.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { isNumericCampid, parseTrackingId } from '../markets/tracking-id.util.js';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
+import { otpService } from '../otp/otp.service.js';
+import { heService } from './he.service.js';
 
 export const createFlowService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
-  const getOtpRepo = () => getRepository(OtpRequest);
 
   const normalizePack = (pack) => {
     const value = (pack || 'daily').toLowerCase();
@@ -39,6 +39,78 @@ export const createFlowService = () => {
     });
     return `/subscription?${params.toString()}`;
   };
+
+  /**
+   * Null-flow CG redirect: append/fill click_id (and common attrs) onto campaign CG URL.
+   * Supports {{click_id}} / {rcid} placeholders, else adds ?click_id=.
+   */
+  const buildCgRedirectUrl = (rawUrl, attrs = {}) => {
+    const clickId = String(attrs.clickId || '').trim();
+    let url = String(rawUrl || '').trim();
+    if (!url) return '';
+
+    const vars = {
+      click_id: clickId,
+      rcid: clickId,
+      clickId,
+      vid: attrs.vid || '',
+      aff_id: attrs.affId || '',
+      campid: attrs.campid != null ? String(attrs.campid) : '',
+    };
+    const original = url;
+    for (const [key, val] of Object.entries(vars)) {
+      url = url.split(`{{${key}}}`).join(encodeURIComponent(val));
+      url = url.split(`{${key}}`).join(encodeURIComponent(val));
+    }
+
+    const hadPlaceholder =
+      /\{\{?(?:click_id|rcid|clickId|vid|aff_id|campid)\}?\}/.test(original);
+    if (clickId && !hadPlaceholder) {
+      try {
+        const u = new URL(url);
+        if (!u.searchParams.has('click_id') && !u.searchParams.has('rcid')) {
+          u.searchParams.set('click_id', clickId);
+        }
+        return u.toString();
+      } catch {
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}click_id=${encodeURIComponent(clickId)}`;
+      }
+    }
+    return url;
+  };
+
+  const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
+    const mode =
+      flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
+    const cg = campaign.cgRedirectUrl?.trim();
+    if (mode !== 'NONE' || !cg) return null;
+
+    let clickId = String(input.clickId || '').trim();
+    let vid = input.vid || '';
+    let affId = input.affId || '';
+    if (visitId && (!clickId || !vid)) {
+      try {
+        const visit = await analyticsService.getVisit(visitId);
+        if (visit) {
+          clickId = clickId || visit.clickId || '';
+          vid = vid || visit.vidRaw || '';
+          affId = affId || visit.affRaw || '';
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+
+    return buildCgRedirectUrl(cg, {
+      clickId,
+      vid,
+      affId,
+      campid: input.campid || campaign.id,
+    });
+  };
+
+  // Attribution only: click_id / vid already saved on visit. No CPA fire.
 
   const getActions = (pageType) => {
     if (pageType === CampaignPageType.HOME) return ['SUBSCRIBE'];
@@ -91,6 +163,7 @@ export const createFlowService = () => {
       actions: getActions(pageType),
       pack: resolvedPack,
       subscriptionUrl: resolvedSubscriptionUrl,
+      cgRedirectUrl: campaign.cgRedirectUrl || null,
     };
   };
 
@@ -223,11 +296,7 @@ export const createFlowService = () => {
   };
 
   const hasVerifiedOtp = async (visitId, phone) => {
-    if (!visitId || !phone) return false;
-    const verifiedOtp = await getOtpRepo().findOne({
-      where: { phone, visitId: parseInt(visitId, 10), status: 'verified' },
-    });
-    return Boolean(verifiedOtp);
+    return otpService.isVisitOtpVerified(visitId, phone);
   };
 
   const assertTrackingAssignmentAvailable = async (
@@ -463,46 +532,79 @@ export const createFlowService = () => {
       }
       await analyticsService.logEvent(visitId, eventType);
 
-      const subscribed = await partnerApiService.checkSubscription(
-        apiConfig,
-        {
-          phone,
-          serviceId,
-          country: campaign.country,
-          operator: campaign.operator,
-        },
-      );
-      if (subscribed) {
-        resolvedPageType = CampaignPageType.THANKYOU;
-        await analyticsService.updateVisit(
-          visitId,
-          VisitStatus.SUBSCRIBED,
-          CampaignPageType.THANKYOU,
-          phone,
-        );
-        await analyticsService.logEvent(
-          visitId,
-          VisitEventType.SUBSCRIBE_SUCCESS,
+      const guardModeForSub =
+        flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
+      // Null/CG flow: no checksub — just store visit + redirect
+      if (guardModeForSub !== 'NONE' && phone) {
+        const subscribed = await partnerApiService.checkSubscription(
+          apiConfig,
           {
-            info: 'Already subscribed',
+            phone,
+            serviceId,
+            country: campaign.country,
+            operator: campaign.operator,
           },
         );
-      } else {
-        let visitStatus = VisitStatus.HOME_SHOWN;
-        if (resolvedPageType === CampaignPageType.OTP) {
-          visitStatus = VisitStatus.OTP_SHOWN;
-        } else if (resolvedPageType === CampaignPageType.CONFIRM) {
-          visitStatus = VisitStatus.CONFIRM_SHOWN;
+        if (subscribed) {
+          resolvedPageType = CampaignPageType.THANKYOU;
+          await analyticsService.updateVisit(
+            visitId,
+            VisitStatus.SUBSCRIBED,
+            CampaignPageType.THANKYOU,
+            phone,
+          );
+          await analyticsService.logEvent(
+            visitId,
+            VisitEventType.SUBSCRIBE_SUCCESS,
+            {
+              info: 'Already subscribed',
+            },
+          );
+        } else {
+          let visitStatus = VisitStatus.HOME_SHOWN;
+          if (resolvedPageType === CampaignPageType.OTP) {
+            visitStatus = VisitStatus.OTP_SHOWN;
+          } else if (resolvedPageType === CampaignPageType.CONFIRM) {
+            visitStatus = VisitStatus.CONFIRM_SHOWN;
+          }
+          await analyticsService.updateVisit(
+            visitId,
+            visitStatus,
+            resolvedPageType,
+            phone,
+          );
         }
+      } else {
         await analyticsService.updateVisit(
           visitId,
-          visitStatus,
+          VisitStatus.HOME_SHOWN,
           resolvedPageType,
-          phone,
+          phone || undefined,
         );
       }
     } else if (visitId && phone) {
       await analyticsService.setVisitPhone(visitId, phone);
+    }
+
+    const cgRedirect = await maybeNullFlowCgRedirect(campaign, visitId, input);
+    if (cgRedirect) {
+      return {
+        campaignId: campaign.id,
+        visitId,
+        pageType: CampaignPageType.HOME,
+        entryPage,
+        templateId: null,
+        html: '',
+        css: '',
+        variables,
+        actions: [],
+        pack: normalizePack(input.pack),
+        projectData: {},
+        cgRedirectUrl: campaign.cgRedirectUrl || null,
+        subscriptionUrl: null,
+        externalRedirect: cgRedirect,
+        clickId: input.clickId || null,
+      };
     }
 
     const page = campaign.pages.find((p) => p.pageType === resolvedPageType);
@@ -530,6 +632,12 @@ export const createFlowService = () => {
       actions: getActions(resolvedPageType),
       pack: normalizePack(input.pack),
       projectData: templateData.projectData || {},
+      cgRedirectUrl: campaign.cgRedirectUrl || null,
+      subscriptionUrl: buildSubscriptionUrl(
+        campaign,
+        normalizePack(input.pack),
+      ),
+      clickId: input.clickId || null,
     };
   };
 
@@ -596,6 +704,39 @@ export const createFlowService = () => {
 
       if (mode === 'NONE') {
         nextPage = CampaignPageType.HOME;
+        const redirect = await maybeNullFlowCgRedirect(
+          campaign,
+          input.visitId,
+          {
+            clickId: input.clickId,
+            vid: input.vid,
+            affId: input.affId,
+            campid: input.campid,
+          },
+        );
+        if (redirect) {
+          await analyticsService.updateVisit(
+            input.visitId,
+            VisitStatus.HOME_SHOWN,
+            CampaignPageType.HOME,
+            resolvedPhone || undefined,
+          );
+          return {
+            ...buildPageResponse(
+              campaign,
+              CampaignPageType.HOME,
+              {
+                phone: resolvedPhone,
+                country: campaign.country,
+                operator: campaign.operator,
+                service_id: serviceId,
+                plan: '',
+              },
+              input.visitId,
+            ),
+            externalRedirect: redirect,
+          };
+        }
       } else {
         const routed = await resolveHomeSubscribeNext(
           mode,
@@ -853,13 +994,7 @@ export const createFlowService = () => {
         throw err;
       }
 
-      const verifiedOtp = await getOtpRepo().findOne({
-        where: {
-          phone,
-          visitId: parseInt(input.visitId, 10),
-          status: 'verified',
-        },
-      });
+      const verifiedOtp = await hasVerifiedOtp(input.visitId, phone);
 
       if (!verifiedOtp) {
         const err = new Error('Phone number has not been verified with OTP');
@@ -936,29 +1071,27 @@ export const createFlowService = () => {
   };
 
   const detectMsisdn = async (input) => {
-    let rawPhone = (input.phone || '').trim();
+    let rawPhone = heService.normalizePhone(input.phone || '');
     const campaign = await resolveCampaign(input).catch(() => null);
     let apiConfig = null;
-    let serviceId = '';
+    let serviceId = campaign?.serviceId || '';
+    let heMeta = { provider: 'header', error: null };
 
-    if (campaign?.partnerId) {
-      const partner = await partnersService.findById(campaign.partnerId).catch(() => null);
-      if (partner?.apiConfigId) {
-        apiConfig = await getApiConfigRepo().findOne({
-          where: { id: partner.apiConfigId },
-        }).catch(() => null);
-      }
-      serviceId = partner?.serviceId || '';
+    if (campaign?.id) {
+      apiConfig = await getApiConfigRepo().findOne({
+        where: { campaignId: campaign.id },
+      });
     }
 
-    if (!rawPhone && apiConfig?.resolveMsisdnUrl) {
-      const ispPhone = await partnerApiService.resolveMsisdn(apiConfig, {
+    if (apiConfig) {
+      heMeta = await heService.resolve(apiConfig, {
+        phone: rawPhone,
+        hint: rawPhone,
         country: input.country || campaign?.country,
         operator: input.operator || campaign?.operator,
-        hint: input.phone,
-      }).catch(() => null);
-      if (ispPhone) {
-        rawPhone = ispPhone;
+      });
+      if (heMeta.phone) {
+        rawPhone = heMeta.phone;
       }
     }
 
@@ -968,15 +1101,19 @@ export const createFlowService = () => {
 
     if (rawPhone && apiConfig) {
       const [subRes, blockRes] = await Promise.all([
-        partnerApiService.checkSubscription(apiConfig, {
-          phone: rawPhone,
-          serviceId,
-          country: input.country || campaign?.country,
-          operator: input.operator || campaign?.operator,
-        }).catch(() => false),
-        partnerApiService.checkBlocked(apiConfig, {
-          phone: rawPhone,
-        }).catch(() => ({ blocked: false })),
+        partnerApiService
+          .checkSubscription(apiConfig, {
+            phone: rawPhone,
+            serviceId,
+            country: input.country || campaign?.country,
+            operator: input.operator || campaign?.operator,
+          })
+          .catch(() => false),
+        partnerApiService
+          .checkBlocked(apiConfig, {
+            phone: rawPhone,
+          })
+          .catch(() => ({ blocked: false })),
       ]);
 
       subscribed = Boolean(subRes);
@@ -990,6 +1127,9 @@ export const createFlowService = () => {
       subscribed,
       blocked,
       blockReason,
+      heProvider: heMeta.provider || apiConfig?.heProvider || 'header',
+      heError: heMeta.error || null,
+      cgRedirectUrl: campaign?.cgRedirectUrl || null,
       country: input.country || campaign?.country,
       operator: input.operator || campaign?.operator,
       campaignId: campaign?.id || null,

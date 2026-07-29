@@ -6,7 +6,6 @@ export const VisitStatus = {
   VISIT: 'VISIT',
   BLOCKED: 'BLOCKED',
   SUBSCRIBED: 'SUBSCRIBED',
-  PLAN_SHOWN: 'PLAN_SHOWN',
   HOME_SHOWN: 'HOME_SHOWN',
   OTP_SHOWN: 'OTP_SHOWN',
   CONFIRM_SHOWN: 'CONFIRM_SHOWN',
@@ -100,6 +99,11 @@ export const VisitSchema = new EntitySchema({
       name: 'updated_at',
       type: 'timestamp',
       updateDate: true,
+    },
+    otpVerifiedAt: {
+      name: 'otp_verified_at',
+      type: 'timestamp',
+      nullable: true,
     },
   },
   relations: {
