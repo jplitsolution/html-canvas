@@ -171,9 +171,10 @@ export function getCampaignPreviewUrl(campaign, options = {}) {
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
 
-  const mode = campaign.verificationMode || campaign.verification_mode
-  if (options.withMsisdn || mode === 'HEADER_INJECTION' || mode === 'MSISDN_ONLY') {
-    params.set('msisdn', options.msisdn || '919876543210')
+  // Only attach msisdn when the caller explicitly passes one (e.g. simulate HE).
+  // Never invent a dummy number — localhost HE will correctly return empty → OTP path.
+  if (options.msisdn) {
+    params.set('msisdn', String(options.msisdn))
   }
 
   return `/subscription?${params.toString()}`
@@ -199,9 +200,8 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options =
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
 
-  const mode = campaign.verificationMode || campaign.verification_mode
-  if (options.withMsisdn || mode === 'HEADER_INJECTION' || mode === 'MSISDN_ONLY') {
-    params.set('msisdn', options.msisdn || '919876543210')
+  if (options.msisdn) {
+    params.set('msisdn', String(options.msisdn))
   }
 
   return `/subscription?${params.toString()}`
@@ -209,6 +209,13 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options =
 
 export async function testSendOtp(payload) {
   return apiClient('/otp/test-send', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function testVerifyOtp(payload) {
+  return apiClient('/otp/test-verify', {
     method: 'POST',
     body: payload,
   })

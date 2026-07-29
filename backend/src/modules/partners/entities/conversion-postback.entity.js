@@ -1,0 +1,108 @@
+import { EntitySchema } from 'typeorm';
+
+export class ConversionPostback {}
+
+export const ConversionPostbackStatus = {
+  PENDING: 'pending',
+  SENT: 'sent',
+  FAILED: 'failed',
+  SKIPPED: 'skipped',
+};
+
+export const ConversionPostbackSchema = new EntitySchema({
+  name: 'ConversionPostback',
+  target: ConversionPostback,
+  tableName: 'conversion_postbacks',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    visitId: {
+      name: 'visit_id',
+      type: 'int',
+      nullable: true,
+    },
+    campaignId: {
+      name: 'campaign_id',
+      type: 'int',
+      nullable: true,
+    },
+    vendorId: {
+      name: 'vendor_id',
+      type: 'int',
+      nullable: true,
+    },
+    affiliateId: {
+      name: 'affiliate_id',
+      type: 'int',
+      nullable: true,
+    },
+    msisdn: {
+      type: 'varchar',
+      length: 64,
+    },
+    campid: {
+      type: 'varchar',
+      length: 128,
+      nullable: true,
+    },
+    clickId: {
+      name: 'click_id',
+      type: 'varchar',
+      length: 255,
+      nullable: true,
+    },
+    offerCode: {
+      name: 'offer_code',
+      type: 'varchar',
+      length: 128,
+      nullable: true,
+    },
+    postbackUrl: {
+      name: 'postback_url',
+      type: 'text',
+      nullable: true,
+    },
+    status: {
+      type: 'varchar',
+      length: 32,
+      default: ConversionPostbackStatus.PENDING,
+    },
+    httpStatus: {
+      name: 'http_status',
+      type: 'int',
+      nullable: true,
+    },
+    responseBody: {
+      name: 'response_body',
+      type: 'text',
+      nullable: true,
+    },
+    errorMessage: {
+      name: 'error_message',
+      type: 'text',
+      nullable: true,
+    },
+    sentAt: {
+      name: 'sent_at',
+      type: 'timestamp',
+      nullable: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+  indices: [
+    { name: 'IDX_postbacks_msisdn_status', columns: ['msisdn', 'status'] },
+    { name: 'IDX_postbacks_visit', columns: ['visitId'] },
+  ],
+});

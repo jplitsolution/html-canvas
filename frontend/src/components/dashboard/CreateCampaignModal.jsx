@@ -4,6 +4,7 @@ import Modal from '../common/Modal'
 import useStore from '../../store/useStore'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
+import { campaignDetailPath } from '../../utils/routes'
 
 function CreateCampaignModal({ isOpen, onClose, campaigns = [] }) {
   const [name, setName] = useState('')
@@ -18,18 +19,26 @@ function CreateCampaignModal({ isOpen, onClose, campaigns = [] }) {
     if (!country.trim() || !operator.trim()) return
     setCreating(true)
     try {
-      const id = await createCampaign({
+      const created = await createCampaign({
         name: name.trim() || `${country} ${operator}`,
         country: country.trim(),
         operator: operator.trim(),
         copyFromCampaignId: copyFromCampaignId ? Number(copyFromCampaignId) : undefined,
       })
+      const id = created?.id || created
       setName('')
       setCountry('')
       setOperator('')
       setCopyFromCampaignId('')
       onClose()
-      navigate(`/campaigns/${id}`)
+      // Prefer nested market URL when codes exist on created campaign
+      navigate(
+        campaignDetailPath(
+          created?.countryCode,
+          created?.operatorCode,
+          id,
+        ),
+      )
     } catch {
       // toast handled in slice
     } finally {

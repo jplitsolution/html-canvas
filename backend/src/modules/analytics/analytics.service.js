@@ -1,11 +1,10 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { Like, In } from 'typeorm';
+import { Like } from 'typeorm';
 import { getRepository } from '../../database/index.js';
 import { Visit, VisitStatus } from './entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
-import { OtpRequest } from '../otp/entities/otp-request.entity.js';
 import { searchService } from '../search/search.service.js';
 import getConfig from '../../config/configuration.js';
 
@@ -168,7 +167,6 @@ export const createAnalyticsService = () => {
       [VisitEventType.OTP_SEND]: 'OTP',
       [VisitEventType.OTP_VERIFY]: 'OTP',
       [VisitEventType.CONFIRM_VIEW]: 'CONFIRM',
-      [VisitEventType.PLAN_VIEW]: 'CONFIRM',
       [VisitEventType.SUBSCRIBE_SUCCESS]: 'THANKYOU',
       [VisitEventType.SUBSCRIBE_FAILED]: 'ERROR',
       [VisitEventType.BLOCKED]: 'BLOCKED',
@@ -225,34 +223,6 @@ export const createAnalyticsService = () => {
         );
       }
     });
-
-    const visitsMissingPhone = data.filter((visit) => !visit.phone);
-    if (visitsMissingPhone.length > 0) {
-      const visitIds = visitsMissingPhone.map((visit) => visit.id);
-      const otpRequests = await getRepository(OtpRequest).find({
-        where: { visitId: In(visitIds) },
-        select: { visitId: true, phone: true, createdAt: true },
-        order: { createdAt: 'DESC' },
-      });
-
-      const phoneByVisitId = new Map();
-      otpRequests.forEach((request) => {
-        if (
-          request.visitId &&
-          request.phone &&
-          !phoneByVisitId.has(request.visitId)
-        ) {
-          phoneByVisitId.set(request.visitId, request.phone);
-        }
-      });
-
-      visitsMissingPhone.forEach((visit) => {
-        const resolvedPhone = phoneByVisitId.get(visit.id);
-        if (resolvedPhone) {
-          visit.phone = resolvedPhone;
-        }
-      });
-    }
 
     const enrichedData = data.map((visit) => ({
       ...visit,

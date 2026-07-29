@@ -26,6 +26,11 @@ export const VendorSchema = new EntitySchema({
       type: 'boolean',
       default: true,
     },
+    postbackUrl: {
+      name: 'postback_url',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

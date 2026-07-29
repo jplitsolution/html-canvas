@@ -16,11 +16,6 @@ export const ApiConfigSchema = new EntitySchema({
       name: 'campaign_id',
       type: 'int',
     },
-    userApi: {
-      name: 'user_api',
-      type: 'varchar',
-      nullable: true,
-    },
     blocklistApi: {
       name: 'blocklist_api',
       type: 'varchar',
@@ -41,12 +36,6 @@ export const ApiConfigSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
-    otpProvider: {
-      name: 'otp_provider',
-      type: 'varchar',
-      length: 32,
-      nullable: true,
-    },
     otpConfigJson: {
       name: 'otp_config_json',
       type: 'text',
@@ -56,6 +45,18 @@ export const ApiConfigSchema = new EntitySchema({
       name: 'resolve_msisdn_url',
       type: 'varchar',
       length: 1024,
+      nullable: true,
+    },
+    heProvider: {
+      name: 'he_provider',
+      type: 'varchar',
+      length: 32,
+      nullable: true,
+      default: 'header',
+    },
+    heConfigJson: {
+      name: 'he_config_json',
+      type: 'text',
       nullable: true,
     },
     createdAt: {

@@ -5,7 +5,6 @@ export class VisitEvent {}
 export const VisitEventType = {
   VISIT: 'VISIT',
   BLOCKED: 'BLOCKED',
-  PLAN_VIEW: 'PLAN_VIEW',
   HOME_VIEW: 'HOME_VIEW',
   OTP_VIEW: 'OTP_VIEW',
   OTP_SEND: 'OTP_SEND',

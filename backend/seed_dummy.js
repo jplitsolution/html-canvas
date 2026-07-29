@@ -100,6 +100,8 @@ async function run() {
       `SA-STC-${camp2Id}`,
     );
 
+    // NOTE: Legacy page types LANDING/OTP_PROMPT/SUCCESS are obsolete.
+    // Use: node seed_proper_campaign.js for a full HOME/CONFIRM/OTP/THANKYOU/BLOCKED/ERROR campaign.
     const tplRes = await client.query(
       `SELECT id, data->>'slug' as slug FROM templates WHERE is_prebuilt = true`,
     );
@@ -110,21 +112,9 @@ async function run() {
     const successTpl = templates.find((t) => t.slug === 'sub-success');
 
     if (landingTpl && paymentTpl && successTpl) {
-      for (const campId of [camp1Id, camp1bId, camp2Id]) {
-        await client.query(
-          `INSERT INTO campaign_pages (campaign_id, page_type, template_id) VALUES ($1, 'LANDING', $2) ON CONFLICT (campaign_id, page_type) DO UPDATE SET template_id = EXCLUDED.template_id`,
-          [campId, landingTpl.id],
-        );
-        await client.query(
-          `INSERT INTO campaign_pages (campaign_id, page_type, template_id) VALUES ($1, 'OTP_PROMPT', $2) ON CONFLICT (campaign_id, page_type) DO UPDATE SET template_id = EXCLUDED.template_id`,
-          [campId, paymentTpl.id],
-        );
-        await client.query(
-          `INSERT INTO campaign_pages (campaign_id, page_type, template_id) VALUES ($1, 'SUCCESS', $2) ON CONFLICT (campaign_id, page_type) DO UPDATE SET template_id = EXCLUDED.template_id`,
-          [campId, successTpl.id],
-        );
-      }
-      console.log('Campaign pages mapped successfully');
+      console.log(
+        'Skipping legacy LANDING/OTP_PROMPT/SUCCESS mapping. Run: node seed_proper_campaign.js',
+      );
     } else {
       console.log(
         'Templates not found. Run backend dev server first so that templates are seeded!',

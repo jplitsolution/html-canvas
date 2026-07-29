@@ -34,6 +34,11 @@ export const CampaignTrackingSchema = new EntitySchema({
       type: 'timestamp',
       createDate: true,
     },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
   },
   relations: {
     campaign: {

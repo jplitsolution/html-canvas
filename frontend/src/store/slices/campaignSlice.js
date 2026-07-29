@@ -154,7 +154,7 @@ export function createCampaignSlice(set, get) {
           campaignRevision: s.campaignRevision + 1,
         }))
         get().addToast('Campaign created', 'success')
-        return campaign.id
+        return campaign
       } catch (err) {
         get().addToast(err.message || 'Failed to create campaign', 'error')
         throw err
