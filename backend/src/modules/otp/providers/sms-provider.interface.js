@@ -1,0 +1,1 @@
+// JS Interface definition stub
