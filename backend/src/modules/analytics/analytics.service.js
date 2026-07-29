@@ -270,7 +270,7 @@ export const createAnalyticsService = () => {
 
   const archiveOldData = async () => {
     const config = getConfig();
-    const retentionDays = config.ARCHIVE_RETENTION_DAYS || 30;
+    const retentionDays = config.archiveRetentionDays || 30;
     const thresholdDate = new Date();
     thresholdDate.setDate(thresholdDate.getDate() - retentionDays);
 

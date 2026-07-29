@@ -1,8 +1,9 @@
 import { otpService } from './otp.service.js';
 import getConfig from '../../config/configuration.js';
+import { publicRateLimit } from '../../common/guards/public-rate-limit.guard.js';
 
 export async function otpRoutes(fastify, options) {
-  fastify.post('/send', async (request, reply) => {
+  fastify.post('/send', { preHandler: publicRateLimit }, async (request, reply) => {
     const body = request.body || {};
     const clientIp =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
@@ -31,7 +32,7 @@ export async function otpRoutes(fastify, options) {
     return result;
   });
 
-  fastify.post('/verify', async (request, reply) => {
+  fastify.post('/verify', { preHandler: publicRateLimit }, async (request, reply) => {
     const body = request.body || {};
     const clientIp =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;

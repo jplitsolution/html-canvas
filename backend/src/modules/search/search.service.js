@@ -13,7 +13,55 @@ export const createSearchService = () => {
   let client = enabled && node ? new Client({ node }) : null;
   let connectionFailed = false;
 
+  // Logs page is always enabled because we have SQL fallback.
   const isEnabled = () => true;
+
+  const ensureIndex = async () => {
+    if (!client) return;
+    const exists = await client.indices.exists({ index: indexName });
+    if (exists) return;
+    await client.indices.create({
+      index: indexName,
+      mappings: {
+        properties: {
+          campaignId: { type: 'integer' },
+          visitId: { type: 'integer' },
+          vendorId: { type: 'integer' },
+          affiliateId: { type: 'integer' },
+          clickId: { type: 'keyword' },
+          vidRaw: { type: 'keyword' },
+          affRaw: { type: 'keyword' },
+          phoneMasked: { type: 'keyword' },
+          country: { type: 'keyword' },
+          operator: { type: 'keyword' },
+          pageType: { type: 'keyword' },
+          eventType: { type: 'keyword' },
+          status: { type: 'keyword' },
+          ip: { type: 'keyword' },
+          userAgent: { type: 'text' },
+          timestamp: { type: 'date' },
+        },
+      },
+    });
+  };
+
+  const init = async () => {
+    if (!client) {
+      console.log(
+        'Elasticsearch disabled (ELASTICSEARCH_NODE not set). Database fallback active.',
+      );
+      return;
+    }
+    try {
+      await ensureIndex();
+      console.log(`Elasticsearch ready. index=${indexName}`);
+    } catch (err) {
+      connectionFailed = true;
+      console.warn(
+        `Elasticsearch init failed (continuing with database fallback): ${err.message}`,
+      );
+    }
+  };
 
   const escapeWildcard = (value) => {
     return value.replace(/([\\*?])/g, '\\$1');
@@ -284,10 +332,179 @@ export const createSearchService = () => {
     return searchFromDb(params);
   };
 
+  const resolveInterval = (params) => {
+    if (params.interval === 'hour' || params.interval === 'day') {
+      return params.interval;
+    }
+    if (params.from && params.to && params.from === params.to) return 'hour';
+    return 'day';
+  };
+
+  const getUtcOffsetString = (timeZone, at = new Date()) => {
+    try {
+      for (const name of ['longOffset', 'shortOffset']) {
+        const parts = new Intl.DateTimeFormat('en-US', {
+          timeZone,
+          timeZoneName: name,
+          hour: '2-digit',
+        }).formatToParts(at);
+        const tzName = parts.find((p) => p.type === 'timeZoneName')?.value || '';
+        if (!tzName) continue;
+        if (tzName === 'GMT' || tzName === 'UTC') return '+00:00';
+        const match = tzName.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/i);
+        if (match) {
+          const sign = match[1];
+          const hours = String(parseInt(match[2], 10)).padStart(2, '0');
+          const mins = (match[3] || '00').padStart(2, '0');
+          return `${sign}${hours}:${mins}`;
+        }
+      }
+      const utc = new Date(at.toLocaleString('en-US', { timeZone: 'UTC' }));
+      const local = new Date(at.toLocaleString('en-US', { timeZone }));
+      const offsetMin = Math.round((local.getTime() - utc.getTime()) / 60000);
+      const sign = offsetMin >= 0 ? '+' : '-';
+      const abs = Math.abs(offsetMin);
+      return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
+    } catch {
+      return '+00:00';
+    }
+  };
+
+  const aggregationsFromDb = async (
+    params,
+    interval = 'day',
+    timeZone = 'UTC',
+  ) => {
+    const buildBaseQuery = (selectKey, alias = 'groupkey') => {
+      const qb = getRepository(VisitEvent)
+        .createQueryBuilder('event')
+        .leftJoin('event.visit', 'visit')
+        .select(selectKey, alias)
+        .addSelect('COUNT(event.id)', 'count');
+      applyDbFilters(qb, params);
+      return qb;
+    };
+
+    const byEventTypeRaw = await buildBaseQuery('event.eventType')
+      .groupBy('event.eventType')
+      .orderBy('count', 'DESC')
+      .limit(30)
+      .getRawMany();
+
+    const byVendorRaw = await buildBaseQuery('visit.vendorId')
+      .groupBy('visit.vendorId')
+      .orderBy('count', 'DESC')
+      .limit(20)
+      .getRawMany();
+
+    const byAffiliateRaw = await buildBaseQuery('visit.affiliateId')
+      .groupBy('visit.affiliateId')
+      .orderBy('count', 'DESC')
+      .limit(20)
+      .getRawMany();
+
+    const byStatusRaw = await buildBaseQuery('visit.visitStatus')
+      .groupBy('visit.visitStatus')
+      .orderBy('count', 'DESC')
+      .limit(20)
+      .getRawMany();
+
+    const dbType = getDataSource().options.type;
+    const offset = getUtcOffsetString(timeZone);
+    let dateSelect;
+    if (dbType === 'postgres') {
+      const fmt = interval === 'hour' ? 'YYYY-MM-DD"T"HH24:00:00' : 'YYYY-MM-DD';
+      dateSelect = `TO_CHAR(timezone('${timeZone.replace(/'/g, "''")}', event.createdAt AT TIME ZONE 'UTC'), '${fmt}')`;
+    } else if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
+      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+      dateSelect = `strftime('${fmt}', event.createdAt)`;
+    } else {
+      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+      dateSelect = `DATE_FORMAT(CONVERT_TZ(event.createdAt, '+00:00', '${offset}'), '${fmt}')`;
+    }
+
+    const timeSeriesRaw = await buildBaseQuery(dateSelect)
+      .groupBy('groupkey')
+      .orderBy('groupkey', 'ASC')
+      .getRawMany();
+
+    const formatBuckets = (rawList) =>
+      rawList.map((row) => ({
+        key: row.groupkey === null ? 'null' : String(row.groupkey),
+        count: Number(row.count),
+      }));
+
+    return {
+      enabled: true,
+      interval,
+      timeSeries: formatBuckets(timeSeriesRaw),
+      byEventType: formatBuckets(byEventTypeRaw),
+      byVendor: formatBuckets(byVendorRaw),
+      byAffiliate: formatBuckets(byAffiliateRaw),
+      byStatus: formatBuckets(byStatusRaw),
+    };
+  };
+
+  const aggregations = async (params) => {
+    const interval = resolveInterval(params);
+    let timeZone = params.timezone || 'UTC';
+    if (timeZone === 'Asia/Calcutta') {
+      timeZone = 'Asia/Kolkata';
+    }
+
+    if (client && !connectionFailed) {
+      try {
+        const res = await client.search({
+          index: indexName,
+          size: 0,
+          query: buildQuery(params),
+          aggs: {
+            timeSeries: {
+              date_histogram: {
+                field: 'timestamp',
+                calendar_interval: interval,
+                time_zone: timeZone,
+                min_doc_count: 0,
+              },
+            },
+            byEventType: { terms: { field: 'eventType', size: 30 } },
+            byVendor: { terms: { field: 'vendorId', size: 20 } },
+            byAffiliate: { terms: { field: 'affiliateId', size: 20 } },
+            byStatus: { terms: { field: 'status', size: 20 } },
+          },
+        });
+        const aggs = res.aggregations || {};
+        const buckets = (key) =>
+          (aggs[key]?.buckets || []).map((b) => ({
+            key: b.key_as_string ?? b.key,
+            count: b.doc_count,
+          }));
+        return {
+          enabled: true,
+          interval,
+          timeSeries: buckets('timeSeries'),
+          byEventType: buckets('byEventType'),
+          byVendor: buckets('byVendor'),
+          byAffiliate: buckets('byAffiliate'),
+          byStatus: buckets('byStatus'),
+        };
+      } catch (err) {
+        connectionFailed = true;
+        console.warn(
+          `Elasticsearch aggregations failed, falling back to SQL database: ${err.message}`,
+        );
+      }
+    }
+
+    return aggregationsFromDb(params, interval, timeZone);
+  };
+
   return {
     isEnabled,
+    init,
     indexEvent,
     search,
+    aggregations,
   };
 };
 

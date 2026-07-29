@@ -1,31 +1,33 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
-import { AnalyticsService } from './analytics.service';
+import { CronJob } from 'cron';
+import { analyticsService } from './analytics.service.js';
 
-@Injectable()
-export class AnalyticsScheduler {
-  logger = new Logger(AnalyticsScheduler.name);
+let jobs = [];
 
-  constructor(@Inject(AnalyticsService) analyticsService) {
-    this.analyticsService = analyticsService;
+export const startAnalyticsScheduler = () => {
+  if (jobs.length > 0) return jobs;
+
+  const midnightArchive = CronJob.from({
+    cronTime: '5 0 * * *',
+    timeZone: 'Asia/Kolkata',
+    start: true,
+    onTick: async () => {
+      console.log('Running midnight IST analytics archive job');
+      try {
+        await analyticsService.archiveOldData();
+      } catch (err) {
+        console.error(`Database archiving failed: ${err.message}`);
+      }
+    },
+  });
+
+  jobs = [midnightArchive];
+  console.log('Analytics scheduler started (daily archive at 00:05 IST)');
+  return jobs;
+};
+
+export const stopAnalyticsScheduler = () => {
+  for (const job of jobs) {
+    job.stop();
   }
-
-  @Cron(CronExpression.EVERY_HOUR)
-  async handleHourlyStatsAggregation() {
-    this.logger.debug('Running hourly stats aggregation (simulated)');
-  }
-
-  @Cron('5 0 * * *', { timeZone: 'Asia/Kolkata' })
-  async handleMidnightStatsAggregation() {
-    this.logger.debug('Running midnight IST stats aggregation (simulated)');
-  }
-
-  async handleDatabaseArchiving() {
-    this.logger.debug('Running daily database archiving job');
-    try {
-      await this.analyticsService.archiveOldData();
-    } catch (err) {
-      this.logger.error(`Database archiving failed: ${err.message}`);
-    }
-  }
-}
+  jobs = [];
+};
