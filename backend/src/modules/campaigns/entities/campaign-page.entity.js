@@ -1,15 +1,6 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index,
-} from 'typeorm';
-import { Campaign } from './campaign.entity';
-import { Template } from '../../templates/entities/template.entity';
+import { EntitySchema } from 'typeorm';
+
+export class CampaignPage {}
 
 export const CampaignPageType = {
   HOME: 'HOME',
@@ -36,37 +27,61 @@ export const ALL_CAMPAIGN_PAGE_TYPES = [
   CampaignPageType.ERROR,
 ];
 
-@Entity('campaign_pages')
-@Index(['campaignId', 'pageType'], { unique: true })
-export class CampaignPage {
-  @PrimaryGeneratedColumn()
-  id;
-
-  @Column({ name: 'campaign_id' })
-  campaignId;
-
-  @ManyToOne(() => Campaign, (campaign) => campaign.pages, {
-    onDelete: 'CASCADE',
-  })
-  @JoinColumn({ name: 'campaign_id' })
-  campaign;
-
-  @Column({
-    type: 'varchar',
-    name: 'page_type',
-  })
-  pageType;
-
-  @Column({ name: 'template_id', nullable: true })
-  templateId;
-
-  @ManyToOne(() => Template, { onDelete: 'SET NULL', nullable: true })
-  @JoinColumn({ name: 'template_id' })
-  template;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt;
-}
+export const CampaignPageSchema = new EntitySchema({
+  name: 'CampaignPage',
+  target: CampaignPage,
+  tableName: 'campaign_pages',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    campaignId: {
+      name: 'campaign_id',
+      type: 'int',
+    },
+    pageType: {
+      name: 'page_type',
+      type: 'varchar',
+    },
+    templateId: {
+      name: 'template_id',
+      type: 'int',
+      nullable: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+  relations: {
+    campaign: {
+      type: 'many-to-one',
+      target: 'Campaign',
+      inverseSide: 'pages',
+      joinColumn: { name: 'campaign_id' },
+      onDelete: 'CASCADE',
+    },
+    template: {
+      type: 'many-to-one',
+      target: 'Template',
+      joinColumn: { name: 'template_id' },
+      onDelete: 'SET NULL',
+      nullable: true,
+    },
+  },
+  indices: [
+    {
+      name: 'IDX_CAMPAIGN_PAGE_TYPE',
+      unique: true,
+      columns: ['campaignId', 'pageType'],
+    },
+  ],
+});

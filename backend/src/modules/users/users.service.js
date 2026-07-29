@@ -1,22 +1,15 @@
-import { Injectable, ConflictException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { User } from './entities/user.entity';
+import { getRepository } from '../../database/index.js';
+import { User } from './entities/user.entity.js';
 
-@Injectable()
-export class UsersService {
-  constructor(
-    @InjectRepository(User)
-    userRepository,
-  ) {
-    this.userRepository = userRepository;
-  }
+export const createUsersService = () => {
+  const getUserRepo = () => getRepository(User);
 
-  async findByEmail(email) {
-    return this.userRepository.findOne({ where: { email } });
-  }
+  const findByEmail = async (email) => {
+    return getUserRepo().findOne({ where: { email } });
+  };
 
-  async findByEmailWithPassword(email) {
-    return this.userRepository.findOne({
+  const findByEmailWithPassword = async (email) => {
+    return getUserRepo().findOne({
       where: { email },
       select: {
         id: true,
@@ -28,31 +21,46 @@ export class UsersService {
         updatedAt: true,
       },
     });
-  }
+  };
 
-  async findById(id) {
-    return this.userRepository.findOne({ where: { id } });
-  }
+  const findById = async (id) => {
+    return getUserRepo().findOne({ where: { id: parseInt(id, 10) } });
+  };
 
-  async create(userData) {
-    const existing = await this.findByEmail(userData.email || '');
+  const create = async (userData) => {
+    const existing = await findByEmail(userData.email || '');
     if (existing) {
-      throw new ConflictException('User with this email already exists');
+      const err = new Error('User with this email already exists');
+      err.statusCode = 409;
+      throw err;
     }
-    const user = this.userRepository.create(userData);
-    return this.userRepository.save(user);
-  }
+    const user = getUserRepo().create(userData);
+    return getUserRepo().save(user);
+  };
 
-  async updateAvatar(id, avatarUrl) {
-    await this.userRepository.update(id, { avatar: avatarUrl });
-    const updated = await this.findById(id);
+  const updateAvatar = async (id, avatarUrl) => {
+    await getUserRepo().update(id, { avatar: avatarUrl });
+    const updated = await findById(id);
     if (!updated) {
-      throw new Error('User not found');
+      const err = new Error('User not found');
+      err.statusCode = 404;
+      throw err;
     }
     return updated;
-  }
+  };
 
-  async updatePassword(id, hashedPassword) {
-    await this.userRepository.update(id, { password: hashedPassword });
-  }
-}
+  const updatePassword = async (id, hashedPassword) => {
+    await getUserRepo().update(id, { password: hashedPassword });
+  };
+
+  return {
+    findByEmail,
+    findByEmailWithPassword,
+    findById,
+    create,
+    updateAvatar,
+    updatePassword,
+  };
+};
+
+export const usersService = createUsersService();

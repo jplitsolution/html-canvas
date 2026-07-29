@@ -1,31 +1,42 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { EntitySchema } from 'typeorm';
 
-@Entity('templates')
-export class Template {
-  @PrimaryGeneratedColumn()
-  id;
+export class Template {}
 
-  @Column()
-  name;
-
-  @Column({ type: 'json' })
-  data;
-
-  @Column({ name: 'user_id', nullable: true })
-  userId;
-
-  @Column({ name: 'is_prebuilt', type: 'boolean', default: false })
-  isPrebuilt;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-
-  @UpdateDateColumn({ name: 'updated_at' })
-  updatedAt;
-}
+export const TemplateSchema = new EntitySchema({
+  name: 'Template',
+  target: Template,
+  tableName: 'templates',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    name: {
+      type: 'varchar',
+    },
+    data: {
+      type: 'json',
+    },
+    userId: {
+      name: 'user_id',
+      type: 'int',
+      nullable: true,
+    },
+    isPrebuilt: {
+      name: 'is_prebuilt',
+      type: 'boolean',
+      default: false,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+    updatedAt: {
+      name: 'updated_at',
+      type: 'timestamp',
+      updateDate: true,
+    },
+  },
+});

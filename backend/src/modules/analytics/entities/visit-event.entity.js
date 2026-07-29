@@ -1,13 +1,6 @@
-import {
-  Entity,
-  PrimaryGeneratedColumn,
-  Column,
-  CreateDateColumn,
-  ManyToOne,
-  JoinColumn,
-  Index,
-} from 'typeorm';
-import { Visit } from './visit.entity';
+import { EntitySchema } from 'typeorm';
+
+export class VisitEvent {}
 
 export const VisitEventType = {
   VISIT: 'VISIT',
@@ -26,28 +19,44 @@ export const VisitEventType = {
   BLOCKED_REQUEST: 'BLOCKED_REQUEST',
 };
 
-@Entity('visit_events')
-export class VisitEvent {
-  @PrimaryGeneratedColumn()
-  id;
-
-  @Index()
-  @Column({ name: 'visit_id' })
-  visitId;
-
-  @ManyToOne(() => Visit, (visit) => visit.events, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'visit_id' })
-  visit;
-
-  @Column({
-    type: 'varchar',
-    name: 'event_type',
-  })
-  eventType;
-
-  @Column({ type: 'json', nullable: true })
-  metadata;
-
-  @CreateDateColumn({ name: 'created_at' })
-  createdAt;
-}
+export const VisitEventSchema = new EntitySchema({
+  name: 'VisitEvent',
+  target: VisitEvent,
+  tableName: 'visit_events',
+  columns: {
+    id: {
+      primary: true,
+      type: 'int',
+      generated: true,
+    },
+    visitId: {
+      name: 'visit_id',
+      type: 'int',
+    },
+    eventType: {
+      name: 'event_type',
+      type: 'varchar',
+    },
+    metadata: {
+      type: 'json',
+      nullable: true,
+    },
+    createdAt: {
+      name: 'created_at',
+      type: 'timestamp',
+      createDate: true,
+    },
+  },
+  relations: {
+    visit: {
+      type: 'many-to-one',
+      target: 'Visit',
+      inverseSide: 'events',
+      joinColumn: { name: 'visit_id' },
+      onDelete: 'CASCADE',
+    },
+  },
+  indices: [
+    { name: 'IDX_VISIT_EVENT_VISIT_ID', columns: ['visitId'] },
+  ],
+});

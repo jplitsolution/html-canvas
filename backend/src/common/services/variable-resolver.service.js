@@ -1,8 +1,5 @@
-import { Injectable } from '@nestjs/common';
-
-@Injectable()
-export class VariableResolverService {
-  replaceVariables(html, variables = {}) {
+export const createVariableResolverService = () => {
+  const replaceVariables = (html, variables = {}) => {
     if (!html) return '';
     let rendered = html;
 
@@ -20,5 +17,9 @@ export class VariableResolverService {
     }
 
     return rendered;
-  }
-}
+  };
+
+  return { replaceVariables };
+};
+
+export const variableResolverService = createVariableResolverService();

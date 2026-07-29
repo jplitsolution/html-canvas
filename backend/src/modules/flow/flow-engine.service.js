@@ -1,5 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { CampaignPageType } from '../campaigns/entities/campaign-page.entity';
+import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
 
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',
@@ -20,11 +19,8 @@ const CONDITION_ALIASES = {
   MSISDN_UNRESOLVED: ['HEADER_UNRESOLVED', 'MSISDN_UNRESOLVED'],
 };
 
-@Injectable()
-export class FlowEngineService {
-  logger = new Logger(FlowEngineService.name);
-
-  parseFlowConfig(raw) {
+export const createFlowEngineService = () => {
+  const parseFlowConfig = (raw) => {
     if (!raw) return null;
     try {
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -33,34 +29,28 @@ export class FlowEngineService {
       }
       return parsed;
     } catch (err) {
-      this.logger.warn(`Invalid flowConfig JSON: ${err.message}`);
+      console.warn(`Invalid flowConfig JSON: ${err.message}`);
       return null;
     }
-  }
+  };
 
-  normalizeMode(mode) {
+  const normalizeMode = (mode) => {
     if (!mode) return null;
     const upper = mode.toUpperCase();
     if (LEGACY_MODE_ALIASES[upper]) {
       return LEGACY_MODE_ALIASES[upper];
     }
-    return VERIFICATION_MODES.includes(upper)
-      ? upper
-      : null;
-  }
+    return VERIFICATION_MODES.includes(upper) ? upper : null;
+  };
 
-  getDefaultFlowConfig(mode = 'BOTH') {
-    const node = (
+  const getDefaultFlowConfig = (mode = 'BOTH') => {
+    const node = (pageType, x, y) => ({
+      id: pageType,
       pageType,
-      x,
-      y,
-    ) => ({ id: pageType, pageType, position: { x, y } });
+      position: { x, y },
+    });
 
-    const edge = (
-      source,
-      target,
-      condition,
-    ) => ({
+    const edge = (source, target, condition) => ({
       id: `${source}-${condition}-${target}`,
       source,
       target,
@@ -121,9 +111,9 @@ export class FlowEngineService {
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
 
     return { version: 1, entryPage: CampaignPageType.HOME, nodes, edges };
-  }
+  };
 
-  getEntryPage(config) {
+  const getEntryPage = (config) => {
     if (!config || config.nodes.length === 0) {
       return CampaignPageType.HOME;
     }
@@ -137,9 +127,9 @@ export class FlowEngineService {
       return config.entryPage;
     }
     return config.nodes[0].pageType;
-  }
+  };
 
-  reachableNodeIds(config, startNodeId) {
+  const reachableNodeIds = (config, startNodeId) => {
     const reachable = new Set([startNodeId]);
     let changed = true;
     while (changed) {
@@ -152,46 +142,36 @@ export class FlowEngineService {
       }
     }
     return reachable;
-  }
+  };
 
-  conditionMatches(
-    edgeCondition,
-    wanted,
-  ) {
+  const conditionMatches = (edgeCondition, wanted) => {
     const edge = edgeCondition || 'DEFAULT';
     if (edge === wanted) return true;
     const aliases = CONDITION_ALIASES[wanted];
     return aliases ? aliases.includes(edge) : false;
-  }
+  };
 
-  nextPage(
-    config,
-    fromPageType,
-    condition,
-  ) {
+  const nextPage = (config, fromPageType, condition) => {
     if (!config) return null;
     const sourceNode = config.nodes.find((n) => n.pageType === fromPageType);
     if (!sourceNode) return null;
 
     const outgoing = config.edges.filter((e) => e.source === sourceNode.id);
     const match =
-      outgoing.find((e) => this.conditionMatches(e.condition, condition)) ||
+      outgoing.find((e) => conditionMatches(e.condition, condition)) ||
       outgoing.find((e) => (e.condition || 'DEFAULT') === 'DEFAULT');
     if (!match) return null;
 
     const targetNode = config.nodes.find((n) => n.id === match.target);
     return targetNode ? targetNode.pageType : null;
-  }
+  };
 
-  stripUnreachableNodes(
-    config,
-    _mode,
-  ) {
-    const entryPage = this.getEntryPage(config);
+  const stripUnreachableNodes = (config, _mode) => {
+    const entryPage = getEntryPage(config);
     const entryNode = config.nodes.find((n) => n.pageType === entryPage);
     if (!entryNode) return config;
 
-    const reachable = this.reachableNodeIds(config, entryNode.id);
+    const reachable = reachableNodeIds(config, entryNode.id);
 
     const keptNodeIds = new Set();
     const filteredNodes = config.nodes.filter((n) => {
@@ -199,9 +179,6 @@ export class FlowEngineService {
         keptNodeIds.add(n.id);
         return true;
       }
-      this.logger.debug(
-        `Stripping unreachable node: ${n.pageType} (id=${n.id})`,
-      );
       return false;
     });
 
@@ -210,15 +187,12 @@ export class FlowEngineService {
     );
 
     return { ...config, nodes: filteredNodes, edges: filteredEdges };
-  }
+  };
 
-  validate(
-    config,
-    mode,
-  ) {
+  const validate = (config, mode) => {
     const errors = [];
     const pageTypes = new Set(config.nodes.map((n) => n.pageType));
-    const entryPage = this.getEntryPage(config);
+    const entryPage = getEntryPage(config);
     const entryNode = config.nodes.find((n) => n.pageType === entryPage);
 
     if (!entryNode) {
@@ -239,7 +213,7 @@ export class FlowEngineService {
     }
 
     if (entryNode) {
-      const reachable = this.reachableNodeIds(config, entryNode.id);
+      const reachable = reachableNodeIds(config, entryNode.id);
       const unreachable = config.nodes.filter((n) => !reachable.has(n.id));
       if (unreachable.length > 0) {
         errors.push(
@@ -251,5 +225,19 @@ export class FlowEngineService {
     }
 
     return { ok: errors.length === 0, errors };
-  }
-}
+  };
+
+  return {
+    parseFlowConfig,
+    normalizeMode,
+    getDefaultFlowConfig,
+    getEntryPage,
+    reachableNodeIds,
+    conditionMatches,
+    nextPage,
+    stripUnreachableNodes,
+    validate,
+  };
+};
+
+export const flowEngineService = createFlowEngineService();
