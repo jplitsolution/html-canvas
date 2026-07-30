@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# Build backend and start — exits with error if build fails.
+# Fastify JS backend — no Nest/tsc build step.
 set -e
-echo "[templatecraft-api] Building NestJS..."
-npm run build
-echo "[templatecraft-api] Build success — starting server..."
-exec node dist/main.js
+cd "$(dirname "$0")"
+echo "[templatecraft-api] Starting Fastify (src/server.js)..."
+exec node src/server.js
