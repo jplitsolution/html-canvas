@@ -57,3 +57,19 @@ export async function transitionFlow(body) {
     dedupe: false,
   })
 }
+
+export async function detectMsisdnApi({ country, operator, campid, phone } = {}) {
+  const params = new URLSearchParams()
+  if (country) params.set('country', country)
+  if (operator) params.set('operator', operator)
+  if (campid) params.set('campid', String(campid))
+  if (phone) params.set('msisdn', String(phone))
+
+  try {
+    return await apiClient(`/flow/detect-msisdn?${params.toString()}`, { method: 'GET' })
+  } catch (err) {
+    console.warn('[detectMsisdnApi] failed:', err)
+    return null
+  }
+}
+

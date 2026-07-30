@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * End-to-end API smoke test for TemplateCraft backend
+ * End-to-end API smoke test for TemplateCraft Fastify backend
  * Usage: node scripts/test-apis.mjs
  */
 const BASE = process.env.API_BASE || 'http://localhost:3000/api'
@@ -59,14 +59,14 @@ async function run() {
   const login = await request('POST', '/auth/login', {
     body: { email: testEmail, password: testPassword },
   })
-  token = login.json?.data?.accessToken || login.json?.accessToken || ''
+  token = login.json?.accessToken || login.json?.data?.accessToken || ''
   assert('POST /auth/login', !!token, JSON.stringify(login.json))
 
   const me = await request('GET', '/auth/me', { token })
-  assert('GET /auth/me', me.ok && me.json?.data?.email === testEmail, JSON.stringify(me.json))
+  assert('GET /auth/me', me.ok && (me.json?.email === testEmail || me.json?.data?.email === testEmail), JSON.stringify(me.json))
 
   const prebuilt = await request('GET', '/templates/prebuilt')
-  const templates = prebuilt.json?.data || []
+  const templates = Array.isArray(prebuilt.json) ? prebuilt.json : (prebuilt.json?.data || [])
   assert('GET /templates/prebuilt', prebuilt.ok && Array.isArray(templates), `count=${templates.length}`)
 
   const createCampaign = await request('POST', '/campaigns', {
@@ -78,11 +78,11 @@ async function run() {
       serviceId: 'test_svc',
     },
   })
-  campaignId = createCampaign.json?.data?.id
+  campaignId = createCampaign.json?.id || createCampaign.json?.data?.id
   assert('POST /campaigns', createCampaign.ok && campaignId, JSON.stringify(createCampaign.json))
 
   const listCampaigns = await request('GET', '/campaigns', { token })
-  const campaigns = listCampaigns.json?.data || []
+  const campaigns = Array.isArray(listCampaigns.json) ? listCampaigns.json : (listCampaigns.json?.data || [])
   assert('GET /campaigns', listCampaigns.ok && campaigns.length >= 1, `count=${campaigns.length}`)
 
   if (campaignId) {
@@ -113,7 +113,7 @@ async function run() {
   const upload = await request('POST', '/uploads', { token, formData: form })
   assert(
     'POST /uploads',
-    upload.ok && upload.json?.data?.url,
+    upload.ok && (upload.json?.url || upload.json?.data?.url),
     upload.json?.message || JSON.stringify(upload.json),
   )
 

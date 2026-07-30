@@ -5,6 +5,10 @@ import { PAGE_TYPE_LABELS, getCampaignPagePreviewUrl } from '../services/api/cam
 import Button from '../components/ui/Button'
 import { saveCampaignPage } from '../editor/services/saveCampaignPage'
 import { validateFunnelPage } from '../editor/utils/funnelGuide'
+import {
+  campaignDetailPath,
+  resolveMarketCodes,
+} from '../utils/routes'
 
 const TemplateEditor = lazy(() => import('../editor/TemplateEditor'))
 
@@ -17,7 +21,7 @@ function BuilderFallback() {
 }
 
 export default function CampaignBuilder() {
-  const { id, pageType } = useParams()
+  const { id, pageType, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
   const navigate = useNavigate()
   const campaign = useStore((s) => s.campaign)
   const campaignPage = useStore((s) => s.campaignPage)
@@ -36,6 +40,11 @@ export default function CampaignBuilder() {
   }, [id, pageType, loadCampaignPage])
 
   const pageLabel = PAGE_TYPE_LABELS[pageType] || pageType
+  const { countryCode, operatorCode } = resolveMarketCodes(
+    { countryCode: routeCountry, operatorCode: routeOperator },
+    campaign,
+  )
+  const detailHref = campaignDetailPath(countryCode, operatorCode, id)
 
   const saveHandler = useCallback(
     async (editor, meta) => {
@@ -72,7 +81,7 @@ export default function CampaignBuilder() {
       html: campaignPage?.html || '',
       css: campaignPage?.css || '',
     }),
-    [campaignPage?.pageType, id],
+    [campaignPage, id, pageType],
   )
 
   if (loading) {
@@ -87,7 +96,7 @@ export default function CampaignBuilder() {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4 bg-bg-canvas px-4">
         <p className="text-sm text-fg-muted text-center">{error || 'Page not found'}</p>
-        <Button variant="outline" onClick={() => navigate(id ? `/campaigns/${id}` : '/markets')}>
+        <Button variant="outline" onClick={() => navigate(detailHref || '/markets')}>
           Back to campaign
         </Button>
       </div>
@@ -101,7 +110,7 @@ export default function CampaignBuilder() {
           projectId={`${id}-${pageType}`}
           projectTitle={pageLabel}
           breadcrumbLabel={`${campaign.country} / ${campaign.operator}`}
-          breadcrumbHref={`/campaigns/${id}`}
+          breadcrumbHref={detailHref}
           initialData={initialData}
           funnelPageType={pageType}
           onSave={handleEditorSave}
