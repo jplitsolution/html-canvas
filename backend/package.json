@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "start:dev": "node --watch src/server.js",
     "start:prod": "node src/server.js",
+    "build": "node -e \"console.log('no build (plain JS)')\"",
     "db:setup": "node scripts/setup-db.mjs",
     "db:reset": "node scripts/reset-db.mjs",
     "db:cleanup": "node scripts/apply-schema-cleanup.mjs",
@@ -36,7 +37,7 @@
     "mysql2": "^3.22.5",
     "pg": "^8.11.3",
     "reflect-metadata": "^0.2.2",
-    "typeorm": "^1.0.0"
+    "typeorm": "^0.3.20"
   },
   "devDependencies": {
     "eslint": "^9.18.0",
