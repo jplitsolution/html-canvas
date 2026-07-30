@@ -1,0 +1,55 @@
+import { DEFAULT_PAGES } from '../templates/starterTemplates'
+
+export function setupPagesManager(editor) {
+  const pages = editor.Pages
+
+  let homeId = 'home'
+  if (pages.getAll().length <= 1) {
+    const existing = pages.getAll()[0]
+    if (existing) {
+      existing.set('name', 'Home')
+      homeId = existing.getId() || 'home'
+    }
+
+    DEFAULT_PAGES.slice(1).forEach((page) => {
+      pages.add({
+        id: page.id,
+        name: page.name,
+        component: `<section data-tc-type="section" style="padding:80px 32px;text-align:center;font-family:Inter,sans-serif;min-height:400px;"><h1 data-gjs-type="text" style="font-size:36px;font-weight:700;color:#0f172a;margin:0 0 12px;">${page.name}</h1><p data-gjs-type="text" style="color:#64748b;font-size:16px;">Start building your ${page.name.toLowerCase()} page.</p></section>`,
+      })
+    })
+  } else {
+    const existing = pages.getAll()[0]
+    if (existing) {
+      homeId = existing.getId() || 'home'
+    }
+  }
+
+  pages.select(homeId)
+}
+
+export function getPagesList(editor) {
+  return pagesToArray(editor)
+}
+
+export function selectPage(editor, pageId) {
+  editor.Pages.select(pageId)
+}
+
+export function addPage(editor, name) {
+  const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || `page-${Date.now()}`
+  editor.Pages.add({
+    id,
+    name,
+    component: `<section data-tc-type="section" style="padding:80px 32px;text-align:center;font-family:Inter,sans-serif;min-height:400px;"><h1 data-gjs-type="text" style="font-size:36px;font-weight:700;color:#0f172a;">${name}</h1></section>`,
+  })
+  editor.Pages.select(id)
+  return id
+}
+
+function pagesToArray(editor) {
+  return editor.Pages.getAll().map((p) => ({
+    id: p.get('id'),
+    name: p.get('name'),
+  }))
+}

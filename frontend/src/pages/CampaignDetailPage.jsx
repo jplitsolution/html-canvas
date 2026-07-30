@@ -24,6 +24,12 @@ import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { copyToClipboard } from '../utils/clipboard'
 import {
+  campaignEditPath,
+  campaignFlowPath,
+  marketPath,
+  resolveMarketCodes,
+} from '../utils/routes'
+import {
   PAGE_TYPE_LABELS,
   PAGE_TYPES,
   REQUIRED_PAGE_TYPES,
@@ -75,7 +81,7 @@ function StatusToggle({ active, onToggle, disabled, activating, blockedReason })
 }
 
 function CampaignDetailPage() {
-  const { id } = useParams()
+  const { id, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
   const navigate = useNavigate()
   const campaign = useStore((s) => s.campaign)
   const loading = useStore((s) => s.loading)
@@ -95,10 +101,31 @@ function CampaignDetailPage() {
 
   const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
   const [selectedAffiliateForAdd, setSelectedAffiliateForAdd] = useState('null')
+  const [cgUrlDraft, setCgUrlDraft] = useState('')
+  const [savingCg, setSavingCg] = useState(false)
 
   useEffect(() => {
     fetchVendors().catch(() => {})
   }, [fetchVendors])
+
+  useEffect(() => {
+    setCgUrlDraft(campaign?.cgRedirectUrl || '')
+  }, [campaign?.id, campaign?.cgRedirectUrl])
+
+  const handleSaveCgUrl = async () => {
+    if (!campaign) return
+    setSavingCg(true)
+    try {
+      await updateCampaign(campaign.id, {
+        cgRedirectUrl: cgUrlDraft.trim() || null,
+      })
+      useStore.getState().addToast('CG redirect URL saved', 'success')
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingCg(false)
+    }
+  }
 
   const handleAddTracking = async (value) => {
     if (!campaign || !value) return
@@ -326,10 +353,14 @@ function CampaignDetailPage() {
   }
 
   const previewUrl = getCampaignPreviewUrl(campaign)
-  const marketPath =
-    campaign.countryCode && campaign.operatorCode
-      ? `/markets/${campaign.countryCode}/${campaign.operatorCode}`
-      : '/markets'
+  const { countryCode, operatorCode } = resolveMarketCodes(
+    { countryCode: routeCountry, operatorCode: routeOperator },
+    campaign,
+  )
+  const backToMarket = marketPath(countryCode, operatorCode)
+  const editBase = (pageType) =>
+    campaignEditPath(countryCode, operatorCode, campaign.id, pageType)
+  const flowHref = campaignFlowPath(countryCode, operatorCode, campaign.id)
   const canActivate = campaign.requiredComplete
   const activateBlockedReason =
     !campaign.active && !canActivate
@@ -343,7 +374,12 @@ function CampaignDetailPage() {
         <Settings className="w-4 h-4" />
         API settings
       </Button>
-      <Button variant="outline" size="sm" onClick={() => window.open(previewUrl, '_blank')}>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => window.open(previewUrl, '_blank')}
+        title="Open live funnel without a fake MSISDN. Localhost HE usually finds nothing → OTP path."
+      >
         <ExternalLink className="w-4 h-4" />
         Preview
       </Button>
@@ -355,7 +391,7 @@ function CampaignDetailPage() {
       <div className="page-container">
         <button
           type="button"
-          onClick={() => navigate(marketPath)}
+          onClick={() => navigate(backToMarket)}
           className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
@@ -368,7 +404,7 @@ function CampaignDetailPage() {
               Markets
             </Link>
             {' / '}
-            <Link to={marketPath} className="hover:text-fg">
+            <Link to={backToMarket} className="hover:text-fg">
               {campaign.country} / {campaign.operator}
             </Link>
           </p>
@@ -442,6 +478,37 @@ function CampaignDetailPage() {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="text-sm font-semibold text-fg">CG redirect URL</h2>
+                <p className="text-xs text-fg-muted mt-1">
+                  Flow mode <strong>None</strong> + yeh URL → user land karte hi yahan redirect,
+                  saath me jo <code className="font-mono">click_id</code> mila tha woh query pe
+                  jaata hai. HE/OTP ki zaroorat nahi. Placeholder:{' '}
+                  <code className="font-mono">{'{{click_id}}'}</code> /{' '}
+                  <code className="font-mono">{'{rcid}'}</code> (warna auto{' '}
+                  <code className="font-mono">?click_id=</code>).
+                </p>
+              </div>
+              <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">
+                <input
+                  className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                  value={cgUrlDraft}
+                  onChange={(e) => setCgUrlDraft(e.target.value)}
+                  placeholder="https://operator-cg.example/path"
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={savingCg}
+                  onClick={handleSaveCgUrl}
+                >
+                  {savingCg ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
             </div>
 
             {/* Attribution & Tracking */}
@@ -681,7 +748,7 @@ function CampaignDetailPage() {
                     Required: Home, Confirm, Thank you
                   </p>
                 </div>
-                <Link to={`/campaigns/${campaign.id}/flow`}>
+                <Link to={flowHref}>
                   <Button variant="outline" size="sm">
                     <Workflow className="w-3.5 h-3.5" />
                     Flow builder
@@ -714,7 +781,7 @@ function CampaignDetailPage() {
                           </p>
                         </div>
                       </div>
-                      <Link to={`/campaigns/${campaign.id}/edit/${pageType}`}>
+                      <Link to={editBase(pageType)}>
                         <Button variant="outline" size="sm">
                           <Pencil className="w-3.5 h-3.5" />
                           Edit
@@ -880,7 +947,7 @@ function CampaignDetailPage() {
                   variant="outline"
                   size="sm"
                   className="w-full justify-start"
-                  onClick={() => navigate(`/campaigns/${campaign.id}/flow`)}
+                  onClick={() => navigate(flowHref)}
                 >
                   <Workflow className="w-4 h-4" />
                   Flow builder

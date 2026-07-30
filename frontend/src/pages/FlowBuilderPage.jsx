@@ -22,6 +22,11 @@ import {
 } from '../components/flow/flowConditions'
 import useStore from '../store/useStore'
 import { PAGE_TYPE_LABELS } from '../services/api/campaigns'
+import {
+  campaignDetailPath,
+  campaignEditPath,
+  resolveMarketCodes,
+} from '../utils/routes'
 
 const nodeTypes = { pageNode: PageNode }
 
@@ -45,8 +50,8 @@ const VERIFICATION_MODES = [
   },
   {
     id: 'NONE',
-    label: 'None (Priority Chain)',
-    hint: 'No HE/OTP routing. Wire API / page / external redirect on HOME yourself.',
+    label: 'None (null / CG redirect)',
+    hint: 'No HE/OTP. Agar CG URL set hai → landing pe wahi redirect + click_id.',
   },
 ]
 
@@ -141,11 +146,23 @@ const DEFAULT_FLOWS = {
 }
 
 function FlowBuilderPage() {
-  const { id } = useParams()
+  const { id, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
   const navigate = useNavigate()
+  const campaign = useStore((s) => s.campaign)
   const addToast = useStore((s) => s.addToast)
   const loadCampaignFlow = useStore((s) => s.loadCampaignFlow)
   const saveCampaignFlow = useStore((s) => s.saveCampaignFlow)
+  const loadCampaign = useStore((s) => s.loadCampaign)
+
+  const { countryCode, operatorCode } = resolveMarketCodes(
+    { countryCode: routeCountry, operatorCode: routeOperator },
+    campaign,
+  )
+  const detailHref = campaignDetailPath(countryCode, operatorCode, id)
+
+  useEffect(() => {
+    if (id) loadCampaign(id)
+  }, [id, loadCampaign])
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -267,9 +284,9 @@ function FlowBuilderPage() {
 
   const editNode = useCallback(
     (pageType) => {
-      navigate(`/campaigns/${id}/edit/${pageType}`)
+      navigate(campaignEditPath(countryCode, operatorCode, id, pageType))
     },
-    [id, navigate],
+    [id, navigate, countryCode, operatorCode],
   )
 
   const displayNodes = useMemo(
@@ -469,7 +486,7 @@ function FlowBuilderPage() {
       <div className="page-container">
         <button
           type="button"
-          onClick={() => navigate(`/campaigns/${id}`)}
+          onClick={() => navigate(detailHref)}
           className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-4 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />

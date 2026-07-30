@@ -8,6 +8,7 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import EmptyState from '../components/ui/EmptyState'
 import CreateCampaignModal from '../components/dashboard/CreateCampaignModal'
+import { campaignDetailPath } from '../utils/routes'
 
 function CampaignsPage() {
   const navigate = useNavigate()
@@ -112,7 +113,15 @@ function CampaignsPage() {
                   <tr
                     key={campaign.id}
                     className="cursor-pointer"
-                    onClick={() => navigate(`/campaigns/${campaign.id}`)}
+                    onClick={() =>
+                      navigate(
+                        campaignDetailPath(
+                          campaign.countryCode,
+                          campaign.operatorCode,
+                          campaign.id,
+                        ),
+                      )
+                    }
                   >
                     <td className="col-text font-medium">{campaign.name}</td>
                     <td className="col-text text-fg-muted">{campaign.country}</td>

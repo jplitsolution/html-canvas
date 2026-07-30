@@ -13,3 +13,5 @@ backend/uploads
 # deploy secrets
 deploy.env
 frontend/.env.production
+
+safwap-server-backup

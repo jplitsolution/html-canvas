@@ -152,7 +152,7 @@ export async function applyCampaignDefaults(id) {
   return mapCampaign(campaign)
 }
 
-export function getCampaignPreviewUrl(campaign) {
+export function getCampaignPreviewUrl(campaign, options = {}) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
@@ -171,11 +171,17 @@ export function getCampaignPreviewUrl(campaign) {
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
 
+  // Only attach msisdn when the caller explicitly passes one (e.g. simulate HE).
+  // Never invent a dummy number — localhost HE will correctly return empty → OTP path.
+  if (options.msisdn) {
+    params.set('msisdn', String(options.msisdn))
+  }
+
   return `/subscription?${params.toString()}`
 }
 
 /** Open live funnel preview for a specific campaign page (HOME, OTP, CONFIRM, …) */
-export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
+export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options = {}) {
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
@@ -194,11 +200,22 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME') {
     if (t.affiliate?.code) params.set('aff_id', t.affiliate.code)
   }
 
+  if (options.msisdn) {
+    params.set('msisdn', String(options.msisdn))
+  }
+
   return `/subscription?${params.toString()}`
 }
 
 export async function testSendOtp(payload) {
   return apiClient('/otp/test-send', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
+export async function testVerifyOtp(payload) {
+  return apiClient('/otp/test-verify', {
     method: 'POST',
     body: payload,
   })

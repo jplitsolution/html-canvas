@@ -152,13 +152,12 @@ start_elasticsearch() {
 }
 
 build_backend() {
-  log "Backend install + build..."
+  log "Backend install (Fastify JS — no build step)..."
   cd "$BACKEND_DIR"
   HUSKY=0 npm install
-  npm run build
 }
 
-build_frontend() {
+build_frontend()
   log "Frontend install + build..."
   cd "$FRONTEND_DIR"
   HUSKY=0 npm install

@@ -28,22 +28,15 @@ const FLOW_SHADOW_STYLES = `
     align-items: center;
     width: 100%;
     margin: 0 auto;
-    animation: flowPageIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    opacity: 1;
   }
   .flow-page-inner > * {
     max-width: 100%;
-  }
-  @keyframes flowPageIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
   }
   .flow-pack-option.flow-pack-selected {
     border-color: #7c4dff !important;
     background: #f5f3ff !important;
     box-shadow: 0 0 0 1px #7c4dff;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .flow-page-inner { animation: none; }
   }
 `
 
@@ -218,8 +211,9 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
       }
       
       let successText = 'Verification code sent!'
-      if (data.otp) {
-        successText += ` (Dev OTP: ${data.otp})`
+      const devOtp = data.devOtpCode || data.otp
+      if (devOtp) {
+        successText += ` (Dev OTP: ${devOtp})`
       }
       setSlotText(statusSlot, successText)
 
@@ -405,7 +399,8 @@ function SubscriptionPage() {
   const campid = searchParams.get('campid') || ''
   const vid = searchParams.get('vid') || ''
   const affId = searchParams.get('aff_id') || ''
-  const clickId = searchParams.get('click_id') || ''
+  const clickId =
+    searchParams.get('click_id') || searchParams.get('rcid') || ''
 
   const [phone, setPhone] = useState('')
   const [phoneResolving, setPhoneResolving] = useState(true)
@@ -423,6 +418,17 @@ function SubscriptionPage() {
   const pageDataRef = useRef(null)
   const selectedPackRef = useRef('daily')
   const phoneRef = useRef('')
+  const clickIdRef = useRef(clickId)
+  const vidRef = useRef(vid)
+  const affIdRef = useRef(affId)
+  const campidRef = useRef(campid)
+
+  useEffect(() => {
+    if (clickId) clickIdRef.current = clickId
+    if (vid) vidRef.current = vid
+    if (affId) affIdRef.current = affId
+    if (campid) campidRef.current = campid
+  }, [clickId, vid, affId, campid])
 
   const queryKey = useMemo(
     () => `${country}|${operator}|${phone}`,
@@ -465,37 +471,58 @@ function SubscriptionPage() {
     let cancelled = false
     setPhoneResolving(true)
 
-    resolvePhoneNumber(new URLSearchParams(window.location.search)).then(({ phone: resolved }) => {
-      if (cancelled) return
-      if (resolved) {
-        phoneRef.current = resolved
-        setPhone(resolved)
-        const currentParams = new URLSearchParams(window.location.search)
-        if (!resolvePhoneFromUrl(currentParams)) {
-          currentParams.set('msisdn', resolved)
-          setSearchParams(currentParams, { replace: true })
-        }
-      } else {
-        // Fall back to session phone from a prior OTP in this tab
-        try {
-          const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
-          const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
-          if (sessionPhone) {
-            phoneRef.current = sessionPhone
-            setPhone(sessionPhone)
-            persistPhone(sessionPhone)
+    const resolveWithTimeout = Promise.race([
+      resolvePhoneNumber(new URLSearchParams(window.location.search), {
+        country,
+        operator,
+        campid,
+      }),
+      // Never block the funnel on a hanging HE / detect call.
+      new Promise((resolve) => {
+        setTimeout(() => resolve({ phone: '', source: 'timeout' }), 4000)
+      }),
+    ])
+
+    resolveWithTimeout
+      .then(({ phone: resolved }) => {
+        if (cancelled) return
+        if (resolved) {
+          phoneRef.current = resolved
+          setPhone(resolved)
+          const currentParams = new URLSearchParams(window.location.search)
+          if (!resolvePhoneFromUrl(currentParams)) {
+            currentParams.set('msisdn', resolved)
+            setSearchParams(currentParams, { replace: true })
           }
-        } catch {
-          /* ignore */
+        } else {
+          // Fall back to session phone from a prior OTP in this tab
+          try {
+            const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+            const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
+            if (sessionPhone) {
+              phoneRef.current = sessionPhone
+              setPhone(sessionPhone)
+              persistPhone(sessionPhone)
+            }
+          } catch {
+            /* ignore */
+          }
         }
-      }
-      setPhoneResolving(false)
-    })
+      })
+      .catch(() => {
+        /* detection is best-effort — continue without MSISDN */
+      })
+      .finally(() => {
+        if (!cancelled) setPhoneResolving(false)
+      })
 
     return () => {
       cancelled = true
     }
-  }, [country, operator, setSearchParams])
+    // setSearchParams omitted from deps on purpose — including it re-runs detection
+    // on every URL step sync and covers the page with the detecting overlay.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [country, operator, campid])
 
   const cachePage = useCallback((data) => {
     if (!data?.pageType) return
@@ -524,18 +551,49 @@ function SubscriptionPage() {
       step: data.pageType,
     })
 
-    // Sync URL step + msisdn so refresh / share keeps the number
+    // Sync URL step + msisdn + always keep click attribution params.
     setSearchParams((prev) => {
       const nextParams = new URLSearchParams(prev)
+      let changed = false
       if (nextParams.get('step') !== data.pageType) {
         nextParams.set('step', data.pageType)
+        changed = true
       }
       if (resolvedPhone && !nextParams.get('msisdn')) {
         nextParams.set('msisdn', resolvedPhone)
+        changed = true
       }
-      return nextParams
-    }, { replace: false })
+      const cid = clickIdRef.current
+      const v = vidRef.current
+      const a = affIdRef.current
+      const c = campidRef.current
+      if (cid && nextParams.get('click_id') !== cid) {
+        nextParams.set('click_id', cid)
+        changed = true
+      }
+      if (v && nextParams.get('vid') !== v) {
+        nextParams.set('vid', v)
+        changed = true
+      }
+      if (a && nextParams.get('aff_id') !== a) {
+        nextParams.set('aff_id', a)
+        changed = true
+      }
+      if (c && nextParams.get('campid') !== c) {
+        nextParams.set('campid', c)
+        changed = true
+      }
+      return changed ? nextParams : prev
+    }, { replace: true })
   }, [saveSession, setSearchParams])
+
+  // Null-flow CG: backend sends externalRedirect with click_id → leave immediately
+  useEffect(() => {
+    const dest = pageData?.externalRedirect
+    if (dest && /^https?:\/\//i.test(dest)) {
+      window.location.assign(dest)
+    }
+  }, [pageData?.externalRedirect])
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {
@@ -550,13 +608,22 @@ function SubscriptionPage() {
             page,
             msisdn: phoneRef.current,
             visitId,
+            campid,
+            vid,
+            affId,
+            clickId,
           })
           prefetchingRef.current.delete(page)
-          if (data) pageCacheRef.current.set(data.pageType, data)
+          // Only cache if backend returned the page we asked for (guards may rewrite CONFIRM→OTP).
+          if (data?.pageType === page) {
+            pageCacheRef.current.set(page, data)
+          } else if (data?.pageType && !pageCacheRef.current.has(data.pageType)) {
+            pageCacheRef.current.set(data.pageType, data)
+          }
         }),
       )
     },
-    [country, operator],
+    [country, operator, campid, vid, affId, clickId],
   )
 
   const loadPage = useCallback(
@@ -570,6 +637,7 @@ function SubscriptionPage() {
 
       if (pageCacheRef.current.has(page)) {
         const cachedData = pageCacheRef.current.get(page)
+        pageDataRef.current = cachedData
         setPageData(cachedData)
         setBooting(false)
         return
@@ -587,6 +655,7 @@ function SubscriptionPage() {
           affId,
           clickId,
         })
+        // Backend may rewrite requested page (e.g. CONFIRM → OTP).
         cachePage(data)
       } catch (err) {
         setError(err.message || 'Failed to load page')
@@ -608,21 +677,26 @@ function SubscriptionPage() {
     }
   }, [])
 
-  // Restore step/session on load/refresh (Refresh Safe)
+  // Boot once per market/campaign after phone detection settles.
+  // Do NOT depend on searchParams — cachePage updates step/msisdn and would re-boot in a loop.
   useEffect(() => {
     if (phoneResolving) return
     let cancelled = false
 
     async function boot() {
       const savedSession = getSavedSession()
-      const urlStep = searchParams.get('step')
+      const urlStep = new URLSearchParams(window.location.search).get('step')
 
       if (savedSession?.visitId) {
         visitIdRef.current = savedSession.visitId
-        phoneRef.current = savedSession.phone || ''
-        setPhone(savedSession.phone || '')
+        if (savedSession.phone) {
+          phoneRef.current = savedSession.phone
+          setPhone(savedSession.phone)
+        }
         setBooting(true)
-        await loadPage(urlStep || savedSession.step || entryPageRef.current || 'HOME')
+        if (!cancelled) {
+          await loadPage(urlStep || savedSession.step || entryPageRef.current || 'HOME')
+        }
         return
       }
 
@@ -635,7 +709,7 @@ function SubscriptionPage() {
       setBooting(true)
 
       if (urlStep) {
-        await loadPage(urlStep)
+        if (!cancelled) await loadPage(urlStep)
         return
       }
 
@@ -653,19 +727,19 @@ function SubscriptionPage() {
     return () => {
       cancelled = true
     }
-  }, [country, operator, campid, phoneResolving, loadPage, getSavedSession, searchParams])
+  }, [country, operator, campid, phoneResolving, loadPage, getSavedSession])
 
-  // Sync step changes from browser history back/forward buttons
+  // Sync step changes from browser history back/forward only (not from our own cachePage writes).
+  const urlStep = searchParams.get('step')
   useEffect(() => {
     if (phoneResolving || booting || !pageData) return
-    const currentStep = pageData.pageType
-    const urlStep = searchParams.get('step') || pageData.entryPage || entryPageRef.current || 'HOME'
-
-    if (currentStep !== urlStep) {
-      setBooting(true)
-      loadPage(urlStep)
-    }
-  }, [searchParams, phoneResolving, booting, pageData, loadPage])
+    if (!urlStep) return
+    if (pageData.pageType === urlStep) return
+    // Ignore while a transition is in flight — cachePage will align URL + page together.
+    if (transitionLockRef.current) return
+    setBooting(true)
+    loadPage(urlStep)
+  }, [urlStep, phoneResolving, booting, pageData, loadPage])
 
   // Track Page Views
   useEffect(() => {
@@ -1011,10 +1085,13 @@ function SubscriptionPage() {
           visitId: visitIdRef.current,
           country,
           operator,
-          campid: campid || undefined,
+          campid: campid || campidRef.current || undefined,
           fromPage,
           action,
           phone: phoneRef.current,
+          clickId: clickIdRef.current || undefined,
+          vid: vidRef.current || undefined,
+          affId: affIdRef.current || undefined,
           ...(planId ? { planId } : {}),
         })
         cachePage(next)
@@ -1023,6 +1100,10 @@ function SubscriptionPage() {
         }
         if (fromPage === 'CONFIRM' && action === 'CONFIRM' && next.pageType === 'THANKYOU') {
           trackEvent('confirm_completed')
+        }
+        if (next.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
+          window.location.assign(next.externalRedirect)
+          return
         }
       } catch (err) {
         setError(err.message || 'Action failed')
@@ -1077,51 +1158,54 @@ function SubscriptionPage() {
     )
   }
 
-  if (phoneResolving || (booting && !pageData)) {
-    return (
-      <div className="flow-runtime-root min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
-          <p className="text-slate-500 text-sm">
-            {phoneResolving ? 'Detecting mobile number...' : 'Loading...'}
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const showBootSpinner = (phoneResolving || booting) && !pageData
+  const showFatalError = Boolean(error && !pageData && !showBootSpinner)
+  const notAvailable =
+    showFatalError &&
+    (/not available|not active|inactive/i.test(error) || error === 'This offer is not available')
 
-  if (error && !pageData) {
-    const notAvailable =
-      /not available|not active|inactive/i.test(error) ||
-      error === 'This offer is not available'
-    return (
-      <div className="flow-runtime-root min-h-screen flex items-center justify-center p-6 bg-slate-50">
-        <div className="text-center max-w-md bg-white border border-slate-200 rounded-2xl px-8 py-10 shadow-sm">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">
-            {notAvailable ? '🚫' : '⚠️'}
-          </div>
-          <h1 className="text-lg font-semibold text-slate-900 mb-2">
-            {notAvailable ? 'Not available' : 'Unable to load'}
-          </h1>
-          <p className="text-sm text-slate-600 leading-relaxed">
-            {notAvailable
-              ? 'This offer is currently not available. Please try again later or contact your provider.'
-              : error}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
+  // Keep the shadow host mounted across loading states. Unmounting it and remounting
+  // with the same pageData skips the mount effect → permanent blank white page.
   return (
     <div className="flow-runtime-root relative min-h-screen w-full">
       {transitioning && <div className="flow-runtime-progress" aria-hidden="true" />}
-      {error && (
+      {error && pageData && (
         <div className="fixed top-0 left-0 right-0 z-40 bg-red-100 text-red-700 text-sm text-center py-2 px-4 animate-fade-in">
           {error}
         </div>
       )}
-      <div ref={hostRef} className="flow-runtime-host is-visible" />
+      {showBootSpinner && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#f8fafc]">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
+            <p className="text-slate-500 text-sm">
+              {phoneResolving ? 'Detecting mobile number...' : 'Loading...'}
+            </p>
+          </div>
+        </div>
+      )}
+      {showFatalError && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center p-6 bg-slate-50">
+          <div className="text-center max-w-md bg-white border border-slate-200 rounded-2xl px-8 py-10 shadow-sm">
+            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-2xl">
+              {notAvailable ? '🚫' : '⚠️'}
+            </div>
+            <h1 className="text-lg font-semibold text-slate-900 mb-2">
+              {notAvailable ? 'Not available' : 'Unable to load'}
+            </h1>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              {notAvailable
+                ? 'This offer is currently not available. Please try again later or contact your provider.'
+                : error}
+            </p>
+          </div>
+        </div>
+      )}
+      <div
+        ref={hostRef}
+        className="flow-runtime-host is-visible"
+        aria-hidden={showBootSpinner || showFatalError || !pageData?.html}
+      />
     </div>
   )
 }
