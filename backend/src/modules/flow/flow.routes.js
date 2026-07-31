@@ -58,12 +58,17 @@ export async function flowRoutes(fastify, options) {
 
   fastify.get('/page', async (request, reply) => {
     const q = request.query || {};
+    const allHeaders = { ...(request.headers || {}) };
     const headerPhone = extractHeaderMsisdn(request.headers);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
 
-    return flowService.getPage({
+    // TEMP debug — ERROR/HOME/etc. sab pages pe headers dikhne chahiye
+    console.log('[HE DEBUG] /flow/page headers:', JSON.stringify(allHeaders, null, 2));
+    console.log('[HE DEBUG] /flow/page extracted MSISDN:', headerPhone || '(none)', 'page=', q.page);
+
+    const result = await flowService.getPage({
       country: q.country,
       operator: q.operator,
       campid: q.campid,
@@ -78,6 +83,12 @@ export async function flowRoutes(fastify, options) {
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
     });
+
+    return {
+      ...result,
+      debugHeaders: allHeaders,
+      debugHeaderPhone: headerPhone || null,
+    };
   });
 
   fastify.post('/transition', { preHandler: publicRateLimit }, async (request, reply) => {

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
+import { detectMsisdnApi, fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
 import { resolvePhoneFromUrl, resolvePhoneNumber, persistPhone } from '../services/flow/resolvePhoneNumber'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
@@ -470,6 +470,16 @@ function SubscriptionPage() {
 
     let cancelled = false
     setPhoneResolving(true)
+
+    // TEMP: always hit detect-msisdn so HE headers show in console even when
+    // URL/storage already has a phone (resolvePhoneNumber would otherwise skip the API).
+    console.log('[HE DEBUG] SubscriptionPage mount — forcing detect-msisdn for header dump', {
+      country,
+      operator,
+      campid,
+      href: window.location.href,
+    })
+    detectMsisdnApi({ country, operator, campid }).catch(() => {})
 
     const resolveWithTimeout = Promise.race([
       resolvePhoneNumber(new URLSearchParams(window.location.search), {
