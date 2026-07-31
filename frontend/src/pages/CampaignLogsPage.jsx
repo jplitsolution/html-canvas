@@ -33,8 +33,7 @@ import {
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
-import { useSearchParams } from 'react-router-dom'
-import SessionTimelineModal from '../components/dashboard/SessionTimelineModal'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { formatDate, formatChartLabel, getDatePartsInTimezone, shiftDateString } from '../utils/date'
 import useStore from '../store/useStore'
 import {
@@ -166,8 +165,11 @@ function getPageBadgeClass(page) {
 
 const getStatusBadgeClass = (status) => {
   const s = String(status).toUpperCase();
-  if (s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+  if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
     return 'text-emerald-600';
+  }
+  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING') {
+    return 'text-amber-600';
   }
   if (s.includes('FAILED') || s.includes('BLOCKED')) {
     return 'text-rose-600';
@@ -185,6 +187,7 @@ const getStatusBadgeClass = (status) => {
 }
 
 function CampaignLogsPage() {
+  const navigate = useNavigate()
   const addToast = useStore((s) => s.addToast)
   const campaigns = useStore((s) => s.campaigns)
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
@@ -196,9 +199,10 @@ function CampaignLogsPage() {
   const [selectedId, setSelectedId] = useState('')
   const [esEnabled, setEsEnabled] = useState(true)
 
-  const [selectedVisitId, setSelectedVisitId] = useState(null)
-  const [timelineCampaignId, setTimelineCampaignId] = useState(null)
-  const [showTimeline, setShowTimeline] = useState(false)
+  const openVisitDetail = useCallback((visitId) => {
+    if (!visitId) return
+    navigate(`/analytics/visits/${visitId}`)
+  }, [navigate])
 
   const [datePreset, setDatePreset] = useState('today')
   const [filters, setFilters] = useState(() => {
@@ -585,11 +589,7 @@ function CampaignLogsPage() {
                     {logs.items.map((row, idx) => (
                       <tr 
                         key={`${row.visitId}-${idx}`} 
-                        onClick={() => {
-                          setSelectedVisitId(row.visitId)
-                          setTimelineCampaignId(row.campaignId || selectedId)
-                          setShowTimeline(true)
-                        }}
+                        onClick={() => openVisitDetail(row.visitId)}
                         className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
                       >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
@@ -678,15 +678,11 @@ function CampaignLogsPage() {
                           <Button
                             variant="outline"
                             size="xs"
-                            onClick={() => {
-                              setSelectedVisitId(row.visitId)
-                              setTimelineCampaignId(row.campaignId || selectedId)
-                              setShowTimeline(true)
-                            }}
+                            onClick={() => openVisitDetail(row.visitId)}
                             className="flex items-center gap-1 text-[10px] font-bold border-indigo-100 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 px-2 py-1 rounded-lg"
                           >
                             <Activity className="w-3.5 h-3.5" />
-                            Timeline
+                            Detail
                           </Button>
                         </td>
                       </tr>
@@ -728,16 +724,6 @@ function CampaignLogsPage() {
         </SectionCard>
       </div>
 
-      <SessionTimelineModal
-        isOpen={showTimeline}
-        onClose={() => {
-          setShowTimeline(false)
-          setSelectedVisitId(null)
-          setTimelineCampaignId(null)
-        }}
-        visitId={selectedVisitId}
-        campaignId={timelineCampaignId}
-      />
     </AppShell>
   )
 }

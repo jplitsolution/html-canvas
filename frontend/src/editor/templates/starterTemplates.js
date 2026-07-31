@@ -1103,6 +1103,72 @@ const errorTemplate3Html = `
 </div>
 `
 
+const statusPageCss = `
+.flow-root { font-family: Inter, system-ui, sans-serif; min-height: 100vh; background: #f8fafc; padding: 24px 16px; }
+.flow-card { max-width: 420px; margin: 0 auto; background: #fff; border-radius: 20px; box-shadow: 0 12px 40px rgba(15,23,42,0.08); overflow: hidden; }
+.flow-accent { height: 6px; }
+.flow-body { padding: 36px 28px 32px; text-align: center; }
+.flow-icon { width: 72px; height: 72px; margin: 0 auto 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 36px; }
+.flow-title { margin: 0 0 10px; font-size: 22px; font-weight: 800; color: #0f172a; }
+.flow-text { margin: 0 0 8px; font-size: 15px; line-height: 1.6; color: #64748b; }
+.flow-note { margin: 0 0 20px; font-size: 13px; color: #94a3b8; }
+.flow-box { border-radius: 12px; padding: 14px; font-size: 13px; text-align: left; }
+`
+
+export const INPROGRESS_STARTER_TEMPLATES = [
+  {
+    id: 'inprogress-classic',
+    name: 'In Progress (Safwap)',
+    description: 'Subscription pending / in-progress status page.',
+    thumb: 'hero',
+    previewImage: '',
+    css: statusPageCss,
+    html: `
+<div class="flow-root">
+  <div class="flow-card">
+    <div class="flow-accent" style="background:#3b82f6;"></div>
+    <div class="flow-body">
+      <div class="flow-icon" style="background:#eff6ff;">⏳</div>
+      <h1 class="flow-title">Subscription In Progress</h1>
+      <p class="flow-text">Your subscription request is currently being processed.</p>
+      <p class="flow-note">Please wait a moment. You may receive an SMS on {{phone}} once it completes.</p>
+      <div class="flow-box" style="background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;">
+        No further action is needed right now. If this takes too long, try again later or contact {{operator}} support.
+      </div>
+    </div>
+  </div>
+</div>
+`,
+  },
+]
+
+export const LOW_BALANCE_STARTER_TEMPLATES = [
+  {
+    id: 'low-balance-classic',
+    name: 'Low Balance (Safwap)',
+    description: 'Parking / grace / insufficient balance status page.',
+    thumb: 'hero',
+    previewImage: '',
+    css: statusPageCss,
+    html: `
+<div class="flow-root">
+  <div class="flow-card">
+    <div class="flow-accent" style="background:#f59e0b;"></div>
+    <div class="flow-body">
+      <div class="flow-icon" style="background:#fff7ed;">💳</div>
+      <h1 class="flow-title">Low Balance</h1>
+      <p class="flow-text">You currently have insufficient balance to complete your subscription.</p>
+      <p class="flow-note">Top up {{phone}} on {{operator}} and try again.</p>
+      <div class="flow-box" style="background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;">
+        Your number may already be registered. After recharging, the service can activate automatically or on your next visit.
+      </div>
+    </div>
+  </div>
+</div>
+`,
+  },
+]
+
 export const ERROR_STARTER_TEMPLATES = [
   {
     id: 'error-classic',

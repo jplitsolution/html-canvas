@@ -10,7 +10,16 @@ import pg from 'pg';
 import { getDefaultFunnelPageData } from './src/database/seed/default-funnel-pages.js';
 import { flowEngineService } from './src/modules/flow/flow-engine.service.js';
 
-const PAGE_TYPES = ['HOME', 'CONFIRM', 'OTP', 'THANKYOU', 'BLOCKED', 'ERROR'];
+const PAGE_TYPES = [
+  'HOME',
+  'CONFIRM',
+  'OTP',
+  'THANKYOU',
+  'INPROGRESS',
+  'LOW_BALANCE',
+  'BLOCKED',
+  'ERROR',
+];
 const USER_ID = 1;
 
 const OTP_CONFIG = {

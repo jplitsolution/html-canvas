@@ -4,6 +4,7 @@ import { Like } from 'typeorm';
 import { getRepository } from '../../database/index.js';
 import { Visit, VisitStatus } from './entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from './entities/visit-event.entity.js';
+import { ApiCallLog } from '../flow/entities/api-call-log.entity.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
 import { searchService } from '../search/search.service.js';
 import getConfig from '../../config/configuration.js';
@@ -11,6 +12,35 @@ import getConfig from '../../config/configuration.js';
 export const createAnalyticsService = () => {
   const getVisitRepo = () => getRepository(Visit);
   const getVisitEventRepo = () => getRepository(VisitEvent);
+  const getApiCallLogRepo = () => getRepository(ApiCallLog);
+
+  const parseJsonSafe = (value) => {
+    if (value == null || value === '') return null;
+    if (typeof value === 'object') return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return value;
+    }
+  };
+
+  const checksubStatusLabel = (body, success) => {
+    const nested = body?.data ?? body ?? {};
+    const current = String(nested.currentStatus || '')
+      .trim()
+      .toLowerCase();
+    const sub = String(nested.subscriptionStatus || '')
+      .trim()
+      .toLowerCase();
+    // Prefer partner body (covers older logs that wrongly stored success=false for "new")
+    if (current === 'active' || sub === 'active') return 'ACTIVE';
+    if (current) return current.toUpperCase();
+    if (sub) return sub.toUpperCase();
+    const code = body?.responseCode;
+    if (code === '0' || code === 0) return 'SUCCESS';
+    if (success === false) return 'FAILED';
+    return success ? 'SUCCESS' : 'FAILED';
+  };
 
   const maskPhone = (phone) => {
     if (!phone) return undefined;
@@ -306,11 +336,151 @@ export const createAnalyticsService = () => {
     }
   };
 
+  const getVisitDetail = async (visitId, userId) => {
+    const id = parseInt(visitId, 10);
+    if (!id) {
+      const err = new Error('Invalid visit id');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const visit = await getVisitRepo().findOne({
+      where: { id },
+      relations: { events: true },
+    });
+    if (!visit) {
+      const err = new Error('Visit not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    let campaignName = null;
+    if (visit.campaignId) {
+      const campaign = await campaignsService.findOne(
+        visit.campaignId,
+        userId,
+      );
+      campaignName = campaign?.name || null;
+    } else {
+      const err = new Error('Visit not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (visit.events) {
+      visit.events.sort(
+        (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+      );
+    }
+
+    const apiLogs = await getApiCallLogRepo().find({
+      where: { visitId: id },
+      order: { createdAt: 'ASC' },
+    });
+
+    const apiCalls = apiLogs.map((row) => {
+      const responseBody = parseJsonSafe(row.responseBody);
+      const requestBody = parseJsonSafe(row.requestBody);
+      const nested = responseBody?.data ?? responseBody ?? {};
+      let statusLabel =
+        row.success === false
+          ? 'FAILED'
+          : row.success
+            ? 'SUCCESS'
+            : null;
+      if (row.callType === 'checksub') {
+        statusLabel = checksubStatusLabel(responseBody, row.success);
+      }
+      return {
+        id: row.id,
+        callType: row.callType,
+        eventType: `API_${String(row.callType || '').toUpperCase()}`,
+        requestUrl: row.requestUrl,
+        requestBody,
+        responseStatus: row.responseStatus,
+        responseBody,
+        success: row.success,
+        statusLabel,
+        errorMessage: row.errorMessage,
+        msisdn: maskPhone(row.msisdn),
+        clickId: row.clickId,
+        rcid: row.rcid,
+        createdAt: row.createdAt,
+        summary:
+          row.callType === 'checksub'
+            ? {
+                currentStatus: nested.currentStatus ?? null,
+                subscriptionStatus: nested.subscriptionStatus ?? null,
+                serviceId: nested.serviceId ?? null,
+                responseCode: responseBody?.responseCode ?? null,
+                responseMessage: responseBody?.responseMessage ?? null,
+              }
+            : null,
+      };
+    });
+
+    const events = (visit.events || []).map((e) => ({
+      id: e.id,
+      eventType: e.eventType,
+      metadata: e.metadata || null,
+      createdAt: e.createdAt,
+      kind: 'event',
+    }));
+
+    const timeline = [
+      ...events,
+      ...apiCalls.map((c) => ({
+        id: `api-${c.id}`,
+        eventType: c.eventType,
+        metadata: {
+          callType: c.callType,
+          statusLabel: c.statusLabel,
+          summary: c.summary,
+          responseStatus: c.responseStatus,
+          requestUrl: c.requestUrl,
+        },
+        createdAt: c.createdAt,
+        kind: 'api',
+        apiCallId: c.id,
+      })),
+    ].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
+
+    return {
+      visit: {
+        id: visit.id,
+        campaignId: visit.campaignId,
+        campaignName,
+        phoneMasked: maskPhone(visit.phone),
+        country: visit.country,
+        operator: visit.operator,
+        pageType: visit.pageType,
+        visitStatus: visit.visitStatus,
+        clickId: visit.clickId,
+        rcid: visit.rcid,
+        vidRaw: visit.vidRaw,
+        affRaw: visit.affRaw,
+        vendorId: visit.vendorId,
+        affiliateId: visit.affiliateId,
+        ipAddress: visit.ipAddress,
+        userAgent: visit.userAgent,
+        createdAt: visit.createdAt,
+        updatedAt: visit.updatedAt,
+      },
+      events,
+      apiCalls,
+      timeline,
+      pagePath: derivePagePath(visit),
+    };
+  };
+
   return {
     maskPhone,
     indexVisitEvent,
     createVisit,
     getVisit,
+    getVisitDetail,
     updateVisit,
     setVisitPhone,
     logEvent,

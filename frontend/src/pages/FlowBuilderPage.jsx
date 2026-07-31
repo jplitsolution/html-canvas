@@ -30,7 +30,16 @@ import {
 
 const nodeTypes = { pageNode: PageNode }
 
-const PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+const PAGE_TYPES = [
+  'HOME',
+  'OTP',
+  'CONFIRM',
+  'THANKYOU',
+  'INPROGRESS',
+  'LOW_BALANCE',
+  'BLOCKED',
+  'ERROR',
+]
 
 const VERIFICATION_MODES = [
   {
@@ -87,14 +96,18 @@ const DEFAULT_FLOWS = {
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
+      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
+      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
     ],
     edges: [
       { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
       { id: 'HOME-HEADER_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'HEADER_UNRESOLVED' },
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
+      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
     ],
@@ -105,14 +118,18 @@ const DEFAULT_FLOWS = {
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
+      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
+      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
     ],
     edges: [
       { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
       { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
+      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
     ],
@@ -123,15 +140,19 @@ const DEFAULT_FLOWS = {
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 100 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 240 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 380 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
+      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
+      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
     ],
     edges: [
       { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
       { id: 'HOME-HEADER_UNRESOLVED-OTP', source: 'HOME', target: 'OTP', condition: 'HEADER_UNRESOLVED' },
       { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
       { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
+      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
       { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
       { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
     ],

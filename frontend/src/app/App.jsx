@@ -12,6 +12,7 @@ import CampaignDetailPage from '../pages/CampaignDetailPage'
 import CampaignBuilder from '../pages/CampaignBuilder'
 import SubscriptionPage from '../pages/SubscriptionPage'
 import CampaignLogsPage from '../pages/CampaignLogsPage'
+import SessionDetailPage from '../pages/SessionDetailPage'
 import VendorsPage from '../pages/VendorsPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
@@ -57,6 +58,10 @@ function App() {
               <Route path="/campaigns/:id/flow" element={<Protected><FlowBuilderPage /></Protected>} />
 
               <Route path="/analytics" element={<Protected><CampaignLogsPage /></Protected>} />
+              <Route
+                path="/analytics/visits/:visitId"
+                element={<Protected><SessionDetailPage /></Protected>}
+              />
               <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/subscription" element={<SubscriptionPage />} />

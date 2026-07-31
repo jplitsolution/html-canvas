@@ -44,6 +44,10 @@ export const createApiCallLogService = () => {
     });
     const saved = await getRepo().save(row);
 
+    const statusLabel =
+      input.statusLabel ||
+      (saved.success ? 'SUCCESS' : 'FAILED');
+
     // ES is the scalable log layer; DB remains source of truth.
     void searchService.indexEvent({
       campaignId: saved.campaignId,
@@ -52,7 +56,7 @@ export const createApiCallLogService = () => {
       rcid: saved.rcid,
       phoneMasked: maskPhone(saved.msisdn),
       eventType: `API_${String(saved.callType || '').toUpperCase()}`,
-      status: saved.success ? 'SUCCESS' : 'FAILED',
+      status: statusLabel,
       requestUrl: saved.requestUrl,
       responseStatus: saved.responseStatus,
       success: saved.success,

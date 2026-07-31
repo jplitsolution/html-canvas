@@ -15,7 +15,7 @@ import {
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
-import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, THANKYOU_STARTER_TEMPLATES, BLOCKED_STARTER_TEMPLATES, ERROR_STARTER_TEMPLATES } from '../templates/starterTemplates'
+import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, THANKYOU_STARTER_TEMPLATES, INPROGRESS_STARTER_TEMPLATES, LOW_BALANCE_STARTER_TEMPLATES, BLOCKED_STARTER_TEMPLATES, ERROR_STARTER_TEMPLATES } from '../templates/starterTemplates'
 import { applyStarterHtml } from '../utils/blockActions'
 import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragAndDrop'
 import { startAssetDrag } from '../plugins/assetDrag'
@@ -290,6 +290,10 @@ export function EditorSidebar() {
                     list = CONFIRM_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'THANKYOU') {
                     list = THANKYOU_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'INPROGRESS') {
+                    list = INPROGRESS_STARTER_TEMPLATES;
+                  } else if (funnelPageType === 'LOW_BALANCE') {
+                    list = LOW_BALANCE_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'BLOCKED') {
                     list = BLOCKED_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'ERROR') {
