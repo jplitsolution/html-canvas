@@ -13,8 +13,8 @@ export const createSearchService = () => {
   let client = enabled && node ? new Client({ node }) : null;
   let connectionFailed = false;
 
-  // Logs page is always enabled because we have SQL fallback.
-  const isEnabled = () => true;
+  // Elasticsearch is enabled only when client is initialized and connection is working.
+  const isEnabled = () => Boolean(client && !connectionFailed);
 
   const ensureIndex = async () => {
     if (!client) return;
