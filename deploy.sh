@@ -4,19 +4,19 @@
 #   - Docker: Elasticsearch only (MySQL bahar hai)
 #   - PM2: NestJS backend + Vite frontend (static serve)
 #
-# Pehli baar (domain nahi — sirf IP + port):
-#   cp deploy.env.example deploy.env
-#   nano deploy.env          # SERVER_HOST = server ki public IP, DB, JWT bharo
+# Env files server pe pehle se rakho (script overwrite nahi karta):
+#   backend/.env
+#   frontend/.env.production   (ya frontend/.env) — VITE_API_BASE_URL etc.
+#
+# Pehli baar:
+#   # backend/.env aur frontend/.env.production server pe daalo
+#   # jis branch pe checkout ho, usi pe hard reset + pull
 #   chmod +x deploy.sh
 #   ./deploy.sh
 #
 # Browser se (nginx + TLS domain):
 #   Frontend → https://wap.wellnesss360.com
 #   API      → https://wap.wellnesss360.com/api  (VITE_API_BASE_URL=/api)
-#
-# Direct IP:port (no TLS) — set in deploy.env:
-#   VITE_API_BASE_URL=http://YOUR_IP:3000/api
-#   PUBLIC_WEB_URL=http://YOUR_IP:8080
 #
 # Usage:
 #   ./deploy.sh              # full deploy (ES + build + PM2)
@@ -35,7 +35,9 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
-DEPLOY_ENV="$ROOT_DIR/deploy.env"
+BACKEND_ENV="$BACKEND_DIR/.env"
+FRONTEND_ENV_PRODUCTION="$FRONTEND_DIR/.env.production"
+FRONTEND_ENV="$FRONTEND_DIR/.env"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -60,38 +62,35 @@ docker_compose() {
   fi
 }
 
-load_deploy_env() {
-  if [ ! -f "$DEPLOY_ENV" ]; then
-    die "deploy.env nahi mila. Pehle: cp deploy.env.example deploy.env && values bharo"
-  fi
+# Source a KEY=VALUE env file without exporting unrelated shell noise.
+source_env_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
   # shellcheck disable=SC1090
   set -a
-  source "$DEPLOY_ENV"
+  source "$file"
   set +a
+}
 
-  : "${SERVER_HOST:?SERVER_HOST deploy.env me set karo}"
-  : "${DB_HOST:?DB_HOST deploy.env me set karo}"
-  : "${DB_USERNAME:?DB_USERNAME deploy.env me set karo}"
-  : "${DB_PASSWORD:?DB_PASSWORD deploy.env me set karo}"
-  : "${JWT_SECRET:?JWT_SECRET deploy.env me set karo}"
+load_env() {
+  if [ ! -f "$BACKEND_ENV" ]; then
+    die "backend/.env nahi mila. Server pe backend/.env daalo, phir dubara chalao."
+  fi
 
-  BACKEND_PORT="${BACKEND_PORT:-3000}"
+  source_env_file "$BACKEND_ENV"
+
+  # Frontend Vite env (optional for ES-only / status; required for app build)
+  if [ -f "$FRONTEND_ENV_PRODUCTION" ]; then
+    source_env_file "$FRONTEND_ENV_PRODUCTION"
+  elif [ -f "$FRONTEND_ENV" ]; then
+    source_env_file "$FRONTEND_ENV"
+  fi
+
+  BACKEND_PORT="${PORT:-${BACKEND_PORT:-3000}}"
   FRONTEND_PORT="${FRONTEND_PORT:-8080}"
-  DEPLOY_GIT_PULL="${DEPLOY_GIT_PULL:-false}"
-  DEPLOY_GIT_BRANCH="${DEPLOY_GIT_BRANCH:-main}"
-  DB_PORT="${DB_PORT:-5432}"
-  DB_DATABASE="${DB_DATABASE:-templatecraft}"
-  JWT_EXPIRATION="${JWT_EXPIRATION:-24h}"
   ELASTICSEARCH_NODE="${ELASTICSEARCH_NODE:-http://127.0.0.1:9200}"
-  ELASTICSEARCH_INDEX="${ELASTICSEARCH_INDEX:-campaign_events}"
-  OTP_EXPOSE_TEST="${OTP_EXPOSE_TEST:-true}"
-  REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
-  REDIS_PORT="${REDIS_PORT:-6379}"
-  # Optional. Leave empty on real HE traffic. Dev/staging only.
-  HE_DUMMY_MSISDN="${HE_DUMMY_MSISDN:-}"
 
-  # Same-origin /api is required for https://wap.wellnesss360.com (mixed-content safe).
-  # Never bake http://IP:PORT into the Vite production bundle.
+  # Same-origin /api is required for HTTPS (mixed-content safe).
   if [ -n "${VITE_API_BASE_URL:-}" ] && [[ "$VITE_API_BASE_URL" == http://* ]]; then
     warn "Ignoring insecure VITE_API_BASE_URL=$VITE_API_BASE_URL — using /api"
     API_URL="/api"
@@ -99,56 +98,30 @@ load_deploy_env() {
     API_URL="${VITE_API_BASE_URL:-/api}"
   fi
   WEB_URL="${PUBLIC_WEB_URL:-https://wap.wellnesss360.com}"
-  # Comma-separated; must include the browser Origin (HTTPS domain)
-  CORS_ORIGIN="${CORS_ORIGIN:-https://wap.wellnesss360.com,http://${SERVER_HOST}:${FRONTEND_PORT}}"
 }
 
-maybe_git_pull() {
-  if [ "$DEPLOY_GIT_PULL" = "true" ]; then
-    require_cmd git
-    log "Git pull: $DEPLOY_GIT_BRANCH"
-    git -C "$ROOT_DIR" fetch origin
-    git -C "$ROOT_DIR" checkout "$DEPLOY_GIT_BRANCH"
-    git -C "$ROOT_DIR" pull --ff-only origin "$DEPLOY_GIT_BRANCH"
+require_frontend_env() {
+  if [ ! -f "$FRONTEND_ENV_PRODUCTION" ] && [ ! -f "$FRONTEND_ENV" ]; then
+    die "frontend/.env.production (ya frontend/.env) nahi mila. Server pe daalo, phir dubara chalao."
   fi
 }
 
-write_backend_env() {
-  log "backend/.env likh raha hoon"
-  cat >"$BACKEND_DIR/.env" <<EOF
-PORT=${BACKEND_PORT}
-NODE_ENV=production
+git_hard_reset_current_branch() {
+  require_cmd git
+  local branch
+  branch="$(git -C "$ROOT_DIR" rev-parse --abbrev-ref HEAD)"
+  if [ -z "$branch" ] || [ "$branch" = "HEAD" ]; then
+    die "Detached HEAD pe ho — pehle kisi branch pe checkout karo, phir deploy chalao."
+  fi
 
-# From deploy.env — empty unless you set HE_DUMMY_MSISDN there (dev/staging only).
-HE_DUMMY_MSISDN=${HE_DUMMY_MSISDN}
-
-DB_TYPE=${DB_TYPE:-postgres}
-DB_HOST=${DB_HOST}
-DB_PORT=${DB_PORT}
-DB_USERNAME=${DB_USERNAME}
-DB_PASSWORD=${DB_PASSWORD}
-DB_DATABASE=${DB_DATABASE}
-
-JWT_SECRET=${JWT_SECRET}
-JWT_EXPIRATION=${JWT_EXPIRATION}
-
-CORS_ORIGIN=${CORS_ORIGIN}
-
-ELASTICSEARCH_NODE=${ELASTICSEARCH_NODE}
-ELASTICSEARCH_INDEX=${ELASTICSEARCH_INDEX}
-
-OTP_EXPOSE_TEST=${OTP_EXPOSE_TEST}
-
-REDIS_HOST=${REDIS_HOST}
-REDIS_PORT=${REDIS_PORT}
-EOF
-}
-
-write_frontend_env() {
-  log "frontend/.env.production likh raha hoon (VITE_API_BASE_URL=${API_URL})"
-  cat >"$FRONTEND_DIR/.env.production" <<EOF
-VITE_API_BASE_URL=${API_URL}
-EOF
+  log "Git fetch + hard reset: origin/$branch"
+  git -C "$ROOT_DIR" fetch origin "$branch"
+  if ! git -C "$ROOT_DIR" rev-parse --verify "origin/$branch" >/dev/null 2>&1; then
+    die "Remote branch origin/$branch nahi mili. Pehle push karo ya sahi branch pe checkout karo."
+  fi
+  # Local tracked changes discard — .env (gitignore) safe rehta hai
+  git -C "$ROOT_DIR" reset --hard "origin/$branch"
+  log "Branch $branch ab origin/$branch ke barabar hai ($(git -C "$ROOT_DIR" rev-parse --short HEAD))"
 }
 
 start_elasticsearch() {
@@ -175,15 +148,16 @@ build_backend() {
 }
 
 build_frontend() {
-  log "Frontend install + build (VITE_API_BASE_URL=${API_URL})..."
+  require_frontend_env
+  log "Frontend install + build (VITE_API_BASE_URL from frontend env → ${API_URL})..."
   cd "$FRONTEND_DIR"
   HUSKY=0 npm install
   # serve package — PM2 static files ke liye
   if ! npm ls serve >/dev/null 2>&1; then
     HUSKY=0 npm install --save-dev serve
   fi
-  # Explicit env wins over any stale .env / .env.production on disk
-  VITE_API_BASE_URL="$API_URL" npm run build
+  # Vite reads frontend/.env.production (and .env) — do not overwrite those files
+  npm run build
   if grep -Rqe 'http://[^"'\'' ]*:3000/api' dist/assets/index-*.js 2>/dev/null; then
     die "Frontend build still contains http://*:3000/api — mixed content will break HTTPS"
   fi
@@ -225,15 +199,13 @@ show_status() {
 }
 
 deploy_elasticsearch() {
-  load_deploy_env
+  load_env
   start_elasticsearch
 }
 
 deploy_apps() {
-  load_deploy_env
-  maybe_git_pull
-  write_backend_env
-  write_frontend_env
+  load_env
+  git_hard_reset_current_branch
   build_backend
   build_frontend
   start_pm2_apps
@@ -241,11 +213,9 @@ deploy_apps() {
 }
 
 deploy_all() {
-  load_deploy_env
-  maybe_git_pull
+  load_env
+  git_hard_reset_current_branch
   start_elasticsearch
-  write_backend_env
-  write_frontend_env
   build_backend
   build_frontend
   start_pm2_apps
@@ -264,7 +234,7 @@ case "$cmd" in
     deploy_apps
     ;;
   status)
-    load_deploy_env
+    load_env
     show_status
     ;;
   logs)
