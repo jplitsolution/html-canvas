@@ -29,6 +29,7 @@ export const createSearchService = () => {
           vendorId: { type: 'integer' },
           affiliateId: { type: 'integer' },
           clickId: { type: 'keyword' },
+          rcid: { type: 'keyword' },
           vidRaw: { type: 'keyword' },
           affRaw: { type: 'keyword' },
           phoneMasked: { type: 'keyword' },
@@ -39,10 +40,31 @@ export const createSearchService = () => {
           status: { type: 'keyword' },
           ip: { type: 'keyword' },
           userAgent: { type: 'text' },
+          requestUrl: { type: 'keyword' },
+          responseStatus: { type: 'integer' },
+          success: { type: 'boolean' },
           timestamp: { type: 'date' },
         },
       },
     });
+  };
+
+  /** Best-effort: add new fields to an existing index mapping. */
+  const ensureMappingFields = async () => {
+    if (!client) return;
+    try {
+      await client.indices.putMapping({
+        index: indexName,
+        properties: {
+          rcid: { type: 'keyword' },
+          requestUrl: { type: 'keyword' },
+          responseStatus: { type: 'integer' },
+          success: { type: 'boolean' },
+        },
+      });
+    } catch (err) {
+      console.warn(`ES putMapping skipped: ${err.message}`);
+    }
   };
 
   const init = async () => {
@@ -54,6 +76,7 @@ export const createSearchService = () => {
     }
     try {
       await ensureIndex();
+      await ensureMappingFields();
       console.log(`Elasticsearch ready. index=${indexName}`);
     } catch (err) {
       connectionFailed = true;
@@ -153,6 +176,7 @@ export const createSearchService = () => {
     if (params.affiliateId)
       filter.push({ term: { affiliateId: params.affiliateId } });
     if (params.clickId) filter.push({ term: { clickId: params.clickId } });
+    if (params.rcid) filter.push({ term: { rcid: params.rcid } });
     if (params.from || params.to) {
       const { from, to } = resolveRangeBounds(params);
       const range = {};
@@ -165,6 +189,7 @@ export const createSearchService = () => {
       const escaped = escapeWildcard(params.q);
       const keywordFields = [
         'clickId',
+        'rcid',
         'vidRaw',
         'affRaw',
         'phoneMasked',
@@ -236,6 +261,11 @@ export const createSearchService = () => {
         clickId: params.clickId,
       });
     }
+    if (params.rcid) {
+      queryBuilder.andWhere('visit.rcid = :rcid', {
+        rcid: params.rcid,
+      });
+    }
     if (params.from || params.to) {
       const { from, to } = resolveRangeBounds(params);
       if (from) {
@@ -252,6 +282,7 @@ export const createSearchService = () => {
       queryBuilder.andWhere(
         new Brackets((qb) => {
           qb.where('visit.clickId LIKE :searchLike', { searchLike })
+            .orWhere('visit.rcid LIKE :searchLike', { searchLike })
             .orWhere('visit.vidRaw LIKE :searchLike', { searchLike })
             .orWhere('visit.affRaw LIKE :searchLike', { searchLike })
             .orWhere('visit.phone LIKE :searchLike', { searchLike })
@@ -285,6 +316,7 @@ export const createSearchService = () => {
       vendorId: event.visit?.vendorId,
       affiliateId: event.visit?.affiliateId,
       clickId: event.visit?.clickId,
+      rcid: event.visit?.rcid,
       vidRaw: event.visit?.vidRaw,
       affRaw: event.visit?.affRaw,
       phoneMasked: maskPhone(event.visit?.phone),

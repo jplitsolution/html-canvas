@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { apiCallLogService } from './api-call-log.service.js';
+import { ApiCallType } from './entities/api-call-log.entity.js';
 
 export const createPartnerApiService = () => {
   const parseHeaders = (headersJson) => {
@@ -36,27 +38,81 @@ export const createPartnerApiService = () => {
       planId: input.planId ?? '',
       pack: input.planId ?? 'daily',
       subServiceId: mapSubServiceId(input.planId),
+      click_id: input.clickId ?? '',
+      rcid: input.rcid ?? '',
+      visit_id:
+        input.visitId != null ? String(input.visitId) : '',
     };
+  };
+
+  const serializeBody = (data) => {
+    if (data == null) return null;
+    try {
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return String(data);
+    }
+  };
+
+  const logCall = async ({
+    callType,
+    input,
+    requestUrl,
+    requestBody,
+    response,
+    success,
+    errorMessage,
+  }) => {
+    try {
+      await apiCallLogService.record({
+        visitId: input.visitId,
+        campaignId: input.campaignId,
+        msisdn: input.phone,
+        rcid: input.rcid,
+        clickId: input.clickId,
+        callType,
+        requestUrl,
+        requestBody,
+        responseStatus: response?.status ?? null,
+        responseBody: serializeBody(response?.data),
+        success,
+        errorMessage,
+      });
+    } catch (err) {
+      console.warn(`api_call_logs write failed: ${err.message}`);
+    }
   };
 
   const sendRequest = async (rawUrl, input, headers, label) => {
     const url = resolveTemplate(rawUrl, buildVars(input));
     const useGet = url.includes('?');
     console.log(`${label} → ${useGet ? 'GET' : 'POST'} ${url}`);
-    return useGet
-      ? axios.get(url, { headers, timeout: 5000 })
-      : axios.post(url, input, { headers, timeout: 5000 });
+    return {
+      url,
+      response: useGet
+        ? await axios.get(url, { headers, timeout: 5000 })
+        : await axios.post(url, input, { headers, timeout: 5000 }),
+    };
   };
 
   const resolveMsisdn = async (config, input) => {
     if (!config?.resolveMsisdnUrl) {
       return null;
     }
+    const payload = {
+      phone: input.hint,
+      country: input.country,
+      operator: input.operator,
+      visitId: input.visitId,
+      campaignId: input.campaignId,
+      clickId: input.clickId,
+      rcid: input.rcid,
+    };
     try {
       const headers = parseHeaders(config.headersJson);
-      const response = await sendRequest(
+      const { url, response } = await sendRequest(
         config.resolveMsisdnUrl,
-        { phone: input.hint, country: input.country, operator: input.operator },
+        payload,
         headers,
         'resolveMsisdn',
       );
@@ -69,9 +125,23 @@ export const createPartnerApiService = () => {
         data.phone ??
         '';
       const resolved = String(candidate || '').trim();
+      await logCall({
+        callType: ApiCallType.RESOLVE_MSISDN,
+        input: payload,
+        requestUrl: url,
+        response,
+        success: Boolean(resolved),
+      });
       return resolved || null;
     } catch (err) {
       console.warn(`resolveMsisdn failed: ${err.message}`);
+      await logCall({
+        callType: ApiCallType.RESOLVE_MSISDN,
+        input: payload,
+        requestUrl: config.resolveMsisdnUrl,
+        success: false,
+        errorMessage: err.message,
+      });
       return null;
     }
   };
@@ -83,7 +153,7 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const response = await sendRequest(
+      const { url, response } = await sendRequest(
         config.subscriptionApi,
         input,
         headers,
@@ -100,9 +170,23 @@ export const createPartnerApiService = () => {
           data.subscribed ?? data.isSubscribed ?? data.active,
         );
       }
+      await logCall({
+        callType: ApiCallType.CHECKSUB,
+        input,
+        requestUrl: url,
+        response,
+        success: subscribed,
+      });
       return subscribed;
     } catch (err) {
       console.warn(`checkSubscription failed: ${err.message}`);
+      await logCall({
+        callType: ApiCallType.CHECKSUB,
+        input,
+        requestUrl: config.subscriptionApi,
+        success: false,
+        errorMessage: err.message,
+      });
       return false;
     }
   };
@@ -118,7 +202,7 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const response = await sendRequest(
+      const { url, response } = await sendRequest(
         config.blocklistApi,
         input,
         headers,
@@ -128,10 +212,10 @@ export const createPartnerApiService = () => {
       const nested = data.data ?? data;
       const blocked = Boolean(
         data.blocked ??
-        data.isBlocked ??
-        data.dnd ??
-        nested.blocked ??
-        nested.dnd,
+          data.isBlocked ??
+          data.dnd ??
+          nested.blocked ??
+          nested.dnd,
       );
       const reason =
         typeof data.reason === 'string'
@@ -139,9 +223,23 @@ export const createPartnerApiService = () => {
           : typeof nested.reason === 'string'
             ? nested.reason
             : undefined;
+      await logCall({
+        callType: ApiCallType.BLOCKLIST,
+        input,
+        requestUrl: url,
+        response,
+        success: true,
+      });
       return { blocked, reason };
     } catch (err) {
       console.warn(`checkBlocked failed: ${err.message}`);
+      await logCall({
+        callType: ApiCallType.BLOCKLIST,
+        input,
+        requestUrl: config.blocklistApi,
+        success: false,
+        errorMessage: err.message,
+      });
       return { blocked: false };
     }
   };
@@ -164,13 +262,21 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const response = await sendRequest(
+      const { url, response } = await sendRequest(
         config.subscribeApi,
         input,
         headers,
         `subscribe visitId=${input.visitId} planId=${input.planId || 'n/a'}`,
       );
       if (response.status < 200 || response.status >= 300) {
+        await logCall({
+          callType: ApiCallType.SUBSCRIBE,
+          input,
+          requestUrl: url,
+          response,
+          success: false,
+          errorMessage: `HTTP ${response.status}`,
+        });
         return false;
       }
       const data = response.data ?? {};
@@ -183,9 +289,23 @@ export const createPartnerApiService = () => {
       } else {
         success = true;
       }
+      await logCall({
+        callType: ApiCallType.SUBSCRIBE,
+        input,
+        requestUrl: url,
+        response,
+        success,
+      });
       return success;
     } catch (err) {
       console.warn(`subscribe failed: ${err.message}`);
+      await logCall({
+        callType: ApiCallType.SUBSCRIBE,
+        input,
+        requestUrl: config.subscribeApi,
+        success: false,
+        errorMessage: err.message,
+      });
       return false;
     }
   };

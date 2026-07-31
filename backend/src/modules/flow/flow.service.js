@@ -1,8 +1,10 @@
+import { randomUUID } from 'crypto';
 import { getRepository } from '../../database/index.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
 import { partnerApiService } from './partner-api.service.js';
 import { partnersService } from '../partners/partners.service.js';
+import { postbackService } from '../partners/postback.service.js';
 import { analyticsService } from '../analytics/analytics.service.js';
 import { VisitStatus } from '../analytics/entities/visit.entity.js';
 import { VisitEventType } from '../analytics/entities/visit-event.entity.js';
@@ -41,18 +43,19 @@ export const createFlowService = () => {
   };
 
   /**
-   * Null-flow CG redirect: append/fill click_id (and common attrs) onto campaign CG URL.
-   * Supports {{click_id}} / {rcid} placeholders, else adds ?click_id=.
+   * Null-flow CG redirect: {{click_id}} = our id; {{rcid}} = affiliate original.
+   * Default append uses our click_id.
    */
   const buildCgRedirectUrl = (rawUrl, attrs = {}) => {
-    const clickId = String(attrs.clickId || '').trim();
+    const ourClickId = String(attrs.clickId || '').trim();
+    const rcid = String(attrs.rcid || '').trim();
     let url = String(rawUrl || '').trim();
     if (!url) return '';
 
     const vars = {
-      click_id: clickId,
-      rcid: clickId,
-      clickId,
+      click_id: ourClickId,
+      rcid,
+      clickId: ourClickId,
       vid: attrs.vid || '',
       aff_id: attrs.affId || '',
       campid: attrs.campid != null ? String(attrs.campid) : '',
@@ -65,19 +68,47 @@ export const createFlowService = () => {
 
     const hadPlaceholder =
       /\{\{?(?:click_id|rcid|clickId|vid|aff_id|campid)\}?\}/.test(original);
-    if (clickId && !hadPlaceholder) {
+    if (ourClickId && !hadPlaceholder) {
       try {
         const u = new URL(url);
         if (!u.searchParams.has('click_id') && !u.searchParams.has('rcid')) {
-          u.searchParams.set('click_id', clickId);
+          u.searchParams.set('click_id', ourClickId);
         }
         return u.toString();
       } catch {
         const sep = url.includes('?') ? '&' : '?';
-        return `${url}${sep}click_id=${encodeURIComponent(clickId)}`;
+        return `${url}${sep}click_id=${encodeURIComponent(ourClickId)}`;
       }
     }
     return url;
+  };
+
+  const loadVisitAttribution = async (visitId, input = {}) => {
+    let clickId = String(input.clickId || '').trim();
+    let rcid = String(input.rcid || '').trim();
+    let vid = input.vid || '';
+    let affId = input.affId || '';
+    let vendorId = input.vendorId || null;
+    let affiliateId = input.affiliateId || null;
+    let campaignId = input.campaignId || null;
+
+    if (visitId) {
+      try {
+        const visit = await analyticsService.getVisit(visitId);
+        if (visit) {
+          clickId = visit.clickId || clickId;
+          rcid = visit.rcid || rcid;
+          vid = vid || visit.vidRaw || '';
+          affId = affId || visit.affRaw || '';
+          vendorId = vendorId || visit.vendorId || null;
+          affiliateId = affiliateId || visit.affiliateId || null;
+          campaignId = campaignId || visit.campaignId || null;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    return { clickId, rcid, vid, affId, vendorId, affiliateId, campaignId };
   };
 
   const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
@@ -86,31 +117,15 @@ export const createFlowService = () => {
     const cg = campaign.cgRedirectUrl?.trim();
     if (mode !== 'NONE' || !cg) return null;
 
-    let clickId = String(input.clickId || '').trim();
-    let vid = input.vid || '';
-    let affId = input.affId || '';
-    if (visitId && (!clickId || !vid)) {
-      try {
-        const visit = await analyticsService.getVisit(visitId);
-        if (visit) {
-          clickId = clickId || visit.clickId || '';
-          vid = vid || visit.vidRaw || '';
-          affId = affId || visit.affRaw || '';
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-
+    const attr = await loadVisitAttribution(visitId, input);
     return buildCgRedirectUrl(cg, {
-      clickId,
-      vid,
-      affId,
+      clickId: attr.clickId,
+      rcid: attr.rcid,
+      vid: attr.vid,
+      affId: attr.affId,
       campid: input.campid || campaign.id,
     });
   };
-
-  // Attribution only: click_id / vid already saved on visit. No CPA fire.
 
   const getActions = (pageType) => {
     if (pageType === CampaignPageType.HOME) return ['SUBSCRIBE'];
@@ -119,7 +134,7 @@ export const createFlowService = () => {
     return [];
   };
 
-  const buildPageResponse = (
+  const buildPageResponse = async (
     campaign,
     pageType,
     variables,
@@ -145,6 +160,7 @@ export const createFlowService = () => {
       (resolvedPack
         ? buildSubscriptionUrl(campaign, resolvedPack)
         : undefined);
+    const attr = await loadVisitAttribution(visitId);
     return {
       campaignId: campaign.id,
       visitId,
@@ -164,6 +180,8 @@ export const createFlowService = () => {
       pack: resolvedPack,
       subscriptionUrl: resolvedSubscriptionUrl,
       cgRedirectUrl: campaign.cgRedirectUrl || null,
+      clickId: attr.clickId || null,
+      rcid: attr.rcid || null,
     };
   };
 
@@ -416,14 +434,18 @@ export const createFlowService = () => {
     };
 
     let visitId = input.visitId;
-    let resolvedPageType = input.pageType;
+    let resolvedPageType = String(input.pageType || CampaignPageType.HOME).toUpperCase();
 
     const guardMode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
 
+    // Direct page-link navigation (href="CONFIRM" from the builder) should render
+    // the chosen page. Funnel guards still apply to normal ?step= / prefetch loads
+    // and to /flow/transition.
     if (
-      resolvedPageType === CampaignPageType.CONFIRM ||
-      resolvedPageType === CampaignPageType.THANKYOU
+      !input.direct &&
+      (resolvedPageType === CampaignPageType.CONFIRM ||
+        resolvedPageType === CampaignPageType.THANKYOU)
     ) {
       const isVerified = await hasVerifiedOtp(visitId, phone);
       const hasPhone = Boolean(phone);
@@ -506,6 +528,9 @@ export const createFlowService = () => {
           }));
         await redisService.set(attrCacheKey, attribution, 15);
       }
+      // Dual IDs: affiliate original → rcid; our UUID → click_id (stable for this visit).
+      const affiliateRcid = String(input.rcid || input.clickId || '').trim() || null;
+      const ourClickId = randomUUID();
       const visit = await analyticsService.createVisit({
         campaignId: campaign.id,
         phone: phone || undefined,
@@ -518,7 +543,8 @@ export const createFlowService = () => {
         pageType: resolvedPageType,
         vendorId: attribution.vendorId,
         affiliateId: attribution.affiliateId,
-        clickId: input.clickId,
+        clickId: ourClickId,
+        rcid: affiliateRcid,
         vidRaw: input.vid,
         affRaw: input.affId,
       });
@@ -543,6 +569,10 @@ export const createFlowService = () => {
             serviceId,
             country: campaign.country,
             operator: campaign.operator,
+            visitId,
+            campaignId: campaign.id,
+            clickId: ourClickId,
+            rcid: affiliateRcid,
           },
         );
         if (subscribed) {
@@ -587,6 +617,22 @@ export const createFlowService = () => {
     }
 
     const cgRedirect = await maybeNullFlowCgRedirect(campaign, visitId, input);
+    const pageAttr = await loadVisitAttribution(visitId, input);
+
+    // CG null-flow: if we already have MSISDN, queue affiliate pending for billing callback.
+    if (cgRedirect && phone) {
+      void postbackService.registerPending({
+        visitId,
+        msisdn: phone,
+        campaignId: campaign.id,
+        campid: input.campid || String(campaign.id),
+        clickId: pageAttr.clickId,
+        rcid: pageAttr.rcid,
+        vendorId: pageAttr.vendorId,
+        affiliateId: pageAttr.affiliateId,
+      });
+    }
+
     if (cgRedirect) {
       return {
         campaignId: campaign.id,
@@ -603,7 +649,8 @@ export const createFlowService = () => {
         cgRedirectUrl: campaign.cgRedirectUrl || null,
         subscriptionUrl: null,
         externalRedirect: cgRedirect,
-        clickId: input.clickId || null,
+        clickId: pageAttr.clickId || null,
+        rcid: pageAttr.rcid || null,
       };
     }
 
@@ -637,7 +684,8 @@ export const createFlowService = () => {
         campaign,
         normalizePack(input.pack),
       ),
-      clickId: input.clickId || null,
+      clickId: pageAttr.clickId || null,
+      rcid: pageAttr.rcid || null,
     };
   };
 
@@ -722,7 +770,7 @@ export const createFlowService = () => {
             resolvedPhone || undefined,
           );
           return {
-            ...buildPageResponse(
+            ...(await buildPageResponse(
               campaign,
               CampaignPageType.HOME,
               {
@@ -733,7 +781,7 @@ export const createFlowService = () => {
                 plan: '',
               },
               input.visitId,
-            ),
+            )),
             externalRedirect: redirect,
           };
         }
@@ -833,11 +881,43 @@ export const createFlowService = () => {
         service_id: serviceId,
         plan: formatPlanLabel(selectedPack),
       };
-      const blockResult = await partnerApiService.checkBlocked(apiConfig, {
+      const confirmAttr = await loadVisitAttribution(input.visitId, input);
+      const partnerCtx = {
         phone,
+        serviceId,
         country: campaign.country,
         operator: campaign.operator,
+        visitId: input.visitId,
+        campaignId: campaign.id,
+        clickId: confirmAttr.clickId,
+        rcid: confirmAttr.rcid,
+      };
+
+      // Immediately log confirm + queue affiliate pending (billing callback will fire).
+      await analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.CONFIRM_CLICK,
+        {
+          clickId: confirmAttr.clickId,
+          rcid: confirmAttr.rcid,
+          pack: selectedPack,
+        },
+      );
+      void postbackService.registerPending({
+        visitId: input.visitId,
+        msisdn: phone,
+        campaignId: campaign.id,
+        campid: input.campid || String(campaign.id),
+        clickId: confirmAttr.clickId,
+        rcid: confirmAttr.rcid,
+        vendorId: confirmAttr.vendorId,
+        affiliateId: confirmAttr.affiliateId,
       });
+
+      const blockResult = await partnerApiService.checkBlocked(
+        apiConfig,
+        partnerCtx,
+      );
 
       const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
 
@@ -874,12 +954,7 @@ export const createFlowService = () => {
 
       const subscribed = await partnerApiService.checkSubscription(
         apiConfig,
-        {
-          phone,
-          serviceId,
-          country: campaign.country,
-          operator: campaign.operator,
-        },
+        partnerCtx,
       );
       if (subscribed) {
         const nextPage = flowEngineService.nextPage(
@@ -913,11 +988,7 @@ export const createFlowService = () => {
       }
 
       const success = await partnerApiService.subscribe(apiConfig, {
-        phone,
-        serviceId,
-        country: campaign.country,
-        operator: campaign.operator,
-        visitId: input.visitId,
+        ...partnerCtx,
         planId: selectedPack,
         subscriptionUrl,
       });

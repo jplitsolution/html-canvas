@@ -32,6 +32,7 @@ export const createAnalyticsService = () => {
         vendorId: visit.vendorId,
         affiliateId: visit.affiliateId,
         clickId: visit.clickId,
+        rcid: visit.rcid,
         vidRaw: visit.vidRaw,
         affRaw: visit.affRaw,
         phoneMasked: maskPhone(visit.phone),

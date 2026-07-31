@@ -7,6 +7,9 @@ import {
   ConversionPostbackStatus,
 } from './entities/conversion-postback.entity.js';
 import { Visit } from '../analytics/entities/visit.entity.js';
+import { analyticsService } from '../analytics/analytics.service.js';
+import { VisitEventType } from '../analytics/entities/visit-event.entity.js';
+import { searchService } from '../search/search.service.js';
 
 /**
  * Affiliate / vendor CPA postbacks (SAFWAP callback_manage parity).
@@ -15,6 +18,8 @@ import { Visit } from '../analytics/entities/visit.entity.js';
  *   {{msisdn}} {{click_id}} {{rcid}} {{campid}} {{camp}} {{offer_code}}
  *   {{visit_id}} {{vendor}} {{affiliate}}
  * Also supports SAFWAP single-brace form: {msisdn}, {rcid}, {campid}
+ *
+ * click_id = our generated id; rcid = affiliate original click.
  */
 export const createPostbackService = () => {
   const getPostbackRepo = () => getRepository(ConversionPostback);
@@ -22,11 +27,17 @@ export const createPostbackService = () => {
   const getAffiliateRepo = () => getRepository(Affiliate);
   const getVisitRepo = () => getRepository(Visit);
 
+  const maskPhone = (phone) => {
+    if (!phone) return undefined;
+    const trimmed = String(phone).trim();
+    if (trimmed.length <= 4) return '****';
+    return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+  };
+
   const fillTemplate = (template, vars) => {
     let url = String(template || '');
     for (const [key, val] of Object.entries(vars)) {
       url = url.split(`{{${key}}}`).join(encodeURIComponent(val ?? ''));
-      // SAFWAP-style single braces
       url = url.split(`{${key}}`).join(encodeURIComponent(val ?? ''));
     }
     return url;
@@ -48,8 +59,25 @@ export const createPostbackService = () => {
     return { template, vendorId };
   };
 
+  const indexPostbackEvent = async (row, eventType, extra = {}) => {
+    void searchService.indexEvent({
+      campaignId: row.campaignId,
+      visitId: row.visitId,
+      vendorId: row.vendorId,
+      affiliateId: row.affiliateId,
+      clickId: row.clickId,
+      rcid: row.rcid,
+      phoneMasked: maskPhone(row.msisdn),
+      eventType,
+      status: row.status,
+      responseStatus: row.httpStatus,
+      timestamp: new Date().toISOString(),
+      ...extra,
+    });
+  };
+
   /**
-   * Queue a pending postback after subscribe / CG redirect (operator may confirm later).
+   * Queue a pending postback after confirm / CG (operator may confirm later).
    */
   const registerPending = async (input) => {
     const msisdn = String(input.msisdn || input.phone || '').replace(/\D/g, '');
@@ -59,22 +87,31 @@ export const createPostbackService = () => {
 
     let vendorId = input.vendorId || null;
     let affiliateId = input.affiliateId || null;
-    let clickId = input.clickId || input.rcid || '';
+    let clickId = input.clickId || '';
+    let rcid = input.rcid || '';
     let campid = input.campid || '';
     let visitId = input.visitId || null;
+    let campaignId = input.campaignId || null;
 
-    if (visitId && (!vendorId || !clickId || !campid)) {
+    if (visitId && (!vendorId || !clickId || !rcid || !campid || !campaignId)) {
       const visit = await getVisitRepo().findOne({
         where: { id: parseInt(visitId, 10) },
       });
       if (visit) {
         vendorId = vendorId || visit.vendorId || null;
         affiliateId = affiliateId || visit.affiliateId || null;
-        clickId = clickId || visit.clickId || visit.affRaw || '';
+        clickId = clickId || visit.clickId || '';
+        rcid = rcid || visit.rcid || '';
+        campaignId = campaignId || visit.campaignId || null;
         if (!campid && visit.campaignId) {
           campid = String(visit.campaignId);
         }
       }
+    }
+
+    // Legacy rows: if only one id was stored as click_id, treat as rcid for affiliate.
+    if (!rcid && clickId && input.legacyClickAsRcid) {
+      rcid = clickId;
     }
 
     const { template, vendorId: resolvedVendorId } = await resolvePostbackTemplate(
@@ -87,7 +124,6 @@ export const createPostbackService = () => {
       return { skipped: true, reason: 'no postback_url on vendor/affiliate' };
     }
 
-    // Avoid duplicate pending for same msisdn (latest pending wins unless click differs)
     const existingQ = getPostbackRepo()
       .createQueryBuilder('p')
       .where('p.msisdn = :msisdn', { msisdn })
@@ -97,7 +133,7 @@ export const createPostbackService = () => {
       .orderBy('p.id', 'DESC')
       .take(1);
     if (clickId) {
-      existingQ.andWhere('p.click_id = :clickId', { clickId });
+      existingQ.andWhere('p.clickId = :clickId', { clickId });
     }
     const existing = await existingQ.getOne();
     if (existing) {
@@ -107,17 +143,28 @@ export const createPostbackService = () => {
     const row = await getPostbackRepo().save(
       getPostbackRepo().create({
         visitId: visitId ? parseInt(visitId, 10) : null,
-        campaignId: input.campaignId || null,
+        campaignId: campaignId || null,
         vendorId: vendorId || null,
         affiliateId: affiliateId || null,
         msisdn,
         campid: campid || null,
         clickId: clickId || null,
+        rcid: rcid || null,
         offerCode: input.offerCode || null,
         postbackUrl: template,
         status: ConversionPostbackStatus.PENDING,
       }),
     );
+
+    if (visitId) {
+      await analyticsService.logEvent(visitId, VisitEventType.POSTBACK_PENDING, {
+        postbackId: row.id,
+        rcid: row.rcid,
+        clickId: row.clickId,
+      });
+    } else {
+      await indexPostbackEvent(row, 'POSTBACK_PENDING');
+    }
 
     if (input.fireImmediate) {
       return firePostback(row.id);
@@ -150,10 +197,13 @@ export const createPostbackService = () => {
       affCode = a?.code || '';
     }
 
+    const affiliateRcid = row.rcid || row.clickId || '';
+    const ourClickId = row.clickId || '';
+
     const url = fillTemplate(row.postbackUrl, {
       msisdn: row.msisdn,
-      click_id: row.clickId || '',
-      rcid: row.clickId || '',
+      click_id: ourClickId,
+      rcid: affiliateRcid,
       campid: row.campid || '',
       camp: row.campid || '',
       offer_code: row.offerCode || '',
@@ -164,7 +214,10 @@ export const createPostbackService = () => {
 
     try {
       console.log(`Affiliate postback → GET ${url}`);
-      const response = await axios.get(url, { timeout: 10000, validateStatus: () => true });
+      const response = await axios.get(url, {
+        timeout: 10000,
+        validateStatus: () => true,
+      });
       const body =
         typeof response.data === 'string'
           ? response.data.slice(0, 2000)
@@ -183,6 +236,21 @@ export const createPostbackService = () => {
           : null;
       await getPostbackRepo().save(row);
 
+      const eventType =
+        row.status === ConversionPostbackStatus.SENT
+          ? VisitEventType.POSTBACK_SENT
+          : VisitEventType.POSTBACK_FAILED;
+
+      if (row.visitId) {
+        await analyticsService.logEvent(row.visitId, eventType, {
+          postbackId: row.id,
+          httpStatus: response.status,
+          url,
+        });
+      } else {
+        await indexPostbackEvent(row, eventType, { requestUrl: url });
+      }
+
       return {
         success: row.status === ConversionPostbackStatus.SENT,
         id: row.id,
@@ -195,6 +263,23 @@ export const createPostbackService = () => {
       row.errorMessage = err.message;
       row.sentAt = new Date();
       await getPostbackRepo().save(row);
+
+      if (row.visitId) {
+        await analyticsService.logEvent(
+          row.visitId,
+          VisitEventType.POSTBACK_FAILED,
+          {
+            postbackId: row.id,
+            error: err.message,
+            url,
+          },
+        );
+      } else {
+        await indexPostbackEvent(row, 'POSTBACK_FAILED', {
+          requestUrl: url,
+        });
+      }
+
       return {
         success: false,
         id: row.id,
@@ -206,7 +291,7 @@ export const createPostbackService = () => {
   };
 
   /**
-   * Operator notifies us (SAFWAP /v1/callback). Find pending by msisdn and fire.
+   * Operator/billing notifies us. Find latest pending by msisdn and fire affiliate.
    */
   const processOperatorCallback = async (query = {}) => {
     const msisdn = String(query.msisdn || query.phone || '').replace(/\D/g, '');
@@ -216,8 +301,15 @@ export const createPostbackService = () => {
       return { skipped: true, reason: 'msisdn required' };
     }
 
-    // Only fire on success-like statuses (or empty)
-    const okStatuses = new Set(['', 'active', 'success', 'ok', 'subscribed', '1', 'true']);
+    const okStatuses = new Set([
+      '',
+      'active',
+      'success',
+      'ok',
+      'subscribed',
+      '1',
+      'true',
+    ]);
     if (status && !okStatuses.has(status)) {
       return { skipped: true, reason: `status=${status} ignored` };
     }
@@ -228,7 +320,36 @@ export const createPostbackService = () => {
     });
 
     if (!pending) {
-      return { skipped: true, reason: 'No pending callback' };
+      // Fallback: latest visit for this MSISDN that has attribution — register then fire.
+      const visit = await getVisitRepo()
+        .createQueryBuilder('v')
+        .where('v.phone = :msisdn', { msisdn })
+        .andWhere('(v.rcid IS NOT NULL OR v.click_id IS NOT NULL)')
+        .orderBy('v.id', 'DESC')
+        .getOne();
+
+      if (!visit) {
+        return { skipped: true, reason: 'No pending callback' };
+      }
+
+      const registered = await registerPending({
+        visitId: visit.id,
+        msisdn,
+        campaignId: visit.campaignId,
+        vendorId: visit.vendorId,
+        affiliateId: visit.affiliateId,
+        clickId: visit.clickId,
+        rcid: visit.rcid,
+        campid: visit.campaignId != null ? String(visit.campaignId) : '',
+      });
+      if (registered.skipped && !registered.id) {
+        return registered;
+      }
+      const id = registered.id;
+      if (!id) {
+        return { skipped: true, reason: 'No pending callback' };
+      }
+      return firePostback(id);
     }
 
     return firePostback(pending.id);

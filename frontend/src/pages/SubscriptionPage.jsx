@@ -11,6 +11,12 @@ const FLOW_FONT =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
 
 const VALID_PACKS = ['daily', 'weekly', 'monthly']
+const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+
+/** Editor stores campaign page links as bare tokens (href="CONFIRM"), not full URLs. */
+function isCampaignPageHref(href) {
+  return VALID_PAGES.includes(String(href || '').trim().toUpperCase())
+}
 
 const FLOW_SHADOW_STYLES = `
   :host { display: block; width: 100%; min-height: 100vh; }
@@ -396,11 +402,13 @@ function SubscriptionPage() {
   const country = searchParams.get('country') || ''
   const operator = searchParams.get('operator') || ''
   // Affiliate / vendor click attribution (from the shared tracking URL).
+  // Incoming affiliate click may arrive as click_id or rcid; after first /flow/page
+  // response, click_id becomes ours and rcid stays the affiliate original.
   const campid = searchParams.get('campid') || ''
   const vid = searchParams.get('vid') || ''
   const affId = searchParams.get('aff_id') || ''
-  const clickId =
-    searchParams.get('click_id') || searchParams.get('rcid') || ''
+  const urlRcid = searchParams.get('rcid') || ''
+  const urlClickId = searchParams.get('click_id') || ''
 
   const [phone, setPhone] = useState('')
   const [phoneResolving, setPhoneResolving] = useState(true)
@@ -418,17 +426,25 @@ function SubscriptionPage() {
   const pageDataRef = useRef(null)
   const selectedPackRef = useRef('daily')
   const phoneRef = useRef('')
-  const clickIdRef = useRef(clickId)
+  const loadGenerationRef = useRef(0)
+  // Our click_id is empty until /flow/page returns it; affiliate seed goes in rcid.
+  const clickIdRef = useRef('')
+  const rcidRef = useRef(urlRcid || urlClickId || '')
   const vidRef = useRef(vid)
   const affIdRef = useRef(affId)
   const campidRef = useRef(campid)
 
   useEffect(() => {
-    if (clickId) clickIdRef.current = clickId
+    if (urlRcid) rcidRef.current = urlRcid
+    else if (urlClickId && !rcidRef.current) rcidRef.current = urlClickId
+    // After backend issues our click_id, URL click_id !== rcid — keep it.
+    if (urlClickId && urlClickId !== rcidRef.current) {
+      clickIdRef.current = urlClickId
+    }
     if (vid) vidRef.current = vid
     if (affId) affIdRef.current = affId
     if (campid) campidRef.current = campid
-  }, [clickId, vid, affId, campid])
+  }, [urlClickId, urlRcid, vid, affId, campid])
 
   const queryKey = useMemo(
     () => `${country}|${operator}|${phone}`,
@@ -542,6 +558,10 @@ function SubscriptionPage() {
     pageDataRef.current = data
     setPageData(data)
 
+    // Backend dual IDs: our clickId + affiliate rcid (stable for the visit).
+    if (data.clickId) clickIdRef.current = String(data.clickId)
+    if (data.rcid) rcidRef.current = String(data.rcid)
+
     const resolvedPhone =
       phoneRef.current || data.variables?.phone || data.variables?.msisdn || ''
     if (resolvedPhone) {
@@ -559,9 +579,11 @@ function SubscriptionPage() {
       visitId: data.visitId || visitIdRef.current,
       phone: resolvedPhone,
       step: data.pageType,
+      clickId: clickIdRef.current || undefined,
+      rcid: rcidRef.current || undefined,
     })
 
-    // Sync URL step + msisdn + always keep click attribution params.
+    // Sync URL step + msisdn + dual click attribution params.
     setSearchParams((prev) => {
       const nextParams = new URLSearchParams(prev)
       let changed = false
@@ -574,11 +596,16 @@ function SubscriptionPage() {
         changed = true
       }
       const cid = clickIdRef.current
+      const rid = rcidRef.current
       const v = vidRef.current
       const a = affIdRef.current
       const c = campidRef.current
       if (cid && nextParams.get('click_id') !== cid) {
         nextParams.set('click_id', cid)
+        changed = true
+      }
+      if (rid && nextParams.get('rcid') !== rid) {
+        nextParams.set('rcid', rid)
         changed = true
       }
       if (v && nextParams.get('vid') !== v) {
@@ -621,7 +648,8 @@ function SubscriptionPage() {
             campid,
             vid,
             affId,
-            clickId,
+            clickId: clickIdRef.current || undefined,
+            rcid: rcidRef.current || undefined,
           })
           prefetchingRef.current.delete(page)
           // Only cache if backend returned the page we asked for (guards may rewrite CONFIRM→OTP).
@@ -633,20 +661,24 @@ function SubscriptionPage() {
         }),
       )
     },
-    [country, operator, campid, vid, affId, clickId],
+    [country, operator, campid, vid, affId],
   )
 
   const loadPage = useCallback(
-    async (page = 'HOME') => {
+    async (page = 'HOME', options = {}) => {
+      const requested = String(page || 'HOME').trim().toUpperCase() || 'HOME'
       if (!country || !operator) {
         setError('Missing country or operator in URL')
         setBooting(false)
         return
       }
       setError('')
+      const generation = ++loadGenerationRef.current
 
-      if (pageCacheRef.current.has(page)) {
-        const cachedData = pageCacheRef.current.get(page)
+      // Direct page-link navigations must not reuse a guarded/prefetch rewrite cache.
+      if (!options.direct && pageCacheRef.current.has(requested)) {
+        const cachedData = pageCacheRef.current.get(requested)
+        if (generation !== loadGenerationRef.current) return
         pageDataRef.current = cachedData
         setPageData(cachedData)
         setBooting(false)
@@ -657,23 +689,29 @@ function SubscriptionPage() {
         const data = await fetchFlowPage({
           country,
           operator,
-          page,
+          page: requested,
           msisdn: phoneRef.current,
           visitId: visitIdRef.current,
           campid,
           vid,
           affId,
-          clickId,
+          clickId: clickIdRef.current || undefined,
+          rcid: rcidRef.current || undefined,
+          direct: Boolean(options.direct),
         })
-        // Backend may rewrite requested page (e.g. CONFIRM → OTP).
+        if (generation !== loadGenerationRef.current) return
+        // Backend may rewrite requested page (e.g. CONFIRM → OTP) unless direct=1.
         cachePage(data)
       } catch (err) {
+        if (generation !== loadGenerationRef.current) return
         setError(err.message || 'Failed to load page')
       } finally {
-        setBooting(false)
+        if (generation === loadGenerationRef.current) {
+          setBooting(false)
+        }
       }
     },
-    [country, operator, cachePage, campid, vid, affId, clickId],
+    [country, operator, cachePage, campid, vid, affId],
   )
 
   useEffect(() => {
@@ -739,12 +777,12 @@ function SubscriptionPage() {
     }
   }, [country, operator, campid, phoneResolving, loadPage, getSavedSession])
 
-  // Sync step changes from browser history back/forward only (not from our own cachePage writes).
-  const urlStep = searchParams.get('step')
+  // Sync step changes from browser history / page-link navigation.
+  const urlStep = (searchParams.get('step') || '').toUpperCase()
   useEffect(() => {
     if (phoneResolving || booting || !pageData) return
     if (!urlStep) return
-    if (pageData.pageType === urlStep) return
+    if (String(pageData.pageType || '').toUpperCase() === urlStep) return
     // Ignore while a transition is in flight — cachePage will align URL + page together.
     if (transitionLockRef.current) return
     setBooting(true)
@@ -800,8 +838,30 @@ function SubscriptionPage() {
       // Flow hotspots use href="#" + data-action — let handleClick own those.
       if (anchor.getAttribute('data-action') || anchor.hasAttribute('data-actions')) return
 
-      const href = anchor.getAttribute('href')
-      if (!href || !href.startsWith('#') || href === '#') return
+      const href = (anchor.getAttribute('href') || '').trim()
+      if (!href) return
+
+      // Page tokens like href="CONFIRM" must load that campaign page directly.
+      // Without direct=1 the flow guard rewrites CONFIRM→HOME when MSISDN is missing,
+      // which flashes ?step=CONFIRM then bounces back to HOME.
+      if (isCampaignPageHref(href)) {
+        event.preventDefault()
+        event.stopPropagation()
+        if (transitionLockRef.current) return
+        const targetPage = href.toUpperCase()
+        if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
+
+        transitionLockRef.current = true
+        setTransitioning(true)
+        setError('')
+        loadPage(targetPage, { direct: true }).finally(() => {
+          setTransitioning(false)
+          transitionLockRef.current = false
+        })
+        return
+      }
+
+      if (!href.startsWith('#') || href === '#') return
 
       event.preventDefault()
       const targetId = decodeURIComponent(href.slice(1))
@@ -954,7 +1014,6 @@ function SubscriptionPage() {
                 }
               } else if (step.type === 'page') {
                 const targetPage = (step.page || '').toUpperCase()
-                const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
                 if (VALID_PAGES.includes(targetPage)) {
                   console.log(
                     `%c[Priority Chain] ${tag} PASS — navigate to ${targetPage}`,
@@ -974,7 +1033,7 @@ function SubscriptionPage() {
                     next.set('step', targetPage)
                     return next
                   })
-                  await loadPage(targetPage)
+                  await loadPage(targetPage, { direct: true })
                   break
                 }
                 console.error(`[Priority Chain] ${tag} FAIL — invalid page:`, step.page)
@@ -1052,15 +1111,19 @@ function SubscriptionPage() {
       if (!node.getAttribute('data-action') && node.matches?.('a[href]')) {
         const href = (node.getAttribute('href') || '').trim()
         const targetPage = href.toUpperCase()
-        const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
 
         if (VALID_PAGES.includes(targetPage)) {
           event.preventDefault()
-          setSearchParams((prev) => {
-            const next = new URLSearchParams(prev)
-            next.set('step', targetPage)
-            return next
-          })
+          if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
+          transitionLockRef.current = true
+          setTransitioning(true)
+          setError('')
+          try {
+            await loadPage(targetPage, { direct: true })
+          } finally {
+            setTransitioning(false)
+            transitionLockRef.current = false
+          }
           return
         }
 
@@ -1100,6 +1163,7 @@ function SubscriptionPage() {
           action,
           phone: phoneRef.current,
           clickId: clickIdRef.current || undefined,
+          rcid: rcidRef.current || undefined,
           vid: vidRef.current || undefined,
           affId: affIdRef.current || undefined,
           ...(planId ? { planId } : {}),
@@ -1150,7 +1214,7 @@ function SubscriptionPage() {
       shadow.removeEventListener('click', handleAnchorClick)
       if (otpCleanup) otpCleanup()
     }
-  }, [pageData, country, operator, campid, cachePage])
+  }, [pageData, country, operator, campid, cachePage, loadPage, setSearchParams])
 
   if (!country || !operator) {
     return (

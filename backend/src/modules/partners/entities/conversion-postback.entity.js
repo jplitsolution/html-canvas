@@ -54,6 +54,12 @@ export const ConversionPostbackSchema = new EntitySchema({
       length: 255,
       nullable: true,
     },
+    /** Affiliate original click — used in postback {rcid} placeholder. */
+    rcid: {
+      type: 'varchar',
+      length: 255,
+      nullable: true,
+    },
     offerCode: {
       name: 'offer_code',
       type: 'varchar',
