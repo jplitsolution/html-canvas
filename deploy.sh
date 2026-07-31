@@ -10,9 +10,13 @@
 #   chmod +x deploy.sh
 #   ./deploy.sh
 #
-# Browser se:
-#   Frontend → http://YOUR_IP:8080
-#   API      → http://YOUR_IP:3000/api
+# Browser se (nginx + TLS domain):
+#   Frontend → https://wap.wellnesss360.com
+#   API      → https://wap.wellnesss360.com/api  (VITE_API_BASE_URL=/api)
+#
+# Direct IP:port (no TLS) — set in deploy.env:
+#   VITE_API_BASE_URL=http://YOUR_IP:3000/api
+#   PUBLIC_WEB_URL=http://YOUR_IP:8080
 #
 # Usage:
 #   ./deploy.sh              # full deploy (ES + build + PM2)
@@ -84,9 +88,16 @@ load_deploy_env() {
   REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
   REDIS_PORT="${REDIS_PORT:-6379}"
 
-  API_URL="http://${SERVER_HOST}:${BACKEND_PORT}/api"
-  WEB_URL="http://${SERVER_HOST}:${FRONTEND_PORT}"
-  CORS_ORIGIN="$WEB_URL"
+  # Default to same-origin /api (HTTPS-safe behind nginx). Absolute http://IP:3000/api
+  # causes browsers to block login as mixed-content on https:// domains.
+  # Override in deploy.env for direct IP:port access without nginx TLS:
+  #   VITE_API_BASE_URL=http://YOUR_IP:3000/api
+  #   PUBLIC_WEB_URL=http://YOUR_IP:8080
+  #   CORS_ORIGIN=http://YOUR_IP:8080
+  API_URL="${VITE_API_BASE_URL:-/api}"
+  WEB_URL="${PUBLIC_WEB_URL:-https://wap.wellnesss360.com}"
+  # Comma-separated; must include the browser Origin (HTTPS domain), not just IP:port
+  CORS_ORIGIN="${CORS_ORIGIN:-https://wap.wellnesss360.com,http://${SERVER_HOST}:${FRONTEND_PORT}}"
 }
 
 maybe_git_pull() {
@@ -157,7 +168,7 @@ build_backend() {
   HUSKY=0 npm install
 }
 
-build_frontend()
+build_frontend() {
   log "Frontend install + build..."
   cd "$FRONTEND_DIR"
   HUSKY=0 npm install

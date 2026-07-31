@@ -66,7 +66,23 @@ export async function detectMsisdnApi({ country, operator, campid, phone } = {})
   if (phone) params.set('msisdn', String(phone))
 
   try {
-    return await apiClient(`/flow/detect-msisdn?${params.toString()}`, { method: 'GET' })
+    const res = await apiClient(`/flow/detect-msisdn?${params.toString()}`, { method: 'GET' })
+    // TEMP debug — server-seen request headers (browser cannot read carrier HE headers itself)
+    if (res?.debugHeaders) {
+      console.log('%c[HE DEBUG] Full request headers seen by server:', 'color:#0ea5e9;font-weight:bold')
+      console.log(res.debugHeaders)
+      console.table(res.debugHeaders)
+      console.log('[HE DEBUG] extracted MSISDN from headers:', res.debugHeaderPhone || '(none)')
+      console.log('[HE DEBUG] detect-msisdn result:', {
+        phone: res.phone,
+        hasMsisdn: res.hasMsisdn,
+        heProvider: res.heProvider,
+        heError: res.heError,
+        subscribed: res.subscribed,
+        blocked: res.blocked,
+      })
+    }
+    return res
   } catch (err) {
     console.warn('[detectMsisdnApi] failed:', err)
     return null
