@@ -155,7 +155,7 @@ function VendorsPage() {
           <h1 className="page-header-title">Vendors &amp; Affiliates</h1>
           <p className="page-header-description">
             Manage partners, toggle active status, then assign them on campaign detail pages.
-            Traffic link ke <code className="font-mono">click_id</code> / <code className="font-mono">vid</code> visit pe store hote hain — CPA postback nahi.
+            Traffic-link <code className="font-mono">click_id</code> / <code className="font-mono">vid</code> values are stored on visit — no CPA postback.
           </p>
         </div>
 

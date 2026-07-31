@@ -249,7 +249,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
                 Placeholders: <code>{'{{msisdn}}'}</code>, <code>{'{{serviceId}}'}</code>,{' '}
                 <code>{'{{country}}'}</code>, <code>{'{{operator}}'}</code>,{' '}
-                <code>{'{{subServiceId}}'}</code>. URL me <code>?</code> ho to GET, warna POST.
+                <code>{'{{subServiceId}}'}</code>. URLs with <code>?</code> use GET; otherwise POST.
               </p>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Subscription check URL</label>
@@ -288,10 +288,10 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           ) : activeTab === 'he' ? (
             <div className="space-y-4">
               <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                <strong>Zyada operators ke liye kuch mat bharao.</strong> Default = phone network
-                header se aati hai (<code>X-MSISDN</code>). URL tabhi chahiye jab operator header
-                nahi bhejta aur alag API deta hai (jaise Safaricom masked). Baaki cases me OTP
-                path use hota hai.
+                <strong>Leave this empty for most operators.</strong> By default, the phone number
+                is read from the carrier network header (<code>X-MSISDN</code>). A resolve URL is
+                only needed when the operator does not send that header and provides a separate API
+                (for example, Safaricom masked). In all other cases, the OTP path is used.
               </p>
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">
@@ -302,27 +302,27 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   value={form.heProvider}
                   onChange={(e) => setForm({ ...form, heProvider: e.target.value })}
                 >
-                  <option value="header">header — network se MSISDN (recommended default)</option>
-                  <option value="none">none — kabhi auto-detect mat karo (sirf OTP)</option>
-                  <option value="custom_http">custom_http — operator ne alag URL diya ho</option>
-                  <option value="safaricom_masked">safaricom_masked — Safaricom token+masked API</option>
+                  <option value="header">header — MSISDN from network (recommended default)</option>
+                  <option value="none">none — disable auto-detect (OTP only)</option>
+                  <option value="custom_http">custom_http — operator-provided resolve URL</option>
+                  <option value="safaricom_masked">safaricom_masked — Safaricom token + masked API</option>
                 </select>
               </div>
               {(form.heProvider === 'custom_http' || form.heProvider === 'safaricom_masked') && (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-fg mb-1.5">
-                      Resolve URL (sirf custom_http)
+                      Resolve URL (custom_http only)
                     </label>
                     <Input
                       value={form.resolveMsisdnUrl}
                       onChange={(e) => setForm({ ...form, resolveMsisdnUrl: e.target.value })}
-                      placeholder="Operator diya ho tabhi"
+                      placeholder="Only if provided by the operator"
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-fg mb-1.5">
-                      Extra HE config JSON (sirf special operators)
+                      Extra HE config JSON (special operators only)
                     </label>
                     <textarea
                       className="w-full min-h-[100px] rounded-lg border border-border bg-bg-subtle px-3 py-2 text-sm text-fg font-mono"
@@ -337,8 +337,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           ) : (
             <div className="space-y-4">
               <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                Sirf external partner OTP APIs. Twilio / MSG91 / local OTP store nahi hai — partner generate + verify karta hai.
-                Success = response body me configured key/value (default <code>responseCode = 0</code>).
+                External partner OTP APIs only. There is no Twilio / MSG91 / local OTP store — the
+                partner generates and verifies the OTP. Success is determined by a configured
+                key/value in the response body (default <code>responseCode = 0</code>).
               </p>
 
               <div className="p-3 border border-border rounded-lg bg-bg-subtle/50 space-y-3">
