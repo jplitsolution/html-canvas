@@ -484,11 +484,11 @@ function CampaignDetailPage() {
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-semibold text-fg">CG redirect URL</h2>
                 <p className="text-xs text-fg-muted mt-1">
-                  Flow mode <strong>None</strong> + yeh URL → user land karte hi yahan redirect,
-                  saath me jo <code className="font-mono">click_id</code> mila tha woh query pe
-                  jaata hai. HE/OTP ki zaroorat nahi. Placeholder:{' '}
+                  With flow mode <strong>None</strong> and this URL set, users are redirected here
+                  on landing, and the received <code className="font-mono">click_id</code> is
+                  appended to the query string. HE/OTP is not required. Placeholder:{' '}
                   <code className="font-mono">{'{{click_id}}'}</code> /{' '}
-                  <code className="font-mono">{'{rcid}'}</code> (warna auto{' '}
+                  <code className="font-mono">{'{rcid}'}</code> (otherwise auto{' '}
                   <code className="font-mono">?click_id=</code>).
                 </p>
               </div>

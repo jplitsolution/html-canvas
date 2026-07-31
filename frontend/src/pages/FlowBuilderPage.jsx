@@ -51,7 +51,7 @@ const VERIFICATION_MODES = [
   {
     id: 'NONE',
     label: 'None (null / CG redirect)',
-    hint: 'No HE/OTP. Agar CG URL set hai → landing pe wahi redirect + click_id.',
+    hint: 'No HE/OTP. If a CG URL is set → redirect there on landing with click_id.',
   },
 ]
 

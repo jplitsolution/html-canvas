@@ -44,7 +44,7 @@ function logHeDebug(label, res) {
     console.log('[HE DEBUG] extracted MSISDN from headers:', res.debugHeaderPhone || '(none)')
   } else {
     console.warn(
-      '[HE DEBUG] debugHeaders missing — backend/frontend deploy stale hai. Server pe ./deploy.sh dubara chalao.',
+      '[HE DEBUG] debugHeaders missing — backend/frontend deploy may be stale. Re-run ./deploy.sh on the server.',
       { keys: res ? Object.keys(res) : null },
     )
   }
