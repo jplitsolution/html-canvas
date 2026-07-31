@@ -1,4 +1,5 @@
 import { memo, useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   Plus,
   Trash2,
@@ -7,6 +8,7 @@ import {
   Power,
   Search,
   Link2,
+  BookOpen,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -162,7 +164,14 @@ function VendorsPage() {
             <code className="font-mono">{'{{click_id}}'}</code>,{' '}
             <code className="font-mono">{'{rcid}'}</code>,{' '}
             <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
-            <code className="font-mono">{'{{campid}}'}</code>.
+            <code className="font-mono">{'{{campid}}'}</code>.{' '}
+            <Link
+              to="/docs/callbacks"
+              className="inline-flex items-center gap-1 text-accent hover:underline font-medium"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              How billing callbacks work
+            </Link>
           </p>
         </div>
 
