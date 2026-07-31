@@ -1,7 +1,7 @@
 /**
  * PM2 process definitions for AlmaLinux production.
  * Each app runs start.sh which builds first — if build fails, PM2 won't start.
- * Ports: set DEPLOY_* in deploy.env.
+ * Ports: FRONTEND_PORT from env / backend/.env (default 8080).
  */
 module.exports = {
   apps: [
