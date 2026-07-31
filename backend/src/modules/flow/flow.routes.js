@@ -21,12 +21,17 @@ function extractHeaderMsisdn(headers) {
 export async function flowRoutes(fastify, options) {
   fastify.get('/detect-msisdn', async (request, reply) => {
     const q = request.query || {};
+    const allHeaders = { ...(request.headers || {}) };
     const headerPhone = extractHeaderMsisdn(request.headers);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
 
-    return flowService.detectMsisdn({
+    // TEMP debug — full headers for HE testing (also returned to browser console)
+    console.log('[HE DEBUG] /detect-msisdn headers:', JSON.stringify(allHeaders, null, 2));
+    console.log('[HE DEBUG] extracted MSISDN:', headerPhone || '(none)');
+
+    const result = await flowService.detectMsisdn({
       country: q.country,
       operator: q.operator,
       campid: q.campid,
@@ -34,6 +39,12 @@ export async function flowRoutes(fastify, options) {
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
     });
+
+    return {
+      ...result,
+      debugHeaders: allHeaders,
+      debugHeaderPhone: headerPhone || null,
+    };
   });
 
   fastify.get('/entry', async (request, reply) => {
