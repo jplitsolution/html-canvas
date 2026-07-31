@@ -14,6 +14,7 @@ import SubscriptionPage from '../pages/SubscriptionPage'
 import CampaignLogsPage from '../pages/CampaignLogsPage'
 import SessionDetailPage from '../pages/SessionDetailPage'
 import VendorsPage from '../pages/VendorsPage'
+import CallbackDocsPage from '../pages/CallbackDocsPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
 
@@ -63,6 +64,7 @@ function App() {
                 element={<Protected><SessionDetailPage /></Protected>}
               />
               <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
+              <Route path="/docs/callbacks" element={<Protected><CallbackDocsPage /></Protected>} />
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/" element={<Navigate to="/markets" replace />} />
