@@ -70,6 +70,11 @@ export const VisitSchema = new EntitySchema({
       type: 'varchar',
       nullable: true,
     },
+    /** Affiliate / network original click id (incoming click_id or rcid). */
+    rcid: {
+      type: 'varchar',
+      nullable: true,
+    },
     vidRaw: {
       name: 'vid_raw',
       type: 'varchar',
@@ -118,5 +123,6 @@ export const VisitSchema = new EntitySchema({
     { name: 'IDX_VISIT_VENDOR_ID', columns: ['vendorId'] },
     { name: 'IDX_VISIT_AFFILIATE_ID', columns: ['affiliateId'] },
     { name: 'IDX_VISIT_CLICK_ID', columns: ['clickId'] },
+    { name: 'IDX_VISIT_RCID', columns: ['rcid'] },
   ],
 });

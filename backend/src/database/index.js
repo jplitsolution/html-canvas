@@ -12,6 +12,7 @@ import { ApiConfigSchema } from '../modules/api-config/entities/api-config.entit
 import { VisitSchema } from '../modules/analytics/entities/visit.entity.js';
 import { VisitEventSchema } from '../modules/analytics/entities/visit-event.entity.js';
 import { ConversionPostbackSchema } from '../modules/partners/entities/conversion-postback.entity.js';
+import { ApiCallLogSchema } from '../modules/flow/entities/api-call-log.entity.js';
 import getConfig from '../config/configuration.js';
 
 /** @type {DataSource | null} */
@@ -31,6 +32,7 @@ export const entities = [
   VisitSchema,
   VisitEventSchema,
   ConversionPostbackSchema,
+  ApiCallLogSchema,
 ];
 
 export const initDatabase = async () => {

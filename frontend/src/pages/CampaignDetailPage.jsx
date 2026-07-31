@@ -485,11 +485,10 @@ function CampaignDetailPage() {
                 <h2 className="text-sm font-semibold text-fg">CG redirect URL</h2>
                 <p className="text-xs text-fg-muted mt-1">
                   With flow mode <strong>None</strong> and this URL set, users are redirected here
-                  on landing, and the received <code className="font-mono">click_id</code> is
-                  appended to the query string. HE/OTP is not required. Placeholder:{' '}
-                  <code className="font-mono">{'{{click_id}}'}</code> /{' '}
-                  <code className="font-mono">{'{rcid}'}</code> (otherwise auto{' '}
-                  <code className="font-mono">?click_id=</code>).
+                  on landing. HE/OTP is not required.{' '}
+                  <code className="font-mono">{'{{click_id}}'}</code> = our generated id;{' '}
+                  <code className="font-mono">{'{rcid}'}</code> = affiliate original (otherwise auto{' '}
+                  <code className="font-mono">?click_id=</code> with our id).
                 </p>
               </div>
               <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">

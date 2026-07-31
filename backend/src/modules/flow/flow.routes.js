@@ -1,6 +1,8 @@
 import { flowService } from './flow.service.js';
+import { postbackService } from '../partners/postback.service.js';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
 import { publicRateLimit } from '../../common/guards/public-rate-limit.guard.js';
+import getConfig from '../../config/configuration.js';
 
 function extractHeaderMsisdn(headers) {
   if (!headers) return '';
@@ -18,24 +20,58 @@ function extractHeaderMsisdn(headers) {
   return Array.isArray(candidate) ? candidate[0] : String(candidate || '');
 }
 
+/** Prefer real HE header / query MSISDN; fall back to HE_DUMMY_MSISDN when set (dev). */
+function resolveRequestMsisdn(headers, query = {}) {
+  const headerPhone = String(extractHeaderMsisdn(headers) || '').replace(/\D/g, '');
+  const queryPhone = String(query.msisdn || query.phone || '').replace(/\D/g, '');
+  if (headerPhone) return { phone: headerPhone, source: 'header', headerPhone };
+  if (queryPhone) return { phone: queryPhone, source: 'query', headerPhone: '' };
+
+  const dummy = getConfig().heDummyMsisdn || '';
+  if (dummy) {
+    console.log(`[HE DEBUG] using HE_DUMMY_MSISDN=${dummy}`);
+    return { phone: dummy, source: 'he_dummy_msisdn', headerPhone: '' };
+  }
+  return { phone: '', source: null, headerPhone: '' };
+}
+
+/**
+ * Dual-ID intake:
+ * - rcid = affiliate original (explicit rcid, else first-land click_id when no visit yet)
+ * - clickId = our id once issued (click_id / clickId); on first land may equal affiliate's
+ *   until visit create rewrites it — service treats input.rcid || input.clickId as affiliate rcid.
+ */
+function resolveAttributionParams(q = {}) {
+  const hasVisit = Boolean(q.visitId);
+  const rcid = String(q.rcid || (!hasVisit ? q.click_id || q.clickId || '' : '') || '').trim();
+  const clickId = String(q.clickId || q.click_id || '').trim();
+  return {
+    rcid: rcid || undefined,
+    clickId: clickId || undefined,
+  };
+}
+
 export async function flowRoutes(fastify, options) {
   fastify.get('/detect-msisdn', async (request, reply) => {
     const q = request.query || {};
     const allHeaders = { ...(request.headers || {}) };
-    const headerPhone = extractHeaderMsisdn(request.headers);
+    const resolved = resolveRequestMsisdn(request.headers, q);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
 
-    // TEMP debug — full headers for HE testing (also returned to browser console)
     console.log('[HE DEBUG] /detect-msisdn headers:', JSON.stringify(allHeaders, null, 2));
-    console.log('[HE DEBUG] extracted MSISDN:', headerPhone || '(none)');
+    console.log(
+      '[HE DEBUG] extracted MSISDN:',
+      resolved.phone || '(none)',
+      resolved.source ? `(${resolved.source})` : '',
+    );
 
     const result = await flowService.detectMsisdn({
       country: q.country,
       operator: q.operator,
       campid: q.campid,
-      phone: headerPhone || q.msisdn || q.phone,
+      phone: resolved.phone,
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
     });
@@ -43,7 +79,8 @@ export async function flowRoutes(fastify, options) {
     return {
       ...result,
       debugHeaders: allHeaders,
-      debugHeaderPhone: headerPhone || null,
+      debugHeaderPhone: resolved.headerPhone || null,
+      debugMsisdnSource: resolved.source,
     };
   });
 
@@ -59,40 +96,61 @@ export async function flowRoutes(fastify, options) {
   fastify.get('/page', async (request, reply) => {
     const q = request.query || {};
     const allHeaders = { ...(request.headers || {}) };
-    const headerPhone = extractHeaderMsisdn(request.headers);
+    const resolved = resolveRequestMsisdn(request.headers, q);
+    const attr = resolveAttributionParams(q);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
 
-    // TEMP debug — ERROR/HOME/etc. sab pages pe headers dikhne chahiye
     console.log('[HE DEBUG] /flow/page headers:', JSON.stringify(allHeaders, null, 2));
-    console.log('[HE DEBUG] /flow/page extracted MSISDN:', headerPhone || '(none)', 'page=', q.page);
+    console.log(
+      '[HE DEBUG] /flow/page extracted MSISDN:',
+      resolved.phone || '(none)',
+      resolved.source ? `(${resolved.source})` : '',
+      'page=',
+      q.page,
+    );
+
+    const direct =
+      q.direct === '1' ||
+      q.direct === 'true' ||
+      q.direct === true ||
+      q.direct === 1;
 
     const result = await flowService.getPage({
       country: q.country,
       operator: q.operator,
       campid: q.campid,
-      pageType: q.page || CampaignPageType.HOME,
-      phone: headerPhone || q.msisdn,
+      pageType: String(q.page || CampaignPageType.HOME).toUpperCase(),
+      phone: resolved.phone,
       visitId: q.visitId ? Number(q.visitId) : undefined,
       pack: q.pack,
       vid: q.vid,
       affId: q.affId || q.aff_id,
-      clickId: q.clickId || q.click_id || q.rcid,
+      clickId: attr.clickId,
+      rcid: attr.rcid,
       landingUrl: q.landingUrl || request.url,
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
+      direct: Boolean(direct),
     });
 
     return {
       ...result,
       debugHeaders: allHeaders,
-      debugHeaderPhone: headerPhone || null,
+      debugHeaderPhone: resolved.headerPhone || null,
+      debugMsisdnSource: resolved.source,
     };
   });
 
   fastify.post('/transition', { preHandler: publicRateLimit }, async (request, reply) => {
     const body = request.body || {};
+    const hasVisit = Boolean(body.visitId);
+    const rcid = String(
+      body.rcid || (!hasVisit ? body.click_id || body.clickId || '' : '') || '',
+    ).trim();
+    const clickId = String(body.clickId || body.click_id || '').trim();
+
     return flowService.transition({
       visitId: body.visitId,
       fromPage: body.fromPage,
@@ -102,9 +160,34 @@ export async function flowRoutes(fastify, options) {
       country: body.country,
       operator: body.operator,
       campid: body.campid,
-      clickId: body.clickId || body.click_id || body.rcid,
+      clickId: clickId || undefined,
+      rcid: rcid || undefined,
       vid: body.vid,
       affId: body.affId || body.aff_id,
+    });
+  });
+
+  /** Billing / operator → us: fire pending affiliate CPA for MSISDN. */
+  const handleCallback = async (request) => {
+    const q = { ...(request.query || {}), ...(request.body || {}) };
+    return postbackService.processOperatorCallback(q);
+  };
+  fastify.get('/callback', { preHandler: publicRateLimit }, handleCallback);
+  fastify.post('/callback', { preHandler: publicRateLimit }, handleCallback);
+
+  /** Optional pre-register (CG / getredirecturl parity). */
+  fastify.post('/register-postback', { preHandler: publicRateLimit }, async (request) => {
+    const body = request.body || {};
+    return postbackService.registerPending({
+      visitId: body.visitId,
+      msisdn: body.msisdn || body.phone,
+      campaignId: body.campaignId,
+      campid: body.campid || body.camp,
+      clickId: body.clickId || body.click_id,
+      rcid: body.rcid,
+      vendorId: body.vendorId,
+      affiliateId: body.affiliateId,
+      offerCode: body.offerCode || body.offer,
     });
   });
 }

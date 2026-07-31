@@ -87,6 +87,8 @@ load_deploy_env() {
   OTP_EXPOSE_TEST="${OTP_EXPOSE_TEST:-true}"
   REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
   REDIS_PORT="${REDIS_PORT:-6379}"
+  # Optional. Leave empty on real HE traffic. Dev/staging only.
+  HE_DUMMY_MSISDN="${HE_DUMMY_MSISDN:-}"
 
   # Same-origin /api is required for https://wap.wellnesss360.com (mixed-content safe).
   # Never bake http://IP:PORT into the Vite production bundle.
@@ -116,6 +118,9 @@ write_backend_env() {
   cat >"$BACKEND_DIR/.env" <<EOF
 PORT=${BACKEND_PORT}
 NODE_ENV=production
+
+# From deploy.env — empty unless you set HE_DUMMY_MSISDN there (dev/staging only).
+HE_DUMMY_MSISDN=${HE_DUMMY_MSISDN}
 
 DB_TYPE=${DB_TYPE:-postgres}
 DB_HOST=${DB_HOST}

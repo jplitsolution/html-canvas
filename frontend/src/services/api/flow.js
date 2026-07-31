@@ -11,6 +11,8 @@ export async function fetchFlowPage({
   vid,
   affId,
   clickId,
+  rcid,
+  direct,
 }) {
   const params = new URLSearchParams({
     country,
@@ -24,7 +26,11 @@ export async function fetchFlowPage({
   if (campid) params.set('campid', String(campid))
   if (vid) params.set('vid', String(vid))
   if (affId) params.set('aff_id', String(affId))
+  // Our click_id + affiliate rcid (dual attribution).
   if (clickId) params.set('click_id', String(clickId))
+  if (rcid) params.set('rcid', String(rcid))
+  // Builder page links: skip funnel rewrite guards (CONFIRM→HOME without MSISDN).
+  if (direct) params.set('direct', '1')
 
   const res = await apiClient(`/flow/page?${params.toString()}`, {
     method: 'GET',

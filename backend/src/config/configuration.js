@@ -1,5 +1,10 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import dotenv from 'dotenv';
-dotenv.config();
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Always load backend/.env (cwd can differ under node --watch / process managers).
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
 
 export default () => ({
   port: parseInt(process.env.PORT || '3000', 10),
@@ -9,6 +14,8 @@ export default () => ({
     .map((origin) => origin.trim())
     .filter(Boolean),
   otpExposeTest: process.env.OTP_EXPOSE_TEST === 'true',
+  // Local/dev HE: when set, used as MSISDN if no real header/query phone is present.
+  heDummyMsisdn: String(process.env.HE_DUMMY_MSISDN || '').replace(/\D/g, ''),
   database: {
     type: process.env.DB_TYPE || 'postgres',
     host: process.env.DB_HOST || 'localhost',
