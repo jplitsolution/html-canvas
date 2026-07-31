@@ -88,15 +88,16 @@ load_deploy_env() {
   REDIS_HOST="${REDIS_HOST:-127.0.0.1}"
   REDIS_PORT="${REDIS_PORT:-6379}"
 
-  # Default to same-origin /api (HTTPS-safe behind nginx). Absolute http://IP:3000/api
-  # causes browsers to block login as mixed-content on https:// domains.
-  # Override in deploy.env for direct IP:port access without nginx TLS:
-  #   VITE_API_BASE_URL=http://YOUR_IP:3000/api
-  #   PUBLIC_WEB_URL=http://YOUR_IP:8080
-  #   CORS_ORIGIN=http://YOUR_IP:8080
-  API_URL="${VITE_API_BASE_URL:-/api}"
+  # Same-origin /api is required for https://wap.wellnesss360.com (mixed-content safe).
+  # Never bake http://IP:PORT into the Vite production bundle.
+  if [ -n "${VITE_API_BASE_URL:-}" ] && [[ "$VITE_API_BASE_URL" == http://* ]]; then
+    warn "Ignoring insecure VITE_API_BASE_URL=$VITE_API_BASE_URL — using /api"
+    API_URL="/api"
+  else
+    API_URL="${VITE_API_BASE_URL:-/api}"
+  fi
   WEB_URL="${PUBLIC_WEB_URL:-https://wap.wellnesss360.com}"
-  # Comma-separated; must include the browser Origin (HTTPS domain), not just IP:port
+  # Comma-separated; must include the browser Origin (HTTPS domain)
   CORS_ORIGIN="${CORS_ORIGIN:-https://wap.wellnesss360.com,http://${SERVER_HOST}:${FRONTEND_PORT}}"
 }
 
@@ -169,14 +170,19 @@ build_backend() {
 }
 
 build_frontend() {
-  log "Frontend install + build..."
+  log "Frontend install + build (VITE_API_BASE_URL=${API_URL})..."
   cd "$FRONTEND_DIR"
   HUSKY=0 npm install
   # serve package — PM2 static files ke liye
   if ! npm ls serve >/dev/null 2>&1; then
     HUSKY=0 npm install --save-dev serve
   fi
-  npm run build
+  # Explicit env wins over any stale .env / .env.production on disk
+  VITE_API_BASE_URL="$API_URL" npm run build
+  if grep -Rqe 'http://[^"'\'' ]*:3000/api' dist/assets/index-*.js 2>/dev/null; then
+    die "Frontend build still contains http://*:3000/api — mixed content will break HTTPS"
+  fi
+  log "Frontend build OK (no hardcoded http API URL)"
 }
 
 start_pm2_apps() {
