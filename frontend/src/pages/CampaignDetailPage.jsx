@@ -18,6 +18,7 @@ import {
   Link2,
   AlertCircle,
   Check,
+  Eye,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -37,7 +38,6 @@ import {
 } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
-import ActivityLogsModal from '../components/dashboard/ActivityLogsModal'
 import { getVisitPagePath } from '../utils/visitPagePath'
 
 function StatusToggle({ active, onToggle, disabled, activating, blockedReason }) {
@@ -93,14 +93,12 @@ function CampaignDetailPage() {
   const fetchVendors = useStore((s) => s.fetchVendors)
   const [showApiConfig, setShowApiConfig] = useState(false)
   const [activating, setActivating] = useState(false)
-  const [showActivityLogs, setShowActivityLogs] = useState(false)
   const [recentLogs, setRecentLogs] = useState([])
   const [recentLogsLoading, setRecentLogsLoading] = useState(false)
   const [assigningVendor, setAssigningVendor] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
 
   const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
-  const [selectedAffiliateForAdd, setSelectedAffiliateForAdd] = useState('null')
   const [cgUrlDraft, setCgUrlDraft] = useState('')
   const [savingCg, setSavingCg] = useState(false)
   const [successUrlDraft, setSuccessUrlDraft] = useState('')
@@ -148,61 +146,45 @@ function CampaignDetailPage() {
     }
   }
 
-  const handleAddTracking = async (value) => {
-    if (!campaign || !value) return
+  const handleSubmitTracking = async () => {
+    if (!campaign || !selectedVendorForAdd) return
     setAssigningVendor(true)
     try {
-      const [vId, aId] = value.split(':')
-      const vendorId = Number(vId)
-      const affiliateId = aId !== 'null' ? Number(aId) : null
+      const vendorId = Number(selectedVendorForAdd)
+      const currentTrackings = (campaign.trackings || [])
+        .map((t) => ({
+          vendorId: t.vendor?.id,
+          affiliateId: null,
+          active: t.active !== false,
+        }))
+        .filter((t) => t.vendorId !== vendorId)
 
-      let currentTrackings = (campaign.trackings || []).map((t) => ({
-        vendorId: t.vendor?.id,
-        affiliateId: t.affiliate?.id || null,
-        active: t.active !== false,
-      }))
-
-      if (affiliateId !== null) {
-        currentTrackings = currentTrackings.filter(
-          (t) => !(t.vendorId === vendorId && t.affiliateId === null),
-        )
-      } else {
-        currentTrackings = currentTrackings.filter((t) => t.vendorId !== vendorId)
-      }
-
-      if (!currentTrackings.find((t) => t.vendorId === vendorId && t.affiliateId === affiliateId)) {
-        currentTrackings.push({ vendorId, affiliateId, active: true })
+      if (!currentTrackings.find((t) => t.vendorId === vendorId)) {
+        currentTrackings.push({ vendorId, affiliateId: null, active: true })
         await updateCampaign(campaign.id, { trackings: currentTrackings })
-        useStore.getState().addToast('Tracking assigned', 'success')
+        useStore.getState().addToast('Vendor tracking assigned', 'success')
       }
+      setSelectedVendorForAdd('')
     } finally {
       setAssigningVendor(false)
     }
   }
 
-  const handleSubmitTracking = async () => {
-    if (!selectedVendorForAdd) return
-    await handleAddTracking(`${selectedVendorForAdd}:${selectedAffiliateForAdd}`)
-    setSelectedVendorForAdd('')
-    setSelectedAffiliateForAdd('null')
-  }
-
-  const handleRemoveTracking = async (vendorId, affiliateId) => {
+  const handleRemoveTracking = async (vendorId) => {
     if (!campaign) return
     const ok = window.confirm(
-      'Remove this tracking assignment? The shareable link will stop working for this vendor/affiliate.',
+      'Remove this tracking assignment? The shareable link will stop working for this vendor.',
     )
     if (!ok) return
     setAssigningVendor(true)
     try {
-      const currentTrackings = (campaign.trackings || []).map((t) => ({
-        vendorId: t.vendor?.id,
-        affiliateId: t.affiliate?.id || null,
-        active: t.active !== false,
-      }))
-      const newTrackings = currentTrackings.filter(
-        (t) => !(t.vendorId === vendorId && t.affiliateId === affiliateId),
-      )
+      const newTrackings = (campaign.trackings || [])
+        .filter((t) => Number(t.vendor?.id) !== Number(vendorId))
+        .map((t) => ({
+          vendorId: t.vendor?.id,
+          affiliateId: null,
+          active: t.active !== false,
+        }))
       await updateCampaign(campaign.id, { trackings: newTrackings })
       useStore.getState().addToast('Tracking removed', 'success')
     } finally {
@@ -210,28 +192,23 @@ function CampaignDetailPage() {
     }
   }
 
-  const handleToggleTrackingActive = async (vendorId, affiliateId) => {
+  const handleToggleTrackingActive = async (vendorId) => {
     if (!campaign) return
     setAssigningVendor(true)
     try {
       const targetVendorId = Number(vendorId)
-      const targetAffiliateId = affiliateId == null ? null : Number(affiliateId)
       const currentTrackings = (campaign.trackings || []).map((t) => {
         const tVendorId = Number(t.vendor?.id)
-        const tAffiliateId = t.affiliate?.id == null ? null : Number(t.affiliate.id)
-        const isMatch =
-          tVendorId === targetVendorId && tAffiliateId === targetAffiliateId
         const currentlyOn = t.active !== false
         return {
           vendorId: tVendorId,
-          affiliateId: tAffiliateId,
-          active: isMatch ? !currentlyOn : currentlyOn,
+          affiliateId: null,
+          active: tVendorId === targetVendorId ? !currentlyOn : currentlyOn,
         }
       })
       await updateCampaign(campaign.id, { trackings: currentTrackings })
       const nowActive = currentTrackings.find(
-        (t) =>
-          t.vendorId === targetVendorId && t.affiliateId === targetAffiliateId,
+        (t) => t.vendorId === targetVendorId,
       )?.active
       useStore.getState().addToast(
         nowActive
@@ -344,11 +321,18 @@ function CampaignDetailPage() {
     [vendors],
   )
 
-  const selectedVendorAffiliates = useMemo(() => {
-    if (!selectedVendorForAdd) return []
-    const vendor = vendors.find((v) => String(v.id) === selectedVendorForAdd)
-    return (vendor?.affiliates || []).filter((a) => a.active !== false)
-  }, [vendors, selectedVendorForAdd])
+  // Dedupe trackings by vendor (legacy affiliate rows collapse to one)
+  const vendorTrackings = useMemo(() => {
+    const seen = new Set()
+    const list = []
+    for (const t of campaign?.trackings || []) {
+      const id = t.vendor?.id
+      if (!id || seen.has(id)) continue
+      seen.add(id)
+      list.push(t)
+    }
+    return list
+  }, [campaign?.trackings])
 
   if (loading) {
     return (
@@ -387,7 +371,7 @@ function CampaignDetailPage() {
     !campaign.active && !canActivate
       ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
       : null
-  const trackings = campaign.trackings || []
+  const trackings = vendorTrackings
 
   const pageActions = (
     <>
@@ -508,7 +492,7 @@ function CampaignDetailPage() {
                   With flow mode <strong>None</strong> and this URL set, users are redirected here
                   on landing. HE/OTP is not required.{' '}
                   <code className="font-mono">{'{{click_id}}'}</code> = our generated id;{' '}
-                  <code className="font-mono">{'{rcid}'}</code> = affiliate original (otherwise auto{' '}
+                  <code className="font-mono">{'{rcid}'}</code> = network original click (otherwise auto{' '}
                   <code className="font-mono">?click_id=</code> with our id).
                 </p>
               </div>
@@ -571,7 +555,7 @@ function CampaignDetailPage() {
                     <div>
                       <h2 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h2>
                       <p className="text-xs text-fg-muted mt-0.5">
-                        Assign vendors and affiliates to generate shareable tracking URLs
+                        Assign vendors to generate shareable tracking URLs
                       </p>
                     </div>
                   </div>
@@ -585,35 +569,18 @@ function CampaignDetailPage() {
               </div>
 
               <div className="px-5 py-4 border-b border-border bg-bg-muted/25">
-                <p className="text-xs font-medium text-fg mb-3">Assign new tracking</p>
+                <p className="text-xs font-medium text-fg mb-3">Assign vendor</p>
                 <div className="flex flex-col sm:flex-row gap-2.5">
                   <select
                     className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring"
                     value={selectedVendorForAdd}
-                    onChange={(e) => {
-                      setSelectedVendorForAdd(e.target.value)
-                      setSelectedAffiliateForAdd('null')
-                    }}
+                    onChange={(e) => setSelectedVendorForAdd(e.target.value)}
                     disabled={assigningVendor}
                   >
                     <option value="">Select vendor…</option>
                     {activeVendors.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.name} ({v.code})
-                      </option>
-                    ))}
-                  </select>
-
-                  <select
-                    className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
-                    value={selectedAffiliateForAdd}
-                    onChange={(e) => setSelectedAffiliateForAdd(e.target.value)}
-                    disabled={assigningVendor || !selectedVendorForAdd}
-                  >
-                    <option value="null">All traffic</option>
-                    {selectedVendorAffiliates.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.name} ({a.code})
                       </option>
                     ))}
                   </select>
@@ -645,29 +612,23 @@ function CampaignDetailPage() {
                   <Store className="w-8 h-8 mx-auto mb-3 text-fg-subtle" />
                   <p className="text-sm font-medium text-fg">No tracking assigned</p>
                   <p className="text-xs text-fg-muted mt-1 max-w-sm mx-auto">
-                    Pick a vendor above to generate an affiliate tracking link for this campaign.
+                    Pick a vendor above to generate a tracking link for this campaign.
                   </p>
                 </div>
               ) : (
                 <div className="divide-y divide-border">
                   {trackings.map((t) => {
                     const vendorId = t.vendor?.id
-                    const affiliateId = t.affiliate?.id
                     const vendor = vendors.find((v) => v.id === vendorId) || t.vendor
-                    const affiliate = affiliateId
-                      ? vendor?.affiliates?.find((a) => a.id === affiliateId) || t.affiliate
-                      : null
                     const assignmentActive = t.active !== false
                     const vendorActive = vendor?.active !== false
-                    const affiliateActive = !affiliate || affiliate.active !== false
-                    const linkActive = assignmentActive && vendorActive && affiliateActive
+                    const linkActive = assignmentActive && vendorActive
                     const displayUrl = buildTrackingUrl({
                       campaign,
                       vendorCode: vendor?.code,
-                      affiliateCode: affiliate?.code,
                     })
                     const relativeDisplay = displayUrl.replace(window.location.origin, '')
-                    const copyKey = `${vendorId}-${affiliateId || 'none'}`
+                    const copyKey = String(vendorId)
 
                     return (
                       <div
@@ -688,27 +649,12 @@ function CampaignDetailPage() {
                               {linkActive ? 'Active' : 'Inactive'}
                             </span>
                           </div>
-                          <p className="text-xs text-fg-muted">
-                            Affiliate:{' '}
-                            {affiliate ? (
-                              <>
-                                <span className="text-fg font-medium">{affiliate.name}</span>
-                                <code className="ml-1.5 text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
-                                  {affiliate.code}
-                                </code>
-                              </>
-                            ) : (
-                              <span className="italic text-fg-subtle">All traffic</span>
-                            )}
-                          </p>
                           {!linkActive && (
                             <p className="text-[11px] text-warning flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" />
                               {!assignmentActive
                                 ? 'Assignment off — visitors see “not available”'
-                                : !vendorActive
-                                  ? 'Vendor is deactivated — reactivate on Vendors page'
-                                  : 'Affiliate is deactivated — reactivate on Vendors page'}
+                                : 'Vendor is deactivated — reactivate on Vendors page'}
                             </p>
                           )}
                           <code className="block text-[11px] text-fg-subtle break-all leading-relaxed bg-bg-muted/50 border border-border rounded-md px-2.5 py-2">
@@ -730,9 +676,7 @@ function CampaignDetailPage() {
                                   : 'Activate assignment'
                               }
                               disabled={assigningVendor}
-                              onClick={() =>
-                                handleToggleTrackingActive(vendorId, affiliateId || null)
-                              }
+                              onClick={() => handleToggleTrackingActive(vendorId)}
                               className={`
                                 relative inline-flex h-6 w-11 shrink-0 items-center rounded-full
                                 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
@@ -774,7 +718,7 @@ function CampaignDetailPage() {
                             variant="ghost"
                             size="sm"
                             className="text-danger hover:text-danger hover:bg-danger-muted"
-                            onClick={() => handleRemoveTracking(vendorId, affiliateId || null)}
+                            onClick={() => handleRemoveTracking(vendorId)}
                             disabled={assigningVendor}
                             title="Remove assignment"
                           >
@@ -849,7 +793,11 @@ function CampaignDetailPage() {
                   <h2 className="text-sm font-semibold text-fg">Recent activity</h2>
                   <p className="text-xs text-fg-muted mt-0.5">Latest visitor interactions</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => setShowActivityLogs(true)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}
+                >
                   <FileText className="w-3.5 h-3.5" />
                   View all
                 </Button>
@@ -866,6 +814,7 @@ function CampaignDetailPage() {
                       <th>Time</th>
                       <th>Path</th>
                       <th>Status</th>
+                      <th className="w-12 text-right"> </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -921,6 +870,17 @@ function CampaignDetailPage() {
                           >
                             {log.visitStatus}
                           </span>
+                        </td>
+                        <td className="text-right">
+                          <button
+                            type="button"
+                            title="View session detail"
+                            aria-label="View session detail"
+                            onClick={() => navigate(`/analytics/visits/${log.id}`)}
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-border text-fg-muted hover:text-accent hover:border-accent/40 hover:bg-accent-muted/40 transition-colors"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -1011,16 +971,6 @@ function CampaignDetailPage() {
         isOpen={showApiConfig}
         onClose={() => setShowApiConfig(false)}
         campaignId={campaign.id}
-      />
-
-      <ActivityLogsModal
-        isOpen={showActivityLogs}
-        onClose={() => {
-          setShowActivityLogs(false)
-          fetchRecentLogs()
-        }}
-        campaignId={campaign.id}
-        campaignName={`${campaign.country} / ${campaign.operator}`}
       />
     </AppShell>
   )

@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { getRepository } from '../../database/index.js';
 import { Vendor } from './entities/vendor.entity.js';
-import { Affiliate } from './entities/affiliate.entity.js';
 import {
   ConversionPostback,
   ConversionPostbackStatus,
@@ -12,19 +11,18 @@ import { VisitEventType } from '../analytics/entities/visit-event.entity.js';
 import { searchService } from '../search/search.service.js';
 
 /**
- * Affiliate / vendor CPA postbacks (SAFWAP callback_manage parity).
+ * Vendor CPA postbacks (SAFWAP callback_manage parity).
  *
  * Placeholders in postback_url:
  *   {{msisdn}} {{click_id}} {{rcid}} {{campid}} {{camp}} {{offer_code}}
- *   {{visit_id}} {{vendor}} {{affiliate}}
+ *   {{visit_id}} {{vendor}}
  * Also supports SAFWAP single-brace form: {msisdn}, {rcid}, {campid}
  *
- * click_id = our generated id; rcid = affiliate original click.
+ * click_id = our generated id; rcid = network original click.
  */
 export const createPostbackService = () => {
   const getPostbackRepo = () => getRepository(ConversionPostback);
   const getVendorRepo = () => getRepository(Vendor);
-  const getAffiliateRepo = () => getRepository(Affiliate);
   const getVisitRepo = () => getRepository(Visit);
 
   const maskPhone = (phone) => {
@@ -43,16 +41,9 @@ export const createPostbackService = () => {
     return url;
   };
 
-  const resolvePostbackTemplate = async (vendorId, affiliateId) => {
+  const resolvePostbackTemplate = async (vendorId) => {
     let template = '';
-    if (affiliateId) {
-      const aff = await getAffiliateRepo().findOne({
-        where: { id: affiliateId },
-      });
-      if (aff?.postbackUrl?.trim()) template = aff.postbackUrl.trim();
-      if (!vendorId && aff) vendorId = aff.vendorId;
-    }
-    if (!template && vendorId) {
+    if (vendorId) {
       const vendor = await getVendorRepo().findOne({ where: { id: vendorId } });
       if (vendor?.postbackUrl?.trim()) template = vendor.postbackUrl.trim();
     }
@@ -86,7 +77,6 @@ export const createPostbackService = () => {
     }
 
     let vendorId = input.vendorId || null;
-    let affiliateId = input.affiliateId || null;
     let clickId = input.clickId || '';
     let rcid = input.rcid || '';
     let campid = input.campid || '';
@@ -99,7 +89,6 @@ export const createPostbackService = () => {
       });
       if (visit) {
         vendorId = vendorId || visit.vendorId || null;
-        affiliateId = affiliateId || visit.affiliateId || null;
         clickId = clickId || visit.clickId || '';
         rcid = rcid || visit.rcid || '';
         campaignId = campaignId || visit.campaignId || null;
@@ -109,19 +98,17 @@ export const createPostbackService = () => {
       }
     }
 
-    // Legacy rows: if only one id was stored as click_id, treat as rcid for affiliate.
+    // Legacy rows: if only one id was stored as click_id, treat as rcid for network.
     if (!rcid && clickId && input.legacyClickAsRcid) {
       rcid = clickId;
     }
 
-    const { template, vendorId: resolvedVendorId } = await resolvePostbackTemplate(
-      vendorId,
-      affiliateId,
-    );
+    const { template, vendorId: resolvedVendorId } =
+      await resolvePostbackTemplate(vendorId);
     vendorId = resolvedVendorId || vendorId;
 
     if (!template) {
-      return { skipped: true, reason: 'no postback_url on vendor/affiliate' };
+      return { skipped: true, reason: 'no postback_url on vendor' };
     }
 
     const existingQ = getPostbackRepo()
@@ -145,7 +132,7 @@ export const createPostbackService = () => {
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaignId || null,
         vendorId: vendorId || null,
-        affiliateId: affiliateId || null,
+        affiliateId: null,
         msisdn,
         campid: campid || null,
         clickId: clickId || null,
@@ -185,35 +172,28 @@ export const createPostbackService = () => {
     }
 
     let vendorCode = '';
-    let affCode = '';
     if (row.vendorId) {
       const v = await getVendorRepo().findOne({ where: { id: row.vendorId } });
       vendorCode = v?.code || '';
     }
-    if (row.affiliateId) {
-      const a = await getAffiliateRepo().findOne({
-        where: { id: row.affiliateId },
-      });
-      affCode = a?.code || '';
-    }
 
-    const affiliateRcid = row.rcid || row.clickId || '';
+    const networkRcid = row.rcid || row.clickId || '';
     const ourClickId = row.clickId || '';
 
     const url = fillTemplate(row.postbackUrl, {
       msisdn: row.msisdn,
       click_id: ourClickId,
-      rcid: affiliateRcid,
+      rcid: networkRcid,
       campid: row.campid || '',
       camp: row.campid || '',
       offer_code: row.offerCode || '',
       visit_id: row.visitId != null ? String(row.visitId) : '',
       vendor: vendorCode,
-      affiliate: affCode,
+      affiliate: '',
     });
 
     try {
-      console.log(`Affiliate postback → GET ${url}`);
+      console.log(`Vendor postback → GET ${url}`);
       const response = await axios.get(url, {
         timeout: 10000,
         validateStatus: () => true,
@@ -291,7 +271,7 @@ export const createPostbackService = () => {
   };
 
   /**
-   * Operator/billing notifies us. Find latest pending by msisdn and fire affiliate.
+   * Operator/billing notifies us. Find latest pending by msisdn and fire vendor postback.
    */
   const processOperatorCallback = async (query = {}) => {
     const msisdn = String(query.msisdn || query.phone || '').replace(/\D/g, '');
@@ -337,7 +317,7 @@ export const createPostbackService = () => {
         msisdn,
         campaignId: visit.campaignId,
         vendorId: visit.vendorId,
-        affiliateId: visit.affiliateId,
+        affiliateId: null,
         clickId: visit.clickId,
         rcid: visit.rcid,
         campid: visit.campaignId != null ? String(visit.campaignId) : '',

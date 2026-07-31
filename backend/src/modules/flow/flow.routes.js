@@ -167,7 +167,7 @@ export async function flowRoutes(fastify, options) {
     });
   });
 
-  /** Billing / operator → us: fire pending affiliate CPA for MSISDN. */
+  /** Billing / operator → us: fire pending vendor CPA for MSISDN. */
   const handleCallback = async (request) => {
     const q = { ...(request.query || {}), ...(request.body || {}) };
     return postbackService.processOperatorCallback(q);

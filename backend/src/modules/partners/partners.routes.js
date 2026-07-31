@@ -28,26 +28,4 @@ export async function partnersRoutes(fastify, options) {
     await partnersService.removeVendor(request.params.id, request.user.id);
     return { message: 'Vendor deleted' };
   });
-
-  fastify.get('/vendors/:id/affiliates', async (request, reply) => {
-    return partnersService.listAffiliates(request.params.id, request.user.id);
-  });
-
-  fastify.post('/affiliates', async (request, reply) => {
-    reply.status(201);
-    return partnersService.createAffiliate(request.body || {}, request.user.id);
-  });
-
-  fastify.patch('/affiliates/:id', async (request, reply) => {
-    return partnersService.updateAffiliate(
-      request.params.id,
-      request.body || {},
-      request.user.id,
-    );
-  });
-
-  fastify.delete('/affiliates/:id', async (request, reply) => {
-    await partnersService.removeAffiliate(request.params.id, request.user.id);
-    return { message: 'Affiliate deleted' };
-  });
 }

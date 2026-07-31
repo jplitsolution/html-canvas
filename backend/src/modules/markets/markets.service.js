@@ -158,7 +158,7 @@ export const createMarketsService = () => {
       where: { operatorId: operator.id, userId },
       relations: {
         pages: { template: true },
-        trackings: { vendor: true, affiliate: true },
+        trackings: { vendor: true },
         marketOperator: { country: true },
       },
       order: { updatedAt: 'DESC' },

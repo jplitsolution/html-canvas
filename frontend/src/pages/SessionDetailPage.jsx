@@ -299,9 +299,7 @@ function SessionDetailPage() {
                   Traffic origin
                 </span>
                 <p className="font-semibold text-gray-800 mt-1 truncate">
-                  {visit?.vidRaw || visit?.affRaw
-                    ? `Vendor: ${visit?.vidRaw || '—'} (Aff: ${visit?.affRaw || '—'})`
-                    : 'Direct'}
+                  {visit?.vidRaw ? `Vendor: ${visit.vidRaw}` : 'Direct'}
                 </p>
               </div>
               <div>
