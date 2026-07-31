@@ -110,7 +110,7 @@ export const createCampaignsService = () => {
       where: { userId },
       relations: {
         pages: { template: true },
-        trackings: { vendor: true, affiliate: true },
+        trackings: { vendor: true },
         marketOperator: { country: true },
       },
       order: { updatedAt: 'DESC' },
@@ -125,7 +125,7 @@ export const createCampaignsService = () => {
       where: { id: parseInt(id, 10) },
       relations: {
         pages: { template: true },
-        trackings: { vendor: true, affiliate: true },
+        trackings: { vendor: true },
         marketOperator: { country: true },
       },
     });
@@ -153,7 +153,6 @@ export const createCampaignsService = () => {
       .leftJoinAndSelect('pages.template', 'template')
       .leftJoinAndSelect('campaign.trackings', 'trackings')
       .leftJoinAndSelect('trackings.vendor', 'vendor')
-      .leftJoinAndSelect('trackings.affiliate', 'affiliate')
       .leftJoinAndSelect('campaign.marketOperator', 'marketOperator')
       .leftJoinAndSelect('marketOperator.country', 'marketCountry')
       .where('LOWER(campaign.country) = LOWER(:country)', {
@@ -203,7 +202,7 @@ export const createCampaignsService = () => {
       where: { id: parseInt(id, 10) },
       relations: {
         pages: { template: true },
-        trackings: { vendor: true, affiliate: true },
+        trackings: { vendor: true },
         marketOperator: { country: true },
       },
     });
@@ -365,10 +364,7 @@ export const createCampaignsService = () => {
           dto.trackings.map((t) => ({
             campaignId: campaign.id,
             vendorId: Number(t.vendorId),
-            affiliateId:
-              t.affiliateId == null || Number.isNaN(Number(t.affiliateId))
-                ? null
-                : Number(t.affiliateId),
+            affiliateId: null,
             active:
               t.active === undefined || t.active === null ? true : !!t.active,
           })),

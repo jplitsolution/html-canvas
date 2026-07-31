@@ -362,69 +362,42 @@ export const createFlowService = () => {
   const assertTrackingAssignmentAvailable = async (
     campaign,
     vid,
-    affId,
+    _affId,
     vendorId,
-    affiliateId,
   ) => {
     const trackings = campaign.trackings || [];
     if (trackings.length === 0) return;
-    if (!vid && !affId && vendorId == null) return;
+    if (!vid && vendorId == null) return;
 
     const vidNorm = vid ? String(vid).trim().toLowerCase() : '';
-    const affNorm = affId ? String(affId).trim().toLowerCase() : '';
-
     let resolvedVendorId = vendorId;
-    let resolvedAffiliateId =
-      affiliateId === undefined ? undefined : affiliateId;
 
     let matched =
       trackings.find((t) => {
         const vCode = t.vendor?.code?.trim().toLowerCase() || '';
-        const aCode = t.affiliate?.code?.trim().toLowerCase() || '';
-        if (vidNorm && vCode !== vidNorm) return false;
-        if (affNorm) return aCode === affNorm;
-        return !t.affiliate;
+        return vidNorm && vCode === vidNorm;
       }) || null;
 
-    if (!matched && (!resolvedVendorId || resolvedAffiliateId === undefined)) {
+    if (!matched && !resolvedVendorId) {
       const attribution = await partnersService
-        .resolveAttribution(vid, affId)
-        .catch(() => ({
-          vendorId: undefined,
-          affiliateId: undefined,
-          mismatch: false,
-        }));
-      if (!resolvedVendorId) resolvedVendorId = attribution.vendorId;
-      if (resolvedAffiliateId === undefined) {
-        resolvedAffiliateId = attribution.affiliateId ?? null;
-      }
+        .resolveAttribution(vid)
+        .catch(() => ({ vendorId: undefined }));
+      resolvedVendorId = attribution.vendorId;
     }
 
     if (!matched && resolvedVendorId) {
-      const exact = trackings.find(
-        (t) =>
-          (t.vendor?.id ?? t.vendorId) === resolvedVendorId &&
-          (t.affiliate?.id ?? t.affiliateId ?? null) ===
-            (resolvedAffiliateId || null),
-      );
       matched =
-        exact ||
         trackings.find(
-          (t) =>
-            (t.vendor?.id ?? t.vendorId) === resolvedVendorId &&
-            !(t.affiliate?.id ?? t.affiliateId),
-        ) ||
-        null;
+          (t) => (t.vendor?.id ?? t.vendorId) === resolvedVendorId,
+        ) || null;
     }
 
     if (!matched) return;
 
     const assignmentActive = matched.active !== false;
     const vendorActive = matched.vendor?.active !== false;
-    const affiliateActive =
-      !matched.affiliate || matched.affiliate.active !== false;
 
-    if (!assignmentActive || !vendorActive || !affiliateActive) {
+    if (!assignmentActive || !vendorActive) {
       const err = new Error('This offer is not available');
       err.statusCode = 403;
       throw err;
@@ -447,7 +420,8 @@ export const createFlowService = () => {
     await assertTrackingAssignmentAvailable(
       campaign,
       input.vid,
-      input.affId,
+      null,
+      null,
     );
 
     const apiConfigCacheKey = `flow:config:${campaign.id}`;
@@ -562,20 +536,20 @@ export const createFlowService = () => {
     }
 
     if (!visitId) {
-      const attrCacheKey = `flow:attr:${input.vid}:${input.affId}`;
+      const attrCacheKey = `flow:attr:${input.vid || ''}`;
       let attribution = await redisService.get(attrCacheKey);
       if (!attribution) {
         attribution = await partnersService
-          .resolveAttribution(input.vid, input.affId)
+          .resolveAttribution(input.vid)
           .catch(() => ({
             vendorId: undefined,
-            affiliateId: undefined,
+            affiliateId: null,
             mismatch: false,
           }));
         await redisService.set(attrCacheKey, attribution, 15);
       }
-      // Dual IDs: affiliate original → rcid; our UUID → click_id (stable for this visit).
-      const affiliateRcid = String(input.rcid || input.clickId || '').trim() || null;
+      // Dual IDs: network original → rcid; our UUID → click_id (stable for this visit).
+      const networkRcid = String(input.rcid || input.clickId || '').trim() || null;
       const ourClickId = randomUUID();
       const visit = await analyticsService.createVisit({
         campaignId: campaign.id,
@@ -588,11 +562,11 @@ export const createFlowService = () => {
         visitStatus: VisitStatus.VISIT,
         pageType: resolvedPageType,
         vendorId: attribution.vendorId,
-        affiliateId: attribution.affiliateId,
+        affiliateId: null,
         clickId: ourClickId,
-        rcid: affiliateRcid,
+        rcid: networkRcid,
         vidRaw: input.vid,
-        affRaw: input.affId,
+        affRaw: null,
       });
       visitId = visit.id;
 
@@ -616,7 +590,7 @@ export const createFlowService = () => {
           visitId,
           campaignId: campaign.id,
           clickId: ourClickId,
-          rcid: affiliateRcid,
+          rcid: networkRcid,
         });
         lastSubCheck = sub;
         // Not "new" → status page (active/pending/parking/grace) — not CONFIRM
@@ -669,7 +643,7 @@ export const createFlowService = () => {
     const cgRedirect = await maybeNullFlowCgRedirect(campaign, visitId, input);
     const pageAttr = await loadVisitAttribution(visitId, input);
 
-    // CG null-flow: if we already have MSISDN, queue affiliate pending for billing callback.
+    // CG null-flow: if we already have MSISDN, queue vendor pending for billing callback.
     if (cgRedirect && phone) {
       void postbackService.registerPending({
         visitId,
@@ -679,7 +653,7 @@ export const createFlowService = () => {
         clickId: pageAttr.clickId,
         rcid: pageAttr.rcid,
         vendorId: pageAttr.vendorId,
-        affiliateId: pageAttr.affiliateId,
+        affiliateId: null,
       });
     }
 
@@ -772,9 +746,8 @@ export const createFlowService = () => {
       await assertTrackingAssignmentAvailable(
         campaign,
         visit.vidRaw,
-        visit.affRaw,
+        null,
         visit.vendorId,
-        visit.affiliateId,
       );
     }
 
@@ -973,7 +946,7 @@ export const createFlowService = () => {
         rcid: confirmAttr.rcid,
       };
 
-      // Immediately log confirm + queue affiliate pending (billing callback will fire).
+      // Immediately log confirm + queue vendor pending (billing callback will fire).
       await analyticsService.logEvent(
         input.visitId,
         VisitEventType.CONFIRM_CLICK,
@@ -991,7 +964,7 @@ export const createFlowService = () => {
         clickId: confirmAttr.clickId,
         rcid: confirmAttr.rcid,
         vendorId: confirmAttr.vendorId,
-        affiliateId: confirmAttr.affiliateId,
+        affiliateId: null,
       });
 
       const blockResult = await partnerApiService.checkBlocked(

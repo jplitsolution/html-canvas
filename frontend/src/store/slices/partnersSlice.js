@@ -43,7 +43,7 @@ export function createPartnersSlice(set, get) {
       try {
         const vendor = await partnersApi.createVendor(payload)
         set((s) => ({
-          vendors: [{ ...vendor, affiliates: vendor.affiliates || [] }, ...s.vendors],
+          vendors: [vendor, ...s.vendors],
           vendorsFetched: true,
           vendorsRevision: s.vendorsRevision + 1,
         }))
@@ -60,7 +60,7 @@ export function createPartnersSlice(set, get) {
         const vendor = await partnersApi.updateVendor(vendorId, payload)
         set((s) => ({
           vendors: s.vendors.map((v) =>
-            v.id === vendorId ? { ...v, ...vendor, affiliates: vendor.affiliates || v.affiliates } : v,
+            v.id === vendorId ? { ...v, ...vendor } : v,
           ),
           vendorsRevision: s.vendorsRevision + 1,
         }))
@@ -89,69 +89,6 @@ export function createPartnersSlice(set, get) {
         get().addToast('Vendor deleted', 'success')
       } catch (err) {
         get().addToast(err.message || 'Failed to delete vendor', 'error')
-        throw err
-      }
-    },
-
-    createAffiliate: async (payload) => {
-      try {
-        const affiliate = await partnersApi.createAffiliate(payload)
-        set((s) => ({
-          vendors: s.vendors.map((v) =>
-            v.id === payload.vendorId
-              ? { ...v, affiliates: [...(v.affiliates || []), affiliate] }
-              : v,
-          ),
-          vendorsRevision: s.vendorsRevision + 1,
-        }))
-        get().addToast('Affiliate created', 'success')
-        return affiliate
-      } catch (err) {
-        get().addToast(err.message || 'Failed to create affiliate', 'error')
-        throw err
-      }
-    },
-
-    updateAffiliate: async (affiliateId, payload) => {
-      try {
-        const affiliate = await partnersApi.updateAffiliate(affiliateId, payload)
-        set((s) => ({
-          vendors: s.vendors.map((v) => ({
-            ...v,
-            affiliates: (v.affiliates || []).map((a) =>
-              a.id === affiliateId ? { ...a, ...affiliate } : a,
-            ),
-          })),
-          vendorsRevision: s.vendorsRevision + 1,
-        }))
-        get().addToast(
-          payload.active === false
-            ? 'Affiliate deactivated'
-            : payload.active === true
-              ? 'Affiliate activated'
-              : 'Affiliate updated',
-          'success',
-        )
-        return affiliate
-      } catch (err) {
-        get().addToast(err.message || 'Failed to update affiliate', 'error')
-        throw err
-      }
-    },
-
-    deleteAffiliate: async (affiliateId) => {
-      try {
-        await partnersApi.deleteAffiliate(affiliateId)
-        set((s) => ({
-          vendors: s.vendors.map((v) => ({
-            ...v,
-            affiliates: (v.affiliates || []).filter((a) => a.id !== affiliateId),
-          })),
-          vendorsRevision: s.vendorsRevision + 1,
-        }))
-        get().addToast('Affiliate deleted', 'success')
-      } catch (err) {
-        get().addToast(err.message || 'Failed to delete affiliate', 'error')
         throw err
       }
     },

@@ -29,7 +29,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Shield,
-  FileText
+  FileText,
+  Eye,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -324,7 +325,7 @@ function CampaignLogsPage() {
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Searchable event stream with real-time vendor / affiliate attribution telemetry.
+              Searchable event stream with real-time vendor attribution telemetry.
             </p>
           </div>
           <Button
@@ -468,7 +469,7 @@ function CampaignLogsPage() {
           <StatCard label="Total Event Count" value={totalEvents} icon={Activity} colorClass="from-indigo-500 to-purple-500" />
           <StatCard label="Loaded Log Rows" value={logs.total || 0} icon={Database} colorClass="from-blue-500 to-indigo-500" />
           <StatCard label="Unique Vendors" value={(aggs?.byVendor || []).length} icon={Users} colorClass="from-teal-500 to-emerald-500" />
-          <StatCard label="Unique Affiliates" value={(aggs?.byAffiliate || []).length} icon={UserCheck} colorClass="from-amber-500 to-orange-500" />
+          <StatCard label="Campaigns in view" value={selectedId === 'all' ? (aggs?.byCampaign || []).length || '—' : 1} icon={UserCheck} colorClass="from-amber-500 to-orange-500" />
         </div>
 
         {/* Charts Dashboard */}
@@ -538,10 +539,10 @@ function CampaignLogsPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Affiliate Traffic Volumes">
+          <SectionCard title="Vendor Traffic Volumes">
             <div style={{ width: '100%', height: 260 }}>
               <ResponsiveContainer>
-                <BarChart data={aggs?.byAffiliate || []} layout="vertical" margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
+                <BarChart data={aggs?.byVendor || []} layout="vertical" margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
                   <YAxis type="category" dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} width={80} />
@@ -579,7 +580,6 @@ function CampaignLogsPage() {
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Funnel Page</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Session Status</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor</th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Affiliate</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID ID</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -587,10 +587,9 @@ function CampaignLogsPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
-                      <tr 
-                        key={`${row.visitId}-${idx}`} 
-                        onClick={() => openVisitDetail(row.visitId)}
-                        className="hover:bg-gray-50/80 transition-colors duration-150 cursor-pointer"
+                      <tr
+                        key={`${row.visitId}-${idx}`}
+                        className="hover:bg-gray-50/80 transition-colors duration-150"
                       >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
@@ -642,17 +641,6 @@ function CampaignLogsPage() {
                             </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
-                          e.stopPropagation()
-                          const val = row.affRaw || String(row.affiliateId || '')
-                          if (val) updateFilter('q', val)
-                        }}>
-                          {row.affRaw || row.affiliateId ? (
-                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by affiliate">
-                              {row.affRaw || row.affiliateId}
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
-                        </td>
                         <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap" onClick={(e) => {
                           e.stopPropagation()
                           if (row.clickId) updateFilter('clickId', row.clickId)
@@ -674,16 +662,17 @@ function CampaignLogsPage() {
                             </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            variant="outline"
-                            size="xs"
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          <button
+                            type="button"
+                            title="View session detail"
+                            aria-label="View session detail"
+                            disabled={!row.visitId}
                             onClick={() => openVisitDetail(row.visitId)}
-                            className="flex items-center gap-1 text-[10px] font-bold border-indigo-100 text-indigo-600 bg-indigo-50/40 hover:bg-indigo-50 px-2 py-1 rounded-lg"
+                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200 text-gray-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                           >
-                            <Activity className="w-3.5 h-3.5" />
-                            Detail
-                          </Button>
+                            <Eye className="w-4 h-4" />
+                          </button>
                         </td>
                       </tr>
                     ))}

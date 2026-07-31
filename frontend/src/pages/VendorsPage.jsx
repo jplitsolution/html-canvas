@@ -3,7 +3,6 @@ import {
   Plus,
   Trash2,
   Users,
-  ChevronRight,
   Store,
   Power,
   Search,
@@ -81,18 +80,11 @@ function VendorsPage() {
   const createVendor = useStore((s) => s.createVendor)
   const updateVendor = useStore((s) => s.updateVendor)
   const deleteVendor = useStore((s) => s.deleteVendor)
-  const createAffiliate = useStore((s) => s.createAffiliate)
-  const updateAffiliate = useStore((s) => s.updateAffiliate)
-  const deleteAffiliate = useStore((s) => s.deleteAffiliate)
 
-  const [expanded, setExpanded] = useState(null)
   const [vendorName, setVendorName] = useState('')
   const [vendorCode, setVendorCode] = useState('')
   const [vendorPostback, setVendorPostback] = useState('')
   const [creatingVendor, setCreatingVendor] = useState(false)
-  const [affName, setAffName] = useState('')
-  const [affCode, setAffCode] = useState('')
-  const [affPostback, setAffPostback] = useState('')
   const [togglingId, setTogglingId] = useState(null)
   const [savingUrlId, setSavingUrlId] = useState(null)
   const [search, setSearch] = useState('')
@@ -104,13 +96,7 @@ function VendorsPage() {
   const filtered = search.trim()
     ? vendors.filter((v) => {
         const q = search.toLowerCase()
-        return (
-          v.name.toLowerCase().includes(q) ||
-          v.code.toLowerCase().includes(q) ||
-          (v.affiliates || []).some(
-            (a) => a.name.toLowerCase().includes(q) || a.code.toLowerCase().includes(q),
-          )
-        )
+        return v.name.toLowerCase().includes(q) || v.code.toLowerCase().includes(q)
       })
     : vendors
 
@@ -135,7 +121,7 @@ function VendorsPage() {
   }
 
   const handleToggleVendor = async (vendor) => {
-    setTogglingId(`v-${vendor.id}`)
+    setTogglingId(vendor.id)
     try {
       await updateVendor(vendor.id, { active: vendor.active === false })
     } catch {
@@ -145,11 +131,10 @@ function VendorsPage() {
     }
   }
 
-  const handleSaveVendorPostback = async (vendorId, postbackUrl) => {
-    setSavingUrlId(`v-${vendorId}`)
+  const handleSavePostback = async (vendorId, postbackUrl) => {
+    setSavingUrlId(vendorId)
     try {
       await updateVendor(vendorId, { postbackUrl })
-      useStore.getState().addToast('Vendor postback URL saved', 'success')
     } catch {
       // toast in slice
     } finally {
@@ -158,59 +143,9 @@ function VendorsPage() {
   }
 
   const handleDeleteVendor = async (vendorId) => {
-    if (!window.confirm('Delete this vendor and all its affiliates?')) return
+    if (!window.confirm('Delete this vendor?')) return
     try {
       await deleteVendor(vendorId)
-      if (expanded === vendorId) setExpanded(null)
-    } catch {
-      // toast in slice
-    }
-  }
-
-  const handleCreateAffiliate = async (vendorId) => {
-    if (!affName.trim() || !affCode.trim()) return
-    try {
-      await createAffiliate({
-        vendorId,
-        name: affName.trim(),
-        code: affCode.trim(),
-        postbackUrl: affPostback.trim() || null,
-      })
-      setAffName('')
-      setAffCode('')
-      setAffPostback('')
-    } catch {
-      // toast in slice
-    }
-  }
-
-  const handleToggleAffiliate = async (affiliate) => {
-    setTogglingId(`a-${affiliate.id}`)
-    try {
-      await updateAffiliate(affiliate.id, { active: affiliate.active === false })
-    } catch {
-      // toast in slice
-    } finally {
-      setTogglingId(null)
-    }
-  }
-
-  const handleSaveAffiliatePostback = async (affiliateId, postbackUrl) => {
-    setSavingUrlId(`a-${affiliateId}`)
-    try {
-      await updateAffiliate(affiliateId, { postbackUrl })
-      useStore.getState().addToast('Affiliate postback URL saved', 'success')
-    } catch {
-      // toast in slice
-    } finally {
-      setSavingUrlId(null)
-    }
-  }
-
-  const handleDeleteAffiliate = async (affiliateId) => {
-    if (!window.confirm('Delete this affiliate?')) return
-    try {
-      await deleteAffiliate(affiliateId)
     } catch {
       // toast in slice
     }
@@ -220,14 +155,14 @@ function VendorsPage() {
     <AppShell>
       <div className="page-container">
         <div className="page-header">
-          <h1 className="page-header-title">Vendors &amp; Affiliates</h1>
+          <h1 className="page-header-title">Vendors</h1>
           <p className="page-header-description">
-            Manage partners, set CPA postback URLs, then assign them on campaign detail pages.
+            Manage traffic partners and CPA postback URLs, then assign them on campaign detail pages.
             Placeholders:{' '}
             <code className="font-mono">{'{{click_id}}'}</code>,{' '}
             <code className="font-mono">{'{rcid}'}</code>,{' '}
             <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
-            <code className="font-mono">{'{{campid}}'}</code>. Affiliate URL overrides vendor URL.
+            <code className="font-mono">{'{{campid}}'}</code>.
           </p>
         </div>
 
@@ -256,7 +191,7 @@ function VendorsPage() {
             </div>
             <input
               className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-              placeholder="Postback URL (optional) — https://affiliate.com/pb?click={{click_id}}&msisdn={{msisdn}}"
+              placeholder="Postback URL (optional) — https://partner.com/pb?click={{click_id}}&msisdn={{msisdn}}"
               value={vendorPostback}
               onChange={(e) => setVendorPostback(e.target.value)}
             />
@@ -268,7 +203,7 @@ function VendorsPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
             <Input
               type="text"
-              placeholder="Search vendors or affiliates..."
+              placeholder="Search vendors..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="pl-9"
@@ -297,8 +232,6 @@ function VendorsPage() {
         ) : (
           <div className="space-y-3">
             {filtered.map((vendor) => {
-              const isOpen = expanded === vendor.id
-              const affiliates = vendor.affiliates || []
               const isActive = vendor.active !== false
               return (
                 <div
@@ -308,38 +241,30 @@ function VendorsPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2 px-4 py-3.5">
-                    <button
-                      type="button"
-                      className="flex-1 flex items-center gap-3 min-w-0 text-left hover:opacity-90 transition-opacity"
-                      onClick={() => setExpanded(isOpen ? null : vendor.id)}
+                    <div
+                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        isActive ? 'bg-accent-muted text-accent' : 'bg-bg-muted text-fg-subtle'
+                      }`}
                     >
-                      <div
-                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                          isActive ? 'bg-accent-muted text-accent' : 'bg-bg-muted text-fg-subtle'
-                        }`}
-                      >
-                        <Users className="w-4 h-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-sm font-semibold text-fg truncate">{vendor.name}</p>
-                          <span className={`badge ${isActive ? 'badge-success' : 'badge-muted'}`}>
-                            {isActive ? 'Active' : 'Inactive'}
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="text-sm font-semibold text-fg truncate">{vendor.name}</p>
+                        <span className={`badge ${isActive ? 'badge-success' : 'badge-muted'}`}>
+                          {isActive ? 'Active' : 'Inactive'}
+                        </span>
+                        {vendor.postbackUrl ? (
+                          <span className="badge badge-muted flex items-center gap-1">
+                            <Link2 className="w-3 h-3" />
+                            Postback
                           </span>
-                          {vendor.postbackUrl ? (
-                            <span className="badge badge-muted flex items-center gap-1">
-                              <Link2 className="w-3 h-3" />
-                              Postback
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="text-xs text-fg-muted mt-0.5">
-                          <code className="font-mono">{vendor.code}</code>
-                          {' · '}
-                          {affiliates.length} affiliate{affiliates.length === 1 ? '' : 's'}
-                        </p>
+                        ) : null}
                       </div>
-                    </button>
+                      <p className="text-xs text-fg-muted mt-0.5">
+                        <code className="font-mono">{vendor.code}</code>
+                      </p>
+                    </div>
 
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="flex items-center gap-2" title={isActive ? 'Deactivate' : 'Activate'}>
@@ -349,7 +274,7 @@ function VendorsPage() {
                         <ActiveSwitch
                           active={isActive}
                           label={isActive ? `Deactivate ${vendor.name}` : `Activate ${vendor.name}`}
-                          disabled={togglingId === `v-${vendor.id}`}
+                          disabled={togglingId === vendor.id}
                           onToggle={() => handleToggleVendor(vendor)}
                         />
                       </div>
@@ -361,131 +286,21 @@ function VendorsPage() {
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
-                      <button
-                        type="button"
-                        className="p-1.5 text-fg-subtle"
-                        onClick={() => setExpanded(isOpen ? null : vendor.id)}
-                        aria-label={isOpen ? 'Collapse' : 'Expand'}
-                      >
-                        <ChevronRight
-                          className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-90' : ''}`}
-                        />
-                      </button>
                     </div>
                   </div>
 
-                  {isOpen && (
-                    <div className="border-t border-border px-5 py-4 space-y-4 bg-bg-muted/20">
-                      <div>
-                        <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle mb-1.5 flex items-center gap-1">
-                          <Link2 className="w-3.5 h-3.5" />
-                          Vendor postback URL
-                        </p>
-                        <PostbackUrlField
-                          value={vendor.postbackUrl}
-                          saving={savingUrlId === `v-${vendor.id}`}
-                          placeholder="https://network.com/postback?click_id={{click_id}}&msisdn={{msisdn}}"
-                          onSave={(url) => handleSaveVendorPostback(vendor.id, url)}
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-2">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                          <input
-                            className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
-                            placeholder="Affiliate name"
-                            value={affName}
-                            onChange={(e) => setAffName(e.target.value)}
-                          />
-                          <input
-                            className="sm:w-36 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-                            placeholder="Code"
-                            value={affCode}
-                            onChange={(e) => setAffCode(e.target.value.toUpperCase())}
-                          />
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCreateAffiliate(vendor.id)}
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                            Add affiliate
-                          </Button>
-                        </div>
-                        <input
-                          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-                          placeholder="Affiliate postback URL (optional, overrides vendor)"
-                          value={affPostback}
-                          onChange={(e) => setAffPostback(e.target.value)}
-                        />
-                      </div>
-
-                      {affiliates.length === 0 ? (
-                        <p className="text-xs text-fg-muted py-2">No affiliates yet.</p>
-                      ) : (
-                        <ul className="divide-y divide-border rounded-lg border border-border overflow-hidden">
-                          {affiliates.map((aff) => {
-                            const affActive = aff.active !== false
-                            return (
-                              <li
-                                key={aff.id}
-                                className={`px-3.5 py-3 bg-bg-elevated space-y-2 ${
-                                  affActive ? '' : 'opacity-70'
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      <p className="text-sm font-medium text-fg">{aff.name}</p>
-                                      <span
-                                        className={`badge ${affActive ? 'badge-success' : 'badge-muted'}`}
-                                      >
-                                        {affActive ? 'Active' : 'Inactive'}
-                                      </span>
-                                      {aff.postbackUrl ? (
-                                        <span className="badge badge-muted flex items-center gap-1">
-                                          <Link2 className="w-3 h-3" />
-                                          Postback
-                                        </span>
-                                      ) : null}
-                                    </div>
-                                    <p className="text-xs text-fg-muted font-mono mt-0.5">{aff.code}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2.5 shrink-0">
-                                    <ActiveSwitch
-                                      active={affActive}
-                                      label={
-                                        affActive
-                                          ? `Deactivate ${aff.name}`
-                                          : `Activate ${aff.name}`
-                                      }
-                                      disabled={togglingId === `a-${aff.id}`}
-                                      onToggle={() => handleToggleAffiliate(aff)}
-                                    />
-                                    <button
-                                      type="button"
-                                      className="p-1.5 text-fg-muted hover:text-danger rounded-md hover:bg-danger-muted transition-colors"
-                                      onClick={() => handleDeleteAffiliate(aff.id)}
-                                      title="Delete affiliate"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </div>
-                                <PostbackUrlField
-                                  value={aff.postbackUrl}
-                                  saving={savingUrlId === `a-${aff.id}`}
-                                  placeholder="Affiliate postback URL (overrides vendor)"
-                                  onSave={(url) => handleSaveAffiliatePostback(aff.id, url)}
-                                />
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  )}
+                  <div className="border-t border-border px-4 py-3 bg-bg-muted/20">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle mb-1.5 flex items-center gap-1">
+                      <Link2 className="w-3.5 h-3.5" />
+                      Postback URL
+                    </p>
+                    <PostbackUrlField
+                      value={vendor.postbackUrl}
+                      saving={savingUrlId === vendor.id}
+                      placeholder="https://partner.com/postback?click_id={{click_id}}&msisdn={{msisdn}}"
+                      onSave={(url) => handleSavePostback(vendor.id, url)}
+                    />
+                  </div>
                 </div>
               )
             })}
@@ -494,8 +309,8 @@ function VendorsPage() {
 
         <p className="mt-6 text-xs text-fg-subtle flex items-center gap-1.5">
           <Power className="w-3.5 h-3.5" />
-          Inactive vendors and affiliates stay assigned but show as inactive on campaign tracking
-          links. CPA postback fires after billing callback (or confirm) when a URL is set.
+          Inactive vendors stay assigned but show as inactive on campaign tracking links. CPA
+          postback fires after billing callback (or confirm) when a URL is set.
         </p>
       </div>
     </AppShell>
