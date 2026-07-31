@@ -144,17 +144,20 @@ start_elasticsearch() {
 build_backend() {
   log "Backend install (Fastify JS — no build step)..."
   cd "$BACKEND_DIR"
-  HUSKY=0 npm install
+  # Production NODE_ENV skips scripts/hooks we don't need on server
+  npm install --ignore-scripts
 }
 
 build_frontend() {
   require_frontend_env
   log "Frontend install + build (VITE_API_BASE_URL from frontend env → ${API_URL})..."
   cd "$FRONTEND_DIR"
-  HUSKY=0 npm install
+  # Server often has NODE_ENV=production (skips vite/husky). Force devDeps for build;
+  # ignore-scripts avoids prepare→husky failing when husky isn't installed yet.
+  npm install --include=dev --ignore-scripts
   # serve package — PM2 static files ke liye
   if ! npm ls serve >/dev/null 2>&1; then
-    HUSKY=0 npm install --save-dev serve
+    npm install --save-dev --ignore-scripts serve
   fi
   # Vite reads frontend/.env.production (and .env) — do not overwrite those files
   npm run build
