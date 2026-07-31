@@ -1,7 +1,10 @@
 import { randomUUID } from 'crypto';
 import { getRepository } from '../../database/index.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
-import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
+import {
+  CampaignPageType,
+  pageTypeForSubscriptionStatus,
+} from '../campaigns/entities/campaign-page.entity.js';
 import { partnerApiService } from './partner-api.service.js';
 import { partnersService } from '../partners/partners.service.js';
 import { postbackService } from '../partners/postback.service.js';
@@ -111,6 +114,20 @@ export const createFlowService = () => {
     return { clickId, rcid, vid, affId, vendorId, affiliateId, campaignId };
   };
 
+  const resolveSuccessRedirect = async (campaign, visitId, input = {}) => {
+    const raw = campaign?.successRedirectUrl?.trim();
+    if (!raw) return null;
+    const attr = await loadVisitAttribution(visitId, input);
+    const resolved = buildCgRedirectUrl(raw, {
+      clickId: attr.clickId,
+      rcid: attr.rcid,
+      vid: attr.vid,
+      affId: attr.affId,
+      campid: attr.campaignId || campaign.id,
+    });
+    return resolved && /^https?:\/\//i.test(resolved) ? resolved : null;
+  };
+
   const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
     const mode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
@@ -142,6 +159,7 @@ export const createFlowService = () => {
     status,
     pack,
     subscriptionUrl,
+    options = {},
   ) => {
     const page = campaign.pages.find((p) => p.pageType === pageType);
     let templateData = page?.template?.data;
@@ -161,6 +179,13 @@ export const createFlowService = () => {
         ? buildSubscriptionUrl(campaign, resolvedPack)
         : undefined);
     const attr = await loadVisitAttribution(visitId);
+    // Content portal redirect: active / fresh subscribe success only.
+    // pending → INPROGRESS, parking/grace → LOW_BALANCE (no portal).
+    const allowSuccessRedirect = options.allowSuccessRedirect !== false;
+    const successRedirect =
+      pageType === CampaignPageType.THANKYOU && allowSuccessRedirect
+        ? await resolveSuccessRedirect(campaign, visitId)
+        : null;
     return {
       campaignId: campaign.id,
       visitId,
@@ -180,6 +205,9 @@ export const createFlowService = () => {
       pack: resolvedPack,
       subscriptionUrl: resolvedSubscriptionUrl,
       cgRedirectUrl: campaign.cgRedirectUrl || null,
+      successRedirectUrl: campaign.successRedirectUrl || null,
+      successRedirect,
+      subscriptionStatus: options.subscriptionStatus || null,
       clickId: attr.clickId || null,
       rcid: attr.rcid || null,
     };
@@ -287,6 +315,21 @@ export const createFlowService = () => {
     };
   };
 
+  const resolveSkipPage = (flowConfig, fromPage, sub) => {
+    const byStatus = pageTypeForSubscriptionStatus(sub?.status, sub?.isActive);
+    if (!byStatus) return null;
+
+    let condition = 'SUBSCRIBED';
+    if (byStatus === CampaignPageType.INPROGRESS) condition = 'PENDING';
+    if (byStatus === CampaignPageType.LOW_BALANCE) condition = 'LOW_BALANCE';
+
+    return (
+      flowEngineService.nextPage(flowConfig, fromPage, condition) ||
+      flowEngineService.nextPage(flowConfig, CampaignPageType.CONFIRM, condition) ||
+      byStatus
+    );
+  };
+
   const maybeSkipToThankYouIfSubscribed = async (
     flowConfig,
     apiConfig,
@@ -296,21 +339,20 @@ export const createFlowService = () => {
     fromPage,
     nextPage,
   ) => {
-    if (nextPage !== CampaignPageType.CONFIRM || !phone) return nextPage;
-    const subscribed = await partnerApiService
+    if (nextPage !== CampaignPageType.CONFIRM || !phone) {
+      return { nextPage, sub: null };
+    }
+    const sub = await partnerApiService
       .checkSubscription(apiConfig, {
         phone,
         serviceId,
         country: campaign.country,
         operator: campaign.operator,
       })
-      .catch(() => false);
-    if (!subscribed) return nextPage;
-    return (
-      flowEngineService.nextPage(flowConfig, fromPage, 'SUBSCRIBED') ||
-      flowEngineService.nextPage(flowConfig, CampaignPageType.CONFIRM, 'SUBSCRIBED') ||
-      CampaignPageType.THANKYOU
-    );
+      .catch(() => null);
+    if (!sub?.shouldSkipSubscribe) return { nextPage, sub };
+    const skipPage = resolveSkipPage(flowConfig, fromPage, sub);
+    return { nextPage: skipPage || CampaignPageType.THANKYOU, sub };
   };
 
   const hasVerifiedOtp = async (visitId, phone) => {
@@ -435,6 +477,8 @@ export const createFlowService = () => {
 
     let visitId = input.visitId;
     let resolvedPageType = String(input.pageType || CampaignPageType.HOME).toUpperCase();
+    /** @type {{ shouldSkipSubscribe?: boolean, isActive?: boolean, status?: string } | null} */
+    let lastSubCheck = null;
 
     const guardMode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
@@ -452,17 +496,19 @@ export const createFlowService = () => {
 
       if (guardMode === 'OTP_ONLY') {
         if (!isVerified) {
-          const subscribed = await partnerApiService
+          const sub = await partnerApiService
             .checkSubscription(apiConfig, {
               phone,
               serviceId,
               country: campaign.country,
               operator: campaign.operator,
             })
-            .catch(() => false);
+            .catch(() => null);
 
-          if (subscribed) {
-            resolvedPageType = CampaignPageType.THANKYOU;
+          if (sub?.shouldSkipSubscribe) {
+            resolvedPageType =
+              pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
+              CampaignPageType.THANKYOU;
           } else {
             resolvedPageType = phone ? CampaignPageType.OTP : entryPage;
           }
@@ -474,15 +520,15 @@ export const createFlowService = () => {
           resolvedPageType === CampaignPageType.THANKYOU &&
           !isVerified
         ) {
-          const subscribed = await partnerApiService
+          const sub = await partnerApiService
             .checkSubscription(apiConfig, {
               phone,
               serviceId,
               country: campaign.country,
               operator: campaign.operator,
             })
-            .catch(() => false);
-          if (!subscribed) {
+            .catch(() => null);
+          if (!sub?.shouldSkipSubscribe) {
             resolvedPageType = hasPhone
               ? CampaignPageType.CONFIRM
               : CampaignPageType.OTP;
@@ -497,15 +543,15 @@ export const createFlowService = () => {
             apiConfig?.subscriptionApi &&
             apiConfig.subscriptionApi.trim() !== ''
           ) {
-            const subscribed = await partnerApiService
+            const sub = await partnerApiService
               .checkSubscription(apiConfig, {
                 phone,
                 serviceId,
                 country: campaign.country,
                 operator: campaign.operator,
               })
-              .catch(() => false);
-            if (!subscribed) {
+              .catch(() => null);
+            if (!sub?.shouldSkipSubscribe) {
               resolvedPageType = hasPhone
                 ? CampaignPageType.CONFIRM
                 : entryPage;
@@ -562,32 +608,36 @@ export const createFlowService = () => {
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
       // Null/CG flow: no checksub — just store visit + redirect
       if (guardModeForSub !== 'NONE' && phone) {
-        const subscribed = await partnerApiService.checkSubscription(
-          apiConfig,
-          {
-            phone,
-            serviceId,
-            country: campaign.country,
-            operator: campaign.operator,
-            visitId,
-            campaignId: campaign.id,
-            clickId: ourClickId,
-            rcid: affiliateRcid,
-          },
-        );
-        if (subscribed) {
-          resolvedPageType = CampaignPageType.THANKYOU;
+        const sub = await partnerApiService.checkSubscription(apiConfig, {
+          phone,
+          serviceId,
+          country: campaign.country,
+          operator: campaign.operator,
+          visitId,
+          campaignId: campaign.id,
+          clickId: ourClickId,
+          rcid: affiliateRcid,
+        });
+        lastSubCheck = sub;
+        // Not "new" → status page (active/pending/parking/grace) — not CONFIRM
+        if (sub?.shouldSkipSubscribe) {
+          resolvedPageType =
+            pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
+            CampaignPageType.THANKYOU;
           await analyticsService.updateVisit(
             visitId,
             VisitStatus.SUBSCRIBED,
-            CampaignPageType.THANKYOU,
+            resolvedPageType,
             phone,
           );
           await analyticsService.logEvent(
             visitId,
             VisitEventType.SUBSCRIBE_SUCCESS,
             {
-              info: 'Already subscribed',
+              info: `Skip subscribe — status=${sub.status} → ${resolvedPageType}`,
+              currentStatus: sub.currentStatus,
+              subscriptionStatus: sub.subscriptionStatus,
+              isActive: sub.isActive,
             },
           );
         } else {
@@ -667,6 +717,14 @@ export const createFlowService = () => {
       variables,
     );
 
+    // Portal redirect only for active → THANKYOU (Safwap content portal)
+    const allowPortal = Boolean(lastSubCheck?.isActive);
+    const successRedirect =
+      resolvedPageType === CampaignPageType.THANKYOU &&
+      (allowPortal || !lastSubCheck)
+        ? await resolveSuccessRedirect(campaign, visitId, input)
+        : null;
+
     return {
       campaignId: campaign.id,
       visitId,
@@ -680,6 +738,9 @@ export const createFlowService = () => {
       pack: normalizePack(input.pack),
       projectData: templateData.projectData || {},
       cgRedirectUrl: campaign.cgRedirectUrl || null,
+      successRedirectUrl: campaign.successRedirectUrl || null,
+      successRedirect,
+      subscriptionStatus: lastSubCheck?.status || null,
       subscriptionUrl: buildSubscriptionUrl(
         campaign,
         normalizePack(input.pack),
@@ -797,7 +858,7 @@ export const createFlowService = () => {
         resolvedPhone = routed.resolvedPhone || resolvedPhone;
       }
 
-      nextPage = await maybeSkipToThankYouIfSubscribed(
+      const skipResult = await maybeSkipToThankYouIfSubscribed(
         flowConfig,
         apiConfig,
         campaign,
@@ -806,13 +867,21 @@ export const createFlowService = () => {
         CampaignPageType.HOME,
         nextPage,
       );
+      nextPage = skipResult.nextPage;
+      const skipSub = skipResult.sub;
+
+      const skippedStatusPage = [
+        CampaignPageType.THANKYOU,
+        CampaignPageType.INPROGRESS,
+        CampaignPageType.LOW_BALANCE,
+      ].includes(nextPage);
 
       const nextStatus =
         nextPage === CampaignPageType.CONFIRM
           ? VisitStatus.CONFIRM_SHOWN
           : nextPage === CampaignPageType.OTP
             ? VisitStatus.OTP_SHOWN
-            : nextPage === CampaignPageType.THANKYOU
+            : skippedStatusPage
               ? VisitStatus.SUBSCRIBED
               : nextPage === CampaignPageType.ERROR
                 ? VisitStatus.FAILED
@@ -834,11 +903,15 @@ export const createFlowService = () => {
           input.visitId,
           VisitEventType.OTP_VIEW,
         );
-      } else if (nextPage === CampaignPageType.THANKYOU) {
+      } else if (skippedStatusPage) {
         await analyticsService.logEvent(
           input.visitId,
           VisitEventType.SUBSCRIBE_SUCCESS,
-          { info: 'Already subscribed after HE resolve' },
+          {
+            info: `Skip subscribe after HE — status=${skipSub?.status || 'active'} → ${nextPage}`,
+            currentStatus: skipSub?.currentStatus,
+            isActive: skipSub?.isActive,
+          },
         );
       } else if (nextPage === CampaignPageType.ERROR) {
         await analyticsService.logEvent(
@@ -860,6 +933,13 @@ export const createFlowService = () => {
         nextPage,
         variables,
         input.visitId,
+        undefined,
+        undefined,
+        undefined,
+        {
+          allowSuccessRedirect: Boolean(skipSub?.isActive),
+          subscriptionStatus: skipSub?.status || null,
+        },
       );
     }
 
@@ -952,16 +1032,18 @@ export const createFlowService = () => {
         );
       }
 
-      const subscribed = await partnerApiService.checkSubscription(
+      const subAtConfirm = await partnerApiService.checkSubscription(
         apiConfig,
         partnerCtx,
       );
-      if (subscribed) {
-        const nextPage = flowEngineService.nextPage(
-          flowConfig,
-          CampaignPageType.CONFIRM,
-          'SUBSCRIBED',
-        ) || CampaignPageType.THANKYOU;
+      if (subAtConfirm?.shouldSkipSubscribe) {
+        const nextPage =
+          resolveSkipPage(flowConfig, CampaignPageType.CONFIRM, subAtConfirm) ||
+          pageTypeForSubscriptionStatus(
+            subAtConfirm.status,
+            subAtConfirm.isActive,
+          ) ||
+          CampaignPageType.THANKYOU;
 
         await analyticsService.updateVisit(
           input.visitId,
@@ -973,7 +1055,9 @@ export const createFlowService = () => {
           input.visitId,
           VisitEventType.SUBSCRIBE_SUCCESS,
           {
-            info: 'Already subscribed at confirm',
+            info: `Skip subscribe at confirm — status=${subAtConfirm.status} → ${nextPage}`,
+            currentStatus: subAtConfirm.currentStatus,
+            isActive: subAtConfirm.isActive,
           },
         );
         return buildPageResponse(
@@ -984,6 +1068,10 @@ export const createFlowService = () => {
           'ALREADY_SUBSCRIBED',
           selectedPack,
           subscriptionUrl,
+          {
+            allowSuccessRedirect: Boolean(subAtConfirm.isActive),
+            subscriptionStatus: subAtConfirm.status,
+          },
         );
       }
 
@@ -1081,7 +1169,7 @@ export const createFlowService = () => {
           'OTP_VERIFIED',
         ) || CampaignPageType.CONFIRM;
 
-      nextPage = await maybeSkipToThankYouIfSubscribed(
+      const skipAfterOtp = await maybeSkipToThankYouIfSubscribed(
         flowConfig,
         apiConfig,
         campaign,
@@ -1090,26 +1178,35 @@ export const createFlowService = () => {
         CampaignPageType.OTP,
         nextPage,
       );
+      nextPage = skipAfterOtp.nextPage;
+      const skipSubOtp = skipAfterOtp.sub;
+
+      const skippedAfterOtp = [
+        CampaignPageType.THANKYOU,
+        CampaignPageType.INPROGRESS,
+        CampaignPageType.LOW_BALANCE,
+      ].includes(nextPage);
 
       await analyticsService.logEvent(
         input.visitId,
         nextPage === CampaignPageType.CONFIRM
           ? VisitEventType.CONFIRM_VIEW
-          : nextPage === CampaignPageType.THANKYOU
+          : skippedAfterOtp
             ? VisitEventType.SUBSCRIBE_SUCCESS
             : VisitEventType.HOME_VIEW,
         {
-          info:
-            nextPage === CampaignPageType.THANKYOU
-              ? 'Already subscribed after OTP'
-              : 'Transition from OTP verified successfully',
+          info: skippedAfterOtp
+            ? `Skip subscribe after OTP — status=${skipSubOtp?.status || 'active'} → ${nextPage}`
+            : 'Transition from OTP verified successfully',
+          currentStatus: skipSubOtp?.currentStatus,
+          isActive: skipSubOtp?.isActive,
         },
       );
 
       const nextStatus =
         nextPage === CampaignPageType.CONFIRM
           ? VisitStatus.CONFIRM_SHOWN
-          : nextPage === CampaignPageType.THANKYOU
+          : skippedAfterOtp
             ? VisitStatus.SUBSCRIBED
             : VisitStatus.HOME_SHOWN;
 
@@ -1133,6 +1230,13 @@ export const createFlowService = () => {
         nextPage,
         variables,
         input.visitId,
+        undefined,
+        undefined,
+        undefined,
+        {
+          allowSuccessRedirect: skipSubOtp ? Boolean(skipSubOtp.isActive) : true,
+          subscriptionStatus: skipSubOtp?.status || null,
+        },
       );
     }
 
@@ -1167,6 +1271,8 @@ export const createFlowService = () => {
     }
 
     let subscribed = false;
+    let subscriptionStatus = null;
+    let isActive = false;
     let blocked = false;
     let blockReason = null;
 
@@ -1179,7 +1285,7 @@ export const createFlowService = () => {
             country: input.country || campaign?.country,
             operator: input.operator || campaign?.operator,
           })
-          .catch(() => false),
+          .catch(() => null),
         partnerApiService
           .checkBlocked(apiConfig, {
             phone: rawPhone,
@@ -1187,7 +1293,9 @@ export const createFlowService = () => {
           .catch(() => ({ blocked: false })),
       ]);
 
-      subscribed = Boolean(subRes);
+      subscribed = Boolean(subRes?.shouldSkipSubscribe);
+      isActive = Boolean(subRes?.isActive);
+      subscriptionStatus = subRes?.status || null;
       blocked = Boolean(blockRes?.blocked);
       blockReason = blockRes?.reason || null;
     }
@@ -1196,6 +1304,8 @@ export const createFlowService = () => {
       phone: rawPhone,
       hasMsisdn: Boolean(rawPhone),
       subscribed,
+      isActive,
+      subscriptionStatus,
       blocked,
       blockReason,
       heProvider: heMeta.provider || apiConfig?.heProvider || 'header',

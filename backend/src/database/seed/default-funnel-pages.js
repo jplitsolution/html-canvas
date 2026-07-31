@@ -254,6 +254,50 @@ const defaultPages = {
     ),
   },
 
+  [CampaignPageType.INPROGRESS]: {
+    css: sharedCss,
+    html: wrapPage(
+      `
+      <div style="padding:36px 28px 32px;text-align:center;">
+        <div style="width:72px;height:72px;margin:0 auto 20px;border-radius:50%;background:#eff6ff;display:flex;align-items:center;justify-content:center;font-size:36px;">⏳</div>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:800;color:#0f172a;">Subscription In Progress</h1>
+        <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#64748b;">
+          Your subscription request is currently being processed.
+        </p>
+        <p style="margin:0 0 20px;font-size:13px;color:#94a3b8;">
+          Please wait a moment. You may receive an SMS on {{phone}} once it completes.
+        </p>
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px;font-size:13px;color:#1e40af;text-align:left;">
+          No further action is needed right now. If this takes too long, try again later or contact {{operator}} support.
+        </div>
+      </div>
+    `,
+      '#3b82f6',
+    ),
+  },
+
+  [CampaignPageType.LOW_BALANCE]: {
+    css: sharedCss,
+    html: wrapPage(
+      `
+      <div style="padding:36px 28px 32px;text-align:center;">
+        <div style="width:72px;height:72px;margin:0 auto 20px;border-radius:50%;background:#fff7ed;display:flex;align-items:center;justify-content:center;font-size:36px;">💳</div>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:800;color:#0f172a;">Low Balance</h1>
+        <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#64748b;">
+          You currently have insufficient balance to complete your subscription.
+        </p>
+        <p style="margin:0 0 20px;font-size:13px;color:#94a3b8;">
+          Top up {{phone}} on {{operator}} and try again.
+        </p>
+        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px;font-size:13px;color:#9a3412;text-align:left;">
+          Your number may already be registered. After recharging, the service can activate automatically or on your next visit.
+        </div>
+      </div>
+    `,
+      '#f59e0b',
+    ),
+  },
+
   [CampaignPageType.BLOCKED]: {
     css: sharedCss,
     html: wrapPage(

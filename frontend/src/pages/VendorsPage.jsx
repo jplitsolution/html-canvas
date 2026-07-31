@@ -7,6 +7,7 @@ import {
   Store,
   Power,
   Search,
+  Link2,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -44,6 +45,35 @@ function ActiveSwitch({ active, onToggle, disabled, label }) {
   )
 }
 
+function PostbackUrlField({ value, onSave, placeholder, saving }) {
+  const [draft, setDraft] = useState(value || '')
+  useEffect(() => {
+    setDraft(value || '')
+  }, [value])
+
+  const dirty = (draft || '').trim() !== (value || '').trim()
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-2">
+      <input
+        className="flex-1 text-xs border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+        placeholder={placeholder}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={!dirty || saving}
+        onClick={() => onSave(draft.trim() || null)}
+      >
+        {saving ? 'Saving…' : 'Save URL'}
+      </Button>
+    </div>
+  )
+}
+
 function VendorsPage() {
   const vendors = useStore((s) => s.vendors)
   const loading = useStore((s) => s.vendorsLoading)
@@ -58,10 +88,13 @@ function VendorsPage() {
   const [expanded, setExpanded] = useState(null)
   const [vendorName, setVendorName] = useState('')
   const [vendorCode, setVendorCode] = useState('')
+  const [vendorPostback, setVendorPostback] = useState('')
   const [creatingVendor, setCreatingVendor] = useState(false)
   const [affName, setAffName] = useState('')
   const [affCode, setAffCode] = useState('')
+  const [affPostback, setAffPostback] = useState('')
   const [togglingId, setTogglingId] = useState(null)
+  const [savingUrlId, setSavingUrlId] = useState(null)
   const [search, setSearch] = useState('')
 
   useEffect(() => {
@@ -86,9 +119,14 @@ function VendorsPage() {
     if (!vendorName.trim() || !vendorCode.trim()) return
     setCreatingVendor(true)
     try {
-      await createVendor({ name: vendorName.trim(), code: vendorCode.trim() })
+      await createVendor({
+        name: vendorName.trim(),
+        code: vendorCode.trim(),
+        postbackUrl: vendorPostback.trim() || null,
+      })
       setVendorName('')
       setVendorCode('')
+      setVendorPostback('')
     } catch {
       // toast in slice
     } finally {
@@ -107,6 +145,18 @@ function VendorsPage() {
     }
   }
 
+  const handleSaveVendorPostback = async (vendorId, postbackUrl) => {
+    setSavingUrlId(`v-${vendorId}`)
+    try {
+      await updateVendor(vendorId, { postbackUrl })
+      useStore.getState().addToast('Vendor postback URL saved', 'success')
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingUrlId(null)
+    }
+  }
+
   const handleDeleteVendor = async (vendorId) => {
     if (!window.confirm('Delete this vendor and all its affiliates?')) return
     try {
@@ -120,9 +170,15 @@ function VendorsPage() {
   const handleCreateAffiliate = async (vendorId) => {
     if (!affName.trim() || !affCode.trim()) return
     try {
-      await createAffiliate({ vendorId, name: affName.trim(), code: affCode.trim() })
+      await createAffiliate({
+        vendorId,
+        name: affName.trim(),
+        code: affCode.trim(),
+        postbackUrl: affPostback.trim() || null,
+      })
       setAffName('')
       setAffCode('')
+      setAffPostback('')
     } catch {
       // toast in slice
     }
@@ -136,6 +192,18 @@ function VendorsPage() {
       // toast in slice
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  const handleSaveAffiliatePostback = async (affiliateId, postbackUrl) => {
+    setSavingUrlId(`a-${affiliateId}`)
+    try {
+      await updateAffiliate(affiliateId, { postbackUrl })
+      useStore.getState().addToast('Affiliate postback URL saved', 'success')
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingUrlId(null)
     }
   }
 
@@ -154,8 +222,12 @@ function VendorsPage() {
         <div className="page-header">
           <h1 className="page-header-title">Vendors &amp; Affiliates</h1>
           <p className="page-header-description">
-            Manage partners, toggle active status, then assign them on campaign detail pages.
-            Traffic-link <code className="font-mono">click_id</code> / <code className="font-mono">vid</code> values are stored on visit — no CPA postback.
+            Manage partners, set CPA postback URLs, then assign them on campaign detail pages.
+            Placeholders:{' '}
+            <code className="font-mono">{'{{click_id}}'}</code>,{' '}
+            <code className="font-mono">{'{rcid}'}</code>,{' '}
+            <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
+            <code className="font-mono">{'{{campid}}'}</code>. Affiliate URL overrides vendor URL.
           </p>
         </div>
 
@@ -164,22 +236,30 @@ function VendorsPage() {
             <Plus className="w-4 h-4" />
             Add vendor
           </h2>
-          <form onSubmit={handleCreateVendor} className="flex flex-col sm:flex-row gap-3">
+          <form onSubmit={handleCreateVendor} className="flex flex-col gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <input
+                className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
+                placeholder="Vendor name"
+                value={vendorName}
+                onChange={(e) => setVendorName(e.target.value)}
+              />
+              <input
+                className="sm:w-40 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                placeholder="Code"
+                value={vendorCode}
+                onChange={(e) => setVendorCode(e.target.value.toUpperCase())}
+              />
+              <Button type="submit" variant="primary" size="sm" disabled={creatingVendor}>
+                {creatingVendor ? 'Creating...' : 'Create'}
+              </Button>
+            </div>
             <input
-              className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
-              placeholder="Vendor name"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
+              className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+              placeholder="Postback URL (optional) — https://affiliate.com/pb?click={{click_id}}&msisdn={{msisdn}}"
+              value={vendorPostback}
+              onChange={(e) => setVendorPostback(e.target.value)}
             />
-            <input
-              className="sm:w-40 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-              placeholder="Code"
-              value={vendorCode}
-              onChange={(e) => setVendorCode(e.target.value.toUpperCase())}
-            />
-            <Button type="submit" variant="primary" size="sm" disabled={creatingVendor}>
-              {creatingVendor ? 'Creating...' : 'Create'}
-            </Button>
           </form>
         </div>
 
@@ -246,6 +326,12 @@ function VendorsPage() {
                           <span className={`badge ${isActive ? 'badge-success' : 'badge-muted'}`}>
                             {isActive ? 'Active' : 'Inactive'}
                           </span>
+                          {vendor.postbackUrl ? (
+                            <span className="badge badge-muted flex items-center gap-1">
+                              <Link2 className="w-3 h-3" />
+                              Postback
+                            </span>
+                          ) : null}
                         </div>
                         <p className="text-xs text-fg-muted mt-0.5">
                           <code className="font-mono">{vendor.code}</code>
@@ -290,28 +376,49 @@ function VendorsPage() {
 
                   {isOpen && (
                     <div className="border-t border-border px-5 py-4 space-y-4 bg-bg-muted/20">
-                      <div className="flex flex-col sm:flex-row gap-2">
-                        <input
-                          className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
-                          placeholder="Affiliate name"
-                          value={affName}
-                          onChange={(e) => setAffName(e.target.value)}
+                      <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle mb-1.5 flex items-center gap-1">
+                          <Link2 className="w-3.5 h-3.5" />
+                          Vendor postback URL
+                        </p>
+                        <PostbackUrlField
+                          value={vendor.postbackUrl}
+                          saving={savingUrlId === `v-${vendor.id}`}
+                          placeholder="https://network.com/postback?click_id={{click_id}}&msisdn={{msisdn}}"
+                          onSave={(url) => handleSaveVendorPostback(vendor.id, url)}
                         />
+                      </div>
+
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
+                            placeholder="Affiliate name"
+                            value={affName}
+                            onChange={(e) => setAffName(e.target.value)}
+                          />
+                          <input
+                            className="sm:w-36 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                            placeholder="Code"
+                            value={affCode}
+                            onChange={(e) => setAffCode(e.target.value.toUpperCase())}
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCreateAffiliate(vendor.id)}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add affiliate
+                          </Button>
+                        </div>
                         <input
-                          className="sm:w-36 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-                          placeholder="Code"
-                          value={affCode}
-                          onChange={(e) => setAffCode(e.target.value.toUpperCase())}
+                          className="w-full text-xs border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                          placeholder="Affiliate postback URL (optional, overrides vendor)"
+                          value={affPostback}
+                          onChange={(e) => setAffPostback(e.target.value)}
                         />
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCreateAffiliate(vendor.id)}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add affiliate
-                        </Button>
                       </div>
 
                       {affiliates.length === 0 ? (
@@ -323,41 +430,55 @@ function VendorsPage() {
                             return (
                               <li
                                 key={aff.id}
-                                className={`flex items-center justify-between gap-3 px-3.5 py-3 bg-bg-elevated ${
+                                className={`px-3.5 py-3 bg-bg-elevated space-y-2 ${
                                   affActive ? '' : 'opacity-70'
                                 }`}
                               >
-                                <div className="min-w-0">
-                                  <div className="flex flex-wrap items-center gap-2">
-                                    <p className="text-sm font-medium text-fg">{aff.name}</p>
-                                    <span
-                                      className={`badge ${affActive ? 'badge-success' : 'badge-muted'}`}
-                                    >
-                                      {affActive ? 'Active' : 'Inactive'}
-                                    </span>
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <p className="text-sm font-medium text-fg">{aff.name}</p>
+                                      <span
+                                        className={`badge ${affActive ? 'badge-success' : 'badge-muted'}`}
+                                      >
+                                        {affActive ? 'Active' : 'Inactive'}
+                                      </span>
+                                      {aff.postbackUrl ? (
+                                        <span className="badge badge-muted flex items-center gap-1">
+                                          <Link2 className="w-3 h-3" />
+                                          Postback
+                                        </span>
+                                      ) : null}
+                                    </div>
+                                    <p className="text-xs text-fg-muted font-mono mt-0.5">{aff.code}</p>
                                   </div>
-                                  <p className="text-xs text-fg-muted font-mono mt-0.5">{aff.code}</p>
+                                  <div className="flex items-center gap-2.5 shrink-0">
+                                    <ActiveSwitch
+                                      active={affActive}
+                                      label={
+                                        affActive
+                                          ? `Deactivate ${aff.name}`
+                                          : `Activate ${aff.name}`
+                                      }
+                                      disabled={togglingId === `a-${aff.id}`}
+                                      onToggle={() => handleToggleAffiliate(aff)}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="p-1.5 text-fg-muted hover:text-danger rounded-md hover:bg-danger-muted transition-colors"
+                                      onClick={() => handleDeleteAffiliate(aff.id)}
+                                      title="Delete affiliate"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
                                 </div>
-                                <div className="flex items-center gap-2.5 shrink-0">
-                                  <ActiveSwitch
-                                    active={affActive}
-                                    label={
-                                      affActive
-                                        ? `Deactivate ${aff.name}`
-                                        : `Activate ${aff.name}`
-                                    }
-                                    disabled={togglingId === `a-${aff.id}`}
-                                    onToggle={() => handleToggleAffiliate(aff)}
-                                  />
-                                  <button
-                                    type="button"
-                                    className="p-1.5 text-fg-muted hover:text-danger rounded-md hover:bg-danger-muted transition-colors"
-                                    onClick={() => handleDeleteAffiliate(aff.id)}
-                                    title="Delete affiliate"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                </div>
+                                <PostbackUrlField
+                                  value={aff.postbackUrl}
+                                  saving={savingUrlId === `a-${aff.id}`}
+                                  placeholder="Affiliate postback URL (overrides vendor)"
+                                  onSave={(url) => handleSaveAffiliatePostback(aff.id, url)}
+                                />
                               </li>
                             )
                           })}
@@ -374,7 +495,7 @@ function VendorsPage() {
         <p className="mt-6 text-xs text-fg-subtle flex items-center gap-1.5">
           <Power className="w-3.5 h-3.5" />
           Inactive vendors and affiliates stay assigned but show as inactive on campaign tracking
-          links.
+          links. CPA postback fires after billing callback (or confirm) when a URL is set.
         </p>
       </div>
     </AppShell>

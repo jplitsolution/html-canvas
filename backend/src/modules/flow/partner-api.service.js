@@ -62,6 +62,7 @@ export const createPartnerApiService = () => {
     response,
     success,
     errorMessage,
+    statusLabel,
   }) => {
     try {
       await apiCallLogService.record({
@@ -77,6 +78,7 @@ export const createPartnerApiService = () => {
         responseBody: serializeBody(response?.data),
         success,
         errorMessage,
+        statusLabel,
       });
     } catch (err) {
       console.warn(`api_call_logs write failed: ${err.message}`);
@@ -146,9 +148,23 @@ export const createPartnerApiService = () => {
     }
   };
 
+  /**
+   * Partner checksub result.
+   * - isActive: currentStatus/subscriptionStatus === active (content access)
+   * - shouldSkipSubscribe: not a brand-new user — do not send to CONFIRM/CG
+   *   (active | parking | grace | pending | …). Only `new` continues funnel.
+   */
   const checkSubscription = async (config, input) => {
+    const empty = {
+      currentStatus: null,
+      subscriptionStatus: null,
+      status: 'unknown',
+      isActive: false,
+      shouldSkipSubscribe: false,
+    };
+
     if (!config?.subscriptionApi || !input.phone) {
-      return false;
+      return empty;
     }
 
     try {
@@ -161,23 +177,58 @@ export const createPartnerApiService = () => {
       );
       const data = response.data ?? {};
       const nested = data.data ?? data;
-      const status = nested.subscriptionStatus;
-      let subscribed;
-      if (typeof status === 'string') {
-        subscribed = status.toLowerCase() === 'active';
-      } else {
-        subscribed = Boolean(
-          data.subscribed ?? data.isSubscribed ?? data.active,
+      const currentStatus = String(nested.currentStatus || '')
+        .trim()
+        .toLowerCase();
+      const subscriptionStatus = String(nested.subscriptionStatus || '')
+        .trim()
+        .toLowerCase();
+
+      let isActive =
+        currentStatus === 'active' || subscriptionStatus === 'active';
+      if (
+        !isActive &&
+        !currentStatus &&
+        !subscriptionStatus
+      ) {
+        isActive = Boolean(
+          nested.subscribed ??
+            nested.isSubscribed ??
+            nested.active ??
+            data.subscribed ??
+            data.isSubscribed ??
+            data.active,
         );
       }
+
+      const status =
+        currentStatus ||
+        subscriptionStatus ||
+        (isActive ? 'active' : 'unknown');
+
+      // Safwap parity: only brand-new MSISDNs enter subscribe/confirm.
+      const shouldSkipSubscribe =
+        isActive ||
+        (Boolean(status) &&
+          status !== 'new' &&
+          status !== 'unknown');
+
+      const statusLabel = (status || 'UNKNOWN').toUpperCase();
       await logCall({
         callType: ApiCallType.CHECKSUB,
         input,
         requestUrl: url,
         response,
-        success: subscribed,
+        success: true,
+        statusLabel,
       });
-      return subscribed;
+      return {
+        currentStatus: currentStatus || null,
+        subscriptionStatus: subscriptionStatus || null,
+        status,
+        isActive,
+        shouldSkipSubscribe,
+      };
     } catch (err) {
       console.warn(`checkSubscription failed: ${err.message}`);
       await logCall({
@@ -186,8 +237,9 @@ export const createPartnerApiService = () => {
         requestUrl: config.subscriptionApi,
         success: false,
         errorMessage: err.message,
+        statusLabel: 'FAILED',
       });
-      return false;
+      return { ...empty, status: 'failed' };
     }
   };
 

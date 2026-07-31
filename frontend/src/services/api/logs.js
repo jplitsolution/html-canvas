@@ -46,3 +46,7 @@ export async function searchAllCampaignLogs(params = {}) {
 export async function getAllCampaignLogAggregations(params = {}) {
   return apiClient(`/logs/all/aggregations${buildQuery(params)}`)
 }
+
+export async function getVisitDetail(visitId) {
+  return apiClient(`/analytics/visits/${visitId}`)
+}

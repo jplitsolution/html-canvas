@@ -1,12 +1,23 @@
 import { apiClient } from './client'
 
-export const PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+export const PAGE_TYPES = [
+  'HOME',
+  'OTP',
+  'CONFIRM',
+  'THANKYOU',
+  'INPROGRESS',
+  'LOW_BALANCE',
+  'BLOCKED',
+  'ERROR',
+]
 
 export const PAGE_TYPE_LABELS = {
   HOME: 'Home',
   OTP: 'OTP',
   CONFIRM: 'Confirm',
   THANKYOU: 'Thank you',
+  INPROGRESS: 'In progress',
+  LOW_BALANCE: 'Low balance',
   BLOCKED: 'Blocked',
   ERROR: 'Error',
 }

@@ -103,6 +103,8 @@ function CampaignDetailPage() {
   const [selectedAffiliateForAdd, setSelectedAffiliateForAdd] = useState('null')
   const [cgUrlDraft, setCgUrlDraft] = useState('')
   const [savingCg, setSavingCg] = useState(false)
+  const [successUrlDraft, setSuccessUrlDraft] = useState('')
+  const [savingSuccessUrl, setSavingSuccessUrl] = useState(false)
 
   useEffect(() => {
     fetchVendors().catch(() => {})
@@ -111,6 +113,10 @@ function CampaignDetailPage() {
   useEffect(() => {
     setCgUrlDraft(campaign?.cgRedirectUrl || '')
   }, [campaign?.id, campaign?.cgRedirectUrl])
+
+  useEffect(() => {
+    setSuccessUrlDraft(campaign?.successRedirectUrl || '')
+  }, [campaign?.id, campaign?.successRedirectUrl])
 
   const handleSaveCgUrl = async () => {
     if (!campaign) return
@@ -124,6 +130,21 @@ function CampaignDetailPage() {
       // toast in slice
     } finally {
       setSavingCg(false)
+    }
+  }
+
+  const handleSaveSuccessUrl = async () => {
+    if (!campaign) return
+    setSavingSuccessUrl(true)
+    try {
+      await updateCampaign(campaign.id, {
+        successRedirectUrl: successUrlDraft.trim() || null,
+      })
+      useStore.getState().addToast('Success redirect URL saved', 'success')
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingSuccessUrl(false)
     }
   }
 
@@ -506,6 +527,35 @@ function CampaignDetailPage() {
                   onClick={handleSaveCgUrl}
                 >
                   {savingCg ? 'Saving...' : 'Save'}
+                </Button>
+              </div>
+            </div>
+
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="text-sm font-semibold text-fg">Success / content URL</h2>
+                <p className="text-xs text-fg-muted mt-1">
+                  After the thank-you page (new subscribe or already subscribed), users are
+                  redirected here. Leave empty to stay on thank-you.{' '}
+                  <code className="font-mono">{'{{click_id}}'}</code> /{' '}
+                  <code className="font-mono">{'{rcid}'}</code> supported like CG redirect.
+                </p>
+              </div>
+              <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">
+                <input
+                  className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                  value={successUrlDraft}
+                  onChange={(e) => setSuccessUrlDraft(e.target.value)}
+                  placeholder="https://saf.wellnesss360.com/"
+                />
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  disabled={savingSuccessUrl}
+                  onClick={handleSaveSuccessUrl}
+                >
+                  {savingSuccessUrl ? 'Saving...' : 'Save'}
                 </Button>
               </div>
             </div>

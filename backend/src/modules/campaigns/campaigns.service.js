@@ -354,6 +354,9 @@ export const createCampaignsService = () => {
     if (dto.cgRedirectUrl !== undefined) {
       campaign.cgRedirectUrl = dto.cgRedirectUrl?.trim() || null;
     }
+    if (dto.successRedirectUrl !== undefined) {
+      campaign.successRedirectUrl = dto.successRedirectUrl?.trim() || null;
+    }
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });

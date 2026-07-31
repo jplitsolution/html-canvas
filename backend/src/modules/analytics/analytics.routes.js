@@ -17,4 +17,16 @@ export async function analyticsRoutes(fastify, options) {
       request.query || {},
     );
   });
+
+  fastify.get('/visits/:visitId', async (request, reply) => {
+    try {
+      return await analyticsService.getVisitDetail(
+        request.params.visitId,
+        request.user.id,
+      );
+    } catch (err) {
+      const code = err.statusCode || 500;
+      return reply.code(code).send({ message: err.message || 'Error' });
+    }
+  });
 }

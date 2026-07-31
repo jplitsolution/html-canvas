@@ -56,6 +56,12 @@ export const CampaignSchema = new EntitySchema({
       length: 1024,
       nullable: true,
     },
+    successRedirectUrl: {
+      name: 'success_redirect_url',
+      type: 'varchar',
+      length: 1024,
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

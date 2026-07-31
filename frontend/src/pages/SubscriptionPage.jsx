@@ -11,7 +11,27 @@ const FLOW_FONT =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
 
 const VALID_PACKS = ['daily', 'weekly', 'monthly']
-const VALID_PAGES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'BLOCKED', 'ERROR']
+const VALID_PAGES = [
+  'HOME',
+  'OTP',
+  'CONFIRM',
+  'THANKYOU',
+  'INPROGRESS',
+  'LOW_BALANCE',
+  'BLOCKED',
+  'ERROR',
+]
+
+function pageForChecksubStatus(currentStatus) {
+  const s = String(currentStatus || '')
+    .trim()
+    .toLowerCase()
+  if (s === 'active') return 'THANKYOU'
+  if (s === 'pending') return 'INPROGRESS'
+  if (s === 'grace' || s === 'parking') return 'LOW_BALANCE'
+  if (s && s !== 'new' && s !== 'unknown') return 'INPROGRESS'
+  return null
+}
 
 /** Editor stores campaign page links as bare tokens (href="CONFIRM"), not full URLs. */
 function isCampaignPageHref(href) {
@@ -47,8 +67,8 @@ const FLOW_SHADOW_STYLES = `
 `
 
 const PRELOAD_BY_PAGE = {
-  HOME: ['CONFIRM', 'THANKYOU', 'ERROR', 'BLOCKED'],
-  CONFIRM: ['THANKYOU', 'ERROR', 'BLOCKED'],
+  HOME: ['CONFIRM', 'THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'ERROR', 'BLOCKED'],
+  CONFIRM: ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'ERROR', 'BLOCKED'],
 }
 
 function normalizePack(value) {
@@ -632,6 +652,17 @@ function SubscriptionPage() {
     }
   }, [pageData?.externalRedirect])
 
+  // THANKYOU → optional success/content portal (show page first, then redirect)
+  useEffect(() => {
+    if (pageData?.pageType !== 'THANKYOU') return undefined
+    const dest = pageData?.successRedirect
+    if (!dest || !/^https?:\/\//i.test(dest)) return undefined
+    const timer = window.setTimeout(() => {
+      window.location.assign(dest)
+    }, 2500)
+    return () => window.clearTimeout(timer)
+  }, [pageData?.pageType, pageData?.successRedirect])
+
   const prefetchPages = useCallback(
     async (pages, visitId) => {
       if (!country || !operator || !visitId) return
@@ -976,36 +1007,47 @@ function SubscriptionPage() {
                     throw new Error(`Priority ${i + 1} Check Failed: ${json.responseMessage || 'Engine error'}`)
                   }
                   const nestedData = json.data || json
-                  const status = nestedData.subscriptionStatus || nestedData.currentStatus || json.subscriptionStatus || json.status
-                  const isSubscribed = typeof status === 'string'
-                    ? status.toLowerCase() === 'active'
-                    : Boolean(json.subscribed || json.isSubscribed || json.active || nestedData.subscribed)
+                  const currentStatus = String(
+                    nestedData.currentStatus || nestedData.subscriptionStatus || json.subscriptionStatus || json.status || '',
+                  )
+                    .trim()
+                    .toLowerCase()
+                  const isActive = currentStatus === 'active'
+                  // Safwap parity: only brand-new users continue funnel
+                  const shouldSkipSubscribe =
+                    isActive ||
+                    (Boolean(currentStatus) &&
+                      currentStatus !== 'new' &&
+                      currentStatus !== 'unknown')
 
                   console.log(`[Priority Chain] ${tag} response:`, {
-                    status,
-                    isSubscribed,
+                    currentStatus,
+                    isActive,
+                    shouldSkipSubscribe,
                     responseCode: json.responseCode,
                     body: json,
                   })
 
-                  if (isSubscribed) {
+                  if (shouldSkipSubscribe) {
+                    const targetPage =
+                      pageForChecksubStatus(currentStatus) || 'THANKYOU'
                     console.log(
-                      `%c[Priority Chain] ${tag} PASS — already subscribed → THANKYOU`,
+                      `%c[Priority Chain] ${tag} PASS — status=${currentStatus || 'active'} → ${targetPage}`,
                       'color:#16a34a;font-weight:bold',
                     )
-                    chainOutcome = 'PASS_THANKYOU'
+                    chainOutcome = `PASS_${targetPage}`
                     saveSession({
                       verificationStatus: 'verified',
                       visitId: visitIdRef.current,
                       phone: phoneRef.current,
-                      step: 'THANKYOU',
+                      step: targetPage,
                     })
                     setSearchParams((prev) => {
                       const next = new URLSearchParams(prev)
-                      next.set('step', 'THANKYOU')
+                      next.set('step', targetPage)
                       return next
                     })
-                    await loadPage('THANKYOU')
+                    await loadPage(targetPage)
                     break
                   }
                   console.warn(`[Priority Chain] ${tag} FAIL — not subscribed → next step`)

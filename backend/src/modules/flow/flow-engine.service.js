@@ -69,9 +69,11 @@ export const createFlowEngineService = () => {
     const nodes = [
       node(CampaignPageType.HOME, 40, 160),
       node(CampaignPageType.CONFIRM, 600, 160),
-      node(CampaignPageType.THANKYOU, 880, 100),
-      node(CampaignPageType.BLOCKED, 880, 240),
-      node(CampaignPageType.ERROR, 880, 380),
+      node(CampaignPageType.THANKYOU, 880, 40),
+      node(CampaignPageType.INPROGRESS, 880, 160),
+      node(CampaignPageType.LOW_BALANCE, 880, 280),
+      node(CampaignPageType.BLOCKED, 880, 400),
+      node(CampaignPageType.ERROR, 880, 520),
     ];
 
     const edges = [];
@@ -104,6 +106,12 @@ export const createFlowEngineService = () => {
 
     edges.push(
       edge(CampaignPageType.CONFIRM, CampaignPageType.THANKYOU, 'SUBSCRIBED'),
+    );
+    edges.push(
+      edge(CampaignPageType.CONFIRM, CampaignPageType.INPROGRESS, 'PENDING'),
+    );
+    edges.push(
+      edge(CampaignPageType.CONFIRM, CampaignPageType.LOW_BALANCE, 'LOW_BALANCE'),
     );
     edges.push(
       edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'),
