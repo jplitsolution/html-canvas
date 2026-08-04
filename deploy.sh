@@ -152,15 +152,29 @@ build_frontend() {
   require_frontend_env
   log "Frontend install + build (VITE_API_BASE_URL from frontend env → ${API_URL})..."
   cd "$FRONTEND_DIR"
-  # Server often has NODE_ENV=production (skips vite/husky). Force devDeps for build;
-  # ignore-scripts avoids prepare→husky failing when husky isn't installed yet.
+  # backend/.env (sourced earlier) often sets NODE_ENV=production. A follow-up
+  # `npm install --save-dev X` without --include=dev then PRUNES vite and other
+  # build tools → "vite: not found". Keep production mode off for this step.
+  local saved_node_env="${NODE_ENV:-}"
+  unset NODE_ENV
+  export npm_config_production=false
+
+  # Force devDeps (vite, etc.); ignore-scripts avoids prepare→husky failure.
   npm install --include=dev --ignore-scripts
-  # serve package — PM2 static files ke liye
+  # serve — PM2 static files; also --include=dev so npm does not prune vite
   if ! npm ls serve >/dev/null 2>&1; then
-    npm install --save-dev --ignore-scripts serve
+    npm install --save-dev --include=dev --ignore-scripts serve
   fi
   # Vite reads frontend/.env.production (and .env) — do not overwrite those files
   npm run build
+
+  if [ -n "$saved_node_env" ]; then
+    export NODE_ENV="$saved_node_env"
+  else
+    unset NODE_ENV
+  fi
+  unset npm_config_production
+
   if grep -Rqe 'http://[^"'\'' ]*:3000/api' dist/assets/index-*.js 2>/dev/null; then
     die "Frontend build still contains http://*:3000/api — mixed content will break HTTPS"
   fi
