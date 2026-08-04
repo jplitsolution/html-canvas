@@ -77,6 +77,9 @@ function mapCampaign(campaign) {
     active: Boolean(campaign.active),
     vendorId: campaign.vendorId ?? null,
     verificationMode: campaign.verificationMode || null,
+    cgRedirectUrl: campaign.cgRedirectUrl || campaign.cg_redirect_url || null,
+    successRedirectUrl:
+      campaign.successRedirectUrl || campaign.success_redirect_url || null,
     pages,
     requiredComplete,
     flowConfig,

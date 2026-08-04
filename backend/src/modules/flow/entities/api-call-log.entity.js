@@ -7,6 +7,7 @@ export const ApiCallType = {
   SUBSCRIBE: 'subscribe',
   BLOCKLIST: 'blocklist',
   RESOLVE_MSISDN: 'resolve_msisdn',
+  PRIORITY: 'priority',
 };
 
 export const ApiCallLogSchema = new EntitySchema({

@@ -3,6 +3,8 @@ import { postbackService } from '../partners/postback.service.js';
 import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
 import { publicRateLimit } from '../../common/guards/public-rate-limit.guard.js';
 import getConfig from '../../config/configuration.js';
+import { apiCallLogService } from './api-call-log.service.js';
+import { ApiCallType } from './entities/api-call-log.entity.js';
 
 function extractHeaderMsisdn(headers) {
   if (!headers) return '';
@@ -178,6 +180,7 @@ export async function flowRoutes(fastify, options) {
   /**
    * Server-side fetch for Priority Chain API checks.
    * Browser CORS blocks direct calls to partner checksub URLs — this proxies them.
+   * Persists request/response into api_call_logs (same audit trail as checksub).
    */
   fastify.post('/priority-check', { preHandler: publicRateLimit }, async (request, reply) => {
     const body = request.body || {};
@@ -196,6 +199,80 @@ export async function flowRoutes(fastify, options) {
       return reply.code(400).send({ ok: false, error: 'only http/https allowed' });
     }
 
+    const visitId = body.visitId ? parseInt(body.visitId, 10) : null;
+    const campaignId = body.campaignId ? parseInt(body.campaignId, 10) : null;
+    const msisdn = String(body.msisdn || body.phone || '').replace(/\D/g, '') || null;
+    const clickId = body.clickId || null;
+    const rcid = body.rcid || null;
+    const stepIndex =
+      body.stepIndex != null && Number.isFinite(Number(body.stepIndex))
+        ? Number(body.stepIndex)
+        : null;
+    const pageType = body.pageType ? String(body.pageType).toUpperCase() : null;
+    const requestMeta = {
+      source: 'priority_chain',
+      method: 'GET',
+      ...(stepIndex != null ? { priority: stepIndex + 1, stepIndex } : {}),
+      ...(pageType ? { pageType } : {}),
+      ...(Array.isArray(body.rules) ? { rules: body.rules } : {}),
+      ...(body.successKey ? { successKey: body.successKey } : {}),
+      ...(body.successValue != null ? { successValue: body.successValue } : {}),
+    };
+
+    const serializeBody = (data) => {
+      if (data == null) return null;
+      try {
+        return typeof data === 'string' ? data : JSON.stringify(data);
+      } catch {
+        return String(data);
+      }
+    };
+
+    const priorityStatusLabel = (json, httpOk) => {
+      const nested = json?.data ?? json ?? {};
+      const current = String(nested.currentStatus || '')
+        .trim()
+        .toLowerCase();
+      const sub = String(nested.subscriptionStatus || '')
+        .trim()
+        .toLowerCase();
+      if (current === 'active' || sub === 'active') return 'ACTIVE';
+      if (current) return current.toUpperCase();
+      if (sub) return sub.toUpperCase();
+      const code = json?.responseCode;
+      if (code === '0' || code === 0) return 'SUCCESS';
+      if (!httpOk) return 'FAILED';
+      return httpOk ? 'SUCCESS' : 'FAILED';
+    };
+
+    const logPriorityCall = async ({
+      responseStatus,
+      responseBody,
+      success,
+      errorMessage,
+      statusLabel,
+    }) => {
+      try {
+        await apiCallLogService.record({
+          visitId,
+          campaignId,
+          msisdn,
+          clickId,
+          rcid,
+          callType: ApiCallType.PRIORITY,
+          requestUrl: rawUrl,
+          requestBody: serializeBody(requestMeta),
+          responseStatus,
+          responseBody: serializeBody(responseBody),
+          success,
+          errorMessage,
+          statusLabel,
+        });
+      } catch (err) {
+        console.warn(`[Priority Check] api_call_logs write failed: ${err.message}`);
+      }
+    };
+
     try {
       const axios = (await import('axios')).default;
       const res = await axios.get(rawUrl, {
@@ -211,13 +288,28 @@ export async function flowRoutes(fastify, options) {
           json = null;
         }
       }
+      const ok = res.status >= 200 && res.status < 300;
+      await logPriorityCall({
+        responseStatus: res.status,
+        responseBody: json ?? res.data,
+        success: ok,
+        errorMessage: ok ? null : `HTTP ${res.status}`,
+        statusLabel: priorityStatusLabel(json, ok),
+      });
       return {
-        ok: res.status >= 200 && res.status < 300,
+        ok,
         status: res.status,
         body: json,
       };
     } catch (err) {
       console.warn('[Priority Check] proxy fetch failed:', err.message);
+      await logPriorityCall({
+        responseStatus: 0,
+        responseBody: null,
+        success: false,
+        errorMessage: err.message || 'proxy fetch failed',
+        statusLabel: 'FAILED',
+      });
       return {
         ok: false,
         status: 0,

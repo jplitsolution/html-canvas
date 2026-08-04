@@ -501,7 +501,7 @@ function CampaignDetailPage() {
                   className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
                   value={cgUrlDraft}
                   onChange={(e) => setCgUrlDraft(e.target.value)}
-                  placeholder="https://operator-cg.example/path"
+                  placeholder="https://dsdp-cg.example/path"
                 />
                 <Button
                   type="button"
@@ -530,7 +530,7 @@ function CampaignDetailPage() {
                   className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
                   value={successUrlDraft}
                   onChange={(e) => setSuccessUrlDraft(e.target.value)}
-                  placeholder="https://saf.wellnesss360.com/"
+                  placeholder="https://content.example/portal"
                 />
                 <Button
                   type="button"

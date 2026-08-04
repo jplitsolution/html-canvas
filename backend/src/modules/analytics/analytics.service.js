@@ -390,6 +390,8 @@ export const createAnalyticsService = () => {
             : null;
       if (row.callType === 'checksub') {
         statusLabel = checksubStatusLabel(responseBody, row.success);
+      } else if (row.callType === 'priority') {
+        statusLabel = checksubStatusLabel(responseBody, row.success);
       }
       return {
         id: row.id,
@@ -407,13 +409,15 @@ export const createAnalyticsService = () => {
         rcid: row.rcid,
         createdAt: row.createdAt,
         summary:
-          row.callType === 'checksub'
+          row.callType === 'checksub' || row.callType === 'priority'
             ? {
                 currentStatus: nested.currentStatus ?? null,
                 subscriptionStatus: nested.subscriptionStatus ?? null,
                 serviceId: nested.serviceId ?? null,
                 responseCode: responseBody?.responseCode ?? null,
                 responseMessage: responseBody?.responseMessage ?? null,
+                priority: requestBody?.priority ?? null,
+                pageType: requestBody?.pageType ?? null,
               }
             : null,
       };

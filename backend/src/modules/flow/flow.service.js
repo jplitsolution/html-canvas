@@ -184,11 +184,9 @@ export const createFlowService = () => {
         ? buildSubscriptionUrl(campaign, resolvedPack)
         : undefined);
     const attr = await loadVisitAttribution(visitId);
-    // Content portal redirect: active / fresh subscribe success only.
-    // pending → INPROGRESS, parking/grace → LOW_BALANCE (no portal).
-    const allowSuccessRedirect = options.allowSuccessRedirect !== false;
+    // After thank-you: redirect to campaign success/content URL when configured.
     const successRedirect =
-      pageType === CampaignPageType.THANKYOU && allowSuccessRedirect
+      pageType === CampaignPageType.THANKYOU
         ? await resolveSuccessRedirect(campaign, visitId)
         : null;
     return {
@@ -719,11 +717,9 @@ export const createFlowService = () => {
       variables,
     );
 
-    // Portal redirect only for active → THANKYOU (Safwap content portal)
-    const allowPortal = Boolean(lastSubCheck?.isActive);
+    // Content portal after thank-you whenever campaign has successRedirectUrl.
     const successRedirect =
-      resolvedPageType === CampaignPageType.THANKYOU &&
-      (allowPortal || !lastSubCheck)
+      resolvedPageType === CampaignPageType.THANKYOU
         ? await resolveSuccessRedirect(campaign, visitId, input)
         : null;
 
