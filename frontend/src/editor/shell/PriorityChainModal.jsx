@@ -64,8 +64,8 @@ function DestinationFields({
           value={go === 'external' ? 'external' : 'page'}
           onChange={(e) => onGoChange(e.target.value)}
         >
-          <option value="page">Campaign page</option>
-          <option value="external">External website (URL)</option>
+          <option value="page">A page in this campaign</option>
+          <option value="external">A website</option>
         </select>
       </Field>
       {go === 'external' ? (
@@ -78,7 +78,7 @@ function DestinationFields({
           />
         </Field>
       ) : (
-        <PageSelect label="Page" value={page || 'OTP'} onChange={onPageChange} />
+        <PageSelect label="Which page" value={page || 'OTP'} onChange={onPageChange} />
       )}
     </div>
   )
@@ -233,14 +233,13 @@ export function PriorityChainModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Priority Flow — button click rules"
+      title="Try checks in order"
       size="xl"
     >
       <div className="space-y-4">
         <p className="text-sm text-fg-muted leading-relaxed">
-          Steps run in order for this button only. For an API check, add multiple if/else rows:
-          if response field equals a value → go to a campaign page <strong>or</strong> an external
-          website URL. First matching row wins.
+          Steps run top to bottom for this button. For a status check, add rules like:
+          if status = active → Thank you page. First match wins; later steps are skipped.
         </p>
 
         <div className="space-y-3">
@@ -254,7 +253,7 @@ export function PriorityChainModal({
                 className="rounded-xl border border-border bg-bg-muted/30 p-4 space-y-3"
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-indigo-600">Priority {idx + 1}</span>
+                  <span className="text-sm font-bold text-indigo-600">Step {idx + 1}</span>
                   <div className="flex items-center gap-1">
                     {idx > 0 && (
                       <button
@@ -286,26 +285,26 @@ export function PriorityChainModal({
                   </div>
                 </div>
 
-                <Field label="Action Type">
+                <Field label="What should this step do?">
                   <select
                     className={inputClass}
                     value={step.type}
                     onChange={(e) => updateStep(idx, 'type', e.target.value)}
                   >
-                    <option value="api">Validate URL / Webhook (API Check)</option>
-                    <option value="page">Another page in this campaign</option>
-                    <option value="external">Another website (URL Redirect)</option>
-                    <option value="anchor">Another part of this page (Scroll)</option>
-                    <option value="flow">Continue verification flow (HE / OTP)</option>
+                    <option value="api">Check a status URL</option>
+                    <option value="page">Go to another page</option>
+                    <option value="external">Open a website</option>
+                    <option value="anchor">Scroll to a section</option>
+                    <option value="flow">Continue signup flow</option>
                   </select>
                 </Field>
 
                 {step.type === 'api' && (
                   <>
-                    <Field label="Webhook / API URL to check">
+                    <Field label="Status check URL">
                       <input
                         className={inputClass}
-                        placeholder="https://wbilzss.tickhighs.com/sub/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
+                        placeholder="https://example.com/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
                         value={step.url || ''}
                         onChange={(e) => updateStep(idx, 'url', e.target.value)}
                       />
@@ -314,7 +313,7 @@ export function PriorityChainModal({
                     <div className="rounded-lg border border-indigo-200 bg-indigo-50/30 p-3 space-y-3">
                       <div className="flex items-center justify-between gap-2">
                         <div>
-                          <p className="text-xs font-semibold text-fg">If / else response rules</p>
+                          <p className="text-xs font-semibold text-fg">Where to go for each status</p>
                           <p className="text-[11px] text-fg-muted mt-0.5">
                             First match wins. Example: currentStatus = parking → Low balance
                           </p>
@@ -324,7 +323,7 @@ export function PriorityChainModal({
                           onClick={() => addRule(idx)}
                           className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50"
                         >
-                          + Add rule
+                          + Add status
                         </button>
                       </div>
 
@@ -336,11 +335,11 @@ export function PriorityChainModal({
                           >
                             <div className="flex items-center justify-between gap-2">
                               <span className="text-[10px] font-bold text-indigo-600">
-                                IF {rIdx + 1}
+                                Rule {rIdx + 1}
                               </span>
                               <button
                                 type="button"
-                                title="Remove rule"
+                                title="Remove this rule"
                                 disabled={rules.length <= 1}
                                 onClick={() => removeRule(idx, rIdx)}
                                 className="px-2 py-1 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-40"
@@ -349,7 +348,7 @@ export function PriorityChainModal({
                               </button>
                             </div>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <Field label="If key">
+                              <Field label="Response field">
                                 <input
                                   className={inputClass}
                                   placeholder="currentStatus"
@@ -357,7 +356,7 @@ export function PriorityChainModal({
                                   onChange={(e) => updateRule(idx, rIdx, 'key', e.target.value)}
                                 />
                               </Field>
-                              <Field label="equals value">
+                              <Field label="Equals">
                                 <input
                                   className={inputClass}
                                   placeholder="parking"
@@ -382,7 +381,7 @@ export function PriorityChainModal({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="space-y-2 rounded-lg border border-border bg-bg p-3">
-                        <Field label="If no rule matches">
+                        <Field label="If nothing matches">
                           <select
                             className={inputClass}
                             value={
@@ -405,20 +404,20 @@ export function PriorityChainModal({
                               saveActions(next)
                             }}
                           >
-                            <option value="continue">Continue to next priority step</option>
-                            <option value="page">Show a campaign page</option>
-                            <option value="external">Redirect to external URL</option>
+                            <option value="continue">Try the next step</option>
+                            <option value="page">Go to a page</option>
+                            <option value="external">Open a website</option>
                           </select>
                         </Field>
                         {step.missAction === 'page' && (
                           <PageSelect
-                            label="Else → page"
+                            label="Which page"
                             value={step.missPage || 'ERROR'}
                             onChange={(pageId) => updateStep(idx, 'missPage', pageId)}
                           />
                         )}
                         {step.missAction === 'external' && (
-                          <Field label="Else → website URL">
+                          <Field label="Website URL">
                             <input
                               className={inputClass}
                               placeholder="https://example.com"
@@ -430,7 +429,7 @@ export function PriorityChainModal({
                       </div>
 
                       <div className="space-y-2 rounded-lg border border-border bg-bg p-3">
-                        <Field label="If API call fails (network / HTTP)">
+                        <Field label="If the check fails to load">
                           <select
                             className={inputClass}
                             value={
@@ -453,20 +452,20 @@ export function PriorityChainModal({
                               saveActions(next)
                             }}
                           >
-                            <option value="continue">Continue to next priority step</option>
-                            <option value="page">Show a campaign page</option>
-                            <option value="external">Redirect to external URL</option>
+                            <option value="continue">Try the next step</option>
+                            <option value="page">Go to a page</option>
+                            <option value="external">Open a website</option>
                           </select>
                         </Field>
                         {step.failAction === 'page' && (
                           <PageSelect
-                            label="On API fail → page"
+                            label="Which page"
                             value={step.failPage || 'ERROR'}
                             onChange={(pageId) => updateStep(idx, 'failPage', pageId)}
                           />
                         )}
                         {step.failAction === 'external' && (
-                          <Field label="On API fail → website URL">
+                          <Field label="Website URL">
                             <input
                               className={inputClass}
                               placeholder="https://example.com"
@@ -482,14 +481,14 @@ export function PriorityChainModal({
 
                 {step.type === 'page' && (
                   <PageSelect
-                    label="Page name"
+                    label="Which page"
                     value={step.page || 'OTP'}
                     onChange={(pageId) => updateStep(idx, 'page', pageId)}
                   />
                 )}
 
                 {step.type === 'external' && (
-                  <Field label="Website address (URL)">
+                  <Field label="Website URL">
                     <input
                       className={inputClass}
                       placeholder="https://example.com"
@@ -518,7 +517,7 @@ export function PriorityChainModal({
 
                 {step.type === 'flow' && (
                   <p className="text-[11px] text-fg-muted">
-                    Hands control back to Flow Builder (HE / OTP verification).
+                    Continues the normal signup path from Flow Builder.
                   </p>
                 )}
               </div>
@@ -531,7 +530,7 @@ export function PriorityChainModal({
           onClick={addStep}
           className="w-full py-2.5 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 rounded-xl text-sm text-indigo-600 font-semibold hover:bg-indigo-50/50 transition-colors"
         >
-          + Add Priority Step
+          + Add step
         </button>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-border">
@@ -577,11 +576,10 @@ export function PriorityChainTrigger({
         onClick={() => setOpen(true)}
         className="w-full py-2.5 px-3 rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-800 text-xs font-semibold hover:bg-indigo-100 transition-colors text-left"
       >
-        <span className="block">Configure Priority Flow…</span>
+        <span className="block">Edit checks &amp; routing…</span>
         <span className="block text-[10px] font-medium text-indigo-600/80 mt-0.5">
           {count} step{count === 1 ? '' : 's'}
-          {ruleCount > 0 ? ` · ${ruleCount} if/else rule${ruleCount === 1 ? '' : 's'}` : ''}
-          {' — opens popup'}
+          {ruleCount > 0 ? ` · ${ruleCount} status rule${ruleCount === 1 ? '' : 's'}` : ''}
         </span>
       </button>
       <PriorityChainModal

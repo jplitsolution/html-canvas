@@ -38,7 +38,7 @@ export const FUNNEL_PAGE_GUIDES = {
     canChange: [
       'Everything on this page',
       'Buttons, images, hotspots',
-      'Priority Chain steps (API / page / flow / external redirect)',
+      'Try-checks-in-order button (status URL → page routing)',
     ],
     required: [],
   },
@@ -101,12 +101,12 @@ export const FUNNEL_PAGE_GUIDES = {
   CONFIRM: {
     title: 'Confirm page',
     summary:
-      'Optional confirm / pack step. Design freely — packs and Confirm button are optional if your Priority Chain or OTP already finishes the journey.',
+      'Optional confirm / pack step. Design freely — packs and Confirm button are optional if your status checks or OTP already finishes the journey.',
     canChange: [
       'Everything on this page',
       'Pack picker (optional)',
       'Confirm button (optional — data-action=CONFIRM if you still want server billing)',
-      'Text, images, hotspots, Priority Chain',
+      'Text, images, hotspots, try-checks-in-order buttons',
     ],
     required: [],
     optional: [
@@ -121,7 +121,7 @@ export const FUNNEL_PAGE_GUIDES = {
       {
         id: 'confirm-btn',
         label: 'Confirm button',
-        why: 'Only if you still want the built-in confirm click (most flows use Priority Chain / OTP instead).',
+        why: 'Only if you still want the built-in confirm click (most flows use status checks or OTP instead).',
         match: 'data-action="CONFIRM"',
         thumb: 'button',
         snippet: `<button type="button" data-action="CONFIRM" class="flow-btn">Confirm Subscription</button>`,
@@ -240,17 +240,17 @@ export function getFlowElementInfo(attrs) {
   if (action === 'CHAIN' || attrs['data-actions']) {
     return {
       isSystem: true,
-      label: 'Priority Chain CTA (system)',
+      label: 'Try checks in order (system)',
       description:
-        'Runs Sequential Action Chain on click. Each API step can send match vs other responses to different pages (or the next step). You can reconfigure the action below.',
+        'On click: runs status checks top to bottom. Matching status opens a page (or the next step). Change the action below if needed.',
     }
   }
   if (action === 'SUBSCRIBE') {
     return {
       isSystem: true,
-      label: 'Verification flow CTA (system)',
+      label: 'Signup flow button (system)',
       description:
-        'On click: runs HE / OTP routing from Flow Builder mode. Reconfigure below to switch to Priority Chain, a direct page, or another action.',
+        'On click: continues the signup path from Flow Builder. Reconfigure below to switch to status checks, a page, or another action.',
     }
   }
   if (action === 'CONFIRM') {
