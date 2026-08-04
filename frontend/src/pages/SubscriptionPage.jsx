@@ -1011,7 +1011,30 @@ function SubscriptionPage() {
                   await loadPage(targetPage, { direct: true })
                 }
 
-                const goConfiguredOrContinue = async (action, page, reason) => {
+                const redirectExternal = (rawUrl, reason) => {
+                  const dest = String(rawUrl || '').trim()
+                  if (!dest || dest === 'https://' || dest === 'http://') {
+                    console.warn(`[Priority Chain] ${tag} ${reason} — external URL missing`)
+                    return false
+                  }
+                  const resolved = dest
+                    .replace(/\{\{msisdn\}\}/gi, phoneRef.current || '')
+                    .replace(/\{\{phone\}\}/gi, phoneRef.current || '')
+                    .replace(/\{\{country\}\}/gi, country || '')
+                    .replace(/\{\{operator\}\}/gi, operator || '')
+                  console.log(
+                    `%c[Priority Chain] ${tag} PASS — ${reason} → external ${resolved}`,
+                    'color:#16a34a;font-weight:bold',
+                  )
+                  chainOutcome = 'PASS_EXTERNAL'
+                  window.location.assign(resolved)
+                  return true
+                }
+
+                const goConfiguredOrContinue = async (action, page, reason, externalUrl = '') => {
+                  if (action === 'external') {
+                    return redirectExternal(externalUrl, reason)
+                  }
                   if (action === 'page') {
                     const configured = String(page || '')
                       .trim()
@@ -1083,7 +1106,8 @@ function SubscriptionPage() {
                   const navigated = await goConfiguredOrContinue(
                     step.failAction,
                     step.failPage,
-                    'API fail → configured page',
+                    'API fail → configured destination',
+                    step.failUrl,
                   )
                   if (navigated) break
                   console.warn(`[Priority Chain] ${tag} → next step`)
@@ -1099,7 +1123,8 @@ function SubscriptionPage() {
                     const navigated = await goConfiguredOrContinue(
                       step.failAction,
                       step.failPage,
-                      'engine error → configured page',
+                      'engine error → configured destination',
+                      step.failUrl,
                     )
                     if (navigated) break
                     throw new Error(
@@ -1114,50 +1139,82 @@ function SubscriptionPage() {
                     matchMode: matchResult.mode,
                     successKey: matchResult.key || step.successKey || '',
                     successValue: step.successValue ?? '',
+                    rules: step.rules || [],
                     actual: matchResult.actual,
                     matched: shouldSkipSubscribe,
+                    matchedGo: matchResult.go || 'page',
+                    matchedPage: matchResult.page || '',
+                    matchedUrl: matchResult.url || '',
                     currentStatus: matchResult.currentStatus || '',
                     matchPage: step.matchPage || '',
                     missAction: step.missAction || 'continue',
                     missPage: step.missPage || '',
+                    missUrl: step.missUrl || '',
                     failAction: step.failAction || 'continue',
                     failPage: step.failPage || '',
+                    failUrl: step.failUrl || '',
                     responseCode: json.responseCode,
                     body: json,
                   })
 
                   if (shouldSkipSubscribe) {
-                    const configuredMatch = String(step.matchPage || '')
-                      .trim()
-                      .toUpperCase()
-                    const targetPage = VALID_PAGES.includes(configuredMatch)
-                      ? configuredMatch
-                      : pageForChecksubStatus(matchResult.currentStatus) || 'THANKYOU'
-                    await navigateChainPage(
-                      targetPage,
-                      matchResult.mode === 'rule'
-                        ? `rule ${matchResult.key}=${matchResult.actual}`
-                        : `status=${matchResult.currentStatus || 'active'} (legacy)`,
-                    )
-                    break
+                    if (matchResult.go === 'external') {
+                      if (
+                        redirectExternal(
+                          matchResult.url,
+                          `rule ${matchResult.key}=${matchResult.actual}`,
+                        )
+                      ) {
+                        break
+                      }
+                    } else {
+                      const fromRule = String(matchResult.page || '')
+                        .trim()
+                        .toUpperCase()
+                      const configuredMatch = String(step.matchPage || '')
+                        .trim()
+                        .toUpperCase()
+                      const targetPage = VALID_PAGES.includes(fromRule)
+                        ? fromRule
+                        : VALID_PAGES.includes(configuredMatch)
+                          ? configuredMatch
+                          : pageForChecksubStatus(matchResult.currentStatus) || 'THANKYOU'
+                      await navigateChainPage(
+                        targetPage,
+                        matchResult.mode === 'rules' || matchResult.mode === 'rule'
+                          ? `rule ${matchResult.key}=${matchResult.actual}`
+                          : `status=${matchResult.currentStatus || 'active'} (legacy)`,
+                      )
+                      break
+                    }
                   }
 
                   // Success rule did not match
                   const missNavigated = await goConfiguredOrContinue(
                     step.missAction,
                     step.missPage,
-                    'rule fail → configured page',
+                    'rule fail → configured destination',
+                    step.missUrl,
                   )
                   if (missNavigated) break
 
                   // continue → next priority step. If this is the LAST step, nowhere to go:
-                  // use failPage when configured (common misconfig: Error set under API-fail only).
+                  // use fail destination when configured.
                   const isLastStep = i === actions.length - 1
                   if (isLastStep) {
                     const fallbackNavigated = await goConfiguredOrContinue(
-                      step.failAction === 'page' ? 'page' : step.missAction,
-                      step.failAction === 'page' ? step.failPage : step.missPage,
-                      'rule fail + no next step → fallback page',
+                      step.failAction === 'page' || step.failAction === 'external'
+                        ? step.failAction
+                        : step.missAction,
+                      step.failAction === 'page' || step.failAction === 'external'
+                        ? step.failPage
+                        : step.missPage,
+                      'rule fail + no next step → fallback',
+                      step.failAction === 'external'
+                        ? step.failUrl
+                        : step.missAction === 'external'
+                          ? step.missUrl
+                          : '',
                     )
                     if (fallbackNavigated) break
                     console.warn(
@@ -1171,7 +1228,8 @@ function SubscriptionPage() {
                   const navigated = await goConfiguredOrContinue(
                     step.failAction,
                     step.failPage,
-                    'invalid JSON → configured page',
+                    'invalid JSON → configured destination',
+                    step.failUrl,
                   )
                   if (navigated) break
                   console.warn(`[Priority Chain] ${tag} → next step`)

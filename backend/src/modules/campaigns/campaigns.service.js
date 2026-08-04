@@ -540,7 +540,6 @@ export const createCampaignsService = () => {
     const allowed = {
       blocklistApi: payload.blocklistApi,
       subscriptionApi: payload.subscriptionApi,
-      subscribeApi: payload.subscribeApi,
       headersJson: payload.headersJson,
       otpConfigJson: payload.otpConfigJson,
       resolveMsisdnUrl: payload.resolveMsisdnUrl,
@@ -551,6 +550,8 @@ export const createCampaignsService = () => {
     Object.keys(allowed).forEach((k) => {
       if (allowed[k] === undefined) delete allowed[k];
     });
+    // Never store subscribe URL — billing is via OTP validate / Priority Chain
+    allowed.subscribeApi = null;
 
     let config = await getApiConfigRepo().findOne({
       where: { campaignId: parseInt(campaignId, 10) },

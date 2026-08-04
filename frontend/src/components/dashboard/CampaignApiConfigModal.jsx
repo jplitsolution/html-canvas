@@ -33,7 +33,6 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const [form, setForm] = useState({
     subscriptionApi: '',
     blocklistApi: '',
-    subscribeApi: '',
     headersJson: '',
     resolveMsisdnUrl: '',
     heProvider: 'header',
@@ -60,7 +59,6 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         setForm({
           subscriptionApi: config.subscriptionApi || '',
           blocklistApi: config.blocklistApi || '',
-          subscribeApi: config.subscribeApi || '',
           headersJson: config.headersJson || '',
           resolveMsisdnUrl: config.resolveMsisdnUrl || '',
           heProvider: config.heProvider || 'header',
@@ -97,6 +95,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     try {
       await saveCampaignApiConfig(campaignId, {
         ...form,
+        // Subscribe URL is not stored — billing is via OTP validate / Priority Chain
+        subscribeApi: null,
         otpConfigJson: JSON.stringify(partnerConfig),
       })
       onClose()
@@ -218,7 +218,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               }`}
               onClick={() => setActiveTab('billing')}
             >
-              Billing &amp; Blocklist APIs
+              Checksub &amp; Blocklist
             </button>
             <button
               type="button"
@@ -247,12 +247,14 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           {activeTab === 'billing' ? (
             <div className="space-y-4">
               <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                Placeholders: <code>{'{{msisdn}}'}</code>, <code>{'{{serviceId}}'}</code>,{' '}
-                <code>{'{{country}}'}</code>, <code>{'{{operator}}'}</code>,{' '}
-                <code>{'{{subServiceId}}'}</code>. URLs with <code>?</code> use GET; otherwise POST.
+                Only checksub and blocklist are stored here. Partner OTP send/verify lives on the OTP
+                tab; there is no separate Subscribe URL (billing is handled by OTP validate or your
+                Priority Chain). Placeholders: <code>{'{{msisdn}}'}</code>,{' '}
+                <code>{'{{serviceId}}'}</code>, <code>{'{{country}}'}</code>,{' '}
+                <code>{'{{operator}}'}</code>, <code>{'{{subServiceId}}'}</code>.
               </p>
               <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">Subscription check URL</label>
+                <label className="block text-sm font-medium text-fg mb-1.5">Subscription check URL (checksub)</label>
                 <Input
                   value={form.subscriptionApi}
                   onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
@@ -265,14 +267,6 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   value={form.blocklistApi}
                   onChange={(e) => setForm({ ...form, blocklistApi: e.target.value })}
                   placeholder="(optional)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">Subscribe URL</label>
-                <Input
-                  value={form.subscribeApi}
-                  onChange={(e) => setForm({ ...form, subscribeApi: e.target.value })}
-                  placeholder="(optional — Tick OTP validate already queues subscribe)"
                 />
               </div>
               <div>

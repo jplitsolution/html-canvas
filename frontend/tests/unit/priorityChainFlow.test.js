@@ -120,11 +120,12 @@ describe('evaluatePriorityApiMatch (OTP-style success rule)', () => {
   it('matches when successKey/value equal response field (top-level)', () => {
     const result = evaluatePriorityApiMatch(
       { responseCode: '0', message: 'ok' },
-      { successKey: 'responseCode', successValue: '0' },
+      { successKey: 'responseCode', successValue: '0', matchPage: 'THANKYOU' },
     )
     expect(result.matched).toBe(true)
-    expect(result.mode).toBe('rule')
+    expect(result.mode).toBe('rules')
     expect(result.actual).toBe('0')
+    expect(result.page).toBe('THANKYOU')
   })
 
   it('matches nested data.subscriptionStatus', () => {
@@ -133,7 +134,7 @@ describe('evaluatePriorityApiMatch (OTP-style success rule)', () => {
       { successKey: 'subscriptionStatus', successValue: 'active' },
     )
     expect(result.matched).toBe(true)
-    expect(result.mode).toBe('rule')
+    expect(result.mode).toBe('rules')
   })
 
   it('misses when value differs', () => {
@@ -142,6 +143,22 @@ describe('evaluatePriorityApiMatch (OTP-style success rule)', () => {
       { successKey: 'subscriptionStatus', successValue: 'active' },
     )
     expect(result.matched).toBe(false)
+  })
+
+  it('picks first matching rule among many ifs', () => {
+    const result = evaluatePriorityApiMatch(
+      { data: { currentStatus: 'parking' } },
+      {
+        rules: [
+          { key: 'currentStatus', value: 'active', page: 'THANKYOU' },
+          { key: 'currentStatus', value: 'parking', page: 'LOW_BALANCE' },
+          { key: 'currentStatus', value: 'pending', page: 'INPROGRESS' },
+        ],
+      },
+    )
+    expect(result.matched).toBe(true)
+    expect(result.page).toBe('LOW_BALANCE')
+    expect(result.actual).toBe('parking')
   })
 
   it('falls back to legacy status heuristic when rule empty', () => {

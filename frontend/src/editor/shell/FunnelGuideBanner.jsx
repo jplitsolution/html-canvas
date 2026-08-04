@@ -88,7 +88,11 @@ export function FunnelGuideBanner({ pageType }) {
             </button>
           </div>
           <p className="text-xs text-fg-muted mt-0.5 leading-relaxed">
-            {expanded ? guide.summary : 'Tap ▼ to see what you can change vs. must keep'}
+            {expanded
+              ? guide.summary
+              : guide.required.length > 0
+                ? 'Tap ▼ to see what you can change vs. must keep'
+                : 'Tap ▼ for tips — this page is fully customizable'}
           </p>
 
           {!ok && (
@@ -156,6 +160,30 @@ export function FunnelGuideBanner({ pageType }) {
                         </li>
                       )
                     })}
+                  </ul>
+                </div>
+              )}
+              {Array.isArray(guide.optional) && guide.optional.length > 0 && (
+                <div className="rounded-md border border-border bg-bg-elevated/80 p-2.5">
+                  <p className="font-semibold text-fg mb-1">Optional helpers</p>
+                  <ul className="space-y-1">
+                    {guide.optional.map((opt) => (
+                      <li key={opt.id} className="flex gap-1.5 text-fg-muted">
+                        <span>
+                          <strong className="font-medium text-fg">{opt.label}</strong> — {opt.why}
+                          {opt.snippet && (
+                            <button
+                              type="button"
+                              onClick={() => handleAddBack(opt)}
+                              className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-bg-subtle border border-border px-1.5 py-0.5 text-[11px] font-semibold text-fg hover:bg-bg transition-colors align-middle"
+                            >
+                              <Plus className="w-2.5 h-2.5" />
+                              Add
+                            </button>
+                          )}
+                        </span>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}
