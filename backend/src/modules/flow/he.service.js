@@ -78,11 +78,12 @@ export const createHeService = () => {
 
   const resolveCustomHttp = async (apiConfig, heConfig, input) => {
     const url =
-      heConfig.url ||
-      heConfig.resolveUrl ||
-      apiConfig.resolveMsisdnUrl;
+      heConfig.url || heConfig.resolveUrl || apiConfig.resolveMsisdnUrl;
     if (!url) {
-      return { phone: '', error: 'custom_http HE requires url / resolveMsisdnUrl' };
+      return {
+        phone: '',
+        error: 'custom_http HE requires url / resolveMsisdnUrl',
+      };
     }
 
     const method = String(heConfig.method || 'GET').toUpperCase();
