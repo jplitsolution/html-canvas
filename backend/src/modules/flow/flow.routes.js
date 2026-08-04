@@ -20,7 +20,7 @@ function extractHeaderMsisdn(headers) {
   return Array.isArray(candidate) ? candidate[0] : String(candidate || '');
 }
 
-/** Prefer real HE header / query MSISDN; fall back to HE_DUMMY_MSISDN only in non-production. */
+/** Prefer real HE header / query MSISDN; fall back to HE_DUMMY_MSISDN when set. */
 function resolveRequestMsisdn(headers, query = {}) {
   const headerPhone = String(extractHeaderMsisdn(headers) || '').replace(/\D/g, '');
   const queryPhone = String(query.msisdn || query.phone || '').replace(/\D/g, '');
@@ -28,17 +28,17 @@ function resolveRequestMsisdn(headers, query = {}) {
   if (queryPhone) return { phone: queryPhone, source: 'query', headerPhone: '' };
 
   const config = getConfig();
-  const isProd = String(config.environment || '').toLowerCase() === 'production';
   const dummy = config.heDummyMsisdn || '';
-  // Never inject fake MSISDN in production — it skips HOME via checksub → LOW_BALANCE/THANKYOU.
-  if (dummy && !isProd) {
-    console.log(`[HE DEBUG] using HE_DUMMY_MSISDN=${dummy}`);
+  if (dummy) {
+    const isProd = String(config.environment || '').toLowerCase() === 'production';
+    if (isProd) {
+      console.warn(
+        `[HE DEBUG] HE_DUMMY_MSISDN=${dummy} active in production — unset it on live operator traffic`,
+      );
+    } else {
+      console.log(`[HE DEBUG] using HE_DUMMY_MSISDN=${dummy}`);
+    }
     return { phone: dummy, source: 'he_dummy_msisdn', headerPhone: '' };
-  }
-  if (dummy && isProd) {
-    console.warn(
-      '[HE DEBUG] HE_DUMMY_MSISDN is set but NODE_ENV=production — ignoring dummy (use real HE header or ?msisdn=)',
-    );
   }
   return { phone: '', source: null, headerPhone: '' };
 }
