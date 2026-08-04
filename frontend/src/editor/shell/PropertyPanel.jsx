@@ -495,17 +495,17 @@ function ClickActionEditor({
 
   return (
     <>
-      <Field label="When clicked, go to">
+      <Field label="When clicked">
         <select
           className={inputClass}
           value={type}
           onChange={(e) => setClickType(e.target.value)}
         >
-          <option value="flow">Continue verification flow (HE / OTP)</option>
-          <option value="anchor">Another part of this page (Scroll)</option>
-          <option value="page">Another page in this campaign</option>
-          <option value="external">Another website (URL)</option>
-          <option value="chain">Sequential Action Chain (Priority Flow)</option>
+          <option value="flow">Continue signup flow</option>
+          <option value="anchor">Scroll to a section</option>
+          <option value="page">Go to another page</option>
+          <option value="external">Open a website</option>
+          <option value="chain">Try checks in order</option>
         </select>
       </Field>
 
@@ -515,7 +515,7 @@ function ClickActionEditor({
 
       {type === 'flow' && (
         <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
-          Starts the subscription funnel on preview/live. The next page comes from Flow Builder (OTP, Confirm, etc.).
+          Continues the normal signup path. The next page is decided by Flow Builder (phone check, OTP, confirm, etc.).
         </p>
       )}
 
