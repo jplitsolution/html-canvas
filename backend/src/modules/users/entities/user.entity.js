@@ -27,6 +27,12 @@ export const UserSchema = new EntitySchema({
       type: 'varchar',
       nullable: true,
     },
+    status: {
+      name: 'status',
+      type: 'varchar',
+      length: 16,
+      default: 'active',
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

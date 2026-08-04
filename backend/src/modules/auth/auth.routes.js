@@ -1,5 +1,6 @@
 import { authService } from './auth.service.js';
 import { usersService } from '../users/users.service.js';
+import { withRole } from '../../common/admin.js';
 
 export async function authRoutes(fastify, options) {
   fastify.post('/register', async (request, reply) => {
@@ -36,9 +37,18 @@ export async function authRoutes(fastify, options) {
         reply.status(404);
         return { statusCode: 404, message: 'User not found' };
       }
-      const result = { ...user };
-      delete result.password;
-      return result;
+      const status = user.status || 'active';
+      if (status !== 'active') {
+        reply.status(403);
+        return {
+          statusCode: 403,
+          message:
+            status === 'suspended'
+              ? 'Your account has been suspended. Contact admin.'
+              : 'Your account is inactive. Contact admin.',
+        };
+      }
+      return withRole(user);
     },
   );
 

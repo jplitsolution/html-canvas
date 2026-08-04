@@ -64,6 +64,18 @@ export async function prefetchFlowPage(params) {
   }
 }
 
+/**
+ * Server-side proxy for Priority Chain API URLs (avoids browser CORS on partner checksub).
+ * Returns { ok, status, body } — body is parsed JSON when possible.
+ */
+export async function priorityCheckApi(url) {
+  return apiClient('/flow/priority-check', {
+    method: 'POST',
+    body: { url },
+    dedupe: false,
+  })
+}
+
 export async function fetchFlowEntry({ country, operator, campid }) {
   const params = new URLSearchParams({ country, operator, page: 'HOME' })
   if (campid) params.set('campid', String(campid))

@@ -19,9 +19,11 @@ import { isNumericCampid, parseTrackingId } from '../markets/tracking-id.util.js
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 import { otpService } from '../otp/otp.service.js';
 import { heService } from './he.service.js';
+import getConfig from '../../config/configuration.js';
 
 export const createFlowService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
+  const isFlowCacheEnabled = () => getConfig().flowCacheEnabled !== false;
 
   const normalizePack = (pack) => {
     const value = (pack || 'daily').toLowerCase();
@@ -218,8 +220,10 @@ export const createFlowService = () => {
       ? `flow:campaign:id:${input.campid}`
       : `flow:campaign:co:${String(input.country).toLowerCase()}:${String(input.operator).toLowerCase()}`;
 
-    const cached = await redisService.get(cacheKey);
-    if (cached) return cached;
+    if (isFlowCacheEnabled()) {
+      const cached = await redisService.get(cacheKey);
+      if (cached) return cached;
+    }
 
     let campaign = null;
     if (input.campid) {
@@ -243,7 +247,7 @@ export const createFlowService = () => {
       );
     }
 
-    if (campaign) {
+    if (campaign && isFlowCacheEnabled()) {
       await redisService.set(cacheKey, campaign, 15);
       await redisService.set(`flow:campaign:id:${campaign.id}`, campaign, 15);
       if (campaign.trackingId) {
@@ -425,12 +429,17 @@ export const createFlowService = () => {
     );
 
     const apiConfigCacheKey = `flow:config:${campaign.id}`;
-    let apiConfig = await redisService.get(apiConfigCacheKey);
-    if (apiConfig === null) {
+    let apiConfig = null;
+    if (isFlowCacheEnabled()) {
+      apiConfig = await redisService.get(apiConfigCacheKey);
+    }
+    if (apiConfig === null || !isFlowCacheEnabled()) {
       apiConfig = await getApiConfigRepo().findOne({
         where: { campaignId: campaign.id },
       });
-      await redisService.set(apiConfigCacheKey, apiConfig ?? '__NULL__', 15);
+      if (isFlowCacheEnabled()) {
+        await redisService.set(apiConfigCacheKey, apiConfig ?? '__NULL__', 15);
+      }
     } else if (apiConfig === '__NULL__') {
       apiConfig = null;
     }
