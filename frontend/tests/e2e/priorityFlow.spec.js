@@ -1,33 +1,41 @@
 import { test, expect } from '@playwright/test'
 
-test('Full E2E: Priority Flow Subscribe button navigates to THANKYOU and Stays stably', async ({ page, request }) => {
+const E2E_EMAIL = 'abhivishwkarmaa52@gmail.com'
+const E2E_PASSWORD = '123456'
+const API = 'http://localhost:3000/api'
+
+test('Full E2E: Priority Flow Subscribe button navigates to THANKYOU and Stays stably', async ({
+  page,
+  request,
+}) => {
   // Step 1: Login via backend API
-  const loginRes = await request.post('http://localhost:3000/api/auth/login', {
-    data: { email: 'qq@gmail.com', password: 'qq1234' }
+  const loginRes = await request.post(`${API}/auth/login`, {
+    data: { email: E2E_EMAIL, password: E2E_PASSWORD },
   })
   expect(loginRes.ok()).toBe(true)
   const loginResult = await loginRes.json()
-  const token = loginResult.data.accessToken
+  const token = loginResult.accessToken
+  expect(token).toBeTruthy()
   const authHeaders = { Authorization: `Bearer ${token}` }
 
   // Step 2: Update campaign 8 flow mode to HEADER_INJECTION so OTP route guard allows direct THANKYOU page
-  const flowConfigRes = await request.get('http://localhost:3000/api/campaigns/8/flow', { headers: authHeaders })
+  const flowConfigRes = await request.get(`${API}/campaigns/8/flow`, { headers: authHeaders })
   if (flowConfigRes.ok()) {
     const flowConfigData = await flowConfigRes.json()
-    await request.put('http://localhost:3000/api/campaigns/8/flow', {
+    await request.put(`${API}/campaigns/8/flow`, {
       headers: authHeaders,
       data: {
         verificationMode: 'HEADER_INJECTION',
-        flowConfig: flowConfigData.data?.flowConfig || flowConfigData.flowConfig
-      }
+        flowConfig: flowConfigData.data?.flowConfig || flowConfigData.flowConfig,
+      },
     })
   }
 
   // Step 3: Prepare valid HTML content with Priority Chain
   const priorityActions = JSON.stringify([
-    { type: 'api', url: 'http://localhost:3000/api/flow/entry?country=India&operator=qq&page=HOME' },
+    { type: 'api', url: `${API}/flow/entry?country=India&operator=qq&page=HOME` },
     { type: 'page', page: 'THANKYOU' },
-    { type: 'page', page: 'ERROR' }
+    { type: 'page', page: 'ERROR' },
   ])
 
   const testHtml = `<div style="text-align:center;padding:50px;">
@@ -35,23 +43,29 @@ test('Full E2E: Priority Flow Subscribe button navigates to THANKYOU and Stays s
   </div>`
 
   // Step 4: Save updated page content to backend DB for campaign 8 HOME page
-  const patchRes = await request.patch('http://localhost:3000/api/campaigns/8/pages/HOME', {
+  const patchRes = await request.patch(`${API}/campaigns/8/pages/HOME`, {
     headers: authHeaders,
     data: {
       html: testHtml,
       css: '',
-      projectData: {}
-    }
+      projectData: {},
+    },
   })
   expect(patchRes.ok()).toBe(true)
 
   // Step 5: Open live subscription preview page in browser
-  await page.goto('http://localhost:5173/subscription?country=India&operator=qq&campid=8&msisdn=919876543210&step=HOME')
+  await page.goto(
+    'http://localhost:5173/subscription?country=India&operator=qq&campid=8&msisdn=919876543210&step=HOME',
+  )
 
   // Step 6: Wait until Shadow DOM content is loaded and rendered
   await page.waitForFunction(() => {
     const host = document.querySelector('.flow-runtime-host')
-    return host && host.shadowRoot && host.shadowRoot.querySelector('[data-action], [data-actions], button, a')
+    return (
+      host &&
+      host.shadowRoot &&
+      host.shadowRoot.querySelector('[data-action], [data-actions], button, a')
+    )
   }, { timeout: 15000 })
 
   // Step 7: Dispatch click on Subscribe button inside Shadow DOM

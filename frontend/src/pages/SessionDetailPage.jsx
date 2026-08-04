@@ -78,6 +78,8 @@ function eventDescription(eventType) {
       return 'Subscription failed or rejected by partner gateway.'
     case 'API_CHECKSUB':
       return 'Partner subscription status check (checksub).'
+    case 'API_PRIORITY':
+      return 'Priority Chain API check (page actions).'
     case 'API_SUBSCRIBE':
       return 'Partner subscribe / billing API call.'
     case 'API_BLOCKLIST':
@@ -142,8 +144,17 @@ function ApiCallCard({ call, defaultOpen }) {
 
       {open && (
         <div className="px-4 pb-4 border-t border-gray-100">
-          {call.callType === 'checksub' && (
+          {(call.callType === 'checksub' || call.callType === 'priority') && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              {call.callType === 'priority' && summary.priority != null && (
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">priority</p>
+                  <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                    #{summary.priority}
+                    {summary.pageType ? ` · ${summary.pageType}` : ''}
+                  </p>
+                </div>
+              )}
               <div>
                 <p className="text-[10px] font-bold uppercase text-gray-400">currentStatus</p>
                 <p className="text-sm font-semibold text-gray-800 mt-0.5">
@@ -358,7 +369,11 @@ function SessionDetailPage() {
                     <ApiCallCard
                       key={call.id}
                       call={call}
-                      defaultOpen={call.callType === 'checksub' || idx === 0}
+                      defaultOpen={
+                        call.callType === 'checksub' ||
+                        call.callType === 'priority' ||
+                        idx === 0
+                      }
                     />
                   ))}
                 </div>
@@ -405,8 +420,14 @@ function SessionDetailPage() {
                           {desc && (
                             <p className="text-xs text-gray-500 mt-1.5">{desc}</p>
                           )}
-                          {apiCall?.callType === 'checksub' && apiCall.summary && (
+                          {(apiCall?.callType === 'checksub' ||
+                            apiCall?.callType === 'priority') &&
+                            apiCall.summary && (
                             <p className="text-xs text-gray-700 mt-1.5 font-medium">
+                              {apiCall.callType === 'priority' &&
+                                apiCall.summary.priority != null && (
+                                  <>priority=#{apiCall.summary.priority} · </>
+                                )}
                               currentStatus={apiCall.summary.currentStatus || '—'}
                               {' · '}
                               subscriptionStatus={apiCall.summary.subscriptionStatus || '—'}

@@ -659,14 +659,16 @@ function SubscriptionPage() {
 
   // THANKYOU → optional success/content portal (show page first, then redirect)
   useEffect(() => {
-    if (pageData?.pageType !== 'THANKYOU') return undefined
-    const dest = pageData?.successRedirect
+    if (String(pageData?.pageType || '').toUpperCase() !== 'THANKYOU') return undefined
+    const dest = String(
+      pageData?.successRedirect || pageData?.successRedirectUrl || '',
+    ).trim()
     if (!dest || !/^https?:\/\//i.test(dest)) return undefined
     const timer = window.setTimeout(() => {
       window.location.assign(dest)
-    }, 2500)
+    }, 2000)
     return () => window.clearTimeout(timer)
-  }, [pageData?.pageType, pageData?.successRedirect])
+  }, [pageData?.pageType, pageData?.successRedirect, pageData?.successRedirectUrl])
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {
@@ -1063,7 +1065,18 @@ function SubscriptionPage() {
 
                 try {
                   if (isAbsoluteHttp) {
-                    const proxied = await priorityCheckApi(formattedUrl)
+                    const proxied = await priorityCheckApi(formattedUrl, {
+                      visitId: visitIdRef.current,
+                      campaignId: pageDataRef.current?.campaignId,
+                      msisdn: phoneRef.current,
+                      clickId: clickIdRef.current || undefined,
+                      rcid: rcidRef.current || undefined,
+                      stepIndex: i,
+                      pageType: pageDataRef.current?.pageType,
+                      rules: step.rules || undefined,
+                      successKey: step.successKey || undefined,
+                      successValue: step.successValue,
+                    })
                     resOk = Boolean(proxied?.ok)
                     json = proxied?.body ?? null
                     if (!resOk) {

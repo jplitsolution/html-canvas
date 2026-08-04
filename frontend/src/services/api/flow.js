@@ -67,11 +67,24 @@ export async function prefetchFlowPage(params) {
 /**
  * Server-side proxy for Priority Chain API URLs (avoids browser CORS on partner checksub).
  * Returns { ok, status, body } — body is parsed JSON when possible.
+ * Also persists request/response to api_call_logs when visit context is provided.
  */
-export async function priorityCheckApi(url) {
+export async function priorityCheckApi(url, meta = {}) {
   return apiClient('/flow/priority-check', {
     method: 'POST',
-    body: { url },
+    body: {
+      url,
+      visitId: meta.visitId || undefined,
+      campaignId: meta.campaignId || undefined,
+      msisdn: meta.msisdn || meta.phone || undefined,
+      clickId: meta.clickId || undefined,
+      rcid: meta.rcid || undefined,
+      stepIndex: meta.stepIndex,
+      pageType: meta.pageType || undefined,
+      rules: meta.rules || undefined,
+      successKey: meta.successKey || undefined,
+      successValue: meta.successValue,
+    },
     dedupe: false,
   })
 }
