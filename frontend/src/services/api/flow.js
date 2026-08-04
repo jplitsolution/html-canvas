@@ -34,7 +34,6 @@ export async function fetchFlowPage({
 
   const res = await apiClient(`/flow/page?${params.toString()}`, {
     method: 'GET',
-    headers: msisdn ? { 'X-MSISDN': String(msisdn) } : undefined,
   })
   logHeDebug('flow/page', res)
   return res

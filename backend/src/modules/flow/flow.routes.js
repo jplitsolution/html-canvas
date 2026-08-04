@@ -22,26 +22,42 @@ function extractHeaderMsisdn(headers) {
   return Array.isArray(candidate) ? candidate[0] : String(candidate || '');
 }
 
-/** Prefer real HE header / query MSISDN; fall back to HE_DUMMY_MSISDN when set. */
+/**
+ * Resolve MSISDN for HE flows.
+ * Priority:
+ *   1) Real carrier HE header (x-msisdn, …) — always wins
+ *   2) Query msisdn/phone (already known from URL/session)
+ *   3) HE_DUMMY_MSISDN — ONLY when header is absent (and no query phone)
+ */
 function resolveRequestMsisdn(headers, query = {}) {
   const headerPhone = String(extractHeaderMsisdn(headers) || '').replace(/\D/g, '');
   const queryPhone = String(query.msisdn || query.phone || '').replace(/\D/g, '');
-  if (headerPhone) return { phone: headerPhone, source: 'header', headerPhone };
-  if (queryPhone) return { phone: queryPhone, source: 'query', headerPhone: '' };
 
+  // Real operator header enrichment — never replace with dummy.
+  if (headerPhone) {
+    return { phone: headerPhone, source: 'header', headerPhone };
+  }
+
+  // Session / URL already has a number (user entered or prior resolve).
+  if (queryPhone) {
+    return { phone: queryPhone, source: 'query', headerPhone: '' };
+  }
+
+  // Local / test fallback — only when no HE header arrived.
   const config = getConfig();
   const dummy = config.heDummyMsisdn || '';
   if (dummy) {
     const isProd = String(config.environment || '').toLowerCase() === 'production';
     if (isProd) {
       console.warn(
-        `[HE DEBUG] HE_DUMMY_MSISDN=${dummy} active in production — unset it on live operator traffic`,
+        `[HE DEBUG] no HE header — using HE_DUMMY_MSISDN=${dummy} (unset on live operator traffic)`,
       );
     } else {
-      console.log(`[HE DEBUG] using HE_DUMMY_MSISDN=${dummy}`);
+      console.log(`[HE DEBUG] no HE header — using HE_DUMMY_MSISDN=${dummy}`);
     }
     return { phone: dummy, source: 'he_dummy_msisdn', headerPhone: '' };
   }
+
   return { phone: '', source: null, headerPhone: '' };
 }
 
