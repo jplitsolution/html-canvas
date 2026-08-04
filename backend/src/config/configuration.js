@@ -32,6 +32,10 @@ export default () => ({
     secret: process.env.JWT_SECRET || 'fallback_secret_key',
     expiresIn: process.env.JWT_EXPIRATION || '24h',
   },
+  // Single dashboard admin (email match). Everyone else is a normal user.
+  adminEmail: String(process.env.ADMIN_EMAIL || '')
+    .trim()
+    .toLowerCase(),
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     apiKey: process.env.CLOUDINARY_API_KEY || '',
@@ -60,6 +64,9 @@ export default () => ({
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
     password: process.env.REDIS_PASSWORD || undefined,
   },
+  // Flow campaign / apiConfig Redis cache. Set FLOW_CACHE_ENABLED=false to always hit DB.
+  flowCacheEnabled:
+    String(process.env.FLOW_CACHE_ENABLED ?? 'true').toLowerCase() !== 'false',
   archiveRetentionDays: parseInt(
     process.env.ARCHIVE_RETENTION_DAYS || '30',
     10,

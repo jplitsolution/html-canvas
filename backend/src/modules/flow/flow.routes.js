@@ -167,6 +167,58 @@ export async function flowRoutes(fastify, options) {
     });
   });
 
+  /**
+   * Server-side fetch for Priority Chain API checks.
+   * Browser CORS blocks direct calls to partner checksub URLs — this proxies them.
+   */
+  fastify.post('/priority-check', { preHandler: publicRateLimit }, async (request, reply) => {
+    const body = request.body || {};
+    const rawUrl = String(body.url || '').trim();
+    if (!rawUrl || rawUrl === 'https://' || rawUrl === 'http://') {
+      return reply.code(400).send({ ok: false, error: 'url is required' });
+    }
+
+    let parsed;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return reply.code(400).send({ ok: false, error: 'invalid url' });
+    }
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return reply.code(400).send({ ok: false, error: 'only http/https allowed' });
+    }
+
+    try {
+      const axios = (await import('axios')).default;
+      const res = await axios.get(rawUrl, {
+        timeout: 12000,
+        validateStatus: () => true,
+        headers: { Accept: 'application/json, text/plain, */*' },
+      });
+      let json = res.data;
+      if (typeof json === 'string') {
+        try {
+          json = JSON.parse(json);
+        } catch {
+          json = null;
+        }
+      }
+      return {
+        ok: res.status >= 200 && res.status < 300,
+        status: res.status,
+        body: json,
+      };
+    } catch (err) {
+      console.warn('[Priority Check] proxy fetch failed:', err.message);
+      return {
+        ok: false,
+        status: 0,
+        body: null,
+        error: err.message || 'proxy fetch failed',
+      };
+    }
+  });
+
   /** Billing / operator → us: fire pending vendor CPA for MSISDN. */
   const handleCallback = async (request) => {
     const q = { ...(request.query || {}), ...(request.body || {}) };

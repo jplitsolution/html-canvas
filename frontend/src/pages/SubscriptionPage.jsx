@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { detectMsisdnApi, fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow } from '../services/api/flow'
+import { detectMsisdnApi, fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow, priorityCheckApi } from '../services/api/flow'
 import { resolvePhoneFromUrl, resolvePhoneNumber, persistPhone } from '../services/flow/resolvePhoneNumber'
+import { evaluatePriorityApiMatch } from '../services/flow/priorityApiMatch'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
 import { trackEvent } from '../utils/analytics'
@@ -9,6 +10,10 @@ import { trackEvent } from '../utils/analytics'
 
 const FLOW_FONT =
   'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap'
+
+/** Set VITE_FLOW_PAGE_CACHE=false to disable in-memory page prefetch/cache on live funnel. */
+const FLOW_PAGE_CACHE_ENABLED =
+  String(import.meta.env.VITE_FLOW_PAGE_CACHE ?? 'true').toLowerCase() !== 'false'
 
 const VALID_PACKS = ['daily', 'weekly', 'monthly']
 const VALID_PAGES = [
@@ -665,6 +670,7 @@ function SubscriptionPage() {
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {
+      if (!FLOW_PAGE_CACHE_ENABLED) return
       if (!country || !operator || !visitId) return
       await Promise.all(
         pages.map(async (page) => {
@@ -707,7 +713,11 @@ function SubscriptionPage() {
       const generation = ++loadGenerationRef.current
 
       // Direct page-link navigations must not reuse a guarded/prefetch rewrite cache.
-      if (!options.direct && pageCacheRef.current.has(requested)) {
+      if (
+        FLOW_PAGE_CACHE_ENABLED &&
+        !options.direct &&
+        pageCacheRef.current.has(requested)
+      ) {
         const cachedData = pageCacheRef.current.get(requested)
         if (generation !== loadGenerationRef.current) return
         pageDataRef.current = cachedData
@@ -981,78 +991,190 @@ function SubscriptionPage() {
 
                 console.log(`[Priority Chain] ${tag} calling:`, formattedUrl)
 
-                let res = null
+                const navigateChainPage = async (targetPage, reason) => {
+                  console.log(
+                    `%c[Priority Chain] ${tag} PASS — ${reason} → ${targetPage}`,
+                    'color:#16a34a;font-weight:bold',
+                  )
+                  chainOutcome = `PASS_${targetPage}`
+                  saveSession({
+                    verificationStatus: 'verified',
+                    visitId: visitIdRef.current,
+                    phone: phoneRef.current,
+                    step: targetPage,
+                  })
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.set('step', targetPage)
+                    return next
+                  })
+                  await loadPage(targetPage, { direct: true })
+                }
+
+                const goConfiguredOrContinue = async (action, page, reason) => {
+                  if (action === 'page') {
+                    const configured = String(page || '')
+                      .trim()
+                      .toUpperCase()
+                    if (VALID_PAGES.includes(configured)) {
+                      await navigateChainPage(configured, reason)
+                      return true
+                    }
+                    console.warn(
+                      `[Priority Chain] ${tag} ${reason} — invalid page:`,
+                      page,
+                      '→ next step',
+                    )
+                  }
+                  return false
+                }
+
+                // Absolute http(s) URLs go through backend proxy (browser CORS blocks partner APIs).
+                // Relative /api paths still use same-origin fetch.
+                let resOk = false
+                let json = null
                 let fetchFailed = false
                 let fetchError = null
+                const isAbsoluteHttp =
+                  formattedUrl.startsWith('http://') || formattedUrl.startsWith('https://')
+
                 try {
-                  res = await fetch(formattedUrl, { method: 'GET', mode: 'cors' })
+                  if (isAbsoluteHttp) {
+                    const proxied = await priorityCheckApi(formattedUrl)
+                    resOk = Boolean(proxied?.ok)
+                    json = proxied?.body ?? null
+                    if (!resOk) {
+                      fetchFailed = true
+                      fetchError = proxied?.error || `HTTP ${proxied?.status || 0}`
+                    }
+                    console.log(`[Priority Chain] ${tag} proxy result:`, {
+                      ok: resOk,
+                      status: proxied?.status,
+                      body: json,
+                    })
+                  } else {
+                    let res = null
+                    try {
+                      res = await fetch(formattedUrl, { method: 'GET', mode: 'cors' })
+                    } catch (err) {
+                      fetchFailed = true
+                      fetchError = err
+                    }
+                    if (fetchFailed || !res || !res.ok) {
+                      fetchFailed = true
+                      if (!fetchError) {
+                        fetchError = { status: res?.status, statusText: res?.statusText }
+                      }
+                    } else {
+                      resOk = true
+                      json = await res.json().catch(() => null)
+                    }
+                  }
                 } catch (err) {
                   fetchFailed = true
                   fetchError = err
                 }
 
-                if (fetchFailed || !res || !res.ok) {
-                  // Browser CORS or network issue: fallback gracefully to next priority step
+                if (fetchFailed || !resOk) {
                   console.warn(
-                    `[Priority Chain] ${tag} FAIL (network/CORS/HTTP) → next step`,
-                    fetchFailed ? fetchError : { status: res?.status, statusText: res?.statusText },
+                    `[Priority Chain] ${tag} FAIL (network/CORS/HTTP)`,
+                    fetchError,
                   )
+                  const navigated = await goConfiguredOrContinue(
+                    step.failAction,
+                    step.failPage,
+                    'API fail → configured page',
+                  )
+                  if (navigated) break
+                  console.warn(`[Priority Chain] ${tag} → next step`)
                   continue
                 }
 
-                const json = await res.json().catch(() => null)
                 if (json) {
                   if (json.responseCode === '500') {
-                    console.error(`[Priority Chain] ${tag} FAIL — engine error:`, json.responseMessage || json)
-                    throw new Error(`Priority ${i + 1} Check Failed: ${json.responseMessage || 'Engine error'}`)
+                    console.error(
+                      `[Priority Chain] ${tag} FAIL — engine error:`,
+                      json.responseMessage || json,
+                    )
+                    const navigated = await goConfiguredOrContinue(
+                      step.failAction,
+                      step.failPage,
+                      'engine error → configured page',
+                    )
+                    if (navigated) break
+                    throw new Error(
+                      `Priority ${i + 1} Check Failed: ${json.responseMessage || 'Engine error'}`,
+                    )
                   }
-                  const nestedData = json.data || json
-                  const currentStatus = String(
-                    nestedData.currentStatus || nestedData.subscriptionStatus || json.subscriptionStatus || json.status || '',
-                  )
-                    .trim()
-                    .toLowerCase()
-                  const isActive = currentStatus === 'active'
-                  // Safwap parity: only brand-new users continue funnel
-                  const shouldSkipSubscribe =
-                    isActive ||
-                    (Boolean(currentStatus) &&
-                      currentStatus !== 'new' &&
-                      currentStatus !== 'unknown')
+
+                  const matchResult = evaluatePriorityApiMatch(json, step)
+                  const shouldSkipSubscribe = matchResult.matched
 
                   console.log(`[Priority Chain] ${tag} response:`, {
-                    currentStatus,
-                    isActive,
-                    shouldSkipSubscribe,
+                    matchMode: matchResult.mode,
+                    successKey: matchResult.key || step.successKey || '',
+                    successValue: step.successValue ?? '',
+                    actual: matchResult.actual,
+                    matched: shouldSkipSubscribe,
+                    currentStatus: matchResult.currentStatus || '',
+                    matchPage: step.matchPage || '',
+                    missAction: step.missAction || 'continue',
+                    missPage: step.missPage || '',
+                    failAction: step.failAction || 'continue',
+                    failPage: step.failPage || '',
                     responseCode: json.responseCode,
                     body: json,
                   })
 
                   if (shouldSkipSubscribe) {
-                    const targetPage =
-                      pageForChecksubStatus(currentStatus) || 'THANKYOU'
-                    console.log(
-                      `%c[Priority Chain] ${tag} PASS — status=${currentStatus || 'active'} → ${targetPage}`,
-                      'color:#16a34a;font-weight:bold',
+                    const configuredMatch = String(step.matchPage || '')
+                      .trim()
+                      .toUpperCase()
+                    const targetPage = VALID_PAGES.includes(configuredMatch)
+                      ? configuredMatch
+                      : pageForChecksubStatus(matchResult.currentStatus) || 'THANKYOU'
+                    await navigateChainPage(
+                      targetPage,
+                      matchResult.mode === 'rule'
+                        ? `rule ${matchResult.key}=${matchResult.actual}`
+                        : `status=${matchResult.currentStatus || 'active'} (legacy)`,
                     )
-                    chainOutcome = `PASS_${targetPage}`
-                    saveSession({
-                      verificationStatus: 'verified',
-                      visitId: visitIdRef.current,
-                      phone: phoneRef.current,
-                      step: targetPage,
-                    })
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev)
-                      next.set('step', targetPage)
-                      return next
-                    })
-                    await loadPage(targetPage)
                     break
                   }
-                  console.warn(`[Priority Chain] ${tag} FAIL — not subscribed → next step`)
+
+                  // Success rule did not match
+                  const missNavigated = await goConfiguredOrContinue(
+                    step.missAction,
+                    step.missPage,
+                    'rule fail → configured page',
+                  )
+                  if (missNavigated) break
+
+                  // continue → next priority step. If this is the LAST step, nowhere to go:
+                  // use failPage when configured (common misconfig: Error set under API-fail only).
+                  const isLastStep = i === actions.length - 1
+                  if (isLastStep) {
+                    const fallbackNavigated = await goConfiguredOrContinue(
+                      step.failAction === 'page' ? 'page' : step.missAction,
+                      step.failAction === 'page' ? step.failPage : step.missPage,
+                      'rule fail + no next step → fallback page',
+                    )
+                    if (fallbackNavigated) break
+                    console.warn(
+                      `[Priority Chain] ${tag} FAIL — no match, no next step, no fallback page`,
+                    )
+                  } else {
+                    console.warn(`[Priority Chain] ${tag} FAIL — no match → next step`)
+                  }
                 } else {
-                  console.warn(`[Priority Chain] ${tag} FAIL — empty/invalid JSON → next step`)
+                  console.warn(`[Priority Chain] ${tag} FAIL — empty/invalid JSON`)
+                  const navigated = await goConfiguredOrContinue(
+                    step.failAction,
+                    step.failPage,
+                    'invalid JSON → configured page',
+                  )
+                  if (navigated) break
+                  console.warn(`[Priority Chain] ${tag} → next step`)
                 }
               } else if (step.type === 'page') {
                 const targetPage = (step.page || '').toUpperCase()

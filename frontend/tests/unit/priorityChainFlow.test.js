@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
+import { evaluatePriorityApiMatch } from '../../src/services/flow/priorityApiMatch'
 
 describe('Priority Chain Execution Logic', () => {
   it('stops loop execution after page navigation (does not run Priority 3)', async () => {
@@ -112,5 +113,49 @@ describe('Priority Chain Execution Logic', () => {
     }
 
     expect(runPriorityChain).toThrow('Priority 1 Error: API URL is missing or incomplete ("https://")')
+  })
+})
+
+describe('evaluatePriorityApiMatch (OTP-style success rule)', () => {
+  it('matches when successKey/value equal response field (top-level)', () => {
+    const result = evaluatePriorityApiMatch(
+      { responseCode: '0', message: 'ok' },
+      { successKey: 'responseCode', successValue: '0' },
+    )
+    expect(result.matched).toBe(true)
+    expect(result.mode).toBe('rule')
+    expect(result.actual).toBe('0')
+  })
+
+  it('matches nested data.subscriptionStatus', () => {
+    const result = evaluatePriorityApiMatch(
+      { responseCode: '0', data: { subscriptionStatus: 'active' } },
+      { successKey: 'subscriptionStatus', successValue: 'active' },
+    )
+    expect(result.matched).toBe(true)
+    expect(result.mode).toBe('rule')
+  })
+
+  it('misses when value differs', () => {
+    const result = evaluatePriorityApiMatch(
+      { data: { subscriptionStatus: 'new' } },
+      { successKey: 'subscriptionStatus', successValue: 'active' },
+    )
+    expect(result.matched).toBe(false)
+  })
+
+  it('falls back to legacy status heuristic when rule empty', () => {
+    const active = evaluatePriorityApiMatch(
+      { data: { subscriptionStatus: 'active' } },
+      {},
+    )
+    expect(active.matched).toBe(true)
+    expect(active.mode).toBe('legacy_status')
+
+    const fresh = evaluatePriorityApiMatch(
+      { data: { subscriptionStatus: 'new' } },
+      {},
+    )
+    expect(fresh.matched).toBe(false)
   })
 })

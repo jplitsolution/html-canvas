@@ -236,7 +236,7 @@ export function getFlowElementInfo(attrs) {
       isSystem: true,
       label: 'Priority Chain CTA (system)',
       description:
-        'Runs Sequential Action Chain on click (API checks → pages / flow). This replaces the old Subscribe-only action.',
+        'Runs Sequential Action Chain on click. Each API step can send match vs other responses to different pages (or the next step). You can reconfigure the action below.',
     }
   }
   if (action === 'SUBSCRIBE') {
@@ -244,7 +244,7 @@ export function getFlowElementInfo(attrs) {
       isSystem: true,
       label: 'Verification flow CTA (system)',
       description:
-        'On click: runs HE / OTP routing from Flow Builder mode. Label can be anything — action matters, not the word Subscribe. Optional if Priority Chain already handles navigation.',
+        'On click: runs HE / OTP routing from Flow Builder mode. Reconfigure below to switch to Priority Chain, a direct page, or another action.',
     }
   }
   if (action === 'CONFIRM') {

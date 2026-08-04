@@ -5,6 +5,7 @@ const AuthContext = createContext({
   user: null,
   loading: true,
   isAuthenticated: false,
+  isAdmin: false,
 })
 
 export function useAuth() {
@@ -22,8 +23,12 @@ function AuthProvider({ children }) {
       .finally(() => setLoading(false))
   }, [])
 
+  const isAdmin = user?.role === 'admin'
+
   return (
-    <AuthContext.Provider value={{ user, loading, isAuthenticated: !!user }}>
+    <AuthContext.Provider
+      value={{ user, loading, isAuthenticated: !!user, isAdmin }}
+    >
       {children}
     </AuthContext.Provider>
   )

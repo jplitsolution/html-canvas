@@ -144,8 +144,11 @@ export const createPostbackService = () => {
     );
 
     if (visitId) {
-      await analyticsService.logEvent(visitId, VisitEventType.POSTBACK_PENDING,  {
-        postbackId: row.id,
+      await analyticsService.logEvent(
+        visitId,
+        VisitEventType.POSTBACK_PENDING,
+        {
+          postbackId: row.id,
           rcid: row.rcid,
           clickId: row.clickId,
         },

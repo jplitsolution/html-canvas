@@ -1,6 +1,6 @@
 import { memo, useState } from 'react'
 import { useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { login, register } from '../services/api/auth'
+import { login } from '../services/api/auth'
 import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -12,10 +12,8 @@ function LoginPage() {
   const location = useLocation()
   const { isAuthenticated, loading: authLoading } = useAuth()
   const redirectTo = location.state?.from?.pathname || '/markets'
-  const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -24,9 +22,6 @@ function LoginPage() {
     setError('')
     setLoading(true)
     try {
-      if (mode === 'register') {
-        await register({ email, password, name })
-      }
       await login({ email, password })
       navigate(redirectTo)
       window.location.reload()
@@ -65,44 +60,8 @@ function LoginPage() {
           </div>
 
           <div className="surface-card p-6">
-            <div className="flex mb-6 p-0.5 rounded-md bg-bg-muted border border-border">
-              <button
-                type="button"
-                onClick={() => setMode('login')}
-                className={`flex-1 py-1.5 text-sm font-medium rounded transition-colors cursor-pointer ${
-                  mode === 'login'
-                    ? 'bg-bg-elevated text-fg shadow-sm'
-                    : 'text-fg-muted hover:text-fg'
-                }`}
-              >
-                Sign in
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('register')}
-                className={`flex-1 py-1.5 text-sm font-medium rounded transition-colors cursor-pointer ${
-                  mode === 'register'
-                    ? 'bg-bg-elevated text-fg shadow-sm'
-                    : 'text-fg-muted hover:text-fg'
-                }`}
-              >
-                Create account
-              </button>
-            </div>
-
+            <h2 className="text-sm font-semibold text-fg mb-4">Sign in</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === 'register' && (
-                <div>
-                  <label className="block text-sm font-medium text-fg mb-1.5">Name</label>
-                  <Input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="Your name"
-                    required
-                  />
-                </div>
-              )}
               <div>
                 <label className="block text-sm font-medium text-fg mb-1.5">Email</label>
                 <Input
@@ -130,9 +89,12 @@ function LoginPage() {
               )}
 
               <Button variant="primary" className="w-full" type="submit" disabled={loading}>
-                {loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
+                {loading ? 'Please wait...' : 'Sign in'}
               </Button>
             </form>
+            <p className="text-xs text-fg-muted text-center mt-4">
+              Need an account? Ask your admin to create one.
+            </p>
           </div>
 
           <p className="text-center text-xs text-fg-subtle mt-6">

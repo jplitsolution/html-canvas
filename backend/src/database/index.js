@@ -56,8 +56,35 @@ export const initDatabase = async () => {
   });
 
   await dataSource.initialize();
+  await ensureUserStatusColumn(dataSource);
   return dataSource;
 };
+
+/** Idempotent: users.status for admin user-management (active|inactive|suspended). */
+async function ensureUserStatusColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "users"
+        ADD COLUMN IF NOT EXISTS "status" varchar(16) NOT NULL DEFAULT 'active'
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'status'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`users\` ADD COLUMN \`status\` varchar(16) NOT NULL DEFAULT 'active'`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureUserStatusColumn:', err.message);
+  }
+}
 
 export const getDataSource = () => {
   if (!dataSource?.isInitialized) {

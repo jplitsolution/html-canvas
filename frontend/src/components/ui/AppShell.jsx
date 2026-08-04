@@ -1,25 +1,28 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, Webhook } from 'lucide-react'
+import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logout } from '../../services/api/auth'
 import Button from './Button'
 import IconButton from './IconButton'
 import BrandLogo, { PartnerBadge } from './BrandLogo'
 
-const navLinks = [
+const baseNavLinks = [
   { to: '/markets', label: 'Markets', icon: FolderKanban },
   { to: '/vendors', label: 'Vendors', icon: Store },
   { to: '/analytics', label: 'Campaign Logs', icon: BarChart3 },
   { to: '/docs/callbacks', label: 'Callbacks', icon: Webhook },
 ]
 
+const adminNavLink = { to: '/users', label: 'User Management', icon: UserCog }
+
 function AppShell({ children, actions, minimal = false }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { isAuthenticated, user, loading } = useAuth()
+  const { isAuthenticated, user, loading, isAdmin } = useAuth()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const navRef = useRef(null)
+  const navLinks = isAdmin ? [...baseNavLinks, adminNavLink] : baseNavLinks
 
   useEffect(() => {
     setMobileNavOpen(false)

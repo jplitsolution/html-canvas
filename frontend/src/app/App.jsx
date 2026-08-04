@@ -17,9 +17,15 @@ import VendorsPage from '../pages/VendorsPage'
 import CallbackDocsPage from '../pages/CallbackDocsPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
+import UsersPage from '../pages/UsersPage'
+import RequireAdmin from '../components/auth/RequireAdmin'
 
 function Protected({ children }) {
   return <RequireAuth>{children}</RequireAuth>
+}
+
+function AdminOnly({ children }) {
+  return <RequireAdmin>{children}</RequireAdmin>
 }
 
 function App() {
@@ -66,6 +72,7 @@ function App() {
               <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
               <Route path="/docs/callbacks" element={<Protected><CallbackDocsPage /></Protected>} />
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
+              <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/" element={<Navigate to="/markets" replace />} />
               <Route path="*" element={<Navigate to="/markets" replace />} />
