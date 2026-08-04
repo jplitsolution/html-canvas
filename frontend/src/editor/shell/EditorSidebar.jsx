@@ -6,11 +6,12 @@ import {
   ImageIcon,
   Search,
   Upload,
-  ChevronDown,
-  ChevronUp,
+  ChevronLeft,
   Puzzle,
   ShieldCheck,
   Code2,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react'
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
@@ -59,14 +60,22 @@ function updateBackgroundText(editor, text) {
   if (heading) heading.set('content', text)
 }
 
+const SIDEBAR_COLLAPSED_KEY = 'tc-editor-sidebar-collapsed'
+
 export function EditorSidebar() {
   const { editor, funnelPageType } = useEditor()
-  const isFunnelPage = Boolean(funnelPageType)
   const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType] : undefined
   const hasFlowParts = Boolean(flowGuide && flowGuide.required.length > 0)
   const [tab, setTab] = useState(
     hasFlowParts ? 'flow' : 'layouts',
   )
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
   const [search, setSearch] = useState('')
   const [assetSearch, setAssetSearch] = useState('')
   const [assets, setAssets] = useState([])
@@ -75,6 +84,31 @@ export function EditorSidebar() {
   const [placementModal, setPlacementModal] = useState(null)
   const [deletingAsset, setDeletingAsset] = useState(null)
   const [brokenAssets, setBrokenAssets] = useState([])
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }, [])
+
+  const selectTab = useCallback((id) => {
+    setTab(id)
+    setCollapsed((prev) => {
+      if (!prev) return prev
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '0')
+      } catch {
+        /* ignore */
+      }
+      return false
+    })
+  }, [])
 
   const refreshAssets = useCallback(() => {
     if (!editor) return
@@ -227,31 +261,58 @@ export function EditorSidebar() {
 
   return (
     <>
-      <aside className="tc-sidebar shrink-0 flex border-r border-gray-100 bg-white min-h-0">
-        <nav className="w-14 shrink-0 flex flex-col items-center py-4 gap-2 border-r border-gray-100 bg-slate-50/50">
+      <aside className="tc-sidebar shrink-0 flex border-r border-gray-100 bg-white min-h-0 relative overflow-hidden">
+        <nav className="w-12 shrink-0 flex flex-col items-center py-3 gap-1.5 bg-slate-50/50">
           {TABS.filter(
             (t) => !(t.id === 'flow' && !hasFlowParts),
           ).map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
+              onClick={() => selectTab(id)}
               title={label}
-              className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 ${
-                tab === id
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20 scale-[1.03]'
+              aria-pressed={tab === id && !collapsed}
+              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200 ${
+                tab === id && !collapsed
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
+                  : tab === id && collapsed
+                  ? 'bg-indigo-100 text-indigo-700'
                   : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100/80'
               }`}
             >
-              <Icon className="w-4.5 h-4.5" />
+              <Icon className="w-4 h-4" />
             </button>
           ))}
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title={collapsed ? 'Show panel' : 'Hide panel'}
+            className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-colors"
+          >
+            {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
         </nav>
 
-        <div className="w-64 flex flex-col min-h-0 min-w-0 bg-white">
-          <div className="px-4 py-4 border-b border-gray-100 shrink-0">
-            <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider">{activeTab?.label}</h2>
-            <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">{activeTab?.hint}</p>
+        <div
+          className={`flex flex-col min-h-0 min-w-0 bg-white overflow-hidden transition-[width] duration-200 ease-out ${
+            collapsed ? 'w-0 border-0' : 'w-60 border-l border-gray-100'
+          }`}
+          aria-hidden={collapsed}
+        >
+          <div className="px-3 py-3 border-b border-gray-100 shrink-0 flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider truncate">{activeTab?.label}</h2>
+              <p className="text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">{activeTab?.hint}</p>
+            </div>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title="Hide panel"
+              className="shrink-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
           </div>
 
           {showBlocks && (

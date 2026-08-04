@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
 import { getFlowElementInfo } from '../utils/funnelGuide';
@@ -19,6 +20,33 @@ import {
 } from '../utils/spacingUtils';
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns';
 import useStore from '../../store/useStore';
+import { PriorityChainTrigger } from './PriorityChainModal';
+
+const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
+
+function usePropsCollapsed() {
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(PROPS_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(PROPS_COLLAPSED_KEY, next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  return { collapsed, toggleCollapsed };
+}
 
 function formatHtml(html) {
   if (!html?.trim()) return ''
@@ -429,12 +457,18 @@ function ClickActionEditor({
           {
             type: 'api',
             url: '',
-            successKey: 'subscriptionStatus',
-            successValue: 'active',
-            matchPage: 'THANKYOU',
-            missAction: 'continue',
+            rules: [
+              { key: 'currentStatus', value: 'active', go: 'page', page: 'THANKYOU', url: '' },
+              { key: 'currentStatus', value: 'parking', go: 'page', page: 'LOW_BALANCE', url: '' },
+              { key: 'currentStatus', value: 'pending', go: 'page', page: 'INPROGRESS', url: '' },
+            ],
+            missAction: 'page',
+            missPage: 'CONFIRM',
+            missUrl: '',
+            failAction: 'page',
+            failPage: 'ERROR',
+            failUrl: '',
           },
-          { type: 'page', page: 'OTP' },
         ]),
         href: '#',
       })
@@ -476,7 +510,7 @@ function ClickActionEditor({
       </Field>
 
       {type === 'chain' && (
-        <ActionChainEditor selected={selected} editor={editor} update={update} />
+        <PriorityChainTrigger selected={selected} editor={editor} update={update} />
       )}
 
       {type === 'flow' && (
@@ -524,313 +558,6 @@ function ClickActionEditor({
   )
 }
 
-function ActionChainEditor({
-  selected,
-  editor,
-  update,
-}) {
-  const attrs = selected.getAttributes() || {}
-  let actions = []
-  try {
-    actions = JSON.parse(attrs['data-actions'] || '[]')
-  } catch (_e) {
-    actions = []
-  }
-
-  if (actions.length === 0) {
-    actions = [
-      {
-        type: 'api',
-        url: '',
-        successKey: 'subscriptionStatus',
-        successValue: 'active',
-        matchPage: 'THANKYOU',
-        missAction: 'continue',
-      },
-      { type: 'page', page: 'OTP' },
-    ]
-  }
-
-  const saveActions = (newActions) => {
-    selected.addAttributes({
-      'data-action': 'CHAIN',
-      'data-actions': JSON.stringify(newActions),
-      href: '#',
-    })
-    update()
-  }
-
-  const updateStep = (index, field, value) => {
-    const next = [...actions]
-    const updated = { ...next[index], [field]: value }
-    // When switching to API type, seed match/miss + success-rule defaults
-    if (field === 'type' && value === 'api') {
-      if (!updated.matchPage) updated.matchPage = 'THANKYOU'
-      if (!updated.missAction) updated.missAction = 'continue'
-      if (!updated.failAction) updated.failAction = 'continue'
-      if (!updated.successKey) updated.successKey = 'subscriptionStatus'
-      if (updated.successValue == null || updated.successValue === '') {
-        updated.successValue = 'active'
-      }
-    }
-    next[index] = updated
-    saveActions(next)
-  }
-
-  const addStep = () => {
-    const next = [...actions, { type: 'page', page: 'OTP' }]
-    saveActions(next)
-  }
-
-  const removeStep = (index) => {
-    if (actions.length <= 1) return
-    const next = actions.filter((_, i) => i !== index)
-    saveActions(next)
-  }
-
-  const moveStep = (index, direction) => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= actions.length) return
-    const next = [...actions]
-    const temp = next[index]
-    next[index] = next[targetIndex]
-    next[targetIndex] = temp
-    saveActions(next)
-  }
-
-  return (
-    <div className="space-y-3 pt-1">
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-semibold text-fg">Action Priority Flow</span>
-        <span className="text-[10px] text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded font-mono font-semibold">
-          {actions.length} Steps
-        </span>
-      </div>
-
-      <p className="text-[11px] text-fg-muted leading-relaxed">
-        Steps run only for this button — Flow Builder is not deleted. Use action type
-        &quot;flow&quot; to hand control back to HE / OTP. For API checks, set a Success rule
-        (key = value, same idea as OTP) then choose which page to show on match vs otherwise.
-      </p>
-
-      <div className="space-y-2.5">
-        {actions.map((step, idx) => (
-          <div
-            key={idx}
-            className="p-2.5 rounded-lg border border-border bg-bg-muted/40 space-y-2 relative"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-indigo-600">
-                Priority {idx + 1}
-              </span>
-              <div className="flex items-center gap-1">
-                {idx > 0 && (
-                  <button
-                    type="button"
-                    title="Move Up"
-                    onClick={() => moveStep(idx, 'up')}
-                    className="px-1.5 py-0.5 text-[10px] bg-bg hover:bg-border border border-border rounded text-fg-muted hover:text-fg font-bold"
-                  >
-                    ↑
-                  </button>
-                )}
-                {idx < actions.length - 1 && (
-                  <button
-                    type="button"
-                    title="Move Down"
-                    onClick={() => moveStep(idx, 'down')}
-                    className="px-1.5 py-0.5 text-[10px] bg-bg hover:bg-border border border-border rounded text-fg-muted hover:text-fg font-bold"
-                  >
-                    ↓
-                  </button>
-                )}
-                {actions.length > 1 && (
-                  <button
-                    type="button"
-                    title="Delete Step"
-                    onClick={() => removeStep(idx)}
-                    className="px-1.5 py-0.5 text-[10px] bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded font-bold ml-1"
-                  >
-                    ✕
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <Field label="Action Type">
-              <select
-                className={inputClass}
-                value={step.type}
-                onChange={(e) => updateStep(idx, 'type', e.target.value)}
-              >
-                <option value="api">Validate URL / Webhook (API Check)</option>
-                <option value="page">Another page in this campaign</option>
-                <option value="external">Another website (URL Redirect)</option>
-                <option value="anchor">Another part of this page (Scroll)</option>
-                <option value="flow">Continue verification flow (HE / OTP)</option>
-              </select>
-            </Field>
-
-            {step.type === 'api' && (
-              <>
-                <Field label="Webhook / API URL to check">
-                  <input
-                    className={inputClass}
-                    placeholder="https://example.com/api/check"
-                    value={step.url || ''}
-                    onChange={(e) => updateStep(idx, 'url', e.target.value)}
-                  />
-                  {(!step.url?.trim() || step.url.trim() === 'https://' || step.url.trim() === 'http://') && (
-                    <p className="text-[10px] text-amber-600 font-medium mt-1">
-                      ⚠️ API URL is required (e.g. https://example.com/api/check)
-                    </p>
-                  )}
-                </Field>
-
-                <div className="rounded-md border border-border bg-bg p-2 space-y-2">
-                  <p className="text-[11px] font-semibold text-fg">Success rule</p>
-                  <p className="text-[10px] text-fg-muted leading-relaxed">
-                    Same idea as OTP: response field equals this value → match. Example:{' '}
-                    <code className="font-mono">subscriptionStatus = active</code> or{' '}
-                    <code className="font-mono">responseCode = 0</code>.
-                  </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Field label="Key">
-                      <input
-                        className={inputClass}
-                        placeholder="subscriptionStatus"
-                        value={step.successKey ?? ''}
-                        onChange={(e) => updateStep(idx, 'successKey', e.target.value)}
-                      />
-                    </Field>
-                    <Field label="Value">
-                      <input
-                        className={inputClass}
-                        placeholder="active"
-                        value={step.successValue ?? ''}
-                        onChange={(e) => updateStep(idx, 'successValue', e.target.value)}
-                      />
-                    </Field>
-                  </div>
-                </div>
-
-                <CampaignPageSelect
-                  label="If success rule matches → show page"
-                  href={step.matchPage || 'THANKYOU'}
-                  editor={editor}
-                  onChange={(pageId) => updateStep(idx, 'matchPage', pageId)}
-                />
-
-                <Field label="If success rule fails (status not matched)">
-                  <select
-                    className={inputClass}
-                    value={step.missAction === 'page' ? 'page' : 'continue'}
-                    onChange={(e) => {
-                      const next = [...actions]
-                      const updated = { ...next[idx], missAction: e.target.value }
-                      if (e.target.value === 'page' && !updated.missPage) {
-                        updated.missPage = 'OTP'
-                      }
-                      next[idx] = updated
-                      saveActions(next)
-                    }}
-                  >
-                    <option value="continue">Continue to next priority step</option>
-                    <option value="page">Show a specific page</option>
-                  </select>
-                </Field>
-
-                {step.missAction === 'page' && (
-                  <CampaignPageSelect
-                    label="On rule fail → show page"
-                    href={step.missPage || 'OTP'}
-                    editor={editor}
-                    onChange={(pageId) => updateStep(idx, 'missPage', pageId)}
-                  />
-                )}
-
-                {step.missAction !== 'page' && idx === actions.length - 1 && (
-                  <p className="text-[10px] text-amber-600 font-medium leading-relaxed">
-                    ⚠️ This is the last step. “Continue” has nowhere to go on no-match —
-                    choose “Show a specific page” (e.g. Error / Confirm / OTP), or add Priority 2.
-                  </p>
-                )}
-
-                <Field label="If API call fails (network / HTTP — not rule miss)">
-                  <select
-                    className={inputClass}
-                    value={step.failAction === 'page' ? 'page' : 'continue'}
-                    onChange={(e) => {
-                      const next = [...actions]
-                      const updated = { ...next[idx], failAction: e.target.value }
-                      if (e.target.value === 'page' && !updated.failPage) {
-                        updated.failPage = 'ERROR'
-                      }
-                      next[idx] = updated
-                      saveActions(next)
-                    }}
-                  >
-                    <option value="continue">Continue to next priority step</option>
-                    <option value="page">Show a specific page</option>
-                  </select>
-                </Field>
-
-                {step.failAction === 'page' && (
-                  <CampaignPageSelect
-                    label="On API fail → show page"
-                    href={step.failPage || 'ERROR'}
-                    editor={editor}
-                    onChange={(pageId) => updateStep(idx, 'failPage', pageId)}
-                  />
-                )}
-              </>
-            )}
-
-            {step.type === 'external' && (
-              <Field label="Website address (URL)">
-                <input
-                  className={inputClass}
-                  placeholder="https://example.com"
-                  value={step.url || ''}
-                  onChange={(e) => updateStep(idx, 'url', e.target.value)}
-                />
-                {!step.url?.trim() && (
-                  <p className="text-[10px] text-amber-600 font-medium mt-1">
-                    ⚠️ URL is required for Priority {idx + 1}
-                  </p>
-                )}
-              </Field>
-            )}
-
-            {step.type === 'page' && (
-              <CampaignPageSelect
-                href={step.page || 'OTP'}
-                editor={editor}
-                onChange={(pageId) => updateStep(idx, 'page', pageId)}
-              />
-            )}
-
-            {step.type === 'anchor' && (
-              <SectionAnchorSelect
-                editor={editor}
-                value={step.section || ''}
-                onChange={(id) => updateStep(idx, 'section', id)}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
-      <button
-        type="button"
-        onClick={addStep}
-        className="w-full py-1.5 px-3 border border-dashed border-indigo-300 hover:border-indigo-500 rounded-lg text-xs text-indigo-600 font-medium hover:bg-indigo-50/50 transition-colors flex items-center justify-center gap-1"
-      >
-        + Add Priority Action Step
-      </button>
-    </div>
-  )
-}
 
 const KIND_LABELS = {
   text: 'Text',
@@ -883,6 +610,7 @@ export function PropertyPanel() {
   const styleHostRef = useRef(null);
   const traitHostRef = useRef(null);
   const [anchorError, setAnchorError] = useState(null);
+  const { collapsed, toggleCollapsed } = usePropsCollapsed();
 
   const selected = editor?.getSelected();
   const kind = editor && selected ? getComponentKind(selected) : 'none';
@@ -894,7 +622,7 @@ export function PropertyPanel() {
   }, [selectionVersion]);
 
   useLayoutEffect(() => {
-    if (!editor || !advancedMode) return;
+    if (!editor || !advancedMode || collapsed) return;
     const cmp = editor.getSelected();
     if (!cmp || getComponentKind(cmp) === 'none') return;
 
@@ -904,11 +632,52 @@ export function PropertyPanel() {
     if (traitHostRef.current) traitHostRef.current.id = 'tc-advanced-traits';
 
     mountAdvancedPanels(editor, cmp);
-  }, [editor, advancedMode, selectionVersion]);
+  }, [editor, advancedMode, selectionVersion, collapsed]);
+
+  if (collapsed) {
+    const label = !editor
+      ? 'Properties'
+      : selected && kind !== 'none'
+      ? KIND_LABELS[kind] || 'Element'
+      : 'Properties';
+    return (
+      <aside className="tc-properties w-10 shrink-0 border-l border-border bg-bg-elevated flex flex-col items-center py-3 gap-2">
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Show properties"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
+        >
+          <PanelRightOpen className="w-4 h-4" />
+        </button>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Show properties"
+          className="flex-1 w-full flex items-start justify-center pt-2"
+        >
+          <span
+            className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted whitespace-nowrap select-none"
+            style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
+          >
+            {label}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={toggleCollapsed}
+          title="Show properties"
+          className="w-8 h-8 flex items-center justify-center rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </aside>
+    );
+  }
 
   if (!editor) {
     return (
-      <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated p-4">
+      <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated p-4">
         <p className="text-sm text-fg-muted">Loading...</p>
       </aside>
     );
@@ -920,9 +689,17 @@ export function PropertyPanel() {
 
   if (!selected || kind === 'none') {
     return (
-      <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated flex flex-col">
-        <div className="p-4 border-b border-border">
+      <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated flex flex-col">
+        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-fg">Edit selection</h2>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title="Hide properties"
+            className="p-1.5 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+          >
+            <PanelRightClose className="w-4 h-4" />
+          </button>
         </div>
         <div className="flex-1 flex items-center justify-center p-6 text-center">
           <p className="text-sm text-fg-muted">
@@ -934,18 +711,18 @@ export function PropertyPanel() {
   }
 
   return (
-    <aside className="tc-properties w-72 shrink-0 border-l border-border bg-bg-elevated flex flex-col overflow-hidden">
-      <div className="p-4 border-b border-border flex items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold text-fg">{KIND_LABELS[kind] || 'Element'}</h2>
-          <p className="text-xs text-fg-muted mt-0.5">Change how this looks on your page</p>
+    <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated flex flex-col overflow-hidden">
+      <div className="p-3 border-b border-border flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-fg truncate">{KIND_LABELS[kind] || 'Element'}</h2>
+          <p className="text-xs text-fg-muted mt-0.5 leading-snug">Change how this looks</p>
         </div>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-0.5 shrink-0">
           <button
             type="button"
             title="Duplicate"
             onClick={() => editor.runCommand('tc-duplicate')}
-            className="p-1.5 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg text-xs"
+            className="px-2 py-1 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg text-[11px] font-medium"
           >
             Duplicate
           </button>
@@ -953,14 +730,22 @@ export function PropertyPanel() {
             type="button"
             title="Delete"
             onClick={() => editor.runCommand('tc-delete')}
-            className="p-1.5 rounded-md text-danger hover:bg-danger-muted text-xs"
+            className="px-2 py-1 rounded-md text-danger hover:bg-danger-muted text-[11px] font-medium"
           >
             Delete
+          </button>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title="Hide properties"
+            className="p-1.5 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-3 space-y-3.5">
         {flowInfo && (
           <div className="rounded-lg border border-warning/40 bg-warning-muted/40 p-3 space-y-1">
             <p className="text-xs font-semibold text-fg flex items-center gap-1.5">

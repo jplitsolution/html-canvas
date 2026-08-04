@@ -99,15 +99,21 @@ export const FUNNEL_PAGE_GUIDES = {
     ],
   },
   CONFIRM: {
-    title: 'Confirm subscription page',
+    title: 'Confirm page',
     summary:
-      'User picks a pack (daily / weekly / monthly) and confirms. This triggers billing on the server.',
-    canChange: ['Text', 'Colors', 'Pack names & descriptions', 'Confirm button label'],
-    required: [
+      'Optional confirm / pack step. Design freely — packs and Confirm button are optional if your Priority Chain or OTP already finishes the journey.',
+    canChange: [
+      'Everything on this page',
+      'Pack picker (optional)',
+      'Confirm button (optional — data-action=CONFIRM if you still want server billing)',
+      'Text, images, hotspots, Priority Chain',
+    ],
+    required: [],
+    optional: [
       {
         id: 'pack-daily',
         label: 'Pack options',
-        why: 'User must pick daily, weekly, or monthly before confirming.',
+        why: 'Only if users should pick daily / weekly / monthly on this page.',
         match: 'data-pack=',
         thumb: 'pricing',
         snippet: packPickerSnippet,
@@ -115,7 +121,7 @@ export const FUNNEL_PAGE_GUIDES = {
       {
         id: 'confirm-btn',
         label: 'Confirm button',
-        why: 'Completes subscription and charges the user — do not remove.',
+        why: 'Only if you still want the built-in confirm click (most flows use Priority Chain / OTP instead).',
         match: 'data-action="CONFIRM"',
         thumb: 'button',
         snippet: `<button type="button" data-action="CONFIRM" class="flow-btn">Confirm Subscription</button>`,

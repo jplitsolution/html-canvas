@@ -13,30 +13,100 @@ export function getResponseField(data, key) {
   return null
 }
 
+function readField(json, key) {
+  const nested = json?.data && typeof json.data === 'object' ? json.data : null
+  return getResponseField(json, key) ?? (nested ? getResponseField(nested, key) : null)
+}
+
+function normalizeGo(raw) {
+  const g = String(raw || 'page').trim().toLowerCase()
+  return g === 'external' ? 'external' : 'page'
+}
+
+function mapRule(r = {}) {
+  const go = normalizeGo(r.go)
+  return {
+    key: String(r?.key || '').trim(),
+    value: r?.value != null ? String(r.value).trim() : '',
+    go,
+    page: String(r?.page || '').trim().toUpperCase(),
+    url: String(r?.url || '').trim(),
+  }
+}
+
+/** Normalize step.rules + legacy successKey/successValue into a rules list. */
+export function normalizePriorityRules(step = {}) {
+  if (Array.isArray(step.rules) && step.rules.length > 0) {
+    return step.rules.map(mapRule).filter((r) => r.key && r.value !== '')
+  }
+
+  const key = String(step.successKey || '').trim()
+  const value = step.successValue != null ? String(step.successValue).trim() : ''
+  if (key && value !== '') {
+    return [
+      {
+        key,
+        value,
+        go: 'page',
+        page: String(step.matchPage || 'THANKYOU').trim().toUpperCase() || 'THANKYOU',
+        url: '',
+      },
+    ]
+  }
+  return []
+}
+
+/** Editor helper — keeps incomplete rows while typing (does not drop empty values). */
+export function normalizeApiRules(step = {}) {
+  if (Array.isArray(step.rules) && step.rules.length > 0) {
+    return step.rules.map((r) => {
+      const mapped = mapRule({
+        ...r,
+        value: r?.value != null ? String(r.value) : '',
+        page: r?.page || 'OTP',
+      })
+      return mapped
+    })
+  }
+  return normalizePriorityRules(step)
+}
+
 /**
- * Priority API match:
- * - If successKey + successValue set → OTP-style rule (checks body + body.data)
- * - Else → legacy subscriptionStatus heuristic (active / pending / …)
+ * Priority API match — first matching rule wins.
+ * rules: [{ key, value, go: 'page'|'external', page, url }, ...]
  */
 export function evaluatePriorityApiMatch(json, step = {}) {
-  const key = String(step.successKey || '').trim()
-  const expectedRaw = step.successValue
-  const hasRule = Boolean(key) && expectedRaw != null && String(expectedRaw).trim() !== ''
+  const rules = normalizePriorityRules(step)
 
-  if (hasRule) {
-    const expected = String(expectedRaw).trim()
-    const nested = json?.data && typeof json.data === 'object' ? json.data : null
-    const actual =
-      getResponseField(json, key) ?? (nested ? getResponseField(nested, key) : null)
-    if (actual === undefined || actual === null) {
-      return { matched: false, mode: 'rule', key, expected, actual: null, currentStatus: '' }
+  if (rules.length > 0) {
+    for (const rule of rules) {
+      const actual = readField(json, rule.key)
+      if (actual === undefined || actual === null) continue
+      if (String(actual) === rule.value) {
+        return {
+          matched: true,
+          mode: 'rules',
+          key: rule.key,
+          expected: rule.value,
+          actual: String(actual),
+          go: rule.go || 'page',
+          page: rule.page || null,
+          url: rule.url || '',
+          currentStatus: '',
+        }
+      }
     }
     return {
-      matched: String(actual) === expected,
-      mode: 'rule',
-      key,
-      expected,
-      actual: String(actual),
+      matched: false,
+      mode: 'rules',
+      key: rules[0]?.key || '',
+      expected: rules.map((r) => r.value).join('|'),
+      actual: readField(json, rules[0]?.key) != null
+        ? String(readField(json, rules[0]?.key))
+        : null,
+      go: 'page',
+      page: null,
+      url: '',
       currentStatus: '',
     }
   }
@@ -62,6 +132,9 @@ export function evaluatePriorityApiMatch(json, step = {}) {
     key: '',
     expected: '',
     actual: currentStatus || null,
+    go: 'page',
+    page: null,
+    url: '',
     currentStatus,
   }
 }

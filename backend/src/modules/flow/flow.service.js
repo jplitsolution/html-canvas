@@ -15,7 +15,10 @@ import { variableResolverService } from '../../common/services/variable-resolver
 import { flowEngineService } from './flow-engine.service.js';
 import { ApiConfig } from '../api-config/entities/api-config.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
-import { isNumericCampid, parseTrackingId } from '../markets/tracking-id.util.js';
+import {
+  isNumericCampid,
+  parseTrackingId,
+} from '../markets/tracking-id.util.js';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 import { otpService } from '../otp/otp.service.js';
 import { heService } from './he.service.js';
@@ -602,25 +605,41 @@ export const createFlowService = () => {
           rcid: networkRcid,
         });
         lastSubCheck = sub;
-        // Not "new" → status page (active/pending/parking/grace) — not CONFIRM
+        // Not "new" → historically jumped to THANKYOU / LOW_BALANCE / INPROGRESS.
+        // Landing on HOME must stay on HOME so Priority Chain / CTA can run on click.
         if (sub?.shouldSkipSubscribe) {
-          resolvedPageType =
-            pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
-            CampaignPageType.THANKYOU;
+          const requested = String(
+            input.pageType || CampaignPageType.HOME,
+          ).toUpperCase();
+          const keepHome =
+            requested === CampaignPageType.HOME ||
+            requested === String(entryPage || '').toUpperCase();
+
+          if (!keepHome) {
+            resolvedPageType =
+              pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
+              CampaignPageType.THANKYOU;
+          }
+
           await analyticsService.updateVisit(
             visitId,
-            VisitStatus.SUBSCRIBED,
+            keepHome ? VisitStatus.HOME_SHOWN : VisitStatus.SUBSCRIBED,
             resolvedPageType,
             phone,
           );
           await analyticsService.logEvent(
             visitId,
-            VisitEventType.SUBSCRIBE_SUCCESS,
+            keepHome
+              ? VisitEventType.HOME_VIEW
+              : VisitEventType.SUBSCRIBE_SUCCESS,
             {
-              info: `Skip subscribe — status=${sub.status} → ${resolvedPageType}`,
+              info: keepHome
+                ? `checksub status=${sub.status} — keeping HOME (CTA / Priority Chain decides next)`
+                : `Skip subscribe — status=${sub.status} → ${resolvedPageType}`,
               currentStatus: sub.currentStatus,
               subscriptionStatus: sub.subscriptionStatus,
               isActive: sub.isActive,
+              keepHome,
             },
           );
         } else {
@@ -881,10 +900,7 @@ export const createFlowService = () => {
           VisitEventType.CONFIRM_VIEW,
         );
       } else if (nextPage === CampaignPageType.OTP) {
-        await analyticsService.logEvent(
-          input.visitId,
-          VisitEventType.OTP_VIEW,
-        );
+        await analyticsService.logEvent(input.visitId, VisitEventType.OTP_VIEW);
       } else if (skippedStatusPage) {
         await analyticsService.logEvent(
           input.visitId,
@@ -1302,7 +1318,9 @@ export const createFlowService = () => {
   const getFlowEntry = async (input) => {
     const campaign = await resolveCampaign(input);
     if (!campaign) {
-      const err = new Error(`No campaign found for ${input.country} / ${input.operator}`);
+      const err = new Error(
+        `No campaign found for ${input.country} / ${input.operator}`,
+      );
       err.statusCode = 404;
       throw err;
     }
