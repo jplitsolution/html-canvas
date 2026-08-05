@@ -322,16 +322,9 @@ function AddHotspotButton({ selected, editor }) {
 const inputClass =
   'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200';
 
-/** Funnel pages only — never GrapesJS site pages (Home/About/Blog…). */
-function getCampaignPageOptions(campaign) {
-  const fromCampaign = (campaign?.pages || [])
-    .map((p) => String(p.pageType || '').toUpperCase())
-    .filter((id) => PAGE_TYPES.includes(id))
-
-  const ids = fromCampaign.length > 0 ? [...new Set(fromCampaign)] : [...PAGE_TYPES]
-
-  // Keep stable funnel order from PAGE_TYPES
-  return PAGE_TYPES.filter((id) => ids.includes(id)).map((id) => ({
+/** All funnel page types — every campaign can edit HOME … ERROR. */
+function getCampaignPageOptions() {
+  return PAGE_TYPES.map((id) => ({
     id,
     label: PAGE_TYPE_LABELS[id] || id,
   }))
@@ -342,8 +335,7 @@ function CampaignPageSelect({
   onChange,
   label = 'Page name',
 }) {
-  const campaign = useStore((s) => s.campaign)
-  const options = getCampaignPageOptions(campaign)
+  const options = getCampaignPageOptions()
   const matched = options.find((o) => o.id.toLowerCase() === (href || '').toLowerCase())
   const value = matched?.id || options[0]?.id || 'OTP'
 

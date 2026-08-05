@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import Modal from '../../components/common/Modal'
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns'
-import useStore from '../../store/useStore'
 import { normalizeApiRules } from '../../services/flow/priorityApiMatch'
 
 const inputClass =
@@ -16,20 +15,15 @@ function Field({ label, children }) {
   )
 }
 
-function getCampaignPageOptions(campaign) {
-  const fromCampaign = (campaign?.pages || [])
-    .map((p) => String(p.pageType || '').toUpperCase())
-    .filter((id) => PAGE_TYPES.includes(id))
-  const ids = fromCampaign.length > 0 ? [...new Set(fromCampaign)] : [...PAGE_TYPES]
-  return PAGE_TYPES.filter((id) => ids.includes(id)).map((id) => ({
+function getCampaignPageOptions() {
+  return PAGE_TYPES.map((id) => ({
     id,
     label: PAGE_TYPE_LABELS[id] || id,
   }))
 }
 
 function PageSelect({ value, onChange, label = 'Page' }) {
-  const campaign = useStore((s) => s.campaign)
-  const options = getCampaignPageOptions(campaign)
+  const options = getCampaignPageOptions()
   const matched = options.find((o) => o.id.toLowerCase() === String(value || '').toLowerCase())
   const selected = matched?.id || options[0]?.id || 'OTP'
 

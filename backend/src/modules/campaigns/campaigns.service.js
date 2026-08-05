@@ -482,7 +482,14 @@ export const createCampaignsService = () => {
 
     await ensureCampaignPages(campaign);
 
-    const page = (campaign.pages || []).find((p) => p.pageType === pageType);
+    const normalizedType = String(pageType || '').trim().toUpperCase();
+    if (!ALL_CAMPAIGN_PAGE_TYPES.includes(normalizedType)) {
+      const err = new Error(`Invalid page type "${pageType}"`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const page = (campaign.pages || []).find((p) => p.pageType === normalizedType);
     if (!page) {
       const err = new Error(`Page type ${pageType} not found for campaign`);
       err.statusCode = 404;
@@ -501,7 +508,13 @@ export const createCampaignsService = () => {
   };
 
   const updatePageContent = async (campaignId, pageType, dto, userId) => {
-    const page = await getPage(campaignId, pageType, userId);
+    const normalizedType = String(pageType || '').trim().toUpperCase();
+    if (!ALL_CAMPAIGN_PAGE_TYPES.includes(normalizedType)) {
+      const err = new Error(`Invalid page type "${pageType}"`);
+      err.statusCode = 400;
+      throw err;
+    }
+    const page = await getPage(campaignId, normalizedType, userId);
     if (!page.templateId) {
       const err = new Error('Template not linked to this page');
       err.statusCode = 404;
@@ -526,7 +539,7 @@ export const createCampaignsService = () => {
     template.data = data;
     await getTemplateRepo().save(template);
 
-    return getPage(campaignId, pageType, userId);
+    return getPage(campaignId, normalizedType, userId);
   };
 
   const getApiConfig = async (campaignId, userId) => {
