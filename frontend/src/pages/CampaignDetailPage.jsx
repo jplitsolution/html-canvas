@@ -34,6 +34,7 @@ import {
   PAGE_TYPE_LABELS,
   PAGE_TYPES,
   REQUIRED_PAGE_TYPES,
+  OPTIONAL_PAGE_TYPES,
   getCampaignPreviewUrl,
 } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
@@ -291,8 +292,32 @@ function CampaignDetailPage() {
       addPage(n.pageType)
     }
 
+    // Always list every funnel page type so status pages (Blocked, Low balance, …)
+    // stay editable even when not present in the saved flow graph.
+    for (const type of defaultOrder) {
+      addPage(type)
+    }
+
     return order
   }, [campaign])
+
+  const pageSections = useMemo(
+    () => [
+      {
+        id: 'core',
+        title: 'Core funnel',
+        subtitle: 'Required before activation: Home, OTP, Confirm, Thank you',
+        types: orderedPageTypes.filter((type) => REQUIRED_PAGE_TYPES.includes(type)),
+      },
+      {
+        id: 'status',
+        title: 'Status & outcome pages',
+        subtitle: 'Shown for parking, blocked, pending, or errors — customize per campaign',
+        types: orderedPageTypes.filter((type) => OPTIONAL_PAGE_TYPES.includes(type)),
+      },
+    ],
+    [orderedPageTypes],
+  )
 
   const pagesReadyCount = useMemo(() => {
     if (!campaign) return 0
@@ -738,7 +763,7 @@ function CampaignDetailPage() {
                 <div>
                   <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
                   <p className="text-xs text-fg-muted mt-0.5">
-                    Required: Home, Confirm, Thank you
+                    Edit every page in this campaign — including Blocked and Low balance
                   </p>
                 </div>
                 <Link to={flowHref}>
@@ -748,42 +773,50 @@ function CampaignDetailPage() {
                   </Button>
                 </Link>
               </div>
-              <div className="divide-y divide-border">
-                {orderedPageTypes.map((pageType) => {
-                  const page = campaign.pages.find((p) => p.pageType === pageType)
-                  const required = REQUIRED_PAGE_TYPES.includes(pageType)
-                  const hasContent = page?.hasContent
-                  return (
-                    <div
-                      key={pageType}
-                      className="flex items-center justify-between px-5 py-3.5 gap-4"
-                    >
-                      <div className="flex items-center gap-3 min-w-0">
-                        {hasContent ? (
-                          <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-fg-subtle shrink-0" />
-                        )}
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-fg">
-                            {PAGE_TYPE_LABELS[pageType]}
-                            {required && <span className="text-danger ml-0.5">*</span>}
-                          </p>
-                          <p className="text-xs text-fg-muted">
-                            {hasContent ? 'Content saved' : 'Not configured'}
-                          </p>
+              {pageSections.map((section) => (
+                <div key={section.id} className="border-b border-border last:border-b-0">
+                  <div className="px-5 py-3 bg-bg-subtle/60 border-b border-border">
+                    <p className="text-xs font-semibold text-fg">{section.title}</p>
+                    <p className="text-[11px] text-fg-muted mt-0.5">{section.subtitle}</p>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {section.types.map((pageType) => {
+                      const page = campaign.pages.find((p) => p.pageType === pageType)
+                      const required = REQUIRED_PAGE_TYPES.includes(pageType)
+                      const hasContent = page?.hasContent
+                      return (
+                        <div
+                          key={pageType}
+                          className="flex items-center justify-between px-5 py-3.5 gap-4"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {hasContent ? (
+                              <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                            ) : (
+                              <Circle className="w-4 h-4 text-fg-subtle shrink-0" />
+                            )}
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium text-fg">
+                                {PAGE_TYPE_LABELS[pageType]}
+                                {required && <span className="text-danger ml-0.5">*</span>}
+                              </p>
+                              <p className="text-xs text-fg-muted">
+                                {hasContent ? 'Content saved' : 'Default template — click Edit to customize'}
+                              </p>
+                            </div>
+                          </div>
+                          <Link to={editBase(pageType)}>
+                            <Button variant="outline" size="sm">
+                              <Pencil className="w-3.5 h-3.5" />
+                              Edit
+                            </Button>
+                          </Link>
                         </div>
-                      </div>
-                      <Link to={editBase(pageType)}>
-                        <Button variant="outline" size="sm">
-                          <Pencil className="w-3.5 h-3.5" />
-                          Edit
-                        </Button>
-                      </Link>
-                    </div>
-                  )
-                })}
-              </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              ))}
             </div>
 
             {/* Recent activity */}

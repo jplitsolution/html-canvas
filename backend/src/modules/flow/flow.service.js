@@ -335,6 +335,58 @@ export const createFlowService = () => {
     );
   };
 
+  const resolveBlockedPage = (flowConfig) =>
+    flowEngineService.nextPage(flowConfig, CampaignPageType.HOME, 'BLOCKED') ||
+    flowEngineService.nextPage(
+      flowConfig,
+      CampaignPageType.CONFIRM,
+      'BLOCKED',
+    ) ||
+    CampaignPageType.BLOCKED;
+
+  const checkBlocklist = async (apiConfig, partnerCtx) =>
+    partnerApiService
+      .checkBlocked(apiConfig, partnerCtx)
+      .catch(() => ({ blocked: false }));
+
+  const buildBlockedPageResponse = async (
+    campaign,
+    flowConfig,
+    visitId,
+    phone,
+    serviceId,
+    reason,
+    info,
+  ) => {
+    const nextPage = resolveBlockedPage(flowConfig);
+    const variables = {
+      phone,
+      country: campaign.country,
+      operator: campaign.operator,
+      service_id: serviceId,
+      plan: '',
+    };
+
+    await analyticsService.updateVisit(
+      visitId,
+      VisitStatus.BLOCKED,
+      nextPage,
+      phone,
+    );
+    await analyticsService.logEvent(visitId, VisitEventType.BLOCKED, {
+      reason,
+      info,
+    });
+
+    return buildPageResponse(
+      campaign,
+      nextPage,
+      variables,
+      visitId,
+      'BLOCKED',
+    );
+  };
+
   const maybeSkipToThankYouIfSubscribed = async (
     flowConfig,
     apiConfig,
@@ -463,6 +515,8 @@ export const createFlowService = () => {
     let resolvedPageType = String(input.pageType || CampaignPageType.HOME).toUpperCase();
     /** @type {{ shouldSkipSubscribe?: boolean, isActive?: boolean, status?: string } | null} */
     let lastSubCheck = null;
+    /** @type {{ blocked?: boolean, reason?: string } | null} */
+    let lastBlockCheck = null;
 
     const guardMode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
@@ -590,9 +644,9 @@ export const createFlowService = () => {
 
       const guardModeForSub =
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
-      // Null/CG flow: no checksub — just store visit + redirect
+      // Null/CG flow: no checksub/blocklist — just store visit + redirect
       if (guardModeForSub !== 'NONE' && phone) {
-        const sub = await partnerApiService.checkSubscription(apiConfig, {
+        const partnerCtx = {
           phone,
           serviceId,
           country: campaign.country,
@@ -601,8 +655,21 @@ export const createFlowService = () => {
           campaignId: campaign.id,
           clickId: ourClickId,
           rcid: networkRcid,
-        });
+        };
+        const [sub, blockResult] = await Promise.all([
+          partnerApiService.checkSubscription(apiConfig, partnerCtx),
+          checkBlocklist(apiConfig, partnerCtx),
+        ]);
         lastSubCheck = sub;
+        lastBlockCheck = blockResult;
+
+        if (blockResult?.blocked) {
+          await analyticsService.logEvent(visitId, VisitEventType.BLOCKED, {
+            info: 'blocklist on HOME load — keeping HOME (SUBSCRIBE routes to BLOCKED)',
+            reason: blockResult.reason,
+            phase: 'home_load',
+          });
+        }
         // Not "new" → historically jumped to THANKYOU / LOW_BALANCE / INPROGRESS.
         // Landing on HOME must stay on HOME so Priority Chain / CTA can run on click.
         if (sub?.shouldSkipSubscribe) {
@@ -664,6 +731,29 @@ export const createFlowService = () => {
       }
     } else if (visitId && phone) {
       await analyticsService.setVisitPhone(visitId, phone);
+      if (
+        guardMode !== 'NONE' &&
+        resolvedPageType === CampaignPageType.HOME
+      ) {
+        const revisitAttr = await loadVisitAttribution(visitId, input);
+        const blockResult = await checkBlocklist(apiConfig, {
+          phone,
+          visitId,
+          campaignId: campaign.id,
+          clickId: revisitAttr.clickId,
+          rcid: revisitAttr.rcid,
+          country: campaign.country,
+          operator: campaign.operator,
+        });
+        lastBlockCheck = blockResult;
+        if (blockResult?.blocked) {
+          await analyticsService.logEvent(visitId, VisitEventType.BLOCKED, {
+            info: 'blocklist on HOME load — keeping HOME (SUBSCRIBE routes to BLOCKED)',
+            reason: blockResult.reason,
+            phase: 'home_load',
+          });
+        }
+      }
     }
 
     const cgRedirect = await maybeNullFlowCgRedirect(campaign, visitId, input);
@@ -739,6 +829,8 @@ export const createFlowService = () => {
       successRedirectUrl: campaign.successRedirectUrl || null,
       successRedirect,
       subscriptionStatus: lastSubCheck?.status || null,
+      blocked: Boolean(lastBlockCheck?.blocked),
+      blockReason: lastBlockCheck?.reason || null,
       subscriptionUrl: buildSubscriptionUrl(
         campaign,
         normalizePack(input.pack),
@@ -853,6 +945,30 @@ export const createFlowService = () => {
         );
         nextPage = routed.nextPage;
         resolvedPhone = routed.resolvedPhone || resolvedPhone;
+      }
+
+      if (mode !== 'NONE' && resolvedPhone) {
+        const subscribeAttr = await loadVisitAttribution(input.visitId, input);
+        const blockResult = await checkBlocklist(apiConfig, {
+          phone: resolvedPhone,
+          visitId: input.visitId,
+          campaignId: campaign.id,
+          clickId: subscribeAttr.clickId || input.clickId,
+          rcid: subscribeAttr.rcid || input.rcid,
+          country: campaign.country,
+          operator: campaign.operator,
+        });
+        if (blockResult?.blocked) {
+          return buildBlockedPageResponse(
+            campaign,
+            flowConfig,
+            input.visitId,
+            resolvedPhone,
+            serviceId,
+            blockResult.reason,
+            'Blocked on SUBSCRIBE — skip CONFIRM',
+          );
+        }
       }
 
       const skipResult = await maybeSkipToThankYouIfSubscribed(
@@ -988,41 +1104,19 @@ export const createFlowService = () => {
         affiliateId: null,
       });
 
-      const blockResult = await partnerApiService.checkBlocked(
-        apiConfig,
-        partnerCtx,
-      );
+      const blockResult = await checkBlocklist(apiConfig, partnerCtx);
 
       const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
 
       if (blockResult.blocked) {
-        const nextPage = flowEngineService.nextPage(
-          flowConfig,
-          CampaignPageType.CONFIRM,
-          'BLOCKED',
-        ) || CampaignPageType.BLOCKED;
-
-        await analyticsService.updateVisit(
-          input.visitId,
-          VisitStatus.BLOCKED,
-          nextPage,
-          phone,
-        );
-        await analyticsService.logEvent(
-          input.visitId,
-          VisitEventType.BLOCKED,
-          {
-            reason: blockResult.reason,
-          },
-        );
-        return buildPageResponse(
+        return buildBlockedPageResponse(
           campaign,
-          nextPage,
-          confirmVariables,
+          flowConfig,
           input.visitId,
-          'BLOCKED',
-          selectedPack,
-          subscriptionUrl,
+          phone,
+          serviceId,
+          blockResult.reason,
+          'Blocked on CONFIRM — skip subscribe',
         );
       }
 
@@ -1156,6 +1250,29 @@ export const createFlowService = () => {
       }
 
       const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
+
+      const otpAttr = await loadVisitAttribution(input.visitId, input);
+      const blockResult = await checkBlocklist(apiConfig, {
+        phone,
+        visitId: input.visitId,
+        campaignId: campaign.id,
+        clickId: otpAttr.clickId || input.clickId,
+        rcid: otpAttr.rcid || input.rcid,
+        country: campaign.country,
+        operator: campaign.operator,
+      });
+      if (blockResult?.blocked) {
+        return buildBlockedPageResponse(
+          campaign,
+          flowConfig,
+          input.visitId,
+          phone,
+          serviceId,
+          blockResult.reason,
+          'Blocked after OTP — skip CONFIRM',
+        );
+      }
+
       let nextPage =
         flowEngineService.nextPage(
           flowConfig,

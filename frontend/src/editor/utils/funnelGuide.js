@@ -134,6 +134,20 @@ export const FUNNEL_PAGE_GUIDES = {
     canChange: ['Everything on this page'],
     required: [],
   },
+  INPROGRESS: {
+    title: 'In progress page',
+    summary:
+      'Shown when subscription is pending (e.g. checksub returns pending). Informational only.',
+    canChange: ['Everything on this page', 'Text, images, and styling'],
+    required: [],
+  },
+  LOW_BALANCE: {
+    title: 'Low balance page',
+    summary:
+      'Shown for parking / grace / insufficient balance (e.g. checksub returns parking). Informational only.',
+    canChange: ['Everything on this page', 'Recharge instructions and branding'],
+    required: [],
+  },
   BLOCKED: {
     title: 'Blocked page',
     summary: 'Shown when user is not allowed to subscribe. Informational only.',

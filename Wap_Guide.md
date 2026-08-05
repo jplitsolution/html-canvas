@@ -1,187 +1,285 @@
-# WAP Manager & Dynamic Funnel Engine: End-to-End Client & Technical Manual
+# WAP Manager (HTML Canvas) — Client Guide
 
-> [!IMPORTANT]
-> This document serves as an exhaustive, step-by-step master reference for creating, configuring, customizing, executing, and auditing campaigns on the unified **WAP Manager (html-canvas)** platform. It details every architectural decision, backend mechanism, frontend editor binding, and logging system so you can confidently present and defend the platform to any client or team member.
+**What this platform is:** a single visual system to design mobile subscription landing pages, connect partner billing APIs, route users by phone / OTP / header enrichment, and run **Priority Chain** checks (status → page) — without deploying a new app for every campaign.
+
+Use this document when explaining the product to clients, ops, or partners.
 
 ---
 
-## 1. Core Architecture & Philosophy: Why a Single Engine?
+## 1. What can you do with this project?
 
-### The Old Model (Fragmented Setup)
-In legacy setups (such as [safwap-server-backup](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/safwap-server-backup)), every new campaign or telecom operator required:
-- Deploying a separate application codebase or hosting static HTML files.
-- Hardcoding operator callback URLs (`DigitalTraffic.sp_CPACallBack`) directly in backend code.
-- Fragmented logging in flat `.log` files on disk.
+| Capability | What the user / admin gets |
+| :--- | :--- |
+| **Campaigns** | Create unlimited campaigns by **Country + Operator + Service ID** on one engine |
+| **Visual page designer** | Design landing & funnel pages in a drag-and-drop canvas (GrapesJS) — HTML/CSS without coding |
+| **Button / hotspot actions** | Point any button or invisible hotspot to: signup flow, another page, external URL, scroll, or **Priority Chain** |
+| **Verification modes** | Header Enrichment (1-click), OTP-only, hybrid (BOTH), or direct CG redirect |
+| **Partner APIs** | Configure blocklist, already-subscribed check, charge/subscribe, MSISDN resolve, custom headers |
+| **Priority Chain** | On click: call partner status URL → match response fields → go to the right page (or website) |
+| **Live subscriber link** | Share one public URL; engine loads the right campaign + pages dynamically |
+| **Analytics & logs** | Visits, conversions, OTP stats, API call logs, and per-session journey timeline |
 
-### The New Unified Model (`html-canvas`)
-The modern platform uses a **Single Universal Multi-Tenant Runtime Engine**:
-- **Zero-Code Deployment**: Unlimited campaigns run on one central engine ([SubscriptionPage.jsx](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/pages/SubscriptionPage.jsx) + [flow.service.js](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/flow/flow.service.js)).
-- **Dynamic Routing**: When a subscriber opens a link like `/subscription?country=India&operator=Jio&campid=101`, the system dynamically resolves the campaign, loads its custom GrapesJS HTML/CSS pages, fires configured partner APIs, and tracks analytics.
+**End consumer experience:** open the campaign link → see branded pages → verify phone (header or OTP) → confirm pack → thank-you / blocked / error / custom pages as configured.
+
+**Admin experience:** create campaign → design pages → wire buttons → set APIs / Priority rules → publish → monitor logs & analytics.
+
+---
+
+## 2. How a campaign works (simple flow)
 
 ```mermaid
-graph TD
-    UserLink["Public Consumer Link (/subscription?country=..&operator=..&campid=..)"] --> Gateway["Fastify Flow Gateway (/flow/page)"]
-    Gateway --> RedisCache["Redis Cache (Flow Config / API Config)"]
-    RedisCache --> DB["Database (campaigns, campaign_pages, api_configs)"]
-    DB --> Runtime["Shadow DOM Runtime Container (SubscriptionPage.jsx)"]
-    Runtime --> Action["User Clicks Action (SUBSCRIBE / CONFIRM)"]
-    Action --> Transition["Flow Transition Gateway (/flow/transition)"]
-    Transition --> PartnerAPIs["Partner APIs (Blocklist -> Check Sub -> Charge/Subscribe)"]
-    PartnerAPIs --> Telemetry["Telemetry Log (MySQL visits + Elasticsearch Event Logs)"]
+flowchart LR
+  A[Ad / Affiliate Link] --> B[Public /subscription URL]
+  B --> C[Load campaign pages]
+  C --> D[User clicks CTA]
+  D --> E{Button action?}
+  E -->|Normal signup| F[HE / OTP / Confirm]
+  E -->|Priority Chain| G[Status API + rules]
+  G --> H[Correct page or external URL]
+  F --> H
+  H --> I[Logs + Analytics]
 ```
+
+**Typical public link shape:**
+
+```text
+/subscription?country=<Country>&operator=<Operator>&campid=<CampaignId>
+```
+
+Optional test params (e.g. `msisdn=`) can be added for QA.
 
 ---
 
-## 2. Step 1: Campaign Creation & Provisioning
+## 3. Campaign setup (admin)
 
-### 2.1 Creating a Campaign
-1. Navigate to **Campaigns Dashboard** (`/campaigns`) in the Admin Panel.
+### 3.1 Create a campaign
+
+1. Open **Campaigns** in the admin panel.
 2. Click **Create Campaign**.
-3. Fill in the primary metadata:
-   - **Name**: Campaign title (e.g. *Jio Games India*).
-   - **Country**: Target country (e.g. *India*, *UAE*, *Saudi Arabia*).
-   - **Operator**: Target telecom operator (e.g. *Jio*, *Etisalat*, *STC*).
-   - **Service ID**: Billing identifier assigned by the carrier/partner.
-   - **Verification Mode**: Choose from 4 engine modes (`HEADER_INJECTION`, `OTP_ONLY`, `BOTH`, `NONE`).
+3. Fill:
+   - **Name** — e.g. *Jio Games India*
+   - **Country** / **Operator** — routing & audit isolation
+   - **Service ID** — partner / carrier billing id
+   - **Verification mode** — see section 4
 
-> [!NOTE]
-> **Reason for Operator/Country Binding**: Telecom charging gateways require specific headers and endpoints tailored per operator/market. Binding `country` and `operator` guarantees clean URL routing and audit isolation.
+### 3.2 Design pages (canvas)
+
+Each campaign can include these page types:
+
+| Page | Purpose |
+| :--- | :--- |
+| **HOME** | Main offer / CTA landing |
+| **OTP** | Enter mobile + OTP when header is missing |
+| **CONFIRM** | Pack choice & final confirm |
+| **THANKYOU** | Success / already subscribed |
+| **BLOCKED** | DND / not eligible |
+| **ERROR** | Technical / config failure |
+| **LOW_BALANCE** | Optional — e.g. parking / insufficient balance |
+| **INPROGRESS** | Optional — pending / in-progress status |
+
+Required for a full funnel: **HOME, OTP, CONFIRM, THANKYOU**. Extra pages are used heavily with **Priority Chain** rules.
+
+### 3.3 Partner API configuration
+
+Per campaign (API Configuration):
+
+| API | Role |
+| :--- | :--- |
+| **Blocklist** | Skip billing if number is barred |
+| **Subscription check** | Detect already active → thank-you / skip recharge |
+| **Subscribe / charge** | Trigger partner billing |
+| **MSISDN resolve** | Lookup number when not in header |
+| **Headers JSON** | Auth tokens for partner calls |
+
+**URL placeholders** (filled automatically at runtime):
+
+- `{{phone}}` / `{{msisdn}}`
+- `{{serviceId}}`, `{{country}}`, `{{operator}}`
+- `{{planId}}` / `{{pack}}`, `{{subServiceId}}`
 
 ---
 
-## 3. Step 2: Understanding Verification Modes & Flow Graph
+## 4. Verification modes
 
-The engine's decision tree is powered by [flow-engine.service.js](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/flow/flow-engine.service.js#L3-L45):
-
-| Verification Mode | Behavior & Entry Sequence | Primary Use Case |
+| Mode | Behavior | Best for |
 | :--- | :--- | :--- |
-| **`HEADER_INJECTION`** | Checks header for MSISDN (`X-MSISDN`). If found $\rightarrow$ proceeds directly to `CONFIRM` or `THANKYOU`. If missing $\rightarrow$ routes to `ERROR` page. | Direct 1-Click WAP / Mobile Data traffic where telco injects numbers. |
-| **`OTP_ONLY`** | Skips auto header checks $\rightarrow$ requires user to enter phone number $\rightarrow$ sends SMS OTP $\rightarrow$ verifies code $\rightarrow$ proceeds to `CONFIRM`. | Wi-Fi traffic, Web traffic, or markets without Header Enrichment gateways. |
-| **`BOTH` (Recommended)** | Hybrid: Tries Header Enrichment first. If MSISDN resolved $\rightarrow$ skips to `CONFIRM`. If MSISDN missing $\rightarrow$ gracefully falls back to `OTP` page. | Universal campaigns handling both 4G/5G Cellular Data and Wi-Fi users seamlessly. |
-| **`NONE` (Direct Redirect)** | Direct 1-Click Null-Flow: Immediately appends `click_id` / attribution parameters and redirects to an external CG URL (`cgRedirectUrl`). | Pure affiliate routing or external carrier landing gateways. |
+| **HEADER_INJECTION** | Read MSISDN from network header → confirm / thank-you; missing → error | Pure WAP / carrier data |
+| **OTP_ONLY** | Always ask phone + OTP | Wi‑Fi / web traffic |
+| **BOTH** (recommended) | Try header first; if missing → OTP | Mixed cellular + Wi‑Fi |
+| **NONE** | Append click params and redirect to external CG URL | Affiliate / external gateway only |
 
 ---
 
-## 4. Step 3: Partner API Configuration (`api_configs`)
+## 5. Button & hotspot actions (editor)
 
-Configured per campaign in the **API Configuration Tab** ([backend/src/modules/api-config/entities/api-config.entity.js](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/api-config/entities/api-config.entity.js#L19-L61)):
+Select any **button** or **hotspot** in the canvas. In the property panel, **When clicked**:
 
-### 4.1 Endpoints Setup
-1. **Blocklist Check API (`blocklistApi`)**: Checks if phone number is DND/Blacklisted before billing.
-2. **Active Subscription API (`subscriptionApi`)**: Checks if user is already an active subscriber. If active, prevents re-charging and routes directly to `THANKYOU` page with status `ALREADY_SUBSCRIBED`.
-3. **Charge / Subscribe API (`subscribeApi`)**: Triggers actual billing setup on partner gateway.
-4. **Header Enrichment Lookup (`resolveMsisdnUrl`)**: External MSISDN lookup endpoint for non-header network gateways.
-5. **Headers JSON (`headersJson`)**: Custom authentication headers (e.g. `{"Authorization": "Bearer TOKEN"}`) passed to partner endpoints.
+| Option | What happens |
+| :--- | :--- |
+| **Continue signup flow** | Normal HE / OTP / confirm path (`SUBSCRIBE`) |
+| **Scroll to a section** | Same-page smooth scroll |
+| **Go to another page** | Jump to OTP, CONFIRM, THANKYOU, etc. |
+| **Open a website** | External redirect |
+| **Try checks in order** | **Priority Chain** (see next section) |
 
-### 4.2 Dynamic URL Template Placeholders
-You can use standard variable placeholders in partner URLs. The engine ([partner-api.service.js:L28-L40](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/flow/partner-api.service.js#L28-L40)) automatically interpolates them:
-
-- `{{phone}}` or `{{msisdn}}` $\rightarrow$ Subscriber mobile number.
-- `{{serviceId}}` $\rightarrow$ Campaign service identifier.
-- `{{country}}` / `{{operator}}` $\rightarrow$ Country and carrier names.
-- `{{planId}}` / `{{pack}}` $\rightarrow$ Selected plan (`daily`, `weekly`, `monthly`).
-- `{{subServiceId}}` $\rightarrow$ Auto-mapped pack code (`HDaily`, `HWeekly`, `HMonthly`).
+No manual HTML coding is required — the editor writes the attributes for you.
 
 ---
 
-## 5. Step 4: Visual Page Builder (GrapesJS Canvas)
+## 6. Priority Chain — full client guide
 
-### 5.1 The 6 Standard Campaign Pages
-Each campaign consists of standard pages managed in the Canvas Editor ([TemplateEditor.tsx](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/editor/TemplateEditor.tsx)):
+### 6.1 What is Priority Chain?
 
-1. **`HOME` (Landing Page)**: Main promotional offer, hero image, subscription trigger button.
-2. **`OTP` (Verification Page)**: Phone input, OTP code input, "Get OTP" & "Verify & Continue" buttons.
-3. **`CONFIRM` (Billing Confirmation Page)**: Pack picker (Daily/Weekly/Monthly) and final confirm button.
-4. **`THANKYOU` (Success Page)**: Confirmation message, content access link.
-5. **`BLOCKED` (Restricted User Page)**: Displayed when partner API returns DND/Blocked status.
-6. **`ERROR` (Fallback Page)**: Displayed when technical errors or invalid parameters occur.
+**Priority Chain** (“Try checks in order”) lets one button run **ordered steps**. Typical use:
+
+1. Call a partner **status / check-subscription** URL.
+2. Read fields from the JSON response (e.g. `currentStatus = active`).
+3. Send the user to the matching **campaign page** or an **external website**.
+4. If nothing matches, either try the next step, open a fallback page, or open a website.
+
+**Why clients use it**
+
+- Already subscribed → Thank you (no double charge)
+- Low balance / parking → Low balance page
+- Pending → In progress page
+- New user → Confirm / OTP to continue signup
+- Custom eligibility, fraud, or CRM checks before billing
+
+Steps run **top → bottom**. **First matching rule wins**; later steps are skipped once a page/redirect happens.
+
+### 6.2 How to configure (editor steps)
+
+1. Open the campaign in the **Canvas editor**.
+2. Select the CTA button (or draw a hotspot).
+3. **When clicked** → choose **Try checks in order**.
+4. Open the Priority Chain modal (**Try checks in order**).
+5. Add / reorder steps (↑ ↓). Save is applied on the button as you edit.
+
+### 6.3 Step types
+
+| Step type | Meaning |
+| :--- | :--- |
+| **Check a status URL** | HTTP call to partner API; evaluate **rules** |
+| **Go to another page** | Navigate to a campaign page |
+| **Open a website** | Full browser redirect |
+| **Scroll to a section** | Same-page scroll |
+| **Continue signup flow** | Hand off to normal verification flow |
+
+### 6.4 Status URL + rules (most important part)
+
+For a **Check a status URL** step:
+
+1. Paste the partner URL, e.g.  
+   `https://partner.example.com/sub/checksub?msisdn={{msisdn}}&serviceId=WELLNESS`
+2. Under **Where to go for each status**, add rules:
+
+| Response field | Equals | Then go to |
+| :--- | :--- | :--- |
+| `currentStatus` | `active` | Thank you page |
+| `currentStatus` | `parking` | Low balance page |
+| `currentStatus` | `pending` | In progress page |
+| `currentStatus` | `new` | Confirm page |
+
+- Field names can be top-level or nested under `data` (e.g. `data.currentStatus` / `subscriptionStatus`).
+- Snake_case / camelCase variants are handled where possible.
+- Destination can be a **campaign page** or a **website URL**.
+
+**If nothing matches**
+
+- Try the next step, **or**
+- Go to a page (e.g. Confirm / Error), **or**
+- Open a website
+
+**If the check fails to load** (network / HTTP error)
+
+- Same choices: continue, page, or website (often **Error**).
+
+### 6.5 Example chain (client-ready)
+
+**Button on HOME:** Subscribe
+
+| Priority | Type | Config |
+| :--- | :--- | :--- |
+| **1** | Status URL | `.../checksub?msisdn={{msisdn}}&serviceId=...` with rules above |
+| **2** | Go to page | **OTP** (only reached if Priority 1 continues / no phone yet) |
+
+**Runtime behavior**
+
+- Phone known + `active` → **THANKYOU** (stop).
+- Phone known + `parking` → **LOW_BALANCE** (stop).
+- Phone known + `new` / no match → next step or configured miss page (e.g. **CONFIRM**).
+- Phone **not** available yet and URL needs `{{msisdn}}` → that API step is **skipped**; chain continues (e.g. to OTP).
+- Absolute `https://` partner URLs are called via the **platform proxy** (avoids browser CORS); each call can be logged as a **priority** API call for audit.
+
+### 6.6 Priority Chain — FAQ
+
+**Q: Do I need a developer to change status → page mapping?**  
+No. Change rules in the editor modal.
+
+**Q: Can one status go to an external offer URL?**  
+Yes — set rule destination to **A website**.
+
+**Q: What if the partner returns an unexpected status?**  
+Use **If nothing matches** (continue / page / website).
+
+**Q: Will later priorities still run after a match?**  
+No. First match navigates and stops the chain.
+
+**Q: Where do I see what happened for a user?**  
+Session / API logs show **priority** checks (URL, status, which priority step).
 
 ---
 
-## 6. Step 5: Buttons, Hotspots & Priority Flow Chains
+## 7. Public runtime (what the end user sees)
 
-### 6.1 Visual Button & Hotspot Setup (No Manual Coding Needed!)
-When the client selects any button or draws a transparent hotspot overlay in the GrapesJS editor, the right-hand **Property Panel** ([PropertyPanel.jsx:L1088-L1138](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/editor/shell/PropertyPanel.jsx#L1088-L1138)) provides visual options:
-
-```html
-<!-- Automatically generated by Editor UI dropdown selection -->
-<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
-<button type="button" data-action="CONFIRM" class="flow-btn">Confirm Payment</button>
-```
-
-#### Action Dropdown Choices in Editor:
-- **"Continue verification flow (HE / OTP)"** $\rightarrow$ Binds `data-action="SUBSCRIBE"`.
-- **"Another page in this campaign"** $\rightarrow$ Direct page link (`OTP`, `CONFIRM`, etc.).
-- **"Another website (URL)"** $\rightarrow$ External URL redirect.
-- **"Another part of this page (Scroll)"** $\rightarrow$ Smooth scroll to section (`#anchor`).
-- **"Sequential Action Chain (Priority Flow)"** $\rightarrow$ Advanced multi-step priority chain.
+- Campaign HTML/CSS is rendered in an isolated **Shadow DOM** so template styles do not clash with the app shell.
+- Clicks on buttons/hotspots are intercepted — no full page reload for in-campaign navigation.
+- URL updates with `step=` (e.g. `CONFIRM`, `THANKYOU`) so the current funnel step is clear and shareable for debugging.
 
 ---
 
-### 6.2 Advanced Feature: Priority Action Chains (`data-action="CHAIN"`)
-For complex campaigns requiring preliminary API checks before advancing, the client can configure **Sequential Priority Chains** directly in the editor ([PropertyPanel.jsx:L453-L479](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/editor/shell/PropertyPanel.jsx#L453-L479)):
+## 8. Analytics, logs & timelines
 
-1. **Priority 1 (Webhook / API Check)**: Hits a custom validation URL (e.g. `https://client-partner.com/api/eligibility-check`).
-2. **Priority 2 (Page Transition)**: If Priority 1 succeeds, proceeds to `CONFIRM` or `OTP` page.
-
-> [!TIP]
-> **Why Priority Chains?** Allows clients to run custom fraud checks, balance checks, or external CRM logging before allowing the user to enter the billing stage.
-
----
-
-## 7. Step 6: Public Consumer Runtime & Shadow DOM Isolation
-
-### 7.1 Why Shadow DOM? ([SubscriptionPage.jsx:L89-L94](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/pages/SubscriptionPage.jsx#L89-L94))
-Public subscriber templates are mounted inside a **Shadow DOM Container** (`attachShadow({ mode: 'open' })`):
-
-* **Reason 1 (Style Isolation)**: Prevents global application styles from breaking custom client HTML/CSS templates, and vice versa.
-* **Reason 2 (Click Interception)**: Uses `composedPath()` event traversal to intercept click events on buttons/hotspots without requiring full page reloads.
-* **Reason 3 (Client-Side Navigation)**: Router navigation updates query parameters (`step=CONFIRM`) in the browser URL for instantaneous page rendering.
+| Area | What you get |
+| :--- | :--- |
+| **Campaign analytics** | Visits, plan views, subscribe success/fail, blocked, etc. |
+| **OTP analytics** | Delivery / resend / provider performance |
+| **Event & API logs** | Filter by visit id, MSISDN, click id, vendor / affiliate |
+| **Session timeline** | Ordered journey: visit → HE → blocklist → priority API → subscribe outcome |
 
 ---
 
-## 8. Step 7: Telemetry Analytics, Logs & Session Timelines
+## 9. Client Q&A
 
-### 8.1 Campaign Analytics Dashboard ([analytics.service.js](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/analytics/analytics.service.js))
-Tracks metrics per campaign:
-- **Total Impressions & Unique Visits**.
-- **Conversion Metrics**: `VISIT`, `BLOCKED`, `PLAN_VIEW`, `CONFIRM_VIEW`, `SUBSCRIBE_CLICK`, `SUBSCRIBE_SUCCESS`, `SUBSCRIBE_FAILED`.
-- **OTP Analytics Dashboard**: Hourly/Daily OTP delivery rates, resend attempt rates, and provider performance comparison.
+**Can numbers be international (UAE, KSA, etc.)?**  
+Yes. Non-digits are stripped; no hard-coded 10-digit-only rule. Partner APIs receive the sanitized number.
 
-### 8.2 Campaign Event Logs & Elasticsearch ([search.service.js](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/backend/src/modules/search/search.service.js))
-Searchable real-time logs page (`/logs`) allows filtering by:
-- `Visit ID`, `MSISDN`, `Click ID`, `Vendor ID`, `Affiliate ID`.
+**Wi‑Fi user, no header?**  
+In **BOTH** mode the user is sent to **OTP** automatically.
 
-### 8.3 Session Timeline Modal ([SessionTimelineModal.jsx](file:///Users/abhinavvishwakarma/work/JPL/wapManager/html-canvas/frontend/src/components/dashboard/SessionTimelineModal.jsx))
-Clicking on any Visit ID opens a visual **User Journey Timeline**:
-1. `VISIT` $\rightarrow$ User landed on HOME page (Timestamp, IP, User-Agent).
-2. `HE_RESOLVE` $\rightarrow$ Header Enrichment MSISDN detected.
-3. `BLOCKLIST_CHECK` $\rightarrow$ Passed DND filter.
-4. `SUBSCRIBE_SUCCESS` $\rightarrow$ Billed successfully on partner gateway.
+**Do we write `data-action` by hand?**  
+No — use the property panel dropdowns / Priority modal.
+
+**Already subscribed — double charge?**  
+Subscription check (campaign API and/or Priority status rules) can route to **THANKYOU** / `ALREADY_SUBSCRIBED` and skip charging.
+
+**One codebase for many operators?**  
+Yes. One multi-tenant engine; each campaign is data + canvas pages + API config.
 
 ---
 
-## 9. Frequently Asked Questions (Client Q&A Cheat Sheet)
+## 10. Go-live checklist
 
-#### Q1: "Can phone numbers come in any international format?"
-> **Answer**: Yes. The system imposes no hardcoded 10-digit or country-specific regex restrictions. Numbers from any country (UAE `971...`, KSA `966...`, Europe, Africa) are sanitized of non-numeric characters and passed directly to partner billing APIs.
-
-#### Q2: "What if Header Enrichment fails when a user is on Wi-Fi?"
-> **Answer**: Under `BOTH` mode, if Header Enrichment fails or returns empty, the engine automatically falls back to the `OTP` page so the user can enter their mobile number manually.
-
-#### Q3: "Does the client need to write HTML attributes manually for buttons?"
-> **Answer**: No. In the GrapesJS visual editor, selecting any button or hotspot opens the Property Panel dropdown where the client selects the desired action visually.
-
-#### Q4: "How does the system prevent double-charging an already subscribed user?"
-> **Answer**: At the `CONFIRM` transition step, `partnerApiService.checkSubscription()` is invoked. If the partner API returns `active`, the engine skips billing and routes the user to `THANKYOU` with status `ALREADY_SUBSCRIBED`.
+- [ ] Create campaign (country, operator, service id, verification mode — prefer **BOTH**)
+- [ ] Configure partner APIs (blocklist, check-sub, subscribe, headers)
+- [ ] Design HOME / OTP / CONFIRM / THANKYOU (+ LOW_BALANCE / INPROGRESS if needed)
+- [ ] Wire CTA: normal flow **or** Priority Chain with status rules
+- [ ] Test public link with cellular + Wi‑Fi (and with/without `msisdn` where allowed)
+- [ ] Confirm Priority API rows appear in logs when the CTA is clicked
+- [ ] Review analytics after a small live sample
 
 ---
 
-## 10. Summary Checklist for Creating a New Campaign
+## 11. One-line summary for the client
 
-- [x] **Create Campaign**: Set Name, Country, Operator, Service ID, and Verification Mode (`BOTH`).
-- [x] **Configure Partner APIs**: Fill in `blocklistApi`, `subscriptionApi`, `subscribeApi`, and `headersJson` in API Configuration Tab.
-- [x] **Design Pages in Canvas**: Customize `HOME`, `OTP`, `CONFIRM`, `THANKYOU` templates in GrapesJS Editor.
-- [x] **Verify Button Actions**: Ensure buttons are linked to `SUBSCRIBE` / `CONFIRM` via Property Panel dropdown.
-- [x] **Test Flow Link**: Test entry link `http://localhost:5173/subscription?country=<Country>&operator=<Operator>&campid=<ID>&msisdn=<TestNumber>`.
-- [x] **Audit Telemetry**: Verify visit footprints and logs on `/logs` and `/analytics` dashboards.
+**HTML Canvas (WAP Manager)** lets you design branded subscription funnels once, attach operator APIs, and use **Priority Chain** so a single button can check partner status and send each user to the right page — all without shipping a new website per campaign.

@@ -24,6 +24,9 @@ export const PAGE_TYPE_LABELS = {
 
 export const REQUIRED_PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU']
 
+/** Status / outcome pages — optional for go-live but always editable per campaign. */
+export const OPTIONAL_PAGE_TYPES = ['INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
+
 function mapCampaign(campaign) {
   if (!campaign) return null
   const pages = (campaign.pages || []).map((page) => ({
