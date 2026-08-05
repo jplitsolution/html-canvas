@@ -113,7 +113,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .otp-label { display: block; font-size: 12px; font-weight: 600; color: #4b5563; margin-bottom: 6px; }
 .otp-input { width: 100%; border: 1px solid #d1d5db; border-radius: 8px; padding: 11px 14px; font-size: 14px; outline: none; transition: border-color 0.2s; }
 .otp-input:focus { border-color: #2563eb; }
-.flow-btn { width: 100%; border: none; cursor: pointer; padding: 13px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; color: #fff; background: #2563eb; transition: background 0.2s; margin-bottom: 12px; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: none; cursor: pointer; padding: 13px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; color: #fff; background: #2563eb; transition: background 0.2s; margin-bottom: 12px; }
 .flow-btn:hover { background: #1d4ed8; }
 .flow-btn:active { transform: scale(0.99); }
 .otp-status { min-height: 16px; color: #4b5563; font-size: 12px; margin-top: 4px; margin-bottom: 8px; text-align: left; }
@@ -163,7 +163,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .otp-label { display: block; font-size: 11px; font-weight: 800; color: #111827; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; text-align: left; }
 .otp-input { width: 100%; border: 3px solid #111827; background: #ffffff; color: #111827; border-radius: 0px; padding: 14px 16px; font-size: 15px; outline: none; margin-bottom: 16px; font-weight: 700; text-align: center; box-shadow: 4px 4px 0px rgba(0,0,0,0.05); }
 .otp-input:focus { background: #fef08a; outline: none; box-shadow: 4px 4px 0px #111827; }
-.flow-btn { width: 100%; border: 3px solid #111827; cursor: pointer; padding: 16px 24px; border-radius: 0px; font-size: 15.5px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0px #111827; transition: transform 0.1s; margin-bottom: 16px; text-transform: uppercase; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: 3px solid #111827; cursor: pointer; padding: 16px 24px; border-radius: 0px; font-size: 15.5px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0px #111827; transition: transform 0.1s; margin-bottom: 16px; text-transform: uppercase; }
 .flow-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #111827; }
 .otp-error { min-height: 18px; color: #dc2626; font-size: 12.5px; margin-bottom: 8px; font-weight: 800; text-align: left; text-transform: uppercase; }
 .otp-status { min-height: 18px; color: #16a34a; font-size: 12px; margin-bottom: 10px; font-weight: 800; text-align: left; }
@@ -209,7 +209,7 @@ body { font-family: Inter, system-ui, sans-serif; background: linear-gradient(13
 .otp-label { display: block; font-size: 11px; font-weight: 700; color: #a78bfa; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; text-align: left; }
 .otp-input { width: 100%; border: 1px solid rgba(255, 255, 255, 0.15); background: rgba(255, 255, 255, 0.03); color: #fff; border-radius: 16px; padding: 14px 16px; font-size: 15px; outline: none; margin-bottom: 16px; font-weight: 600; text-align: center; }
 .otp-input:focus { border-color: #c084fc; }
-.flow-btn { width: 100%; border: none; cursor: pointer; padding: 16px 24px; border-radius: 16px; font-size: 15.5px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ec4899, #8b5cf6); box-shadow: 0 8px 20px rgba(236, 72, 153, 0.3); transition: all 0.2s; margin-bottom: 16px; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: none; cursor: pointer; padding: 16px 24px; border-radius: 16px; font-size: 15.5px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ec4899, #8b5cf6); box-shadow: 0 8px 20px rgba(236, 72, 153, 0.3); transition: all 0.2s; margin-bottom: 16px; }
 .flow-btn:hover { opacity: 0.95; }
 .otp-error { min-height: 18px; color: #f87171; font-size: 12.5px; margin-bottom: 8px; font-weight: 600; text-align: left; }
 .otp-status { min-height: 18px; color: #38bdf8; font-size: 12px; margin-bottom: 10px; font-weight: 600; text-align: left; }
@@ -255,7 +255,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .otp-label { display: block; font-size: 10px; font-weight: 700; color: #d4af37; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; text-align: left; }
 .otp-input { width: 100%; border: 1px solid #3f3f46; background: #0f0f11; color: #ffffff; border-radius: 6px; padding: 14px 16px; font-size: 15px; outline: none; margin-bottom: 16px; font-weight: 600; text-align: center; }
 .otp-input:focus { border-color: #d4af37; }
-.flow-btn { width: 100%; border: 1px solid #d4af37; cursor: pointer; padding: 16px 24px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; transition: all 0.2s; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: 1px solid #d4af37; cursor: pointer; padding: 16px 24px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; transition: all 0.2s; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.05em; }
 .flow-btn:hover { background: transparent; color: #d4af37; }
 .otp-error { min-height: 18px; color: #f87171; font-size: 12.5px; margin-bottom: 8px; font-weight: 600; text-align: left; }
 .otp-status { min-height: 18px; color: #a1a1aa; font-size: 12px; margin-bottom: 10px; font-weight: 600; text-align: left; }
@@ -387,7 +387,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .flow-pack-option.flow-pack-selected { border-color: #4f46e5 !important; background: #f5f3ff !important; }
 .flow-pack-name { display: block; font-size: 14px; font-weight: 700; color: #0f172a; }
 .flow-pack-desc { display: block; font-size: 11px; color: #64748b; margin-top: 1px; }
-.flow-btn { width: 100%; border: none; cursor: pointer; padding: 14px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; color: #fff; background: #4f46e5; transition: background 0.2s; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: none; cursor: pointer; padding: 14px 20px; border-radius: 8px; font-size: 15px; font-weight: 600; color: #fff; background: #4f46e5; transition: background 0.2s; }
 .flow-btn:hover { background: #4338ca; }
 .flow-footnote { font-size: 11px; color: #94a3b8; margin-top: 14px; line-height: 1.5; }
 `
@@ -450,7 +450,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .flow-pack-option.flow-pack-selected { background: #fef08a !important; }
 .flow-pack-name { display: block; font-size: 14px; font-weight: 800; color: #111827; text-transform: uppercase; }
 .flow-pack-desc { display: block; font-size: 11px; color: #374151; margin-top: 1px; font-weight: 600; }
-.flow-btn { width: 100%; border: 3px solid #111827; cursor: pointer; padding: 16px 24px; border-radius: 0px; font-size: 15.5px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0px #111827; transition: transform 0.1s; text-transform: uppercase; margin-bottom: 0; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: 3px solid #111827; cursor: pointer; padding: 16px 24px; border-radius: 0px; font-size: 15.5px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0px #111827; transition: transform 0.1s; text-transform: uppercase; margin-bottom: 0; }
 .flow-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #111827; }
 .flow-footnote { font-size: 11px; color: #4b5563; margin-top: 16px; font-weight: 600; text-transform: uppercase; }
 `
@@ -510,7 +510,7 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 .flow-pack-option.flow-pack-selected { border-color: #d4af37 !important; background: rgba(212, 175, 55, 0.08) !important; }
 .flow-pack-name { display: block; font-size: 14px; font-weight: 700; color: #ffffff; }
 .flow-pack-desc { display: block; font-size: 11px; color: #71717a; margin-top: 1px; }
-.flow-btn { width: 100%; border: 1px solid #d4af37; cursor: pointer; padding: 16px 24px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; }
+.flow-btn { box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; line-height: 1.25; width: 100%; border: 1px solid #d4af37; cursor: pointer; padding: 16px 24px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0; }
 .flow-btn:hover { background: transparent; color: #d4af37; }
 .flow-footnote { font-size: 11px; color: #71717a; margin-top: 16px; letter-spacing: 0.02em; }
 `
@@ -607,47 +607,37 @@ export const CONFIRM_STARTER_TEMPLATES = [
 
 // ----------------------------------------------------
 // HOME Page Templates
+// Flat, mobile-first cards — every text/button is a single
+// GrapesJS-selectable node (no nested span+text that breaks editing).
 // ----------------------------------------------------
 const homeTemplate1Css = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; }
-.home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg, #f8fafc 0%, #f1f5f9 100%); }
-.home-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(15,23,42,0.08), 0 0 0 1px rgba(15,23,42,0.04); overflow: hidden; }
-.home-bar { height: 6px; background: linear-gradient(90deg, #6366f1, #3b82f6); }
-.home-body { padding: 36px 32px 32px; text-align: center; }
-.home-icon { width: 64px; height: 64px; margin: 0 auto 20px; border-radius: 20px; background: linear-gradient(135deg, #6366f1, #3b82f6); display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 16px rgba(99, 102, 241, 0.2); }
-.home-title { margin: 0 0 12px; font-size: 24px; font-weight: 850; line-height: 1.25; color: #0f172a; letter-spacing: -0.02em; }
-.home-subtitle { margin: 0 0 24px; font-size: 14px; line-height: 1.6; color: #475569; font-weight: 500; }
-.flow-btn { width: 100%; border: none; cursor: pointer; padding: 16px 24px; border-radius: 16px; font-size: 16px; font-weight: 750; color: #fff; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.35); transition: all 0.2s; }
+.home-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%); }
+.home-card { width: 100%; max-width: 400px; background: #ffffff; border-radius: 20px; box-shadow: 0 20px 50px -12px rgba(15,23,42,0.1); border: 1px solid #e2e8f0; padding: 32px 28px; text-align: center; }
+.home-logo { width: 64px; height: 64px; margin: 0 auto 16px; display: block; border-radius: 16px; object-fit: cover; }
+.home-badge { display: inline-block; margin: 0 0 12px; padding: 5px 12px; font-size: 11px; font-weight: 700; color: #4f46e5; background: #e0e7ff; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em; }
+.home-title { margin: 0 0 10px; font-size: 24px; font-weight: 800; line-height: 1.25; color: #0f172a; letter-spacing: -0.02em; }
+.home-subtitle { margin: 0 0 20px; font-size: 14px; line-height: 1.6; color: #64748b; }
+.home-feature { margin: 0 0 10px; padding: 10px 12px; font-size: 13px; line-height: 1.4; color: #334155; text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+.home-feature:last-of-type { margin-bottom: 20px; }
+.flow-btn { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; border: none; cursor: pointer; padding: 14px 20px; border-radius: 12px; font-size: 16px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.35); }
 .flow-btn:active { transform: scale(0.98); }
-.flow-feature-list { list-style: none; padding: 0; margin: 0 0 24px; text-align: left; }
-.flow-feature-list li { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 14px; color: #475569; font-weight: 550; }
-.flow-check { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: #dcfce7; color: #15803d; font-size: 11px; font-weight: 700; }
-.home-footnote { margin-top: 16px; font-size: 11px; color: #94a3b8; line-height: 1.5; }
+.home-footnote { margin-top: 14px; font-size: 11px; color: #94a3b8; line-height: 1.5; }
 `
 
 const homeTemplate1Html = `
-<div class="home-container">
+<div class="home-page">
   <div class="home-card">
-    <div class="home-bar"></div>
-    <div class="home-body">
-      <div class="home-icon">
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:28px;height:28px;">
-          <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
-          <line x1="12" y1="18" x2="12.01" y2="18"></line>
-        </svg>
-      </div>
-      <p style="display:inline-block;margin:0 0 12px;padding:4px 12px;font-size:11px;font-weight:700;color:#4f46e5;background:#e0e7ff;border-radius:100px;text-transform:uppercase;letter-spacing:0.05em;">{{operator}} &#xB7; {{country}}</p>
-      <h1 class="home-title">Premium Mobile Service</h1>
-      <p class="home-subtitle">Get unlimited access to exclusive content and premium features &#x2014; billed directly on your {{operator}} number.</p>
-      <ul class="flow-feature-list">
-        <li><span class="flow-check">&#x2713;</span> Instant activation on {{operator}}</li>
-        <li><span class="flow-check">&#x2713;</span> Cancel anytime from your phone</li>
-        <li><span class="flow-check">&#x2713;</span> Secure operator billing</li>
-      </ul>
-      <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
-      <p class="home-footnote">By subscribing you agree to the terms. Data charges may apply.</p>
-    </div>
+    <img data-tc-type="image" class="home-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%236366f1'/%3E%3Crect x='22' y='14' width='20' height='36' rx='3' fill='none' stroke='%23ffffff' stroke-width='2.5'/%3E%3Ccircle cx='32' cy='42' r='1.5' fill='%23ffffff'/%3E%3C/svg%3E" alt="Service logo" />
+    <p class="home-badge">{{operator}} &#xB7; {{country}}</p>
+    <h1 class="home-title">Premium Mobile Service</h1>
+    <p class="home-subtitle">Get unlimited access to exclusive content and premium features &#x2014; billed directly on your {{operator}} number.</p>
+    <p class="home-feature">&#x2713; Instant activation on {{operator}}</p>
+    <p class="home-feature">&#x2713; Cancel anytime from your phone</p>
+    <p class="home-feature">&#x2713; Secure operator billing</p>
+    <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
+    <p class="home-footnote">By subscribing you agree to the terms. Data charges may apply.</p>
   </div>
 </div>
 `
@@ -655,31 +645,29 @@ const homeTemplate1Html = `
 const homeTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
-.home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
-.home-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0px; padding: 40px 32px; text-align: center; box-shadow: 8px 8px 0px #111827; }
-.home-icon { width: 64px; height: 64px; margin: 0 auto 20px; background: #fef08a; border: 3px solid #111827; border-radius: 0px; display: flex; align-items: center; justify-content: center; font-size: 28px; box-shadow: 4px 4px 0px #111827; }
-.home-title { font-size: 26px; font-weight: 900; color: #111827; margin-bottom: 12px; text-transform: uppercase; letter-spacing: -0.01em; }
-.home-subtitle { font-size: 13.5px; color: #374151; margin-bottom: 24px; line-height: 1.6; font-weight: 500; }
-.flow-btn { width: 100%; border: 3px solid #111827; cursor: pointer; padding: 16px 24px; border-radius: 0px; font-size: 15.5px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0px #111827; transition: transform 0.1s; text-transform: uppercase; margin-bottom: 0; }
-.flow-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0px #111827; }
-.flow-feature-list { list-style: none; padding: 0; margin: 0 0 24px; text-align: left; }
-.flow-feature-list li { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 14px; color: #374151; font-weight: 600; }
-.flow-check { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 0px; background: #fef08a; border: 2px solid #111827; color: #111827; font-size: 11px; font-weight: 900; box-shadow: 2px 2px 0px #111827; flex-shrink: 0; }
-.home-footnote { font-size: 11px; color: #4b5563; margin-top: 16px; font-weight: 600; text-transform: uppercase; }
+.home-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: #fefce8; }
+.home-card { width: 100%; max-width: 400px; background: #ffffff; border: 3px solid #111827; border-radius: 0; padding: 36px 28px; text-align: center; box-shadow: 8px 8px 0 #111827; }
+.home-logo { width: 56px; height: 56px; margin: 0 auto 16px; display: block; border: 3px solid #111827; box-shadow: 3px 3px 0 #111827; object-fit: cover; }
+.home-badge { display: inline-block; margin: 0 0 12px; padding: 4px 10px; font-size: 11px; font-weight: 900; color: #111827; background: #fef08a; border: 2px solid #111827; text-transform: uppercase; letter-spacing: 0.04em; }
+.home-title { margin: 0 0 10px; font-size: 24px; font-weight: 900; color: #111827; text-transform: uppercase; letter-spacing: -0.01em; line-height: 1.2; }
+.home-subtitle { margin: 0 0 20px; font-size: 13.5px; color: #374151; line-height: 1.6; font-weight: 500; }
+.home-feature { margin: 0 0 10px; padding: 10px 12px; font-size: 13px; color: #111827; text-align: left; font-weight: 700; background: #fff; border: 2px solid #111827; box-shadow: 2px 2px 0 #111827; }
+.home-feature:last-of-type { margin-bottom: 20px; }
+.flow-btn { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; border: 3px solid #111827; cursor: pointer; padding: 14px 20px; border-radius: 0; font-size: 15px; font-weight: 900; color: #111827; background: #fef08a; box-shadow: 4px 4px 0 #111827; text-transform: uppercase; }
+.flow-btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #111827; }
+.home-footnote { margin-top: 14px; font-size: 11px; color: #4b5563; font-weight: 600; text-transform: uppercase; }
 `
 
 const homeTemplate2Html = `
-<div class="home-container">
+<div class="home-page">
   <div class="home-card">
-    <div class="home-icon">&#x1F4F1;</div>
-    <p style="display:inline-block;margin:0 0 12px;padding:4px 12px;font-size:11px;font-weight:900;color:#111827;background:#fef08a;border-radius:0;text-transform:uppercase;letter-spacing:0.05em;border:2px solid #111827;">{{operator}} &#xB7; {{country}}</p>
+    <img data-tc-type="image" class="home-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Crect width='56' height='56' fill='%23fef08a'/%3E%3Ctext x='28' y='36' text-anchor='middle' font-size='28'%3E%F0%9F%93%B1%3C/text%3E%3C/svg%3E" alt="Service logo" />
+    <p class="home-badge">{{operator}} &#xB7; {{country}}</p>
     <h1 class="home-title">Premium Mobile Service</h1>
     <p class="home-subtitle">Get unlimited access to exclusive content and premium features &#x2014; billed directly on your {{operator}} number.</p>
-    <ul class="flow-feature-list">
-      <li><span class="flow-check">&#x2713;</span> Instant activation on {{operator}}</li>
-      <li><span class="flow-check">&#x2713;</span> Cancel anytime from your phone</li>
-      <li><span class="flow-check">&#x2713;</span> Secure operator billing</li>
-    </ul>
+    <p class="home-feature">&#x2713; Instant activation on {{operator}}</p>
+    <p class="home-feature">&#x2713; Cancel anytime from your phone</p>
+    <p class="home-feature">&#x2713; Secure operator billing</p>
     <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
     <p class="home-footnote">By subscribing you agree to the terms. Data charges may apply.</p>
   </div>
@@ -689,31 +677,29 @@ const homeTemplate2Html = `
 const homeTemplate3Css = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #e4e4e7; }
-.home-container { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; }
-.home-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 40px 32px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
-.home-icon { width: 64px; height: 64px; margin: 0 auto 20px; border: 1px solid #d4af37; color: #d4af37; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; background: rgba(212, 175, 55, 0.05); }
-.home-title { font-size: 24px; font-weight: 700; color: #ffffff; margin-bottom: 12px; font-family: Georgia, serif; letter-spacing: 0.02em; }
-.home-subtitle { font-size: 13.5px; color: #a1a1aa; margin-bottom: 24px; line-height: 1.6; }
-.flow-btn { width: 100%; border: 1px solid #d4af37; cursor: pointer; padding: 16px 24px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.05em; }
+.home-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: #0a0a0b; }
+.home-card { width: 100%; max-width: 400px; background: #18181b; border: 1px solid #d4af37; border-radius: 12px; padding: 36px 28px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.5); }
+.home-logo { width: 56px; height: 56px; margin: 0 auto 16px; display: block; border: 1px solid #d4af37; border-radius: 50%; object-fit: cover; background: rgba(212,175,55,0.08); }
+.home-badge { display: inline-block; margin: 0 0 12px; padding: 4px 12px; font-size: 11px; font-weight: 700; color: #d4af37; background: rgba(212,175,55,0.1); border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em; border: 1px solid #d4af37; }
+.home-title { margin: 0 0 10px; font-size: 24px; font-weight: 700; color: #ffffff; font-family: Georgia, serif; letter-spacing: 0.02em; line-height: 1.25; }
+.home-subtitle { margin: 0 0 20px; font-size: 13.5px; color: #a1a1aa; line-height: 1.6; }
+.home-feature { margin: 0 0 10px; padding: 10px 12px; font-size: 13px; color: #e4e4e7; text-align: left; background: #0f0f11; border: 1px solid #3f3f46; border-radius: 8px; }
+.home-feature:last-of-type { margin-bottom: 20px; }
+.flow-btn { box-sizing: border-box; display: flex; align-items: center; justify-content: center; width: 100%; min-height: 48px; border: 1px solid #d4af37; cursor: pointer; padding: 14px 20px; border-radius: 6px; font-size: 15px; font-weight: 700; color: #0f0f11; background: #d4af37; text-transform: uppercase; letter-spacing: 0.04em; }
 .flow-btn:hover { background: transparent; color: #d4af37; }
-.flow-feature-list { list-style: none; padding: 0; margin: 0 0 24px; text-align: left; }
-.flow-feature-list li { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; font-size: 14px; color: #a1a1aa; }
-.flow-check { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1px solid #d4af37; color: #d4af37; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-.home-footnote { margin-top: 16px; font-size: 11px; color: #71717a; line-height: 1.5; letter-spacing: 0.02em; }
+.home-footnote { margin-top: 14px; font-size: 11px; color: #71717a; line-height: 1.5; letter-spacing: 0.02em; }
 `
 
 const homeTemplate3Html = `
-<div class="home-container">
+<div class="home-page">
   <div class="home-card">
-    <div class="home-icon">&#x269C;</div>
-    <p style="display:inline-block;margin:0 0 12px;padding:4px 12px;font-size:11px;font-weight:700;color:#d4af37;background:rgba(212,175,55,0.1);border-radius:100px;text-transform:uppercase;letter-spacing:0.05em;border:1px solid #d4af37;">{{operator}} &#xB7; {{country}}</p>
+    <img data-tc-type="image" class="home-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='56' viewBox='0 0 56 56'%3E%3Ccircle cx='28' cy='28' r='27' fill='%2318181b' stroke='%23d4af37'/%3E%3Ctext x='28' y='34' text-anchor='middle' font-size='22' fill='%23d4af37'%3E%E2%99%9C%3C/text%3E%3C/svg%3E" alt="Service logo" />
+    <p class="home-badge">{{operator}} &#xB7; {{country}}</p>
     <h1 class="home-title">Premium Mobile Service</h1>
     <p class="home-subtitle">Get unlimited access to exclusive content and premium features &#x2014; billed directly on your {{operator}} number.</p>
-    <ul class="flow-feature-list">
-      <li><span class="flow-check">&#x2713;</span> Instant activation on {{operator}}</li>
-      <li><span class="flow-check">&#x2713;</span> Cancel anytime from your phone</li>
-      <li><span class="flow-check">&#x2713;</span> Secure operator billing</li>
-    </ul>
+    <p class="home-feature">&#x2713; Instant activation on {{operator}}</p>
+    <p class="home-feature">&#x2713; Cancel anytime from your phone</p>
+    <p class="home-feature">&#x2713; Secure operator billing</p>
     <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
     <p class="home-footnote">By subscribing you agree to the terms. Data charges may apply.</p>
   </div>
@@ -728,8 +714,8 @@ body { font-family: Inter, system-ui, sans-serif; background-color: transparent;
 const wellnessHomeHtml = `
 <div class="wellness-home-container">
   <img data-tc-type="image" class="wellness-img" src="/templates/wellness360.jpg" alt="Wellness 360" />
-  <a data-tc-type="hotspot" href="#" style="position:absolute;width:30%;height:12%;top:57%;left:8%;display:block;text-decoration:none;"></a>
-  <a data-tc-type="hotspot" href="#" style="position:absolute;width:30%;height:14%;top:55%;left:60%;display:block;text-decoration:none;"></a>
+  <a data-tc-type="hotspot" data-action="SUBSCRIBE" href="#" style="position:absolute;width:30%;height:12%;top:57%;left:8%;display:block;z-index:50;pointer-events:auto;cursor:pointer;text-decoration:none;"></a>
+  <a data-tc-type="hotspot" data-action="SUBSCRIBE" href="#" style="position:absolute;width:30%;height:14%;top:55%;left:60%;display:block;z-index:50;pointer-events:auto;cursor:pointer;text-decoration:none;"></a>
 </div>
 `
 
@@ -746,7 +732,7 @@ export const HOME_STARTER_TEMPLATES = [
   {
     id: 'home-indigo',
     name: 'Classic Royal Blue',
-    description: 'Modern indigo card layout with circular checkmarks and rounded primary buttons.',
+    description: 'Clean indigo card — logo, texts and Subscribe button all fully editable.',
     thumb: 'hero',
     previewImage: '',
     css: homeTemplate1Css,
@@ -755,7 +741,7 @@ export const HOME_STARTER_TEMPLATES = [
   {
     id: 'home-brutalist',
     name: 'Neo-Brutalist Yellow',
-    description: 'High contrast yellow layout with thick black borders and bold uppercase typography.',
+    description: 'Bold yellow card with thick borders — every line editable.',
     thumb: 'gallery',
     previewImage: '',
     css: homeTemplate2Css,
@@ -764,7 +750,7 @@ export const HOME_STARTER_TEMPLATES = [
   {
     id: 'home-luxury',
     name: 'Elegant Charcoal Gold',
-    description: 'Charcoal card layout with refined golden outline borders and clean serif typography.',
+    description: 'Dark charcoal + gold — logo and copy fully editable.',
     thumb: 'card',
     previewImage: '',
     css: homeTemplate3Css,

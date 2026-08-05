@@ -1,4 +1,6 @@
-import { transformReactComponentsInHtml, encodeNonAscii } from './styleUtils'
+import { encodeNonAscii } from './styleUtils'
+import { applyTextSizeAlignment, healFlowButtonsInEditor } from './textSizeAlign'
+import { ensureAllTextEditable } from './textContent'
 
 export function insertBlock(editor, blockId) {
   const block = editor.BlockManager.get(blockId)
@@ -26,6 +28,16 @@ export function applyStarterHtml(editor, html, css = '') {
   editor.setStyle(css)
   editor.setComponents(safeHtml)
   editor.UndoManager.clear()
+  // Defer so component:add handlers finish first, then wire text/CTAs for editing
+  setTimeout(() => {
+    try {
+      ensureAllTextEditable(editor)
+      healFlowButtonsInEditor(editor)
+      editor.Canvas?.refresh?.()
+    } catch (_) {
+      /* best-effort */
+    }
+  }, 80)
 }
 
 export function getComponentKind(component) {
@@ -59,4 +71,7 @@ export function getStyleProp(component, prop) {
 export function setStyleProp(component, prop, value) {
   const style = { ...component.getStyle(), [prop]: value }
   component.setStyle(style)
+  if (prop === 'width' || prop === 'height') {
+    applyTextSizeAlignment(component)
+  }
 }

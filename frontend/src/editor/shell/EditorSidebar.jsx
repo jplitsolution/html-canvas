@@ -65,7 +65,9 @@ const SIDEBAR_COLLAPSED_KEY = 'tc-editor-sidebar-collapsed'
 export function EditorSidebar() {
   const { editor, funnelPageType } = useEditor()
   const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType] : undefined
-  const hasFlowParts = Boolean(flowGuide && flowGuide.required.length > 0)
+  const hasFlowParts = Boolean(
+    flowGuide && ((flowGuide.required?.length || 0) + (flowGuide.optional?.length || 0) > 0)
+  )
   const [tab, setTab] = useState(
     hasFlowParts ? 'flow' : 'layouts',
   )

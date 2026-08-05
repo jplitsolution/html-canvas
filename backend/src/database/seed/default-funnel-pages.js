@@ -156,26 +156,33 @@ function infoCard(label, value, accent = false, hint = '') {
 
 const defaultPages = {
   [CampaignPageType.HOME]: {
-    css: sharedCss,
-    html: wrapPage(`
-      <div style="padding:32px 28px 28px;text-align:center;">
-        <div style="width:64px;height:64px;margin:0 auto 20px;border-radius:16px;background:linear-gradient(135deg,#7c4dff,#00e5ff);display:flex;align-items:center;justify-content:center;font-size:28px;">📱</div>
-        <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#7c4dff;text-transform:uppercase;letter-spacing:0.05em;">{{operator}} · {{country}}</p>
-        <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;line-height:1.2;color:#0f172a;">Premium Mobile Service</h1>
-        <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#64748b;">
-          Get unlimited access to exclusive content and premium features — billed directly on your {{operator}} number.
-        </p>
-        <ul class="flow-feature-list">
-          <li><span class="flow-check">✓</span> Instant activation on {{operator}}</li>
-          <li><span class="flow-check">✓</span> Cancel anytime from your phone</li>
-          <li><span class="flow-check">✓</span> Secure operator billing</li>
-        </ul>
-        <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
-        <p class="flow-footnote" style="margin-top:16px;">
-          By subscribing you agree to the service terms. Standard data charges may apply.
-        </p>
-      </div>
-    `),
+    css:
+      sharedCss +
+      `
+.home-page { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%); font-family: ${ff}; }
+.home-card { width: 100%; max-width: 420px; background: #fff; border-radius: 20px; box-shadow: 0 20px 50px rgba(15,23,42,0.08); border: 1px solid #e2e8f0; padding: 32px 28px; text-align: center; }
+.home-logo { width: 64px; height: 64px; margin: 0 auto 16px; display: block; border-radius: 16px; object-fit: cover; }
+.home-badge { display: inline-block; margin: 0 0 8px; font-size: 13px; font-weight: 600; color: #7c4dff; text-transform: uppercase; letter-spacing: 0.05em; }
+.home-title { margin: 0 0 12px; font-size: 26px; font-weight: 800; line-height: 1.2; color: #0f172a; }
+.home-subtitle { margin: 0 0 20px; font-size: 15px; line-height: 1.6; color: #64748b; }
+.home-feature { margin: 0 0 10px; padding: 10px 12px; font-size: 14px; color: #334155; text-align: left; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; }
+.home-feature:last-of-type { margin-bottom: 20px; }
+.home-footnote { margin-top: 16px; font-size: 11px; color: #94a3b8; line-height: 1.5; }
+`,
+    html: `
+<div class="home-page">
+  <div class="home-card">
+    <img data-tc-type="image" class="home-logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%237c4dff'/%3E%3Ctext x='32' y='40' text-anchor='middle' font-size='28'%3E%F0%9F%93%B1%3C/text%3E%3C/svg%3E" alt="Service logo" />
+    <p class="home-badge">{{operator}} &#xB7; {{country}}</p>
+    <h1 class="home-title">Premium Mobile Service</h1>
+    <p class="home-subtitle">Get unlimited access to exclusive content and premium features &#x2014; billed directly on your {{operator}} number.</p>
+    <p class="home-feature">&#x2713; Instant activation on {{operator}}</p>
+    <p class="home-feature">&#x2713; Cancel anytime from your phone</p>
+    <p class="home-feature">&#x2713; Secure operator billing</p>
+    <button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>
+    <p class="home-footnote">By subscribing you agree to the service terms. Standard data charges may apply.</p>
+  </div>
+</div>`,
   },
 
   [CampaignPageType.CONFIRM]: {

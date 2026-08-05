@@ -1,5 +1,15 @@
 import { RESPONSIVE_STYLE_RULES } from '../services/exportSite'
 import { safeGetWrapper } from '../utils/editorUtils'
+import {
+  applyTextSizeAlignment,
+  configureFlowButtonResizable,
+  healFlowButtonsInEditor,
+  keepFlowButtonInFlow,
+  isFlowLayoutButton,
+  wasIntentionallyAbsolute,
+  TEXT_SIZE_ALIGN_CANVAS_CSS,
+} from '../utils/textSizeAlign'
+import { OVERLAY_STACKING_CANVAS_CSS, healEditorHotspot } from '../utils/overlayStacking'
 
 function getCanvasFrameEl(editor) {
   if (!editor?.Canvas?.getFrameEl) return null
@@ -240,7 +250,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   editor.on('page:select', checkEmpty)
   editor.on('canvas:frame:load', checkEmpty)
 
-  editor.on('canvas:frame:load', ({ window: frameWin }) => {
+  const injectCanvasStyles = (frameWin) => {
     if (!frameWin) return
     const doc = frameWin.document
     let canvasStyles = doc.getElementById('tc-canvas-styles')
@@ -255,12 +265,20 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
         [data-gjs-type="wrapper"] { min-height: 0; }
         *:hover { outline: 1px dashed rgba(79, 70, 229, 0.35); outline-offset: 2px; }
         .gjs-selected { outline: 2px solid #2563eb !important; outline-offset: 2px; }
+        ${TEXT_SIZE_ALIGN_CANVAS_CSS}
+        ${OVERLAY_STACKING_CANVAS_CSS}
         ${RESPONSIVE_STYLE_RULES}
       `
+  }
+
+  editor.on('canvas:frame:load', ({ window: frameWin }) => {
+    injectCanvasStyles(frameWin)
 
     const currentDevice = editor.Devices.getSelected()
     const afterLoad = () => {
       if (!alive) return
+      const frame = editor.Canvas.getFrameEl?.()
+      if (frame?.contentWindow) injectCanvasStyles(frame.contentWindow)
       const devName = currentDevice ? String(currentDevice.get('name')) : 'Desktop'
       applyDeviceViewport(editor, devName)
       syncCanvasFrameHeight(editor)
@@ -268,6 +286,14 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     setTimeout(afterLoad, 60)
     setTimeout(afterLoad, 350)
   })
+
+  // Ensure styles exist even if frame:load already fired before this plugin bound
+  try {
+    const existing = editor.Canvas.getFrameEl?.()
+    if (existing?.contentWindow) injectCanvasStyles(existing.contentWindow)
+  } catch (_) {
+    /* noop */
+  }
 
   editor.on('component:add', () => syncCanvasFrameHeight(editor))
   editor.on('component:remove', () => syncCanvasFrameHeight(editor))
@@ -312,12 +338,101 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   editor.on('page:select', () => setTimeout(attachScrollSync, 100))
   setTimeout(attachScrollSync, 500)
 
-  editor.on('component:drag', refreshHandles)
-  editor.on('component:resize', refreshHandles)
-  editor.on('component:styleUpdate', refreshHandles)
-  editor.on('component:update:style', refreshHandles)
+  // NEVER Canvas.refresh during live drag/resize — that freezes Grapes sorter
+  editor.on('component:drag:end', refreshHandles)
+  editor.on('component:resize:end', refreshHandles)
   editor.on('undo', refreshHandles)
   editor.on('redo', refreshHandles)
+
+  const resolveComponent = (payload) =>
+    payload?.component ||
+    (payload?.getStyle ? payload : null) ||
+    editor.getSelected?.()
+
+  // Flow CTAs: only heal on resize end / select — NOT on drag end
+  // (absolute drag mode must be free to move them without snapping back)
+  const protectFlowButton = (payload) => {
+    if (!alive) return
+    const component = resolveComponent(payload)
+    if (!component) return
+    try {
+      if (wasIntentionallyAbsolute(component)) {
+        configureFlowButtonResizable(component)
+        return
+      }
+      if (!isFlowLayoutButton(component)) return
+      keepFlowButtonInFlow(component)
+      configureFlowButtonResizable(component)
+    } catch (_) {
+      /* noop */
+    }
+  }
+
+  const alignSizedText = (payload) => {
+    if (!alive) return
+    const component = resolveComponent(payload)
+    if (!component) return
+    try {
+      if (isFlowLayoutButton(component) && !wasIntentionallyAbsolute(component)) {
+        keepFlowButtonInFlow(component)
+        return
+      }
+      applyTextSizeAlignment(component)
+    } catch (_) {
+      /* noop */
+    }
+  }
+
+  editor.on('component:selected', (component) => {
+    if (!alive || !component) return
+    configureFlowButtonResizable(component)
+  })
+
+  editor.on('component:resize:end', protectFlowButton)
+  editor.on('component:resize:end', (component) => {
+    if (!alive) return
+    const cmp = resolveComponent(component)
+    if (cmp?.getAttributes?.()?.['data-tc-type'] !== 'hotspot') return
+    try {
+      const style = cmp.getStyle?.() || {}
+      const w = String(style.width || '')
+      const h = String(style.height || '')
+      if (w !== '100%' || h !== '100%') {
+        const attrs = { ...(cmp.getAttributes?.() || {}) }
+        if (attrs['data-tc-cover-full']) {
+          delete attrs['data-tc-cover-full']
+          cmp.setAttributes(attrs)
+        }
+      }
+      healEditorHotspot(cmp, editor)
+    } catch (_) {
+      /* noop */
+    }
+  })
+  editor.on('component:styleUpdate', (component) => {
+    if (!component) return
+    if (isFlowLayoutButton(component) && !wasIntentionallyAbsolute(component)) {
+      // Only heal flow layout when user isn't in an active absolute drag
+      if (editor.Commands?.isActive?.('core:component-drag')) return
+      protectFlowButton(component)
+      return
+    }
+    const style = component.getStyle?.() || {}
+    if (style.width || style.height || style['min-height']) alignSizedText(component)
+  })
+
+  editor.on('load', () => {
+    setTimeout(() => {
+      if (!alive) return
+      healFlowButtonsInEditor(editor)
+    }, 100)
+  })
+  editor.on('page:select', () => {
+    setTimeout(() => {
+      if (!alive) return
+      healFlowButtonsInEditor(editor)
+    }, 80)
+  })
 
   return () => {
     alive = false

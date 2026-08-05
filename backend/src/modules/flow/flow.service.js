@@ -51,12 +51,15 @@ export const createFlowService = () => {
   };
 
   /**
-   * Null-flow CG redirect: {{click_id}} = our id; {{rcid}} = affiliate original.
-   * Default append uses our click_id.
+   * Null-flow / HE CG redirect: {{click_id}} = our id; {{rcid}} = affiliate original.
+   * Also supports {{msisdn}} / {{phone}}. Default append: click_id (+ msisdn when known).
    */
   const buildCgRedirectUrl = (rawUrl, attrs = {}) => {
     const ourClickId = String(attrs.clickId || '').trim();
     const rcid = String(attrs.rcid || '').trim();
+    const msisdn = String(attrs.msisdn || attrs.phone || '')
+      .replace(/\D/g, '')
+      .trim();
     let url = String(rawUrl || '').trim();
     if (!url) return '';
 
@@ -67,6 +70,8 @@ export const createFlowService = () => {
       vid: attrs.vid || '',
       aff_id: attrs.affId || '',
       campid: attrs.campid != null ? String(attrs.campid) : '',
+      msisdn,
+      phone: msisdn,
     };
     const original = url;
     for (const [key, val] of Object.entries(vars)) {
@@ -74,21 +79,37 @@ export const createFlowService = () => {
       url = url.split(`{${key}}`).join(encodeURIComponent(val));
     }
 
-    const hadPlaceholder =
-      /\{\{?(?:click_id|rcid|clickId|vid|aff_id|campid)\}?\}/.test(original);
-    if (ourClickId && !hadPlaceholder) {
-      try {
-        const u = new URL(url);
+    const hadClickPlaceholder =
+      /\{\{?(?:click_id|rcid|clickId)\}?\}/.test(original);
+    const hadMsisdnPlaceholder = /\{\{?(?:msisdn|phone)\}?\}/.test(original);
+
+    try {
+      const u = new URL(url);
+      if (ourClickId && !hadClickPlaceholder) {
         if (!u.searchParams.has('click_id') && !u.searchParams.has('rcid')) {
           u.searchParams.set('click_id', ourClickId);
         }
-        return u.toString();
-      } catch {
-        const sep = url.includes('?') ? '&' : '?';
-        return `${url}${sep}click_id=${encodeURIComponent(ourClickId)}`;
       }
+      // Keep affiliate original when we have both.
+      if (rcid && !u.searchParams.has('rcid') && rcid !== ourClickId) {
+        u.searchParams.set('rcid', rcid);
+      }
+      if (msisdn && !hadMsisdnPlaceholder && !u.searchParams.has('msisdn')) {
+        u.searchParams.set('msisdn', msisdn);
+      }
+      return u.toString();
+    } catch {
+      let out = url;
+      if (ourClickId && !hadClickPlaceholder && !/[?&]click_id=/.test(out)) {
+        const sep = out.includes('?') ? '&' : '?';
+        out = `${out}${sep}click_id=${encodeURIComponent(ourClickId)}`;
+      }
+      if (msisdn && !hadMsisdnPlaceholder && !/[?&]msisdn=/.test(out)) {
+        const sep = out.includes('?') ? '&' : '?';
+        out = `${out}${sep}msisdn=${encodeURIComponent(msisdn)}`;
+      }
+      return out;
     }
-    return url;
   };
 
   const loadVisitAttribution = async (visitId, input = {}) => {
@@ -1356,12 +1377,28 @@ export const createFlowService = () => {
     throw err;
   };
 
+  const applyHeRedirectVars = (rawUrl, vars = {}) => {
+    let url = String(rawUrl || '').trim();
+    if (!url || !/^https?:\/\//i.test(url)) return '';
+    for (const [key, val] of Object.entries(vars)) {
+      const encoded = encodeURIComponent(val == null ? '' : String(val));
+      url = url.split(`{{${key}}}`).join(encoded);
+      url = url.split(`{${key}}`).join(encoded);
+    }
+    return url;
+  };
+
   const detectMsisdn = async (input) => {
     let rawPhone = heService.normalizePhone(input.phone || '');
     const campaign = await resolveCampaign(input).catch(() => null);
     let apiConfig = null;
     let serviceId = campaign?.serviceId || '';
-    let heMeta = { provider: 'header', error: null };
+    let heMeta = {
+      provider: 'header',
+      error: null,
+      failRedirectUrl: '',
+      successRedirectUrl: '',
+    };
 
     if (campaign?.id) {
       apiConfig = await getApiConfigRepo().findOne({
@@ -1375,6 +1412,7 @@ export const createFlowService = () => {
         hint: rawPhone,
         country: input.country || campaign?.country,
         operator: input.operator || campaign?.operator,
+        sessionId: input.sessionId,
       });
       if (heMeta.phone) {
         rawPhone = heMeta.phone;
@@ -1411,6 +1449,61 @@ export const createFlowService = () => {
       blockReason = blockRes?.reason || null;
     }
 
+    const redirectVars = {
+      msisdn: rawPhone,
+      phone: rawPhone,
+      campid: input.campid || campaign?.id || '',
+      country: input.country || campaign?.country || '',
+      operator: input.operator || campaign?.operator || '',
+      click_id: input.clickId || '',
+      rcid: input.rcid || '',
+    };
+
+    const heProvider = heMeta.provider || apiConfig?.heProvider || 'header';
+    const apiHeProviders = new Set([
+      'safaricom_masked',
+      'custom_http',
+      'custom',
+    ]);
+
+    // Fail redirect: explicit heConfig.failRedirectUrl, else campaign CG URL
+    // when using token/API HE (so OTP-only campaigns with a CG field are untouched).
+    let rawFail = String(heMeta.failRedirectUrl || '').trim();
+    if (
+      !rawPhone &&
+      !rawFail &&
+      apiHeProviders.has(String(heProvider).toLowerCase())
+    ) {
+      rawFail = String(campaign?.cgRedirectUrl || '').trim();
+    }
+
+    const failRedirectUrl = rawFail
+      ? buildCgRedirectUrl(
+          applyHeRedirectVars(rawFail, redirectVars) || rawFail,
+          {
+            clickId: input.clickId,
+            rcid: input.rcid,
+            campid: input.campid || campaign?.id,
+            msisdn: rawPhone,
+            phone: rawPhone,
+          },
+        )
+      : '';
+
+    const successRedirectUrl = heMeta.successRedirectUrl
+      ? buildCgRedirectUrl(
+          applyHeRedirectVars(heMeta.successRedirectUrl, redirectVars) ||
+            heMeta.successRedirectUrl,
+          {
+            clickId: input.clickId,
+            rcid: input.rcid,
+            campid: input.campid || campaign?.id,
+            msisdn: rawPhone,
+            phone: rawPhone,
+          },
+        )
+      : '';
+
     return {
       phone: rawPhone,
       hasMsisdn: Boolean(rawPhone),
@@ -1419,8 +1512,10 @@ export const createFlowService = () => {
       subscriptionStatus,
       blocked,
       blockReason,
-      heProvider: heMeta.provider || apiConfig?.heProvider || 'header',
+      heProvider,
       heError: heMeta.error || null,
+      failRedirectUrl: failRedirectUrl || null,
+      successRedirectUrl: successRedirectUrl || null,
       cgRedirectUrl: campaign?.cgRedirectUrl || null,
       country: input.country || campaign?.country,
       operator: input.operator || campaign?.operator,

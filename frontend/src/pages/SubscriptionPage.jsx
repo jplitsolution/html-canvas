@@ -1,11 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { detectMsisdnApi, fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow, priorityCheckApi } from '../services/api/flow'
-import { resolvePhoneFromUrl, resolvePhoneNumber, persistPhone } from '../services/flow/resolvePhoneNumber'
+import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow, priorityCheckApi } from '../services/api/flow'
+import {
+  resolvePhoneFromUrl,
+  resolvePhoneNumber,
+  persistPhone,
+  pickHeFailRedirectUrl,
+  appendHeAttributionToUrl,
+} from '../services/flow/resolvePhoneNumber'
 import { evaluatePriorityApiMatch } from '../services/flow/priorityApiMatch'
 import { getApiBase } from '../services/api/client'
 import { sendOtp, verifyOtp } from '../services/api/otp'
 import { trackEvent } from '../utils/analytics'
+import { healLiveHotspots } from '../editor/utils/overlayStacking'
 
 
 const FLOW_FONT =
@@ -69,6 +76,47 @@ const FLOW_SHADOW_STYLES = `
     background: #f5f3ff !important;
     box-shadow: 0 0 0 1px #7c4dff;
   }
+  /* Keep resized button/text labels centered (matches editor) */
+  button, a[data-tc-type="button"], .flow-btn {
+    box-sizing: border-box;
+  }
+  button[style*="height"]:not([data-tc-absolute="1"]),
+  a[data-tc-type="button"][style*="height"]:not([data-tc-absolute="1"]),
+  .flow-btn[style*="height"]:not([data-tc-absolute="1"]) {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.25 !important;
+  }
+
+  /* WYSIWYG: same overlay stacking as canvas */
+  img,
+  [data-tc-type="image"] {
+    position: relative;
+    z-index: 1;
+  }
+  [data-tc-absolute="1"],
+  [data-tc-type="hotspot"] {
+    position: absolute !important;
+    z-index: 40 !important;
+  }
+  [data-tc-type="hotspot"] {
+    z-index: 50 !important;
+    pointer-events: auto !important;
+    cursor: pointer !important;
+  }
+  button[data-tc-absolute="1"],
+  a[data-tc-type="button"][data-tc-absolute="1"],
+  [data-tc-absolute="1"].flow-btn,
+  button.flow-btn[data-tc-absolute="1"],
+  .flow-btn[data-tc-absolute="1"] {
+    width: auto !important;
+    max-width: calc(100% - 16px) !important;
+    min-width: 0 !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
 `
 
 const PRELOAD_BY_PAGE = {
@@ -86,7 +134,7 @@ function findActionTarget(event) {
   for (const node of path) {
     if (!(node instanceof HTMLElement)) continue
     if (node.closest('[data-pack]')) continue
-    if (!node.matches('[data-action], [data-actions], button, a')) continue
+    if (!node.matches('[data-action], [data-actions], button, a, [data-tc-type="hotspot"]')) continue
     const action =
       node.getAttribute('data-action') ||
       (node.hasAttribute('data-actions') ? 'CHAIN' : null) ||
@@ -122,6 +170,27 @@ function mountPageInShadow(shadow, pageData) {
     <style>${cleanCss}</style>
     <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
   `
+
+  // Bad editor saves: missing data-action, px boxes, cursor:move — repair for clicks
+  healLiveHotspots(shadow, pageData.pageType)
+  // Re-run after images give the container real height (first pass can see 0-height parents)
+  const imgs = shadow.querySelectorAll('img')
+  if (imgs.length) {
+    let left = imgs.length
+    const redo = () => {
+      left -= 1
+      if (left <= 0) healLiveHotspots(shadow, pageData.pageType)
+    }
+    imgs.forEach((img) => {
+      if (img.complete) redo()
+      else {
+        img.addEventListener('load', redo, { once: true })
+        img.addEventListener('error', redo, { once: true })
+      }
+    })
+  } else {
+    requestAnimationFrame(() => healLiveHotspots(shadow, pageData.pageType))
+  }
 }
 
 function syncPackPicker(shadow, selectedPack) {
@@ -451,6 +520,15 @@ function SubscriptionPage() {
   const pageDataRef = useRef(null)
   const selectedPackRef = useRef('daily')
   const phoneRef = useRef('')
+  const phoneResolvingRef = useRef(true)
+  const heMetaRef = useRef({
+    done: false,
+    heProvider: null,
+    heError: null,
+    failRedirectUrl: null,
+    successRedirectUrl: null,
+    cgRedirectUrl: null,
+  })
   const loadGenerationRef = useRef(0)
   // Our click_id is empty until /flow/page returns it; affiliate seed goes in rcid.
   const clickIdRef = useRef('')
@@ -505,38 +583,57 @@ function SubscriptionPage() {
 
   useEffect(() => {
     if (!country || !operator) {
+      phoneResolvingRef.current = false
       setPhoneResolving(false)
       return undefined
     }
 
     let cancelled = false
+    phoneResolvingRef.current = true
     setPhoneResolving(true)
+    heMetaRef.current = {
+      done: false,
+      heProvider: null,
+      heError: null,
+      failRedirectUrl: null,
+      successRedirectUrl: null,
+      cgRedirectUrl: null,
+    }
 
-    // TEMP: always hit detect-msisdn so HE headers show in console even when
-    // URL/storage already has a phone (resolvePhoneNumber would otherwise skip the API).
-    console.log('[HE DEBUG] SubscriptionPage mount — forcing detect-msisdn for header dump', {
-      country,
-      operator,
-      campid,
-      href: window.location.href,
-    })
-    detectMsisdnApi({ country, operator, campid }).catch(() => {})
-
+    // HOME boots in parallel — do not block the page on HE.
     const resolveWithTimeout = Promise.race([
       resolvePhoneNumber(new URLSearchParams(window.location.search), {
         country,
         operator,
         campid,
       }),
-      // Never block the funnel on a hanging HE / detect call.
       new Promise((resolve) => {
-        setTimeout(() => resolve({ phone: '', source: 'timeout' }), 4000)
+        setTimeout(() => resolve({ phone: '', source: 'timeout' }), 10000)
       }),
     ])
 
     resolveWithTimeout
-      .then(({ phone: resolved }) => {
+      .then((result) => {
         if (cancelled) return
+        const {
+          phone: resolved,
+          source,
+          failRedirectUrl,
+          successRedirectUrl,
+          cgRedirectUrl,
+          heError,
+          heProvider,
+        } = result || {}
+
+        heMetaRef.current = {
+          done: true,
+          heProvider: heProvider || null,
+          heError: heError || null,
+          failRedirectUrl: failRedirectUrl || null,
+          successRedirectUrl: successRedirectUrl || null,
+          cgRedirectUrl: cgRedirectUrl || null,
+        }
+
         if (resolved) {
           phoneRef.current = resolved
           setPhone(resolved)
@@ -545,26 +642,40 @@ function SubscriptionPage() {
             currentParams.set('msisdn', resolved)
             setSearchParams(currentParams, { replace: true })
           }
-        } else {
-          // Fall back to session phone from a prior OTP in this tab
-          try {
-            const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
-            const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
-            if (sessionPhone) {
-              phoneRef.current = sessionPhone
-              setPhone(sessionPhone)
-              persistPhone(sessionPhone)
-            }
-          } catch {
-            /* ignore */
+          return
+        }
+
+        // Fall back to session phone from a prior OTP in this tab
+        try {
+          const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
+          const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
+          if (sessionPhone) {
+            phoneRef.current = sessionPhone
+            setPhone(sessionPhone)
+            persistPhone(sessionPhone)
           }
+        } catch {
+          /* ignore */
+        }
+
+        // Do NOT auto-redirect on fail — HOME stays visible; warn on CTA click.
+        if (source !== 'timeout' && (failRedirectUrl || cgRedirectUrl || heError)) {
+          console.log('[HE] no MSISDN — HOME stays; warn on button press', {
+            heError,
+            failRedirectUrl,
+            cgRedirectUrl,
+          })
         }
       })
       .catch(() => {
         /* detection is best-effort — continue without MSISDN */
+        heMetaRef.current = { ...heMetaRef.current, done: true }
       })
       .finally(() => {
-        if (!cancelled) setPhoneResolving(false)
+        if (!cancelled) {
+          phoneResolvingRef.current = false
+          setPhoneResolving(false)
+        }
       })
 
     return () => {
@@ -574,6 +685,55 @@ function SubscriptionPage() {
     // on every URL step sync and covers the page with the detecting overlay.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, operator, campid])
+
+  /** HOME CTA without MSISDN after API HE → warning (+ optional CG redirect). */
+  const warnIfHeUnresolved = useCallback(() => {
+    if (phoneRef.current) return false
+
+    const meta = heMetaRef.current
+    const provider = String(meta.heProvider || '').toLowerCase()
+    const isApiHe =
+      provider === 'safaricom_masked' ||
+      provider === 'custom_http' ||
+      provider === 'custom'
+
+    // Still detecting — ask user to wait instead of bouncing.
+    if (phoneResolvingRef.current || !meta.done) {
+      setError('Detecting your mobile number… please wait a moment and try again.')
+      return true
+    }
+
+    // Only gate Token/Custom HE flows (OTP / header paths continue normally).
+    if (!isApiHe) return false
+
+    const baseFailUrl = pickHeFailRedirectUrl({
+      failRedirectUrl: meta.failRedirectUrl,
+      cgRedirectUrl: meta.cgRedirectUrl,
+    })
+    const message =
+      meta.heError ||
+      'Could not detect your mobile number. Please use operator mobile data.'
+
+    // Rebuild at CTA time so we send latest click_id (+ msisdn if any) for vendor postbacks.
+    const failUrl = baseFailUrl
+      ? appendHeAttributionToUrl(baseFailUrl, {
+          clickId: clickIdRef.current,
+          rcid: rcidRef.current,
+          msisdn: phoneRef.current,
+          campid: campidRef.current || campid,
+        })
+      : ''
+
+    setError(message)
+    console.warn('[HE] CTA blocked — no MSISDN', { message, failUrl })
+
+    if (failUrl) {
+      window.setTimeout(() => {
+        window.location.assign(failUrl)
+      }, 2000)
+    }
+    return true
+  }, [campid])
 
   const cachePage = useCallback((data) => {
     if (!data?.pageType) return
@@ -768,10 +928,10 @@ function SubscriptionPage() {
     }
   }, [])
 
-  // Boot once per market/campaign after phone detection settles.
+  // Boot HOME immediately — HE detect runs in parallel and must not block first paint.
   // Do NOT depend on searchParams — cachePage updates step/msisdn and would re-boot in a loop.
   useEffect(() => {
-    if (phoneResolving) return
+    if (!country || !operator) return undefined
     let cancelled = false
 
     async function boot() {
@@ -818,19 +978,19 @@ function SubscriptionPage() {
     return () => {
       cancelled = true
     }
-  }, [country, operator, campid, phoneResolving, loadPage, getSavedSession])
+  }, [country, operator, campid, loadPage, getSavedSession])
 
   // Sync step changes from browser history / page-link navigation.
   const urlStep = (searchParams.get('step') || '').toUpperCase()
   useEffect(() => {
-    if (phoneResolving || booting || !pageData) return
+    if (booting || !pageData) return
     if (!urlStep) return
     if (String(pageData.pageType || '').toUpperCase() === urlStep) return
     // Ignore while a transition is in flight — cachePage will align URL + page together.
     if (transitionLockRef.current) return
     setBooting(true)
     loadPage(urlStep)
-  }, [urlStep, phoneResolving, booting, pageData, loadPage])
+  }, [urlStep, booting, pageData, loadPage])
 
   // Track Page Views
   useEffect(() => {
@@ -891,6 +1051,9 @@ function SubscriptionPage() {
         event.preventDefault()
         event.stopPropagation()
         if (transitionLockRef.current) return
+        const onHome =
+          String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
+        if (onHome && warnIfHeUnresolved()) return
         const targetPage = href.toUpperCase()
         if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
 
@@ -919,6 +1082,14 @@ function SubscriptionPage() {
       if (!hit || !visitIdRef.current || transitionLockRef.current) return
 
       const { action, node } = hit
+      const onHome =
+        String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
+
+      // Token/Custom HE: HOME CTA without MSISDN → warning (then CG if configured).
+      if (onHome && warnIfHeUnresolved()) {
+        event.preventDefault()
+        return
+      }
 
       // Handle Sequential Action Chain (Priority Flow)
       if (action === 'CHAIN' || node.hasAttribute('data-actions')) {
@@ -1449,7 +1620,7 @@ function SubscriptionPage() {
       shadow.removeEventListener('click', handleAnchorClick)
       if (otpCleanup) otpCleanup()
     }
-  }, [pageData, country, operator, campid, cachePage, loadPage, setSearchParams])
+  }, [pageData, country, operator, campid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
 
   if (!country || !operator) {
     return (
@@ -1467,7 +1638,7 @@ function SubscriptionPage() {
     )
   }
 
-  const showBootSpinner = (phoneResolving || booting) && !pageData
+  const showBootSpinner = booting && !pageData
   const showFatalError = Boolean(error && !pageData && !showBootSpinner)
   const notAvailable =
     showFatalError &&
@@ -1479,17 +1650,20 @@ function SubscriptionPage() {
     <div className="flow-runtime-root relative min-h-screen w-full">
       {transitioning && <div className="flow-runtime-progress" aria-hidden="true" />}
       {error && pageData && (
-        <div className="fixed top-0 left-0 right-0 z-40 bg-red-100 text-red-700 text-sm text-center py-2 px-4 animate-fade-in">
+        <div className="fixed top-0 left-0 right-0 z-40 bg-amber-100 text-amber-900 text-sm text-center py-2.5 px-4 animate-fade-in border-b border-amber-200">
           {error}
+        </div>
+      )}
+      {phoneResolving && pageData && (
+        <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-bg-elevated/95 px-3 py-1.5 text-[11px] text-fg-muted shadow-sm">
+          Detecting number…
         </div>
       )}
       {showBootSpinner && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#f8fafc]">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
-            <p className="text-slate-500 text-sm">
-              {phoneResolving ? 'Detecting mobile number...' : 'Loading...'}
-            </p>
+            <p className="text-slate-500 text-sm">Loading...</p>
           </div>
         </div>
       )}

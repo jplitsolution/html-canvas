@@ -106,12 +106,51 @@ export async function transitionFlow(body) {
   })
 }
 
-export async function detectMsisdnApi({ country, operator, campid, phone } = {}) {
+export async function detectMsisdnApi({
+  country,
+  operator,
+  campid,
+  phone,
+  clickId,
+  rcid,
+  sessionId,
+} = {}) {
   const params = new URLSearchParams()
   if (country) params.set('country', country)
   if (operator) params.set('operator', operator)
   if (campid) params.set('campid', String(campid))
   if (phone) params.set('msisdn', String(phone))
+  if (clickId) params.set('click_id', String(clickId))
+  if (rcid) params.set('rcid', String(rcid))
+
+  // Pull attribution from the live landing URL when callers omit it.
+  if (typeof window !== 'undefined') {
+    const q = new URLSearchParams(window.location.search)
+    if (!params.get('click_id')) {
+      const fromUrl = q.get('click_id') || q.get('clickId') || q.get('clickid')
+      if (fromUrl) params.set('click_id', fromUrl)
+    }
+    if (!params.get('rcid')) {
+      const fromUrl = q.get('rcid')
+      if (fromUrl) params.set('rcid', fromUrl)
+    }
+    // Stable browser session for Safaricom token (X-Session-ID).
+    let sid = sessionId
+    if (!sid) {
+      try {
+        sid = sessionStorage.getItem('templatecraft_he_session_id')
+        if (!sid) {
+          sid = `sid_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+          sessionStorage.setItem('templatecraft_he_session_id', sid)
+        }
+      } catch {
+        sid = `sid_${Date.now()}`
+      }
+    }
+    if (sid) params.set('sessionId', sid)
+  } else if (sessionId) {
+    params.set('sessionId', String(sessionId))
+  }
 
   console.log('[HE DEBUG] calling /flow/detect-msisdn…', Object.fromEntries(params))
   try {
@@ -122,6 +161,9 @@ export async function detectMsisdnApi({ country, operator, campid, phone } = {})
       hasMsisdn: res?.hasMsisdn,
       heProvider: res?.heProvider,
       heError: res?.heError,
+      failRedirectUrl: res?.failRedirectUrl,
+      successRedirectUrl: res?.successRedirectUrl,
+      cgRedirectUrl: res?.cgRedirectUrl,
       subscribed: res?.subscribed,
       blocked: res?.blocked,
     })

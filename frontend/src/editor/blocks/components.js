@@ -39,7 +39,7 @@ export function registerComponentBlocks(editor) {
     'Button',
     'component',
     'button',
-    `<a data-tc-type="button" href="#" style="display:inline-block;background-color:#2563eb;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:Inter,sans-serif;font-size:15px;">Click me</a>`
+    `<a data-tc-type="button" href="#" style="display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;background-color:#2563eb;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:Inter,sans-serif;font-size:15px;line-height:1.25;">Click me</a>`
   )
 
   addBlock(
@@ -78,6 +78,6 @@ export function registerComponentBlocks(editor) {
     'Clickable Area',
     'component',
     'button',
-    `<a data-tc-type="hotspot" href="#" style="position:absolute;top:40%;left:25%;width:50%;height:120px;min-height:80px;display:block;z-index:50;text-decoration:none;"></a>`
+    `<a data-tc-type="hotspot" data-action="SUBSCRIBE" href="#" style="position:absolute;top:40%;left:25%;width:50%;height:120px;min-height:80px;display:block;z-index:50;pointer-events:auto;cursor:pointer;text-decoration:none;"></a>`
   )
 }

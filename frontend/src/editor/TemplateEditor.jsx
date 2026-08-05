@@ -7,6 +7,7 @@ import { registerAllBlocks } from './blocks'
 import { setupAssetUpload, restoreAssetsFromProjectData } from './plugins/assetUpload'
 import { setupAssetCanvasDrop } from './plugins/assetDrag'
 import { setupCanvasEnhancements, setCanvasZoom, applyDeviceViewport, syncCanvasFrameHeight } from './plugins/canvasEnhancements'
+import { setupDragUnstick } from './plugins/dragUnstick'
 import { setupEditorExperience } from './plugins/editorExperience'
 import { setupTextEditing } from './plugins/textEditing'
 import { ensureAllTextEditable } from './utils/textContent'
@@ -26,6 +27,8 @@ import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
+import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
+import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot } from './utils/overlayStacking'
 
 export default function TemplateEditor({
   projectId,
@@ -116,20 +119,18 @@ export default function TemplateEditor({
     }
   }, [])
 
-  const handlePreview = useCallback(() => {
+  const handlePreview = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
     const { projectTitle: name, onPreview: previewCb } = callbacksRef.current
-    if (isDirty && previewCb) {
-      useStore.getState().addToast(
-        'Preview shows the last saved version. Use Save & preview to save your changes first.',
-        'info',
-      )
+    // Auto-save so Preview matches what you see on the canvas (WYSIWYG)
+    if (isDirty) {
+      await handleSave()
     }
     if (previewCb) {
       previewCb(getTemplatePayload(ed, name))
     }
-  }, [isDirty, editorRef, callbacksRef])
+  }, [isDirty, handleSave])
 
   const handlePublish = useCallback(async () => {
     await handleSave()
@@ -279,6 +280,7 @@ export default function TemplateEditor({
             'data-action': 'SUBSCRIBE',
             href: '#',
             title: 'Subscribe Hotspot',
+            ...(opts.coverFull ? { 'data-tc-cover-full': '1' } : {}),
           },
           style: hotspotStyle,
           draggable: true,
@@ -310,6 +312,7 @@ export default function TemplateEditor({
     setupAssetCanvasDrop(ed)
     const cleanupDragAndDrop = setupDragAndDrop(ed, setDragDebug)
     const cleanupCanvasEnhancements = setupCanvasEnhancements(ed, (empty) => mounted && setIsEmpty(empty))
+    const cleanupDragUnstick = setupDragUnstick(ed)
     const cleanupTextEditing = setupTextEditing(ed, refreshSelection)
 
     let lastDragEvent = null
@@ -414,44 +417,103 @@ export default function TemplateEditor({
     ed.on('component:add', (component) => {
       setTimeout(() => {
         if (!mounted || editorRef.current !== ed) return
-        
+
         const type = component.get('type')
         const tag = (component.get('tagName') || '').toLowerCase()
-        const isWrapperOrSection = type === 'wrapper' || tag === 'body' || ['section', 'header', 'footer', 'main'].includes(tag) || component.getAttributes()?.['data-tc-type'] === 'section'
-        
-        if (!isWrapperOrSection) {
-          const parent = component.parent()
-          if (parent) {
-            const pStyle = parent.getStyle() || {}
-            if (pStyle.position !== 'absolute' && pStyle.position !== 'relative' && pStyle.position !== 'fixed') {
-              parent.addStyle({ position: 'relative' })
-            }
+        const isWrapperOrSection =
+          type === 'wrapper' ||
+          tag === 'body' ||
+          ['section', 'header', 'footer', 'main'].includes(tag) ||
+          component.getAttributes()?.['data-tc-type'] === 'section'
 
-            if (isDraggingBlock && lastDragEvent && lastDragEvent.clientX !== undefined) {
-              const parentEl = parent.getEl ? parent.getEl() : null
-              if (parentEl) {
-                const rect = parentEl.getBoundingClientRect()
-                const topPx = lastDragEvent.clientY - rect.top
-                const leftPx = lastDragEvent.clientX - rect.left
-                
-                const topPct = (topPx / rect.height) * 100
-                const leftPct = (leftPx / rect.width) * 100
-                
-                component.addStyle({ 
-                  position: 'absolute', 
-                  top: `${topPct.toFixed(2)}%`, 
-                  left: `${leftPct.toFixed(2)}%`,
-                  'z-index': '20',
-                  margin: '0'
-                })
+        if (isWrapperOrSection) return
+
+        const isButton = isButtonLikeComponent(component) || isFlowLayoutButton(component)
+        const parent = component.parent()
+
+        // Absolute placement ONLY for real user drops / click-add onto images.
+        // Never run on setComponents (starter templates) — that was stacking every
+        // text/div as absolute and breaking layout + editability.
+        if (parent && isDraggingBlock && lastDragEvent && lastDragEvent.clientX !== undefined) {
+          const parentEl = parent.getEl ? parent.getEl() : null
+          if (parentEl) {
+            const rect = parentEl.getBoundingClientRect()
+            const topPct = ((lastDragEvent.clientY - rect.top) / rect.height) * 100
+            const leftPct = ((lastDragEvent.clientX - rect.left) / rect.width) * 100
+            const droppedOnImage = dropPointHitsImage(
+              parentEl,
+              lastDragEvent.clientX,
+              lastDragEvent.clientY
+            )
+
+            if (isFlowLayoutButton(component) && !droppedOnImage) {
+              // In-card CTA stays in document flow
+            } else if (isButton) {
+              markAsAbsoluteOverlay(component, {
+                top: `${Math.max(0, Math.min(95, topPct)).toFixed(2)}%`,
+                left: `${Math.max(0, Math.min(95, leftPct)).toFixed(2)}%`,
+              })
+            } else {
+              const pStyle = parent.getStyle() || {}
+              if (!['absolute', 'relative', 'fixed'].includes(String(pStyle.position || ''))) {
+                parent.addStyle({ position: 'relative' })
               }
-            } else if (!component.getStyle()?.position) {
-              component.addStyle({ position: 'absolute', 'z-index': '20', margin: '0' })
+              component.addStyle({
+                position: 'absolute',
+                top: `${Math.max(0, Math.min(95, topPct)).toFixed(2)}%`,
+                left: `${Math.max(0, Math.min(95, leftPct)).toFixed(2)}%`,
+                margin: '0',
+              })
             }
           }
+        } else if (
+          parent &&
+          isButton &&
+          !isFlowLayoutButton(component) &&
+          isImageComponent(parent)
+        ) {
+          // Sidebar click-add of a freeform button into an image/banner wrapper
+          markAsAbsoluteOverlay(component, { top: '40%', left: '25%' })
+        }
+
+        // In-card funnel CTAs stay in flow; overlays on images do not
+        const isOverlay =
+          component.getAttributes()?.['data-tc-absolute'] === '1' ||
+          component.getAttributes()?.['data-tc-type'] === 'hotspot'
+        if (isFlowLayoutButton(component) && !isOverlay) {
+          keepFlowButtonInFlow(component)
+          configureFlowButtonResizable(component)
+        } else if (isButton && isOverlay) {
+          configureFlowButtonResizable(component)
+        }
+
+        // Buttons / images / hotspots resize; text stays selectable without giant handles
+        if (
+          isButton ||
+          isImageComponent(component) ||
+          component.getAttributes()?.['data-tc-type'] === 'hotspot'
+        ) {
           component.set('resizable', true)
         }
       }, 50)
+    })
+
+    // After drag: lift buttons above images (img has z-index:1 in canvas CSS)
+    ed.on('component:drag:end', (component) => {
+      if (!mounted || !component) return
+      if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+        // px → % + restore data-action / pointer-events (absolute drag leaves junk)
+        healEditorHotspot(component, ed)
+        promoteOverlayIfNeeded(component)
+        return
+      }
+      // Any absolute button/link over or near an image → mark overlay + z-index 40
+      if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) {
+        promoteOverlayIfNeeded(component)
+        configureFlowButtonResizable(component)
+      } else {
+        promoteOverlayIfNeeded(component)
+      }
     })
 
     ed.on('component:remove', (removedComponent) => {
@@ -483,6 +545,15 @@ export default function TemplateEditor({
 
     ed.on('component:selected', () => mounted && refreshSelection())
     ed.on('component:deselected', () => mounted && refreshSelection())
+
+    // If an absolute button is selected over an image, keep it above
+    ed.on('component:selected', (component) => {
+      if (!mounted || !component) return
+      if (!isButtonLikeComponent(component) && !isFlowLayoutButton(component)) return
+      const style = component.getStyle?.() || {}
+      if (String(style.position || '').toLowerCase() !== 'absolute') return
+      promoteOverlayIfNeeded(component)
+    })
     ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
     ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
     ed.on('device:select', (dev) => mounted && setDevice(dev?.get('name') || 'Desktop'))
@@ -519,14 +590,27 @@ export default function TemplateEditor({
       }
       ed.UndoManager.clear()
       setCanvasZoom(ed, 100)
-      
+
+      // Canva-style free-form drag (restored from working git history)
       ed.setDragMode('absolute')
 
       const wrapper = ed.getWrapper()
       if (wrapper) {
         const walk = (cmp) => {
           const style = cmp.getStyle() || {}
-          const isAbsolute = style.position === 'absolute' || cmp.getAttributes()?.['data-tc-type'] === 'hotspot'
+          const isHotspot = cmp.getAttributes()?.['data-tc-type'] === 'hotspot'
+
+          // Clear leftover freeze from a previous stuck session
+          const st = cmp.get('status')
+          if (st === 'freezed' || st === 'freezed-selected') {
+            cmp.set('status', '')
+          }
+
+          if (isHotspot) {
+            healEditorHotspot(cmp, ed)
+          }
+
+          const isAbsolute = style.position === 'absolute' || isHotspot
           if (isAbsolute) {
             if (style.margin || style['margin-top'] || style['margin-left']) {
               const newStyle = { ...style }
@@ -545,10 +629,42 @@ export default function TemplateEditor({
               }
             }
             cmp.set('resizable', true)
+            cmp.set('draggable', true)
+          }
+          if (style.height && !isHotspot) {
+            try {
+              applyTextSizeAlignment(cmp)
+            } catch (_) {
+              /* noop */
+            }
+          }
+          if (isFlowLayoutButton(cmp)) {
+            configureFlowButtonResizable(cmp)
           }
           cmp.components().forEach(walk)
         }
         walk(wrapper)
+        healFlowButtonsInEditor(ed)
+
+        // DOM boxes ready after first paint — fix blown hotspots, then clear dirty
+        setTimeout(() => {
+          if (!mounted || editorRef.current !== ed) return
+          const w = ed.getWrapper()
+          if (w) {
+            const walkHs = (cmp) => {
+              if (cmp.getAttributes()?.['data-tc-type'] === 'hotspot') {
+                healEditorHotspot(cmp, ed)
+              }
+              cmp.components()?.forEach?.(walkHs)
+            }
+            walkHs(w)
+          }
+          try {
+            ed.UndoManager.clear()
+          } catch (_) {
+            /* noop */
+          }
+        }, 200)
       }
 
       try {
@@ -621,6 +737,7 @@ export default function TemplateEditor({
       cleanupExperienceRef.current?.()
       cleanupDragAndDrop?.()
       cleanupCanvasEnhancements?.()
+      cleanupDragUnstick?.()
       cleanupTextEditing?.()
       ed.destroy()
       editorRef.current = null
