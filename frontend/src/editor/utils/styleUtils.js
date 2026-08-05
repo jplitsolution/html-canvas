@@ -187,6 +187,9 @@ export function injectStylesheetsIntoCanvas(editor) {
       [data-tc-type="hotspot"] {
         background-color: rgba(99,102,241,0.3) !important;
         border: 2px dashed rgba(99,102,241,0.8) !important;
+        pointer-events: auto !important;
+        cursor: pointer !important;
+        z-index: 50 !important;
       }
       [data-tc-type="hotspot"]:hover {
         background-color: rgba(99,102,241,0.5) !important;

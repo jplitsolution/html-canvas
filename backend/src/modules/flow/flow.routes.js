@@ -98,6 +98,9 @@ export async function flowRoutes(fastify, options) {
       operator: q.operator,
       campid: q.campid,
       phone: resolved.phone,
+      clickId: q.click_id || q.clickId || q.clickid,
+      rcid: q.rcid,
+      sessionId: q.sessionId || q.session_id || request.headers['x-session-id'],
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
     });

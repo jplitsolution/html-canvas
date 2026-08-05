@@ -1,7 +1,9 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect, useMemo, useState } from 'react'
+import { Check, Smartphone, WifiOff } from 'lucide-react'
 import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
+import Tabs from '../ui/Tabs'
 import useStore from '../../store/useStore'
 import {
   testSendOtp,
@@ -21,6 +23,91 @@ const DEFAULT_PARTNER = {
   successValue: '0',
 }
 
+const HE_MODES = [
+  {
+    id: 'header',
+    title: 'Network header',
+    subtitle: 'X-MSISDN from carrier (default)',
+  },
+  {
+    id: 'none',
+    title: 'Off',
+    subtitle: 'OTP only — no auto-detect',
+  },
+  {
+    id: 'custom_http',
+    title: 'Custom API',
+    subtitle: 'Operator resolve URL',
+  },
+  {
+    id: 'safaricom_masked',
+    title: 'Token + MSISDN',
+    subtitle: 'Token API then masked number',
+  },
+]
+
+const EMPTY_HE_FIELDS = {
+  tokenUrl: '',
+  maskedUrl: '',
+  resolveUrl: '',
+  failMessage: '',
+  failRedirectUrl: '',
+  successRedirectUrl: '',
+}
+
+function parseHeConfig(raw) {
+  if (!raw) return { ...EMPTY_HE_FIELDS }
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object') return { ...EMPTY_HE_FIELDS }
+    return {
+      tokenUrl: parsed.tokenUrl || parsed.heTokenUrl || '',
+      maskedUrl: parsed.maskedUrl || parsed.maskedMsisdnUrl || '',
+      resolveUrl: parsed.url || parsed.resolveUrl || '',
+      failMessage: parsed.failMessage || '',
+      failRedirectUrl: parsed.failRedirectUrl || parsed.heFailRedirectUrl || '',
+      successRedirectUrl:
+        parsed.successRedirectUrl || parsed.heSuccessRedirectUrl || '',
+    }
+  } catch {
+    return { ...EMPTY_HE_FIELDS }
+  }
+}
+
+function buildHeConfigJson(provider, fields, resolveMsisdnUrl) {
+  if (provider === 'header' || provider === 'none') return ''
+
+  const out = {}
+  if (provider === 'safaricom_masked') {
+    if (fields.tokenUrl.trim()) out.tokenUrl = fields.tokenUrl.trim()
+    if (fields.maskedUrl.trim()) out.maskedUrl = fields.maskedUrl.trim()
+  }
+  if (provider === 'custom_http') {
+    const url = (fields.resolveUrl || resolveMsisdnUrl || '').trim()
+    if (url) out.url = url
+  }
+  if (fields.failMessage.trim()) out.failMessage = fields.failMessage.trim()
+  if (fields.failRedirectUrl.trim()) {
+    out.failRedirectUrl = fields.failRedirectUrl.trim()
+  }
+  if (fields.successRedirectUrl.trim()) {
+    out.successRedirectUrl = fields.successRedirectUrl.trim()
+  }
+  return Object.keys(out).length ? JSON.stringify(out, null, 2) : ''
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <label className="text-sm font-medium text-fg">{label}</label>
+        {hint ? <span className="text-[11px] text-fg-subtle">{hint}</span> : null}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const loadCampaignApiConfig = useStore((s) => s.loadCampaignApiConfig)
   const saveCampaignApiConfig = useStore((s) => s.saveCampaignApiConfig)
@@ -36,9 +123,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     headersJson: '',
     resolveMsisdnUrl: '',
     heProvider: 'header',
-    heConfigJson: '',
   })
-
+  const [heFields, setHeFields] = useState(EMPTY_HE_FIELDS)
   const [partnerConfig, setPartnerConfig] = useState(DEFAULT_PARTNER)
 
   const [testPhone, setTestPhone] = useState('')
@@ -53,21 +139,26 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     setTestResult('')
     setTestPhone('')
     setTestOtp('')
+    setActiveTab('billing')
 
     loadCampaignApiConfig(campaignId)
       .then((config) => {
+        const provider = config.heProvider || 'header'
+        const parsedHe = parseHeConfig(config.heConfigJson)
         setForm({
           subscriptionApi: config.subscriptionApi || '',
           blocklistApi: config.blocklistApi || '',
           headersJson: config.headersJson || '',
-          resolveMsisdnUrl: config.resolveMsisdnUrl || '',
-          heProvider: config.heProvider || 'header',
-          heConfigJson: config.heConfigJson || '',
+          resolveMsisdnUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
+          heProvider: provider,
+        })
+        setHeFields({
+          ...parsedHe,
+          resolveUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
         })
         if (config.otpConfigJson) {
           try {
             const parsed = JSON.parse(config.otpConfigJson)
-            // Ignore legacy failover / twilio blobs — only keep partner URL fields
             const source =
               parsed?.failover && parsed?.providers?.partner?.config
                 ? parsed.providers.partner.config
@@ -90,12 +181,28 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
       .finally(() => setLoading(false))
   }, [isOpen, campaignId, loadCampaignApiConfig, addToast])
 
+  const heConfigPreview = useMemo(
+    () => buildHeConfigJson(form.heProvider, heFields, form.resolveMsisdnUrl),
+    [form.heProvider, heFields, form.resolveMsisdnUrl],
+  )
+
   const handleSave = async () => {
     setSaving(true)
     try {
+      const heConfigJson = buildHeConfigJson(
+        form.heProvider,
+        heFields,
+        form.resolveMsisdnUrl,
+      )
+      const resolveMsisdnUrl =
+        form.heProvider === 'custom_http'
+          ? (heFields.resolveUrl || form.resolveMsisdnUrl || '').trim()
+          : form.resolveMsisdnUrl || null
+
       await saveCampaignApiConfig(campaignId, {
         ...form,
-        // Subscribe URL is not stored — billing is via OTP validate / Priority Chain
+        resolveMsisdnUrl: resolveMsisdnUrl || null,
+        heConfigJson: heConfigJson || null,
         subscribeApi: null,
         otpConfigJson: JSON.stringify(partnerConfig),
       })
@@ -202,246 +309,388 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     }
   }
 
+  const setHeField = (key, value) => {
+    setHeFields((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const renderHeTab = () => (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+        <p className="text-sm font-medium text-fg">How phone detection works</p>
+        <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+          Most campaigns need nothing here — the carrier sends the number in a
+          network header. Use Token + MSISDN only when the operator gives you two
+          APIs (token, then number). If the number is missing, users go to the
+          campaign CG URL (or an optional fail URL below).
+        </p>
+      </div>
+
+      <div>
+        <p className="mb-2 text-sm font-medium text-fg">Detection mode</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {HE_MODES.map((mode) => {
+            const active = form.heProvider === mode.id
+            return (
+              <button
+                key={mode.id}
+                type="button"
+                onClick={() => setForm({ ...form, heProvider: mode.id })}
+                className={`rounded-xl border px-3.5 py-3 text-left transition-colors ${
+                  active
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-border-focus hover:bg-bg-subtle/50'
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <span
+                    className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      active
+                        ? 'border-accent bg-accent text-white'
+                        : 'border-border bg-bg-elevated'
+                    }`}
+                  >
+                    {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+                  </span>
+                  <span>
+                    <span className="block text-sm font-semibold text-fg">
+                      {mode.title}
+                    </span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-fg-muted">
+                      {mode.subtitle}
+                    </span>
+                  </span>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {form.heProvider === 'header' && (
+        <div className="flex gap-3 rounded-xl border border-border bg-bg-elevated px-4 py-3">
+          <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p className="text-xs leading-relaxed text-fg-muted">
+            Recommended default. On operator mobile data the gateway injects{' '}
+            <code className="rounded bg-bg-subtle px-1 py-0.5 font-mono text-[11px]">
+              X-MSISDN
+            </code>
+            . No extra URLs needed.
+          </p>
+        </div>
+      )}
+
+      {form.heProvider === 'none' && (
+        <div className="flex gap-3 rounded-xl border border-border bg-bg-elevated px-4 py-3">
+          <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
+          <p className="text-xs leading-relaxed text-fg-muted">
+            Auto-detect is off. Users enter their number via OTP (or your page
+            flow). No HE token calls on HOME.
+          </p>
+        </div>
+      )}
+
+      {form.heProvider === 'custom_http' && (
+        <div className="space-y-4 rounded-xl border border-border bg-bg-elevated p-4">
+          <div>
+            <p className="text-sm font-semibold text-fg">Operator resolve API</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              One URL that returns MSISDN. Used when the carrier does not send a
+              header.
+            </p>
+          </div>
+          <Field label="Resolve URL" hint="required">
+            <Input
+              value={heFields.resolveUrl}
+              onChange={(e) => {
+                setHeField('resolveUrl', e.target.value)
+                setForm({ ...form, resolveMsisdnUrl: e.target.value })
+              }}
+              placeholder="https://operator.example/resolve-msisdn"
+            />
+          </Field>
+          <Field label="Fail message" hint="optional">
+            <Input
+              value={heFields.failMessage}
+              onChange={(e) => setHeField('failMessage', e.target.value)}
+              placeholder="Please use mobile data"
+            />
+          </Field>
+          <Field
+            label="Fail redirect URL"
+            hint="optional — else campaign CG URL"
+          >
+            <Input
+              value={heFields.failRedirectUrl}
+              onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
+              placeholder="https://cg.example/fallback"
+            />
+          </Field>
+        </div>
+      )}
+
+      {form.heProvider === 'safaricom_masked' && (
+        <div className="space-y-4 rounded-xl border border-border bg-bg-elevated p-4">
+          <div>
+            <p className="text-sm font-semibold text-fg">Token → MSISDN APIs</p>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Safaricom Kenya: POST token with <code className="font-mono text-[11px]">X-Session-ID</code>,
+              then GET masked MSISDN with Bearer + partner headers. Fail → CG / fail redirect.
+            </p>
+          </div>
+
+          <div className="relative space-y-4 pl-4 before:absolute before:bottom-3 before:left-[7px] before:top-3 before:w-px before:bg-border">
+            <div className="relative space-y-1.5">
+              <span className="absolute -left-4 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+                1
+              </span>
+              <Field label="Token URL" hint="required — POST + X-Session-ID">
+                <Input
+                  value={heFields.tokenUrl}
+                  onChange={(e) => setHeField('tokenUrl', e.target.value)}
+                  placeholder="https://evisaf.wellnesss360.com/safcom/hetoken"
+                />
+              </Field>
+            </div>
+            <div className="relative space-y-1.5">
+              <span className="absolute -left-4 top-2 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-accent text-[9px] font-bold text-white">
+                2
+              </span>
+              <Field label="Masked / MSISDN URL" hint="required — Bearer + X-App">
+                <Input
+                  value={heFields.maskedUrl}
+                  onChange={(e) => setHeField('maskedUrl', e.target.value)}
+                  placeholder="https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn"
+                />
+              </Field>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 sm:grid-cols-2">
+            <Field label="Fail message" hint="optional">
+              <Input
+                value={heFields.failMessage}
+                onChange={(e) => setHeField('failMessage', e.target.value)}
+                placeholder="Please use Safaricom Mobile Data"
+              />
+            </Field>
+            <Field label="Fail redirect" hint="optional — else CG URL">
+              <Input
+                value={heFields.failRedirectUrl}
+                onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
+                placeholder="https://dsdp-cg.safaricom.com/300002437"
+              />
+            </Field>
+          </div>
+
+          {heConfigPreview ? (
+            <details className="rounded-lg border border-border bg-bg-subtle/50 px-3 py-2">
+              <summary className="cursor-pointer text-xs font-medium text-fg-muted">
+                Advanced — saved JSON preview
+              </summary>
+              <pre className="mt-2 max-h-36 overflow-auto rounded-md bg-bg-base p-2 font-mono text-[11px] text-fg-muted">
+                {heConfigPreview}
+              </pre>
+            </details>
+          ) : null}
+        </div>
+      )}
+    </div>
+  )
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Campaign Integration & Settings" size="lg">
       {loading ? (
-        <p className="text-fg-muted text-sm py-4">Loading configurations...</p>
+        <p className="py-4 text-sm text-fg-muted">Loading configurations...</p>
       ) : (
         <div className="space-y-4">
-          <div className="flex border-b border-border mb-4">
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'billing'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-fg-muted hover:text-fg'
-              }`}
-              onClick={() => setActiveTab('billing')}
-            >
-              Checksub &amp; Blocklist
-            </button>
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'he'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-fg-muted hover:text-fg'
-              }`}
-              onClick={() => setActiveTab('he')}
-            >
-              Detect phone (HE)
-            </button>
-            <button
-              type="button"
-              className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === 'otp'
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-fg-muted hover:text-fg'
-              }`}
-              onClick={() => setActiveTab('otp')}
-            >
-              Partner OTP APIs
-            </button>
-          </div>
+          <Tabs
+            tabs={[
+              { id: 'billing', label: 'Checksub' },
+              { id: 'he', label: 'Detect phone' },
+              { id: 'otp', label: 'Partner OTP' },
+            ]}
+            activeTab={activeTab}
+            onChange={setActiveTab}
+          />
 
           {activeTab === 'billing' ? (
             <div className="space-y-4">
-              <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                Only checksub and blocklist are stored here. Partner OTP send/verify lives on the OTP
-                tab; there is no separate Subscribe URL (billing is handled by OTP validate or your
-                Priority Chain). Placeholders: <code>{'{{msisdn}}'}</code>,{' '}
-                <code>{'{{serviceId}}'}</code>, <code>{'{{country}}'}</code>,{' '}
-                <code>{'{{operator}}'}</code>, <code>{'{{subServiceId}}'}</code>.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">Subscription check URL (checksub)</label>
+              <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+                <p className="text-xs leading-relaxed text-fg-muted">
+                  Only checksub and blocklist live here. OTP send/verify is on the
+                  Partner OTP tab. Placeholders:{' '}
+                  <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
+                  <code className="font-mono text-[11px]">{'{{serviceId}}'}</code>,{' '}
+                  <code className="font-mono text-[11px]">{'{{country}}'}</code>,{' '}
+                  <code className="font-mono text-[11px]">{'{{operator}}'}</code>.
+                </p>
+              </div>
+              <Field label="Subscription check URL (checksub)">
                 <Input
                   value={form.subscriptionApi}
                   onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
-                  placeholder="https://wbilzss.tickhighs.com/sub/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
+                  placeholder="https://…/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">Blocklist / DND URL</label>
+              </Field>
+              <Field label="Blocklist / DND URL" hint="optional">
                 <Input
                   value={form.blocklistApi}
                   onChange={(e) => setForm({ ...form, blocklistApi: e.target.value })}
-                  placeholder="(optional)"
+                  placeholder="https://…"
                 />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">Headers (JSON)</label>
+              </Field>
+              <Field label="Headers (JSON)" hint="optional">
                 <textarea
-                  className="w-full min-h-[80px] rounded-lg border border-border bg-bg-subtle px-3 py-2 text-sm text-fg font-mono"
+                  className="min-h-[80px] w-full rounded-lg border border-border bg-bg-elevated px-3 py-2 font-mono text-sm text-fg"
                   value={form.headersJson}
                   onChange={(e) => setForm({ ...form, headersJson: e.target.value })}
                   placeholder='{"Authorization":"Bearer ..."}'
                 />
-              </div>
+              </Field>
             </div>
           ) : activeTab === 'he' ? (
-            <div className="space-y-4">
-              <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                <strong>Leave this empty for most operators.</strong> By default, the phone number
-                is read from the carrier network header (<code>X-MSISDN</code>). A resolve URL is
-                only needed when the operator does not send that header and provides a separate API
-                (for example, Safaricom masked). In all other cases, the OTP path is used.
-              </p>
-              <div>
-                <label className="block text-sm font-medium text-fg mb-1.5">
-                  Phone detect mode
-                </label>
-                <select
-                  className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg"
-                  value={form.heProvider}
-                  onChange={(e) => setForm({ ...form, heProvider: e.target.value })}
-                >
-                  <option value="header">header — MSISDN from network (recommended default)</option>
-                  <option value="none">none — disable auto-detect (OTP only)</option>
-                  <option value="custom_http">custom_http — operator-provided resolve URL</option>
-                  <option value="safaricom_masked">safaricom_masked — Safaricom token + masked API</option>
-                </select>
-              </div>
-              {(form.heProvider === 'custom_http' || form.heProvider === 'safaricom_masked') && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-fg mb-1.5">
-                      Resolve URL (custom_http only)
-                    </label>
-                    <Input
-                      value={form.resolveMsisdnUrl}
-                      onChange={(e) => setForm({ ...form, resolveMsisdnUrl: e.target.value })}
-                      placeholder="Only if provided by the operator"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-fg mb-1.5">
-                      Extra HE config JSON (special operators only)
-                    </label>
-                    <textarea
-                      className="w-full min-h-[100px] rounded-lg border border-border bg-bg-subtle px-3 py-2 text-sm text-fg font-mono"
-                      value={form.heConfigJson}
-                      onChange={(e) => setForm({ ...form, heConfigJson: e.target.value })}
-                      placeholder='{"tokenUrl":"...","maskedUrl":"..."}'
-                    />
-                  </div>
-                </>
-              )}
-            </div>
+            renderHeTab()
           ) : (
             <div className="space-y-4">
-              <p className="text-xs text-fg-subtle bg-bg-subtle border border-border rounded-lg px-3 py-2">
-                External partner OTP APIs only. There is no Twilio / MSG91 / local OTP store — the
-                partner generates and verifies the OTP. Success is determined by a configured
-                key/value in the response body (default <code>responseCode = 0</code>).
-              </p>
+              <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+                <p className="text-xs leading-relaxed text-fg-muted">
+                  Partner generates and verifies OTP. Success when the response
+                  key matches the value below (default{' '}
+                  <code className="font-mono text-[11px]">responseCode = 0</code>
+                  ).
+                </p>
+              </div>
 
-              <div className="p-3 border border-border rounded-lg bg-bg-subtle/50 space-y-3">
-                <div>
-                  <label className="block text-xs font-medium text-fg mb-1">Send URL</label>
+              <div className="space-y-3 rounded-xl border border-border bg-bg-elevated p-4">
+                <Field label="Send URL">
                   <Input
                     value={partnerConfig.sendUrl}
-                    onChange={(e) => setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })}
-                    placeholder="https://wbilzss.tickhighs.com/otp/subscribe?msisdn={{msisdn}}&subServiceId={{subServiceId}}&serviceId=WELLNESS&cpId=100&channel=wap&country=SS&operator=ZAIN&reqType=1&language=_E"
+                    onChange={(e) =>
+                      setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })
+                    }
+                    placeholder="https://…/otp/subscribe?msisdn={{msisdn}}"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-fg mb-1">Verify URL</label>
+                </Field>
+                <Field label="Verify URL">
                   <Input
                     value={partnerConfig.verifyUrl}
-                    onChange={(e) => setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })}
-                    placeholder="https://wbilzss.tickhighs.com/otp/validate_otp?msisdn={{msisdn}}&otp={{otp}}"
+                    onChange={(e) =>
+                      setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })
+                    }
+                    placeholder="https://…/otp/validate_otp?msisdn={{msisdn}}&otp={{otp}}"
                   />
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-fg mb-1">Send method</label>
+                </Field>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Field label="Send method">
                     <Input
                       value={partnerConfig.method}
-                      onChange={(e) => setPartnerConfig({ ...partnerConfig, method: e.target.value })}
+                      onChange={(e) =>
+                        setPartnerConfig({ ...partnerConfig, method: e.target.value })
+                      }
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-fg mb-1">Verify method</label>
+                  </Field>
+                  <Field label="Verify method">
                     <Input
                       value={partnerConfig.verifyMethod}
                       onChange={(e) =>
-                        setPartnerConfig({ ...partnerConfig, verifyMethod: e.target.value })
+                        setPartnerConfig({
+                          ...partnerConfig,
+                          verifyMethod: e.target.value,
+                        })
                       }
                     />
-                  </div>
+                  </Field>
                 </div>
-                <div className="rounded-lg border border-border bg-bg-base p-3 space-y-2">
-                  <p className="text-xs font-semibold text-fg">Success rule</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-fg mb-1">Key</label>
+                <div className="rounded-lg border border-border bg-bg-subtle/50 p-3">
+                  <p className="mb-2 text-xs font-semibold text-fg">Success rule</p>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <Field label="Key">
                       <Input
                         value={partnerConfig.successKey || 'responseCode'}
                         onChange={(e) =>
-                          setPartnerConfig({ ...partnerConfig, successKey: e.target.value })
+                          setPartnerConfig({
+                            ...partnerConfig,
+                            successKey: e.target.value,
+                          })
                         }
                       />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-fg mb-1">Value</label>
+                    </Field>
+                    <Field label="Value">
                       <Input
                         value={partnerConfig.successValue ?? '0'}
                         onChange={(e) =>
-                          setPartnerConfig({ ...partnerConfig, successValue: e.target.value })
+                          setPartnerConfig({
+                            ...partnerConfig,
+                            successValue: e.target.value,
+                          })
                         }
                       />
-                    </div>
+                    </Field>
                   </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-fg mb-1">Headers (JSON)</label>
+                <Field label="Headers (JSON)" hint="optional">
                   <textarea
-                    className="w-full min-h-[60px] rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-xs text-fg font-mono"
+                    className="min-h-[60px] w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 font-mono text-xs text-fg"
                     value={partnerConfig.headersJson}
                     onChange={(e) =>
-                      setPartnerConfig({ ...partnerConfig, headersJson: e.target.value })
+                      setPartnerConfig({
+                        ...partnerConfig,
+                        headersJson: e.target.value,
+                      })
                     }
                     placeholder="{}"
                   />
-                </div>
+                </Field>
               </div>
 
-              <div className="p-3 border border-dashed border-border rounded-lg bg-bg-subtle space-y-3">
-                <p className="text-xs font-semibold text-fg-muted uppercase tracking-wider">
-                  OTP API Testing Hub
+              <div className="space-y-3 rounded-xl border border-dashed border-border bg-bg-subtle/40 p-4">
+                <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
+                  OTP API testing
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <label className="block text-xs font-medium text-fg mb-1">Test phone</label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Field label="Test phone">
                     <Input
                       value={testPhone}
                       onChange={(e) => setTestPhone(e.target.value)}
                       placeholder="e.g. 211911961169"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-fg mb-1">OTP from SMS</label>
+                  </Field>
+                  <Field label="OTP from SMS">
                     <Input
                       value={testOtp}
                       onChange={(e) => setTestOtp(e.target.value)}
                       placeholder="e.g. 4827"
                     />
-                  </div>
+                  </Field>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button variant="outline" size="sm" onClick={handleHealthCheck} disabled={testing}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleHealthCheck}
+                    disabled={testing}
+                  >
                     Health Check
                   </Button>
-                  <Button variant="primary" size="sm" onClick={handleTestSend} disabled={testing}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleTestSend}
+                    disabled={testing}
+                  >
                     {testing ? 'Processing...' : 'Send Test OTP'}
                   </Button>
-                  <Button variant="primary" size="sm" onClick={handleTestVerify} disabled={testing}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={handleTestVerify}
+                    disabled={testing}
+                  >
                     Verify Test OTP
                   </Button>
                 </div>
                 {testResult && (
-                  <div className="mt-2 text-xs font-mono p-2 bg-bg-base border border-border rounded-lg max-h-[180px] overflow-y-auto whitespace-pre-wrap">
+                  <div className="mt-2 max-h-[180px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-base p-2 font-mono text-xs">
                     {testResult}
                   </div>
                 )}
@@ -449,7 +698,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             </div>
           )}
 
-          <div className="flex justify-end gap-3 pt-4 border-t border-border mt-6">
+          <div className="mt-6 flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={onClose}>
               Cancel
             </Button>

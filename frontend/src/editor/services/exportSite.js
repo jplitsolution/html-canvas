@@ -1,5 +1,6 @@
 import { createZipBlob } from '../../utils/zip'
 import { getActiveStylesheetsContent, transformReactComponentsInHtml } from '../utils/styleUtils'
+import { OVERLAY_STACKING_CSS } from '../utils/overlayStacking'
 
 export function slugifyFilename(value) {
   return value.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'page'
@@ -262,16 +263,21 @@ img, video, iframe, embed, object {
     max-width: 100% !important;
   }
 
-  /* CTA buttons: block + no overflow */
-  a[data-tc-type="button"],
-  a[style*="padding:14px"],
-  a[style*="padding: 14px"] {
-    display: block !important;
+  /* CTA buttons: flex-center + no overflow (skip absolute image overlays) */
+  a[data-tc-type="button"]:not([data-tc-absolute="1"]),
+  a[style*="padding:14px"]:not([data-tc-absolute="1"]),
+  a[style*="padding: 14px"]:not([data-tc-absolute="1"]),
+  button.flow-btn:not([data-tc-absolute="1"]),
+  .flow-btn:not([data-tc-absolute="1"]) {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     width: 100% !important;
     text-align: center !important;
     box-sizing: border-box !important;
     white-space: normal !important;
     word-break: break-word !important;
+    line-height: 1.25 !important;
   }
 
   /* Grid columns: single column on mobile */
@@ -335,7 +341,8 @@ export function renderPageDocument(
   <style>${hostCss}
 ${optimizedCss}
 ${scrollBehavior}
-${RESPONSIVE_STYLE_RULES}</style>
+${RESPONSIVE_STYLE_RULES}
+${OVERLAY_STACKING_CSS}</style>
 </head>
 <body id="wrapper">${optimizedHtml}
 <script>${ANCHOR_SCROLL_SCRIPT}</script>

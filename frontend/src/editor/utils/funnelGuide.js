@@ -41,6 +41,16 @@ export const FUNNEL_PAGE_GUIDES = {
       'Try-checks-in-order button (status URL → page routing)',
     ],
     required: [],
+    optional: [
+      {
+        id: 'subscribe-btn',
+        label: 'Subscribe button',
+        why: 'Starts the signup path. Re-add if it went missing after resize.',
+        match: 'data-action="SUBSCRIBE"',
+        thumb: 'button',
+        snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
+      },
+    ],
   },
   OTP: {
     title: 'OTP verification page',

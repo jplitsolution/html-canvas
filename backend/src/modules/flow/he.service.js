@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomUUID } from 'crypto';
 
 /**
  * Header Enrichment providers (config-driven — no per-campaign redeploy).
@@ -7,13 +8,26 @@ import axios from 'axios';
  *   - header            : trust X-MSISDN / query (default)
  *   - none              : never resolve
  *   - custom_http       : GET/POST resolveMsisdnUrl (or heConfig.url)
- *   - safaricom_masked  : token URL → Bearer → masked MSISDN API (SAFWAP prod)
+ *   - safaricom_masked  : POST token → Bearer GET masked MSISDN (Safaricom Kenya WAP)
  *
- * heConfigJson examples:
- *   safaricom_masked: {
- *     "tokenUrl": "https://evisaf.../safcom/hetoken",
+ * heConfigJson (Safaricom Kenya):
+ *   {
+ *     "tokenUrl": "https://evisaf.wellnesss360.com/safcom/hetoken",
  *     "maskedUrl": "https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn",
- *     "failMessage": "Please use Safaricom Mobile Data"
+ *     "failMessage": "Please use Safaricom Mobile Data",
+ *     "failRedirectUrl": "https://dsdp-cg.safaricom.com/300002437"
+ *   }
+ *
+ * Token call (partner contract):
+ *   POST tokenUrl, headers: { X-Session-ID }, body: {}
+ *   → access_token
+ *
+ * MSISDN call:
+ *   GET maskedUrl, headers: {
+ *     Authorization: Bearer <token>,
+ *     X-App: he-partner,
+ *     X-MessageID: <id>,
+ *     X-Source-System: he-partner
  *   }
  */
 export const createHeService = () => {
@@ -29,7 +43,61 @@ export const createHeService = () => {
 
   const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
 
-  const resolveSafaricomMasked = async (heConfig) => {
+  const pickRedirectUrl = (heConfig, ...keys) => {
+    for (const key of keys) {
+      const value = String(heConfig?.[key] || '').trim();
+      if (value && /^https?:\/\//i.test(value)) return value;
+    }
+    return '';
+  };
+
+  const redirectMeta = (heConfig = {}) => ({
+    failRedirectUrl: pickRedirectUrl(
+      heConfig,
+      'failRedirectUrl',
+      'heFailRedirectUrl',
+    ),
+    successRedirectUrl: pickRedirectUrl(
+      heConfig,
+      'successRedirectUrl',
+      'heSuccessRedirectUrl',
+    ),
+  });
+
+  const makeSessionId = (hint) => {
+    const fromHint = String(hint || '').trim();
+    if (fromHint) return fromHint;
+    return `sid_${Date.now()}_${randomUUID().slice(0, 8)}`;
+  };
+
+  const mergeHeaders = (base, extra) => {
+    if (!extra) return { ...base };
+    if (typeof extra === 'string') {
+      try {
+        const parsed = JSON.parse(extra);
+        return { ...base, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+      } catch {
+        return { ...base };
+      }
+    }
+    if (typeof extra === 'object' && !Array.isArray(extra)) {
+      return { ...base, ...extra };
+    }
+    return { ...base };
+  };
+
+  const makeMessageId = (heConfig) => {
+    const configured = String(heConfig.messageId || heConfig.xMessageId || '').trim();
+    if (configured) return configured;
+    return String(Date.now() % 1000000000);
+  };
+
+  /**
+   * Safaricom Kenya WAP: POST hetoken → GET fetchMaskedMsisdn with partner headers.
+   * @param {object} heConfig
+   * @param {{ sessionId?: string }} [input]
+   */
+  const resolveSafaricomMasked = async (heConfig, input = {}) => {
     const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl;
     const maskedUrl = heConfig.maskedUrl || heConfig.maskedMsisdnUrl;
     if (!tokenUrl || !maskedUrl) {
@@ -39,10 +107,25 @@ export const createHeService = () => {
       };
     }
 
-    const tokenRes = await axios.get(tokenUrl, { timeout: 10000 });
+    const sessionId = makeSessionId(input.sessionId || heConfig.sessionId);
+    const tokenMethod = String(heConfig.tokenMethod || 'POST').toUpperCase();
+    const tokenHeaders = mergeHeaders(
+      { 'X-Session-ID': sessionId },
+      heConfig.tokenHeaders,
+    );
+
+    const tokenRes =
+      tokenMethod === 'GET'
+        ? await axios.get(tokenUrl, { timeout: 12000, headers: tokenHeaders })
+        : await axios.post(tokenUrl, heConfig.tokenBody || {}, {
+            timeout: 12000,
+            headers: tokenHeaders,
+          });
+
     const token =
-      tokenRes.data?.token ||
       tokenRes.data?.access_token ||
+      tokenRes.data?.token ||
+      tokenRes.data?.data?.access_token ||
       tokenRes.data?.data?.token ||
       (typeof tokenRes.data === 'string' ? tokenRes.data : null);
 
@@ -50,9 +133,19 @@ export const createHeService = () => {
       return { phone: '', error: 'HE token missing from tokenUrl response' };
     }
 
+    const maskedHeaders = mergeHeaders(
+      {
+        Authorization: `Bearer ${token}`,
+        'X-App': heConfig.xApp || 'he-partner',
+        'X-MessageID': makeMessageId(heConfig),
+        'X-Source-System': heConfig.xSourceSystem || 'he-partner',
+      },
+      heConfig.maskedHeaders,
+    );
+
     const maskedRes = await axios.get(maskedUrl, {
-      timeout: 10000,
-      headers: { Authorization: `Bearer ${token}` },
+      timeout: 12000,
+      headers: maskedHeaders,
     });
 
     const body = maskedRes.data || {};
@@ -62,18 +155,20 @@ export const createHeService = () => {
       body?.msisdn ||
       body?.MSISDN ||
       body?.data?.msisdn ||
+      body?.MaskedMsisdn ||
+      body?.maskedMsisdn ||
       '';
 
     const failMessage =
       body?.header?.customerMessage ||
       heConfig.failMessage ||
-      'Please use operator mobile data';
+      'Please use Safaricom Mobile Data';
 
     const normalized = normalizePhone(phone);
     if (!normalized) {
-      return { phone: '', error: failMessage };
+      return { phone: '', error: failMessage, sessionId };
     }
-    return { phone: normalized, error: null };
+    return { phone: normalized, error: null, sessionId };
   };
 
   const resolveCustomHttp = async (apiConfig, heConfig, input) => {
@@ -115,7 +210,7 @@ export const createHeService = () => {
 
   /**
    * @param {object} apiConfig
-   * @param {{ phone?: string, country?: string, operator?: string, hint?: string }} input
+   * @param {{ phone?: string, country?: string, operator?: string, hint?: string, sessionId?: string }} input
    *   input.phone = already extracted from HTTP headers / query
    */
   const resolve = async (apiConfig, input = {}) => {
@@ -126,34 +221,42 @@ export const createHeService = () => {
       .trim();
 
     const heConfig = parseJson(apiConfig?.heConfigJson);
+    const redirects = redirectMeta(heConfig);
     const headerPhone = normalizePhone(input.phone || input.hint || '');
 
     if (provider === 'none') {
-      return { phone: '', provider, error: null };
+      return { phone: '', provider, error: null, ...redirects };
     }
 
     if (provider === 'header' || !provider) {
-      return { phone: headerPhone, provider: 'header', error: null };
+      return { phone: headerPhone, provider: 'header', error: null, ...redirects };
     }
 
     // Prefer header if already present (operator gateway injected)
     if (headerPhone) {
-      return { phone: headerPhone, provider, error: null, source: 'header' };
+      return {
+        phone: headerPhone,
+        provider,
+        error: null,
+        source: 'header',
+        ...redirects,
+      };
     }
 
     try {
       if (provider === 'safaricom_masked') {
-        const result = await resolveSafaricomMasked(heConfig);
-        return { ...result, provider };
+        const result = await resolveSafaricomMasked(heConfig, input);
+        return { ...result, provider, ...redirects };
       }
       if (provider === 'custom_http' || provider === 'custom') {
         const result = await resolveCustomHttp(apiConfig, heConfig, input);
-        return { ...result, provider };
+        return { ...result, provider, ...redirects };
       }
       return {
         phone: '',
         provider,
         error: `Unknown heProvider: ${provider}`,
+        ...redirects,
       };
     } catch (err) {
       console.warn(`HE resolve failed (${provider}): ${err.message}`);
@@ -161,11 +264,19 @@ export const createHeService = () => {
         phone: '',
         provider,
         error: heConfig.failMessage || err.message,
+        ...redirects,
       };
     }
   };
 
-  return { resolve, parseJson, normalizePhone };
+  return {
+    resolve,
+    parseJson,
+    normalizePhone,
+    redirectMeta,
+    pickRedirectUrl,
+    makeSessionId,
+  };
 };
 
 export const heService = createHeService();

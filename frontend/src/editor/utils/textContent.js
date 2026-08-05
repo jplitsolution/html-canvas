@@ -54,7 +54,7 @@ export function configureAsTextComponent(component) {
   const tag = (component.get('tagName') || '').toLowerCase();
   const type = component.get('type') || '';
 
-  if (tag === 'a' || type === 'link') {
+  if (tag === 'a' || tag === 'button' || type === 'link') {
     component.set({
       editable: true,
       highlightable: true,
@@ -108,38 +108,104 @@ export function setTextContent(component, value, _editor) {
     configureAsTextComponent(component);
   }
   setModelContent(component, value);
+  syncComponentDomText(component, value);
 }
 
-export function getLinkText(component) {
-  return getTextContent(component);
-}
-
-export function setLinkText(component, value, _editor) {
+/** Buttons / links / CTAs whose label is edited from the property panel. */
+export function isCtaLabelComponent(component) {
+  if (!component) return false;
   const tag = (component.get('tagName') || '').toLowerCase();
   const type = component.get('type') || '';
+  const attrs = component.getAttributes?.() || {};
+  const tcType = attrs['data-tc-type'];
+  if (tcType === 'hotspot') return false;
+  if (tag === 'button' || tag === 'a' || type === 'link' || tcType === 'button') return true;
+  return false;
+}
 
-  if (tag !== 'a' && type !== 'link') {
-    setTextContent(component, value, _editor);
-    return;
+function syncComponentDomText(component, value) {
+  const el = component.getEl?.();
+  if (el) el.textContent = value;
+}
+
+function refreshComponentView(component, editor) {
+  try {
+    const view = component.getView?.() || component.view;
+    if (view?.render) view.render();
+  } catch (_) {
+    /* noop */
+  }
+  try {
+    editor?.Canvas?.refresh?.();
+  } catch (_) {
+    /* noop */
+  }
+}
+
+/**
+ * Read CTA / button label. Prefer live DOM so sidebar matches canvas after edits.
+ */
+export function getLinkText(component) {
+  if (!component) return '';
+
+  const children = component.components?.() || { length: 0 };
+  if (children.length === 1) {
+    const first = children.at?.(0);
+    if (first?.get?.('type') === 'textnode') {
+      const nodeText = first.get('content');
+      if (typeof nodeText === 'string') return nodeText;
+    }
   }
 
   const el = component.getEl?.();
-  if (el) el.textContent = value;
+  const domText = el ? String(el.textContent || '') : '';
+  if (domText.trim()) return domText;
+
+  const raw = component.get('content');
+  if (typeof raw === 'string' && raw.trim()) return stripHtml(raw);
+  return domText;
+}
+
+/**
+ * Set CTA / button label on model + DOM for `<button>`, `<a>`, and data-tc-type=button.
+ * GrapesJS `set('content')` alone does not update button DOM — that caused blank canvas labels.
+ */
+export function setLinkText(component, value, editor) {
+  if (!component) return;
+
+  const text = value == null ? '' : String(value);
+
+  if (!isCtaLabelComponent(component)) {
+    setTextContent(component, text, editor);
+    return;
+  }
 
   const children = component.components();
   if (children.length === 0) {
-    setModelContent(component, value);
+    setModelContent(component, text);
+    syncComponentDomText(component, text);
+    refreshComponentView(component, editor);
     return;
   }
 
   const first = children.at(0);
-  if (first?.get('type') === 'textnode') {
-    first.set('content', value);
+  if (children.length === 1 && first?.get('type') === 'textnode') {
+    first.set('content', text);
+    syncComponentDomText(component, text);
+    refreshComponentView(component, editor);
     return;
   }
 
+  // Nested markup inside the CTA — replace with plain label text
   children.reset();
-  component.append(value);
+  setModelContent(component, text);
+  try {
+    component.append(text);
+  } catch (_) {
+    syncComponentDomText(component, text);
+  }
+  syncComponentDomText(component, text);
+  refreshComponentView(component, editor);
 }
 
 export function walkComponents(component, fn) {

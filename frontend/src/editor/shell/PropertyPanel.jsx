@@ -367,10 +367,14 @@ function isLockedSystemAction(attrs = {}) {
 
 function getClickActionType(attrs = {}) {
   if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain'
-  if (attrs['data-action'] === 'SUBSCRIBE') return 'flow'
   const href = attrs.href || ''
+  // Prefer real navigation targets over a leftover SUBSCRIBE (save heal used to re-add it)
+  if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('tel:')) {
+    return 'external'
+  }
+  if (href.startsWith('#') && href !== '#') return 'anchor'
+  if (attrs['data-action'] === 'SUBSCRIBE') return 'flow'
   if (href.startsWith('#')) return 'anchor'
-  if (href.startsWith('http://') || href.startsWith('https://')) return 'external'
   return 'page'
 }
 
@@ -830,6 +834,11 @@ export function PropertyPanel() {
                 onChange={(e) => {
                   setLinkText(selected, e.target.value, editor);
                   update();
+                  try {
+                    editor?.Canvas?.refresh?.();
+                  } catch (_) {
+                    /* noop */
+                  }
                 }}
               />
             </Field>
@@ -1035,13 +1044,18 @@ export function PropertyPanel() {
                 <button
                   title="Make the whole image clickable"
                   onClick={() => {
+                    selected.addAttributes({ 'data-tc-cover-full': '1' });
                     selected.addStyle({
+                      position: 'absolute',
                       width: '100%',
                       height: '100%',
-                      top: '0px',
-                      left: '0px',
-                      right: '0px',
-                      bottom: '0px',
+                      top: '0%',
+                      left: '0%',
+                      right: '0%',
+                      bottom: '0%',
+                      'z-index': '50',
+                      'pointer-events': 'auto',
+                      cursor: 'pointer',
                     });
                     update();
                   }}

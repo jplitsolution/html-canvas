@@ -515,7 +515,9 @@ function CampaignDetailPage() {
                 <h2 className="text-sm font-semibold text-fg">CG redirect URL</h2>
                 <p className="text-xs text-fg-muted mt-1">
                   With flow mode <strong>None</strong> and this URL set, users are redirected here
-                  on landing. HE/OTP is not required.{' '}
+                  on landing. HE/OTP is not required. Also used as the HOME fallback when API HE
+                  (<code>safaricom_masked</code> / <code>custom_http</code>) cannot resolve MSISDN
+                  and no <code>failRedirectUrl</code> is set in HE config.{' '}
                   <code className="font-mono">{'{{click_id}}'}</code> = our generated id;{' '}
                   <code className="font-mono">{'{rcid}'}</code> = network original click (otherwise auto{' '}
                   <code className="font-mono">?click_id=</code> with our id).
