@@ -145,6 +145,7 @@ https://dsdp-cg.safaricom.com/300002437
 | Token URL | `https://evisaf.wellnesss360.com/safcom/hetoken` |
 | Masked / MSISDN URL | `https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn` |
 | Fail message | `Please use Safaricom Mobile Data` |
+| Success redirect | empty = stay on HOME / funnel; or any `https://…` to leave with msisdn |
 | Fail redirect | `https://dsdp-cg.safaricom.com/300002437` |
 
 > If **Fail redirect** is left empty, the campaign **CG redirect URL** is used automatically for Token/Custom HE modes.
@@ -183,13 +184,38 @@ Ensure HOME / CONFIRM / THANKYOU are ready, campaign is **live**, then test with
 
 ## 4. What happens at runtime
 
+### Config knobs (both optional)
+
+| Field | MSISDN found | MSISDN missing |
+|--------|----------------|----------------|
+| **Success redirect** empty | Stay on **HOME**, continue funnel | — |
+| **Success redirect** set | Redirect there with `msisdn` + `click_id` | — |
+| **Fail redirect** / CG | — | HOME shown → CTA warning → redirect |
+
+So you can redirect in **either or both** cases:
+
+```json
+{
+  "tokenUrl": "https://evisaf.wellnesss360.com/safcom/hetoken",
+  "maskedUrl": "https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn",
+  "successRedirectUrl": "https://partner.example/next",
+  "failRedirectUrl": "https://dsdp-cg.safaricom.com/300002437",
+  "failMessage": "Please use Safaricom Mobile Data"
+}
+```
+
+- Only fail URL → HOME when number found; CG when missing.  
+- Only success URL → leave when number found; fail path uses campaign CG / OTP.  
+- Both set → redirect both ways.  
+- Both empty → classic HOME funnel (+ fail uses CG if campaign CG is set for API HE).
+
 ### Success (token + MSISDN both OK)
 
-1. HOME visible.
+1. HOME may paint briefly while HE runs.
 2. Soft chip may show “Detecting number…” briefly.
 3. `msisdn` added to URL / session.
-4. User taps Subscribe / CTA → **no warning**.
-5. Flow goes to **CONFIRM** (or next graph node) with the number.
+4. If **success redirect** is set → browser goes there (`msisdn`, `click_id`, `rcid`).
+5. If success redirect is **empty** → user stays on HOME; CTA continues CONFIRM / funnel.
 
 ### Failure (no MSISDN)
 

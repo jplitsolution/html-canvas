@@ -195,18 +195,32 @@ function redirectFields(operatorRes) {
  */
 export async function resolvePhoneNumber(searchParams, context = {}) {
   const fromUrl = resolvePhoneFromUrl(searchParams)
+  // Still hit detect for HE redirect URLs even when msisdn is already in the query.
+  const operatorRes = await resolvePhoneFromOperator(context)
+
   if (fromUrl) {
     persistPhone(fromUrl)
-    return { phone: fromUrl, source: 'url' }
+    return {
+      phone: fromUrl,
+      source: 'url',
+      heProvider: operatorRes?.heProvider,
+      heError: operatorRes?.heError,
+      ...redirectFields(operatorRes),
+    }
   }
 
   const fromCustom = await resolveCustomHook()
   if (fromCustom) {
     persistPhone(fromCustom)
-    return { phone: fromCustom, source: 'custom' }
+    return {
+      phone: fromCustom,
+      source: 'custom',
+      heProvider: operatorRes?.heProvider,
+      heError: operatorRes?.heError,
+      ...redirectFields(operatorRes),
+    }
   }
 
-  const operatorRes = await resolvePhoneFromOperator(context)
   if (operatorRes?.phone) {
     const phone = normalizeMsisdn(operatorRes.phone)
     persistPhone(phone)

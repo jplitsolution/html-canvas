@@ -75,7 +75,10 @@ export const createHeService = () => {
     if (typeof extra === 'string') {
       try {
         const parsed = JSON.parse(extra);
-        return { ...base, ...(parsed && typeof parsed === 'object' ? parsed : {}) };
+        return {
+          ...base,
+          ...(parsed && typeof parsed === 'object' ? parsed : {}),
+        };
       } catch {
         return { ...base };
       }
@@ -87,7 +90,9 @@ export const createHeService = () => {
   };
 
   const makeMessageId = (heConfig) => {
-    const configured = String(heConfig.messageId || heConfig.xMessageId || '').trim();
+    const configured = String(
+      heConfig.messageId || heConfig.xMessageId || '',
+    ).trim();
     if (configured) return configured;
     return String(Date.now() % 1000000000);
   };
@@ -186,7 +191,11 @@ export const createHeService = () => {
       method === 'POST'
         ? await axios.post(
             url,
-            { country: input.country, operator: input.operator, hint: input.hint },
+            {
+              country: input.country,
+              operator: input.operator,
+              hint: input.hint,
+            },
             { timeout: 10000 },
           )
         : await axios.get(url, {
@@ -215,7 +224,8 @@ export const createHeService = () => {
    */
   const resolve = async (apiConfig, input = {}) => {
     const provider = String(
-      apiConfig?.heProvider || (apiConfig?.resolveMsisdnUrl ? 'custom_http' : 'header'),
+      apiConfig?.heProvider ||
+        (apiConfig?.resolveMsisdnUrl ? 'custom_http' : 'header'),
     )
       .toLowerCase()
       .trim();
@@ -229,7 +239,12 @@ export const createHeService = () => {
     }
 
     if (provider === 'header' || !provider) {
-      return { phone: headerPhone, provider: 'header', error: null, ...redirects };
+      return {
+        phone: headerPhone,
+        provider: 'header',
+        error: null,
+        ...redirects,
+      };
     }
 
     // Prefer header if already present (operator gateway injected)

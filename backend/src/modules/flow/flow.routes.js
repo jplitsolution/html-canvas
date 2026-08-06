@@ -131,7 +131,10 @@ export async function flowRoutes(fastify, options) {
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
 
-    console.log('[HE DEBUG] /flow/page headers:', JSON.stringify(allHeaders, null, 2));
+    console.log(
+      '[HE DEBUG] /flow/page headers:',
+      JSON.stringify(allHeaders, null, 2),
+    );
     console.log(
       '[HE DEBUG] /flow/page extracted MSISDN:',
       resolved.phone || '(none)',
@@ -172,30 +175,35 @@ export async function flowRoutes(fastify, options) {
     };
   });
 
-  fastify.post('/transition', { preHandler: publicRateLimit }, async (request, reply) => {
-    const body = request.body || {};
-    const hasVisit = Boolean(body.visitId);
-    const rcid = String(
-      body.rcid || (!hasVisit ? body.click_id || body.clickId || '' : '') || '',
-    ).trim();
-    const clickId = String(body.clickId || body.click_id || '').trim();
+  fastify.post(
+    '/transition',
+    { preHandler: publicRateLimit },
+    async (request, reply) => {
+      const body = request.body || {};
+      const hasVisit = Boolean(body.visitId);
+      const rcid = String(
+        body.rcid ||
+          (!hasVisit ? body.click_id || body.clickId || '' : '') ||
+          '',
+      ).trim();
+      const clickId = String(body.clickId || body.click_id || '').trim();
 
-    return flowService.transition({
-      visitId: body.visitId,
-      fromPage: body.fromPage,
-      action: body.action,
-      phone: body.phone,
-      planId: body.planId,
-      country: body.country,
-      operator: body.operator,
-      campid: body.campid,
-      clickId: clickId || undefined,
-      rcid: rcid || undefined,
-      vid: body.vid,
-      affId: body.affId || body.aff_id,
-    });
-  });
-
+      return flowService.transition({
+        visitId: body.visitId,
+        fromPage: body.fromPage,
+        action: body.action,
+        phone: body.phone,
+        planId: body.planId,
+        country: body.country,
+        operator: body.operator,
+        campid: body.campid,
+        clickId: clickId || undefined,
+        rcid: rcid || undefined,
+        vid: body.vid,
+        affId: body.affId || body.aff_id,
+      });
+    },
+  );
   /**
    * Server-side fetch for Priority Chain API checks.
    * Browser CORS blocks direct calls to partner checksub URLs — this proxies them.
@@ -235,7 +243,9 @@ export async function flowRoutes(fastify, options) {
       ...(pageType ? { pageType } : {}),
       ...(Array.isArray(body.rules) ? { rules: body.rules } : {}),
       ...(body.successKey ? { successKey: body.successKey } : {}),
-      ...(body.successValue != null ? { successValue: body.successValue } : {}),
+        ...(body.successValue != null
+          ? { successValue: body.successValue }
+          : {}),
     };
 
     const serializeBody = (data) => {
