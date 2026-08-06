@@ -43,7 +43,18 @@ export const ConversionPostbackSchema = new EntitySchema({
       type: 'varchar',
       length: 64,
     },
+    /**
+     * Vendor / network campid from tracking URL (?campid=).
+     * Fills postback {campid} / {camp}.
+     */
     campid: {
+      type: 'varchar',
+      length: 128,
+      nullable: true,
+    },
+    /** Our tracking id (BF-OBF-11) from ?tracking_campid=. */
+    trackingCampid: {
+      name: 'tracking_campid',
       type: 'varchar',
       length: 128,
       nullable: true,
@@ -110,5 +121,6 @@ export const ConversionPostbackSchema = new EntitySchema({
   indices: [
     { name: 'IDX_postbacks_msisdn_status', columns: ['msisdn', 'status'] },
     { name: 'IDX_postbacks_visit', columns: ['visitId'] },
+    { name: 'IDX_postbacks_campid', columns: ['campid'] },
   ],
 });

@@ -92,6 +92,35 @@ export const createAnalyticsService = () => {
     return await getVisitRepo().findOne({ where: { id: parseInt(id, 10) } });
   };
 
+  /**
+   * Reuse visit created by detect-msisdn when /page races in parallel
+   * (same campaign + affiliate rcid, recent window).
+   */
+  /**
+   * Reuse visit created by detect-msisdn when /page races in parallel
+   * (same campaign + affiliate rcid, recent window).
+   * Window uses DB clock (NOW()) so Node/Postgres skew cannot break dedupe.
+   */
+  const findRecentVisitByRcid = async (campaignId, rcid, withinMs = 120000) => {
+    const cId = parseInt(campaignId, 10);
+    const key = String(rcid || '').trim();
+    if (!cId || !key) return null;
+
+    const withinSec = Math.max(1, Math.ceil(Number(withinMs) / 1000) || 120);
+
+    const visit = await getVisitRepo()
+      .createQueryBuilder('v')
+      .where('v.campaignId = :cId', { cId })
+      .andWhere('v.rcid = :key', { key })
+      .andWhere(`v.createdAt > NOW() - (:withinSec * INTERVAL '1 second')`, {
+        withinSec,
+      })
+      .orderBy('v.id', 'ASC')
+      .getOne();
+
+    return visit || null;
+  };
+
   const updateVisit = async (id, status, pageType, phone) => {
     const visit = await getVisitRepo().findOne({ where: { id: parseInt(id, 10) } });
     if (!visit) return null;
@@ -112,6 +141,66 @@ export const createAnalyticsService = () => {
     const cleanPhone = phone?.trim();
     if (!cleanPhone) return;
     await getVisitRepo().update({ id: parseInt(id, 10) }, { phone: cleanPhone });
+  };
+
+  /** Fill vendor campid / our tracking_campid when missing on an existing visit. */
+  const ensureVisitCampids = async (id, { campid, trackingCampid } = {}) => {
+    const visitId = parseInt(id, 10);
+    if (!visitId) return;
+    const patch = {};
+    const vendor = String(campid || '').trim();
+    const tracking = String(trackingCampid || '').trim();
+    if (!vendor && !tracking) return;
+
+    const visit = await getVisitRepo().findOne({ where: { id: visitId } });
+    if (!visit) return;
+    if (vendor && !visit.campid) patch.campid = vendor;
+    if (tracking && !visit.trackingCampid) patch.trackingCampid = tracking;
+    if (Object.keys(patch).length === 0) return;
+    await getVisitRepo().update({ id: visitId }, patch);
+  };
+
+  /** Patch attribution fields missing on a visit created by a parallel request. */
+  const ensureVisitAttribution = async (
+    id,
+    { campid, trackingCampid, vidRaw, vendorId } = {},
+  ) => {
+    const visitId = parseInt(id, 10);
+    if (!visitId) return;
+    const visit = await getVisitRepo().findOne({ where: { id: visitId } });
+    if (!visit) return;
+    const patch = {};
+    const vendor = String(campid || '').trim();
+    const tracking = String(trackingCampid || '').trim();
+    const vid = String(vidRaw || '').trim();
+    if (vendor && !visit.campid) patch.campid = vendor;
+    if (tracking && !visit.trackingCampid) patch.trackingCampid = tracking;
+    if (vid && !visit.vidRaw) patch.vidRaw = vid;
+    if (vendorId && !visit.vendorId) patch.vendorId = vendorId;
+    if (Object.keys(patch).length === 0) return;
+    await getVisitRepo().update({ id: visitId }, patch);
+  };
+
+  /**
+   * Drop a duplicate visit created by parallel detect+/page race.
+   * Only removes if it has no meaningful events beyond the auto VISIT.
+   */
+  const abandonOrphanVisit = async (id) => {
+    const visitId = parseInt(id, 10);
+    if (!visitId) return false;
+    const events = await getVisitEventRepo().find({
+      where: { visitId },
+      take: 5,
+    });
+    const meaningful = (events || []).filter(
+      (e) => e.eventType && e.eventType !== VisitEventType.VISIT,
+    );
+    if (meaningful.length > 0) return false;
+    if (events?.length) {
+      await getVisitEventRepo().delete({ visitId });
+    }
+    await getVisitRepo().delete({ id: visitId });
+    return true;
   };
 
   const logEvent = async (visitId, eventType, metadata) => {
@@ -463,6 +552,8 @@ export const createAnalyticsService = () => {
         visitStatus: visit.visitStatus,
         clickId: visit.clickId,
         rcid: visit.rcid,
+        campid: visit.campid || null,
+        trackingCampid: visit.trackingCampid || null,
         vidRaw: visit.vidRaw,
         affRaw: visit.affRaw,
         vendorId: visit.vendorId,
@@ -484,9 +575,13 @@ export const createAnalyticsService = () => {
     indexVisitEvent,
     createVisit,
     getVisit,
+    findRecentVisitByRcid,
     getVisitDetail,
     updateVisit,
     setVisitPhone,
+    ensureVisitCampids,
+    ensureVisitAttribution,
+    abandonOrphanVisit,
     logEvent,
     getCampaignAnalytics,
     getCampaignActivityLogs,

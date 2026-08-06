@@ -206,6 +206,7 @@ function CampaignLogsPage() {
   }, [navigate])
 
   const [datePreset, setDatePreset] = useState('today')
+  const [viewMode, setViewMode] = useState('sessions') // sessions | events
   const [filters, setFilters] = useState(() => {
     const range = getDateRangeForPreset('today', timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
     return {
@@ -263,7 +264,7 @@ function CampaignLogsPage() {
     try {
       const interval = resolveInterval(datePreset, filters.from, filters.to)
       const aggParams = { ...filters, interval, timezone }
-      const params = { ...filters, page, size: PAGE_SIZE, timezone }
+      const params = { ...filters, page, size: PAGE_SIZE, timezone, view: viewMode }
       const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
         isAll ? getAllCampaignLogAggregations(aggParams) : getCampaignLogAggregations(selectedId, aggParams),
@@ -276,7 +277,7 @@ function CampaignLogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedId, filters, page, addToast, datePreset, timezone])
+  }, [selectedId, filters, page, addToast, datePreset, timezone, viewMode])
 
   useEffect(() => {
     fetchData()
@@ -325,19 +326,53 @@ function CampaignLogsPage() {
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              Searchable event stream with real-time vendor attribution telemetry.
+              {viewMode === 'sessions'
+                ? 'One row per click/session — open Eye for full event timeline.'
+                : 'Raw event stream — every funnel / postback step as its own row.'}
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchData}
-            disabled={loading}
-            className="flex items-center gap-2 self-start sm:self-center border-gray-200/80 bg-white hover:bg-gray-50 text-gray-700 shadow-2xs font-semibold px-4 py-2 rounded-xl"
-          >
-            <RefreshCw className={`w-4 h-4 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Data
-          </Button>
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5 shadow-2xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('sessions')
+                  setPage(1)
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  viewMode === 'sessions'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Sessions
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setViewMode('events')
+                  setPage(1)
+                }}
+                className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  viewMode === 'events'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Events
+              </button>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchData}
+              disabled={loading}
+              className="flex items-center gap-2 border-gray-200/80 bg-white hover:bg-gray-50 text-gray-700 shadow-2xs font-semibold px-4 py-2 rounded-xl"
+            >
+              <RefreshCw className={`w-4 h-4 text-gray-500 ${loading ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {!esEnabled && (
@@ -467,7 +502,12 @@ function CampaignLogsPage() {
         {/* KPI Summary Widgets */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard label="Total Event Count" value={totalEvents} icon={Activity} colorClass="from-indigo-500 to-purple-500" />
-          <StatCard label="Loaded Log Rows" value={logs.total || 0} icon={Database} colorClass="from-blue-500 to-indigo-500" />
+          <StatCard
+            label={viewMode === 'sessions' ? 'Sessions in filter' : 'Loaded log rows'}
+            value={logs.total || 0}
+            icon={Database}
+            colorClass="from-blue-500 to-indigo-500"
+          />
           <StatCard label="Unique Vendors" value={(aggs?.byVendor || []).length} icon={Users} colorClass="from-teal-500 to-emerald-500" />
           <StatCard label="Campaigns in view" value={selectedId === 'all' ? (aggs?.byCampaign || []).length || '—' : 1} icon={UserCheck} colorClass="from-amber-500 to-orange-500" />
         </div>
@@ -555,7 +595,13 @@ function CampaignLogsPage() {
         </div>
 
         {/* Log Viewer Table */}
-        <SectionCard title="Real-Time Event Stream Log">
+        <SectionCard
+          title={
+            viewMode === 'sessions'
+              ? 'Sessions (one row per click)'
+              : 'Real-Time Event Stream Log'
+          }
+        >
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -564,7 +610,11 @@ function CampaignLogsPage() {
           ) : logs.items.length === 0 ? (
             <div className="text-center py-12">
               <Database className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-gray-500">No telemetry log events match these filters.</p>
+              <p className="text-sm font-semibold text-gray-500">
+                {viewMode === 'sessions'
+                  ? 'No sessions match these filters.'
+                  : 'No telemetry log events match these filters.'}
+              </p>
             </div>
           ) : (
             <>
@@ -572,36 +622,65 @@ function CampaignLogsPage() {
                 <table className="min-w-full divide-y divide-gray-100 text-left">
                   <thead>
                     <tr className="bg-gray-50/75 border-b border-gray-100">
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Time</th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Name</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Time</span>
+                      </th>
+                      {viewMode === 'events' ? (
+                        <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Name</th>
+                      ) : (
+                        <>
+                          <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Last Event</th>
+                          <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Events</th>
+                        </>
+                      )}
                       {selectedId === 'all' && (
                         <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campaign</th>
                       )}
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Funnel Page</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Funnel Page</span>
+                      </th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Session Status</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor</th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID ID</th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campid</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</span>
+                      </th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
                       <tr
-                        key={`${row.visitId}-${idx}`}
+                        key={`${row.visitId}-${row.eventType || 's'}-${idx}`}
                         className="hover:bg-gray-50/80 transition-colors duration-150"
                       >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs font-medium" onClick={(e) => {
-                          e.stopPropagation()
-                          if (row.eventType) updateFilter('eventType', row.eventType)
-                        }}>
-                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border hover:underline ${getEventBadgeClass(row.eventType)}`} title="Click to filter by event type">
-                            {row.eventType || '—'}
-                          </span>
-                        </td>
+                        {viewMode === 'events' ? (
+                          <td className="px-4 py-3 text-xs font-medium" onClick={(e) => {
+                            e.stopPropagation()
+                            if (row.eventType) updateFilter('eventType', row.eventType)
+                          }}>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border hover:underline ${getEventBadgeClass(row.eventType)}`} title="Click to filter by event type">
+                              {row.eventType || '—'}
+                            </span>
+                          </td>
+                        ) : (
+                          <>
+                            <td className="px-4 py-3 text-xs font-medium">
+                              {row.eventType ? (
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
+                                  {row.eventType}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>}
+                            </td>
+                            <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
+                              {row.eventCount != null ? row.eventCount : '—'}
+                            </td>
+                          </>
+                        )}
                         {selectedId === 'all' && (
                           <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
                             e.stopPropagation()
@@ -640,6 +719,9 @@ function CampaignLogsPage() {
                               {row.vidRaw || row.vendorId}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono text-gray-700 whitespace-nowrap max-w-[140px] truncate" title={row.campid || ''}>
+                          {row.campid || <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap" onClick={(e) => {
                           e.stopPropagation()
@@ -683,7 +765,9 @@ function CampaignLogsPage() {
               {/* Pagination Controls */}
               <div className="flex items-center justify-between mt-5 bg-gray-50/50 p-4 border border-gray-100 rounded-xl">
                 <p className="text-xs font-medium text-gray-500">
-                  Page <span className="font-bold text-gray-800">{logs.page}</span> of <span className="font-bold text-gray-800">{totalPages}</span> · Total <span className="font-bold text-indigo-600">{logs.total}</span> events
+                  Page <span className="font-bold text-gray-800">{logs.page}</span> of <span className="font-bold text-gray-800">{totalPages}</span> · Total{' '}
+                  <span className="font-bold text-indigo-600">{logs.total}</span>{' '}
+                  {viewMode === 'sessions' ? 'sessions' : 'events'}
                 </p>
                 <div className="flex gap-2">
                   <Button

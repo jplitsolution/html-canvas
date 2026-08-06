@@ -8,6 +8,12 @@ export const ApiCallType = {
   BLOCKLIST: 'blocklist',
   RESOLVE_MSISDN: 'resolve_msisdn',
   PRIORITY: 'priority',
+  HE_TOKEN: 'he_token',
+  HE_MSISDN: 'he_msisdn',
+  HE_RESOLVE: 'he_resolve',
+  HE_REDIRECT: 'he_redirect',
+  BILLING_CALLBACK: 'billing_callback',
+  VENDOR_POSTBACK: 'vendor_postback',
 };
 
 export const ApiCallLogSchema = new EntitySchema({

@@ -9,16 +9,20 @@ import { Visit } from '../analytics/entities/visit.entity.js';
 import { analyticsService } from '../analytics/analytics.service.js';
 import { VisitEventType } from '../analytics/entities/visit-event.entity.js';
 import { searchService } from '../search/search.service.js';
+import { apiCallLogService } from '../flow/api-call-log.service.js';
+import { ApiCallType } from '../flow/entities/api-call-log.entity.js';
 
 /**
  * Vendor CPA postbacks (SAFWAP callback_manage parity).
  *
  * Placeholders in postback_url:
- *   {{msisdn}} {{click_id}} {{rcid}} {{campid}} {{camp}} {{offer_code}}
- *   {{visit_id}} {{vendor}}
+ *   {{msisdn}} {{click_id}} {{rcid}} {{campid}} {{camp}} {{tracking_campid}}
+ *   {{offer_code}} {{visit_id}} {{vendor}}
  * Also supports SAFWAP single-brace form: {msisdn}, {rcid}, {campid}
  *
  * click_id = our generated id; rcid = network original click.
+ * campid / camp = vendor campid from tracking URL (NOT our BF-OBF-11).
+ * tracking_campid = our tracking id.
  */
 export const createPostbackService = () => {
   const getPostbackRepo = () => getRepository(ConversionPostback);
@@ -30,6 +34,15 @@ export const createPostbackService = () => {
     const trimmed = String(phone).trim();
     if (trimmed.length <= 4) return '****';
     return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+  };
+
+  const serializeBody = (data) => {
+    if (data == null) return null;
+    try {
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return String(data);
+    }
   };
 
   const fillTemplate = (template, vars) => {
@@ -58,6 +71,8 @@ export const createPostbackService = () => {
       affiliateId: row.affiliateId,
       clickId: row.clickId,
       rcid: row.rcid,
+      campid: row.campid,
+      trackingCampid: row.trackingCampid,
       phoneMasked: maskPhone(row.msisdn),
       eventType,
       status: row.status,
@@ -67,8 +82,17 @@ export const createPostbackService = () => {
     });
   };
 
+  const logApiCall = async (input) => {
+    try {
+      await apiCallLogService.record(input);
+    } catch (err) {
+      console.warn(`postback api_call_logs write failed: ${err.message}`);
+    }
+  };
+
   /**
    * Queue a pending postback after confirm / CG (operator may confirm later).
+   * campid = vendor; trackingCampid = ours.
    */
   const registerPending = async (input) => {
     const msisdn = String(input.msisdn || input.phone || '').replace(/\D/g, '');
@@ -79,11 +103,17 @@ export const createPostbackService = () => {
     let vendorId = input.vendorId || null;
     let clickId = input.clickId || '';
     let rcid = input.rcid || '';
-    let campid = input.campid || '';
+    let campid = String(input.campid || '').trim();
+    let trackingCampid = String(
+      input.trackingCampid || input.tracking_campid || '',
+    ).trim();
     let visitId = input.visitId || null;
     let campaignId = input.campaignId || null;
 
-    if (visitId && (!vendorId || !clickId || !rcid || !campid || !campaignId)) {
+    if (
+      visitId &&
+      (!vendorId || !clickId || !rcid || !campid || !trackingCampid || !campaignId)
+    ) {
       const visit = await getVisitRepo().findOne({
         where: { id: parseInt(visitId, 10) },
       });
@@ -92,8 +122,9 @@ export const createPostbackService = () => {
         clickId = clickId || visit.clickId || '';
         rcid = rcid || visit.rcid || '';
         campaignId = campaignId || visit.campaignId || null;
-        if (!campid && visit.campaignId) {
-          campid = String(visit.campaignId);
+        if (!campid && visit.campid) campid = String(visit.campid);
+        if (!trackingCampid && visit.trackingCampid) {
+          trackingCampid = String(visit.trackingCampid);
         }
       }
     }
@@ -135,6 +166,7 @@ export const createPostbackService = () => {
         affiliateId: null,
         msisdn,
         campid: campid || null,
+        trackingCampid: trackingCampid || null,
         clickId: clickId || null,
         rcid: rcid || null,
         offerCode: input.offerCode || null,
@@ -148,9 +180,13 @@ export const createPostbackService = () => {
         visitId,
         VisitEventType.POSTBACK_PENDING,
         {
+          info: 'Vendor CPA postback queued — waiting for billing callback.',
           postbackId: row.id,
           rcid: row.rcid,
           clickId: row.clickId,
+          campid: row.campid,
+          trackingCampid: row.trackingCampid,
+          postbackUrl: template,
         },
       );
     } else {
@@ -183,13 +219,15 @@ export const createPostbackService = () => {
 
     const networkRcid = row.rcid || row.clickId || '';
     const ourClickId = row.clickId || '';
+    const vendorCampid = row.campid || '';
 
     const url = fillTemplate(row.postbackUrl, {
       msisdn: row.msisdn,
       click_id: ourClickId,
       rcid: networkRcid,
-      campid: row.campid || '',
-      camp: row.campid || '',
+      campid: vendorCampid,
+      camp: vendorCampid,
+      tracking_campid: row.trackingCampid || '',
       offer_code: row.offerCode || '',
       visit_id: row.visitId != null ? String(row.visitId) : '',
       vendor: vendorCode,
@@ -207,40 +245,66 @@ export const createPostbackService = () => {
           ? response.data.slice(0, 2000)
           : JSON.stringify(response.data).slice(0, 2000);
 
-      row.status =
-        response.status >= 200 && response.status < 300
-          ? ConversionPostbackStatus.SENT
-          : ConversionPostbackStatus.FAILED;
+      const ok = response.status >= 200 && response.status < 300;
+      row.status = ok
+        ? ConversionPostbackStatus.SENT
+        : ConversionPostbackStatus.FAILED;
       row.httpStatus = response.status;
       row.responseBody = body;
       row.sentAt = new Date();
-      row.errorMessage =
-        row.status === ConversionPostbackStatus.FAILED
-          ? `HTTP ${response.status}`
-          : null;
+      row.errorMessage = ok ? null : `HTTP ${response.status}`;
       await getPostbackRepo().save(row);
 
-      const eventType =
-        row.status === ConversionPostbackStatus.SENT
-          ? VisitEventType.POSTBACK_SENT
-          : VisitEventType.POSTBACK_FAILED;
+      await logApiCall({
+        visitId: row.visitId,
+        campaignId: row.campaignId,
+        msisdn: row.msisdn,
+        rcid: row.rcid,
+        clickId: row.clickId,
+        callType: ApiCallType.VENDOR_POSTBACK,
+        requestUrl: url,
+        requestBody: serializeBody({
+          method: 'GET',
+          postbackId: row.id,
+          vendorId: row.vendorId,
+          campid: vendorCampid,
+          trackingCampid: row.trackingCampid,
+          template: row.postbackUrl,
+        }),
+        responseStatus: response.status,
+        responseBody: body,
+        success: ok,
+        errorMessage: ok ? null : `HTTP ${response.status}`,
+        statusLabel: ok ? 'SUCCESS' : 'FAILED',
+      });
+
+      const eventType = ok
+        ? VisitEventType.POSTBACK_SENT
+        : VisitEventType.POSTBACK_FAILED;
 
       if (row.visitId) {
         await analyticsService.logEvent(row.visitId, eventType, {
+          info: ok
+            ? 'Vendor / affiliate CPA postback fired successfully.'
+            : `Vendor / affiliate CPA postback failed (HTTP ${response.status}).`,
           postbackId: row.id,
           httpStatus: response.status,
           url,
+          campid: vendorCampid,
+          trackingCampid: row.trackingCampid,
+          responseBody: body,
         });
       } else {
         await indexPostbackEvent(row, eventType, { requestUrl: url });
       }
 
       return {
-        success: row.status === ConversionPostbackStatus.SENT,
+        success: ok,
         id: row.id,
         url,
         httpStatus: response.status,
         status: row.status,
+        responseBody: body,
       };
     } catch (err) {
       row.status = ConversionPostbackStatus.FAILED;
@@ -248,14 +312,40 @@ export const createPostbackService = () => {
       row.sentAt = new Date();
       await getPostbackRepo().save(row);
 
+      await logApiCall({
+        visitId: row.visitId,
+        campaignId: row.campaignId,
+        msisdn: row.msisdn,
+        rcid: row.rcid,
+        clickId: row.clickId,
+        callType: ApiCallType.VENDOR_POSTBACK,
+        requestUrl: url,
+        requestBody: serializeBody({
+          method: 'GET',
+          postbackId: row.id,
+          vendorId: row.vendorId,
+          campid: vendorCampid,
+          trackingCampid: row.trackingCampid,
+          template: row.postbackUrl,
+        }),
+        responseStatus: err.response?.status ?? null,
+        responseBody: serializeBody(err.response?.data),
+        success: false,
+        errorMessage: err.message,
+        statusLabel: 'FAILED',
+      });
+
       if (row.visitId) {
         await analyticsService.logEvent(
           row.visitId,
           VisitEventType.POSTBACK_FAILED,
           {
+            info: `Vendor / affiliate CPA postback error: ${err.message}`,
             postbackId: row.id,
             error: err.message,
             url,
+            campid: vendorCampid,
+            trackingCampid: row.trackingCampid,
           },
         );
       } else {
@@ -303,8 +393,41 @@ export const createPostbackService = () => {
       order: { id: 'DESC' },
     });
 
+    const logInbound = async (visitId, campaignId, clickId, rcid, extra = {}) => {
+      const safeQuery = { ...query };
+      if (safeQuery.msisdn) safeQuery.msisdn = maskPhone(safeQuery.msisdn);
+      if (safeQuery.phone) safeQuery.phone = maskPhone(safeQuery.phone);
+
+      if (visitId) {
+        await analyticsService.logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, {
+          info: 'Billing / operator callback received — firing vendor postback.',
+          msisdn: maskPhone(msisdn),
+          status,
+          ...extra,
+        });
+      }
+      await logApiCall({
+        visitId: visitId || null,
+        campaignId: campaignId || null,
+        msisdn,
+        rcid: rcid || null,
+        clickId: clickId || null,
+        callType: ApiCallType.BILLING_CALLBACK,
+        requestUrl: '/api/flow/callback',
+        requestBody: serializeBody({
+          msisdn: maskPhone(msisdn),
+          status,
+          query: safeQuery,
+          ...extra,
+        }),
+        responseStatus: 200,
+        responseBody: null,
+        success: true,
+        statusLabel: 'RECEIVED',
+      });
+    };
+
     if (!pending) {
-      // Fallback: latest visit for this MSISDN that has attribution — register then fire.
       const visit = await getVisitRepo()
         .createQueryBuilder('v')
         .where('v.phone = :msisdn', { msisdn })
@@ -316,6 +439,13 @@ export const createPostbackService = () => {
         return { skipped: true, reason: 'No pending callback' };
       }
 
+      await logInbound(visit.id, visit.campaignId, visit.clickId, visit.rcid, {
+        action: 'register_then_fire',
+        reason: 'no pending row — registered from latest visit',
+        campid: visit.campid,
+        trackingCampid: visit.trackingCampid,
+      });
+
       const registered = await registerPending({
         visitId: visit.id,
         msisdn,
@@ -324,7 +454,8 @@ export const createPostbackService = () => {
         affiliateId: null,
         clickId: visit.clickId,
         rcid: visit.rcid,
-        campid: visit.campaignId != null ? String(visit.campaignId) : '',
+        campid: visit.campid || '',
+        trackingCampid: visit.trackingCampid || '',
       });
       if (registered.skipped && !registered.id) {
         return registered;
@@ -335,6 +466,19 @@ export const createPostbackService = () => {
       }
       return firePostback(id);
     }
+
+    await logInbound(
+      pending.visitId,
+      pending.campaignId,
+      pending.clickId,
+      pending.rcid,
+      {
+        action: 'fire',
+        postbackId: pending.id,
+        campid: pending.campid,
+        trackingCampid: pending.trackingCampid,
+      },
+    );
 
     return firePostback(pending.id);
   };

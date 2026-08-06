@@ -8,6 +8,7 @@ export async function fetchFlowPage({
   visitId,
   pack,
   campid,
+  trackingCampid,
   vid,
   affId,
   clickId,
@@ -22,8 +23,9 @@ export async function fetchFlowPage({
   if (visitId) params.set('visitId', String(visitId))
   if (pack) params.set('pack', pack)
   if (msisdn) params.set('msisdn', String(msisdn))
-  // Affiliate / vendor click attribution (tracking-URL params).
+  // Vendor campid + our tracking_campid (dual).
   if (campid) params.set('campid', String(campid))
+  if (trackingCampid) params.set('tracking_campid', String(trackingCampid))
   if (vid) params.set('vid', String(vid))
   if (affId) params.set('aff_id', String(affId))
   // Our click_id + affiliate rcid (dual attribution).
@@ -88,9 +90,10 @@ export async function priorityCheckApi(url, meta = {}) {
   })
 }
 
-export async function fetchFlowEntry({ country, operator, campid }) {
+export async function fetchFlowEntry({ country, operator, campid, trackingCampid }) {
   const params = new URLSearchParams({ country, operator, page: 'HOME' })
   if (campid) params.set('campid', String(campid))
+  if (trackingCampid) params.set('tracking_campid', String(trackingCampid))
   return apiClient(`/flow/entry?${params.toString()}`, { method: 'GET' })
 }
 
@@ -110,18 +113,24 @@ export async function detectMsisdnApi({
   country,
   operator,
   campid,
+  trackingCampid,
   phone,
   clickId,
   rcid,
+  visitId,
   sessionId,
+  vid,
 } = {}) {
   const params = new URLSearchParams()
   if (country) params.set('country', country)
   if (operator) params.set('operator', operator)
   if (campid) params.set('campid', String(campid))
+  if (trackingCampid) params.set('tracking_campid', String(trackingCampid))
   if (phone) params.set('msisdn', String(phone))
   if (clickId) params.set('click_id', String(clickId))
   if (rcid) params.set('rcid', String(rcid))
+  if (visitId) params.set('visitId', String(visitId))
+  if (vid) params.set('vid', String(vid))
 
   // Pull attribution from the live landing URL when callers omit it.
   if (typeof window !== 'undefined') {
@@ -134,13 +143,33 @@ export async function detectMsisdnApi({
       const fromUrl = q.get('rcid')
       if (fromUrl) params.set('rcid', fromUrl)
     }
-    // Stable browser session for Safaricom token (X-Session-ID).
+    if (!params.get('campid')) {
+      const fromUrl = q.get('campid')
+      if (fromUrl) params.set('campid', fromUrl)
+    }
+    if (!params.get('tracking_campid')) {
+      const fromUrl = q.get('tracking_campid') || q.get('trackingCampid')
+      if (fromUrl) params.set('tracking_campid', fromUrl)
+    }
+    if (!params.get('vid')) {
+      const fromUrl = q.get('vid')
+      if (fromUrl) params.set('vid', fromUrl)
+    }
+    if (!params.get('visitId')) {
+      const fromUrl = q.get('visitId')
+      if (fromUrl) params.set('visitId', fromUrl)
+    }
+    // Stable browser session for Safaricom token (X-Session-ID) — same pattern as
+    // partner sample sessionStorage `session_id` / `sid_<ts>_<rand>`.
     let sid = sessionId
     if (!sid) {
       try {
-        sid = sessionStorage.getItem('templatecraft_he_session_id')
+        sid =
+          sessionStorage.getItem('session_id') ||
+          sessionStorage.getItem('templatecraft_he_session_id')
         if (!sid) {
-          sid = `sid_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+          sid = `sid_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`
+          sessionStorage.setItem('session_id', sid)
           sessionStorage.setItem('templatecraft_he_session_id', sid)
         }
       } catch {
@@ -166,6 +195,9 @@ export async function detectMsisdnApi({
       cgRedirectUrl: res?.cgRedirectUrl,
       subscribed: res?.subscribed,
       blocked: res?.blocked,
+      visitId: res?.visitId,
+      clickId: res?.clickId,
+      rcid: res?.rcid,
     })
     return res
   } catch (err) {

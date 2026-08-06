@@ -2,6 +2,7 @@ import { Client } from '@elastic/elasticsearch';
 import { Brackets } from 'typeorm';
 import { getDataSource, getRepository } from '../../database/index.js';
 import { VisitEvent } from '../analytics/entities/visit-event.entity.js';
+import { Visit } from '../analytics/entities/visit.entity.js';
 import getConfig from '../../config/configuration.js';
 
 export const createSearchService = () => {
@@ -286,6 +287,8 @@ export const createSearchService = () => {
             .orWhere('visit.vidRaw LIKE :searchLike', { searchLike })
             .orWhere('visit.affRaw LIKE :searchLike', { searchLike })
             .orWhere('visit.phone LIKE :searchLike', { searchLike })
+            .orWhere('visit.campid LIKE :searchLike', { searchLike })
+            .orWhere('visit.trackingCampid LIKE :searchLike', { searchLike })
             .orWhere('visit.ipAddress LIKE :searchLike', { searchLike })
             .orWhere('visit.userAgent LIKE :searchLike', { searchLike });
         }),
@@ -293,7 +296,158 @@ export const createSearchService = () => {
     }
   };
 
+  const applyVisitFilters = (queryBuilder, params) => {
+    if (Array.isArray(params.campaignId)) {
+      queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
+        campaignIds: params.campaignId.length > 0 ? params.campaignId : [-1],
+      });
+    } else {
+      queryBuilder.where('visit.campaignId = :campaignId', {
+        campaignId: params.campaignId,
+      });
+    }
+
+    if (params.visitId !== undefined) {
+      queryBuilder.andWhere('visit.id = :visitId', { visitId: params.visitId });
+    }
+    if (params.vendorId) {
+      queryBuilder.andWhere('visit.vendorId = :vendorId', {
+        vendorId: params.vendorId,
+      });
+    }
+    if (params.affiliateId) {
+      queryBuilder.andWhere('visit.affiliateId = :affiliateId', {
+        affiliateId: params.affiliateId,
+      });
+    }
+    if (params.clickId) {
+      queryBuilder.andWhere('visit.clickId = :clickId', {
+        clickId: params.clickId,
+      });
+    }
+    if (params.rcid) {
+      queryBuilder.andWhere('visit.rcid = :rcid', { rcid: params.rcid });
+    }
+    if (params.from || params.to) {
+      const { from, to } = resolveRangeBounds(params);
+      if (from) queryBuilder.andWhere('visit.createdAt >= :from', { from });
+      if (to) queryBuilder.andWhere('visit.createdAt <= :to', { to });
+    }
+    if (params.eventType) {
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM visit_events ve
+          WHERE ve.visit_id = visit.id AND ve.event_type = :eventType
+        )`,
+        { eventType: params.eventType },
+      );
+    }
+    if (params.q) {
+      const dbQuery = params.q.replace(/\*/g, '_');
+      const searchLike = `%${dbQuery}%`;
+      queryBuilder.andWhere(
+        new Brackets((qb) => {
+          qb.where('visit.clickId LIKE :searchLike', { searchLike })
+            .orWhere('visit.rcid LIKE :searchLike', { searchLike })
+            .orWhere('visit.vidRaw LIKE :searchLike', { searchLike })
+            .orWhere('visit.affRaw LIKE :searchLike', { searchLike })
+            .orWhere('visit.phone LIKE :searchLike', { searchLike })
+            .orWhere('visit.campid LIKE :searchLike', { searchLike })
+            .orWhere('visit.trackingCampid LIKE :searchLike', { searchLike })
+            .orWhere('visit.ipAddress LIKE :searchLike', { searchLike })
+            .orWhere('visit.userAgent LIKE :searchLike', { searchLike });
+        }),
+      );
+    }
+  };
+
+  const searchSessionsFromDb = async (params) => {
+    const page = Math.max(1, params.page || 1);
+    const size = Math.min(200, Math.max(1, params.size || 25));
+
+    const queryBuilder = getRepository(Visit).createQueryBuilder('visit');
+    applyVisitFilters(queryBuilder, params);
+
+    queryBuilder
+      .orderBy('visit.updatedAt', 'DESC')
+      .addOrderBy('visit.id', 'DESC')
+      .skip((page - 1) * size)
+      .take(size);
+
+    const [visits, total] = await queryBuilder.getManyAndCount();
+    const ids = visits.map((v) => v.id).filter(Boolean);
+
+    const eventCountByVisit = new Map();
+    const lastEventByVisit = new Map();
+    if (ids.length > 0) {
+      const counts = await getRepository(VisitEvent)
+        .createQueryBuilder('e')
+        .select('e.visitId', 'visitId')
+        .addSelect('COUNT(e.id)', 'cnt')
+        .where('e.visitId IN (:...ids)', { ids })
+        .groupBy('e.visitId')
+        .getRawMany();
+      for (const row of counts) {
+        eventCountByVisit.set(Number(row.visitId), Number(row.cnt) || 0);
+      }
+
+      const dbType = getDataSource().options.type;
+      if (dbType === 'postgres') {
+        const lasts = await getRepository(VisitEvent)
+          .createQueryBuilder('e')
+          .distinctOn(['e.visitId'])
+          .where('e.visitId IN (:...ids)', { ids })
+          .orderBy('e.visitId', 'ASC')
+          .addOrderBy('e.createdAt', 'DESC')
+          .getMany();
+        for (const e of lasts) {
+          lastEventByVisit.set(e.visitId, e.eventType);
+        }
+      } else {
+        for (const id of ids) {
+          const last = await getRepository(VisitEvent).findOne({
+            where: { visitId: id },
+            order: { createdAt: 'DESC' },
+          });
+          if (last) lastEventByVisit.set(id, last.eventType);
+        }
+      }
+    }
+
+    const items = visits.map((visit) => ({
+      campaignId: visit.campaignId,
+      visitId: visit.id,
+      vendorId: visit.vendorId,
+      affiliateId: visit.affiliateId,
+      clickId: visit.clickId,
+      rcid: visit.rcid,
+      campid: visit.campid || null,
+      trackingCampid: visit.trackingCampid || null,
+      vidRaw: visit.vidRaw,
+      affRaw: visit.affRaw,
+      phoneMasked: maskPhone(visit.phone),
+      country: visit.country,
+      operator: visit.operator,
+      pageType: visit.pageType,
+      eventType: lastEventByVisit.get(visit.id) || null,
+      eventCount: eventCountByVisit.get(visit.id) || 0,
+      status: visit.visitStatus,
+      ip: visit.ipAddress,
+      userAgent: visit.userAgent,
+      timestamp: (visit.updatedAt || visit.createdAt)?.toISOString?.()
+        || visit.updatedAt
+        || visit.createdAt,
+      view: 'sessions',
+    }));
+
+    return { total, page, size, items, view: 'sessions' };
+  };
+
   const searchFromDb = async (params) => {
+    if (params.view === 'sessions') {
+      return searchSessionsFromDb(params);
+    }
+
     const page = Math.max(1, params.page || 1);
     const size = Math.min(200, Math.max(1, params.size || 25));
 
@@ -317,6 +471,8 @@ export const createSearchService = () => {
       affiliateId: event.visit?.affiliateId,
       clickId: event.visit?.clickId,
       rcid: event.visit?.rcid,
+      campid: event.visit?.campid || null,
+      trackingCampid: event.visit?.trackingCampid || null,
       vidRaw: event.visit?.vidRaw,
       affRaw: event.visit?.affRaw,
       phoneMasked: maskPhone(event.visit?.phone),
@@ -328,14 +484,21 @@ export const createSearchService = () => {
       ip: event.visit?.ipAddress,
       userAgent: event.visit?.userAgent,
       timestamp: event.createdAt.toISOString(),
+      view: 'events',
     }));
 
-    return { total, page, size, items };
+    return { total, page, size, items, view: 'events' };
   };
 
   const search = async (params) => {
     const page = Math.max(1, params.page || 1);
     const size = Math.min(200, Math.max(1, params.size || 25));
+    const view = params.view === 'sessions' ? 'sessions' : 'events';
+
+    // Sessions = one row per visit; always use DB for accurate unique counts.
+    if (view === 'sessions') {
+      return searchSessionsFromDb(params);
+    }
 
     if (client && !connectionFailed) {
       try {
@@ -354,6 +517,7 @@ export const createSearchService = () => {
           total: totalValue,
           page,
           size,
+          view: 'events',
           items: res.hits.hits.map((h) => h._source),
         };
       } catch (err) {
@@ -361,7 +525,7 @@ export const createSearchService = () => {
       }
     }
 
-    return searchFromDb(params);
+    return searchFromDb({ ...params, view: 'events' });
   };
 
   const resolveInterval = (params) => {

@@ -217,7 +217,7 @@ function getSelectedPackFromShadow(shadow) {
   return normalizePack(selected?.getAttribute('data-pack'))
 }
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -421,6 +421,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
           country,
           operator,
           campid: campid || undefined,
+          trackingCampid: trackingCampid || undefined,
           fromPage: 'OTP',
           action: 'CONTINUE',
           phone: msisdn,
@@ -496,10 +497,22 @@ function SubscriptionPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const country = searchParams.get('country') || ''
   const operator = searchParams.get('operator') || ''
-  // Affiliate / vendor click attribution (from the shared tracking URL).
-  // Incoming affiliate click may arrive as click_id or rcid; after first /flow/page
-  // response, click_id becomes ours and rcid stays the affiliate original.
-  const campid = searchParams.get('campid') || ''
+  // Dual campaign ids:
+  // - campid = vendor/network (postback {campid})
+  // - tracking_campid = ours (BF-OBF-11) for resolve
+  // Legacy: only campid that looks like our tracking id → treat as tracking.
+  const urlCampidRaw = searchParams.get('campid') || ''
+  const urlTrackingRaw =
+    searchParams.get('tracking_campid') || searchParams.get('trackingCampid') || ''
+  const looksLikeOurs =
+    /^[A-Z0-9]+-[A-Z0-9]+-\d+$/i.test(urlCampidRaw.trim()) ||
+    /^\d+$/.test(urlCampidRaw.trim())
+  let trackingCampid = urlTrackingRaw
+  let campid = urlCampidRaw
+  if (!trackingCampid && looksLikeOurs) {
+    trackingCampid = urlCampidRaw
+    campid = ''
+  }
   const vid = searchParams.get('vid') || ''
   const affId = searchParams.get('aff_id') || ''
   const urlRcid = searchParams.get('rcid') || ''
@@ -534,12 +547,40 @@ function SubscriptionPage() {
     cgRedirectUrl: null,
   })
   const loadGenerationRef = useRef(0)
-  // Our click_id is empty until /flow/page returns it; affiliate seed goes in rcid.
+  // Our click_id is empty until detect-msisdn /flow/page returns it; affiliate seed goes in rcid.
   const clickIdRef = useRef('')
   const rcidRef = useRef(urlRcid || urlClickId || '')
   const vidRef = useRef(vid)
   const affIdRef = useRef(affId)
   const campidRef = useRef(campid)
+  const trackingCampidRef = useRef(trackingCampid)
+
+  // Stable landing seed so parallel detect + /page share one visit when URL has no click_id.
+  useEffect(() => {
+    if (urlRcid) {
+      rcidRef.current = urlRcid
+      return
+    }
+    if (urlClickId && !rcidRef.current) {
+      rcidRef.current = urlClickId
+      return
+    }
+    if (rcidRef.current) return
+    try {
+      const key = `tc_landing_rcid_${country}_${operator}_${trackingCampid || campid || 'x'}`
+      let seed = sessionStorage.getItem(key)
+      if (!seed) {
+        seed =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `land_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+        sessionStorage.setItem(key, seed)
+      }
+      rcidRef.current = seed
+    } catch {
+      rcidRef.current = `land_${Date.now()}`
+    }
+  }, [country, operator, campid, trackingCampid, urlRcid, urlClickId])
 
   useEffect(() => {
     if (urlRcid) rcidRef.current = urlRcid
@@ -551,7 +592,8 @@ function SubscriptionPage() {
     if (vid) vidRef.current = vid
     if (affId) affIdRef.current = affId
     if (campid) campidRef.current = campid
-  }, [urlClickId, urlRcid, vid, affId, campid])
+    if (trackingCampid) trackingCampidRef.current = trackingCampid
+  }, [urlClickId, urlRcid, vid, affId, campid, trackingCampid])
 
   const queryKey = useMemo(
     () => `${country}|${operator}|${phone}`,
@@ -613,6 +655,11 @@ function SubscriptionPage() {
         country,
         operator,
         campid,
+        trackingCampid,
+        vid: vidRef.current || vid || undefined,
+        visitId: visitIdRef.current || undefined,
+        clickId: clickIdRef.current || undefined,
+        rcid: rcidRef.current || undefined,
       }),
       new Promise((resolve) => {
         setTimeout(() => resolve({ phone: '', source: 'timeout' }), 10000)
@@ -629,7 +676,38 @@ function SubscriptionPage() {
           cgRedirectUrl,
           heError,
           heProvider,
+          visitId: heVisitId,
+          clickId: heClickId,
+          rcid: heRcid,
         } = result || {}
+
+        // Visit-first: store our click_id / visitId from detect so /page reuses them.
+        if (heVisitId) visitIdRef.current = heVisitId
+        if (heClickId) clickIdRef.current = String(heClickId)
+        if (heRcid) rcidRef.current = String(heRcid)
+        else if (heClickId && !rcidRef.current) {
+          /* keep existing affiliate rcid */
+        }
+
+        if (heVisitId || heClickId || heRcid) {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            let changed = false
+            if (heClickId && next.get('click_id') !== String(heClickId)) {
+              next.set('click_id', String(heClickId))
+              changed = true
+            }
+            if (heRcid && next.get('rcid') !== String(heRcid)) {
+              next.set('rcid', String(heRcid))
+              changed = true
+            }
+            if (heVisitId && next.get('visitId') !== String(heVisitId)) {
+              next.set('visitId', String(heVisitId))
+              changed = true
+            }
+            return changed ? next : prev
+          }, { replace: true })
+        }
 
         heMetaRef.current = {
           done: true,
@@ -647,6 +725,9 @@ function SubscriptionPage() {
           const currentParams = new URLSearchParams(window.location.search)
           if (!resolvePhoneFromUrl(currentParams)) {
             currentParams.set('msisdn', resolved)
+            if (clickIdRef.current) currentParams.set('click_id', clickIdRef.current)
+            if (rcidRef.current) currentParams.set('rcid', rcidRef.current)
+            if (visitIdRef.current) currentParams.set('visitId', String(visitIdRef.current))
             setSearchParams(currentParams, { replace: true })
           }
 
@@ -657,14 +738,11 @@ function SubscriptionPage() {
             const go = () => {
               if (cancelled) return
               const dest = appendHeAttributionToUrl(successRedirectUrl, {
-                clickId:
-                  clickIdRef.current ||
-                  currentParams.get('click_id') ||
-                  currentParams.get('clickId') ||
-                  '',
-                rcid: rcidRef.current || currentParams.get('rcid') || '',
+                clickId: clickIdRef.current || '',
+                rcid: rcidRef.current || '',
                 msisdn: resolved,
                 campid: campidRef.current || campid,
+                trackingCampid: trackingCampidRef.current || trackingCampid,
               })
               if (!dest) {
                 heExitPendingRef.current = false
@@ -676,16 +754,21 @@ function SubscriptionPage() {
               console.log('[HE] MSISDN resolved — success redirect (skip HOME)', dest)
               window.location.replace(dest)
             }
-            const started = Date.now()
-            const tick = () => {
-              if (cancelled) return
-              if (clickIdRef.current || Date.now() - started > 2500) {
-                go()
-                return
+            // clickId is issued by detect-msisdn now — redirect immediately when present.
+            if (clickIdRef.current) {
+              go()
+            } else {
+              const started = Date.now()
+              const tick = () => {
+                if (cancelled) return
+                if (clickIdRef.current || Date.now() - started > 2500) {
+                  go()
+                  return
+                }
+                window.setTimeout(tick, 150)
               }
-              window.setTimeout(tick, 150)
+              tick()
             }
-            tick()
             return
           }
           // No success URL → stay on HOME / funnel
@@ -708,6 +791,7 @@ function SubscriptionPage() {
                 rcid: rcidRef.current,
                 msisdn: sessionPhone,
                 campid: campidRef.current || campid,
+          trackingCampid: trackingCampidRef.current || trackingCampid,
               })
               if (dest) {
                 console.log('[HE] session MSISDN — success redirect (skip HOME)', dest)
@@ -738,16 +822,12 @@ function SubscriptionPage() {
           setHeExitPending(true)
           const goFail = () => {
             if (cancelled) return
-            const q = new URLSearchParams(window.location.search)
             const dest = appendHeAttributionToUrl(baseFailUrl, {
-              clickId:
-                clickIdRef.current ||
-                q.get('click_id') ||
-                q.get('clickId') ||
-                '',
-              rcid: rcidRef.current || q.get('rcid') || '',
+              clickId: clickIdRef.current || '',
+              rcid: rcidRef.current || '',
               msisdn: '',
               campid: campidRef.current || campid,
+          trackingCampid: trackingCampidRef.current || trackingCampid,
             })
             if (!dest) {
               heExitPendingRef.current = false
@@ -762,16 +842,20 @@ function SubscriptionPage() {
             })
             window.location.replace(dest)
           }
-          const started = Date.now()
-          const tick = () => {
-            if (cancelled) return
-            if (clickIdRef.current || Date.now() - started > 2500) {
-              goFail()
-              return
+          if (clickIdRef.current) {
+            goFail()
+          } else {
+            const started = Date.now()
+            const tick = () => {
+              if (cancelled) return
+              if (clickIdRef.current || Date.now() - started > 2500) {
+                goFail()
+                return
+              }
+              window.setTimeout(tick, 150)
             }
-            window.setTimeout(tick, 150)
+            tick()
           }
-          tick()
           return
         }
 
@@ -821,6 +905,7 @@ function SubscriptionPage() {
         rcid: rcidRef.current,
         msisdn: phoneRef.current,
         campid: campidRef.current || campid,
+        trackingCampid: trackingCampidRef.current || trackingCampid,
       })
       if (dest) {
         console.log('[HE] CTA — success redirect', dest)
@@ -846,6 +931,7 @@ function SubscriptionPage() {
           rcid: rcidRef.current,
           msisdn: phoneRef.current,
           campid: campidRef.current || campid,
+          trackingCampid: trackingCampidRef.current || trackingCampid,
         })
       : ''
 
@@ -910,6 +996,7 @@ function SubscriptionPage() {
       const v = vidRef.current
       const a = affIdRef.current
       const c = campidRef.current
+      const tc = trackingCampidRef.current
       if (cid && nextParams.get('click_id') !== cid) {
         nextParams.set('click_id', cid)
         changed = true
@@ -928,6 +1015,10 @@ function SubscriptionPage() {
       }
       if (c && nextParams.get('campid') !== c) {
         nextParams.set('campid', c)
+        changed = true
+      }
+      if (tc && nextParams.get('tracking_campid') !== tc) {
+        nextParams.set('tracking_campid', tc)
         changed = true
       }
       return changed ? nextParams : prev
@@ -970,6 +1061,7 @@ function SubscriptionPage() {
             msisdn: phoneRef.current,
             visitId,
             campid,
+            trackingCampid,
             vid,
             affId,
             clickId: clickIdRef.current || undefined,
@@ -985,7 +1077,7 @@ function SubscriptionPage() {
         }),
       )
     },
-    [country, operator, campid, vid, affId],
+    [country, operator, campid, trackingCampid, vid, affId],
   )
 
   const loadPage = useCallback(
@@ -1021,6 +1113,7 @@ function SubscriptionPage() {
           msisdn: phoneRef.current,
           visitId: visitIdRef.current,
           campid,
+          trackingCampid,
           vid,
           affId,
           clickId: clickIdRef.current || undefined,
@@ -1039,7 +1132,7 @@ function SubscriptionPage() {
         }
       }
     },
-    [country, operator, cachePage, campid, vid, affId],
+    [country, operator, cachePage, campid, trackingCampid, vid, affId],
   )
 
   useEffect(() => {
@@ -1079,7 +1172,7 @@ function SubscriptionPage() {
       selectedPackRef.current = 'daily'
       pageCacheRef.current.clear()
       prefetchingRef.current.clear()
-      visitIdRef.current = null
+      // Do not clear visitIdRef — detect-msisdn may have already created the visit.
       pageDataRef.current = null
       setPageData(null)
       setBooting(true)
@@ -1090,7 +1183,7 @@ function SubscriptionPage() {
       }
 
       try {
-        const { entryPage } = await fetchFlowEntry({ country, operator, campid })
+        const { entryPage } = await fetchFlowEntry({ country, operator, campid, trackingCampid })
         if (cancelled) return
         entryPageRef.current = entryPage || 'HOME'
         await loadPage(entryPageRef.current)
@@ -1103,7 +1196,7 @@ function SubscriptionPage() {
     return () => {
       cancelled = true
     }
-  }, [country, operator, campid, loadPage, getSavedSession])
+  }, [country, operator, campid, trackingCampid, loadPage, getSavedSession])
 
   // Sync step changes from browser history / page-link navigation.
   const urlStep = (searchParams.get('step') || '').toUpperCase()
@@ -1690,6 +1783,7 @@ function SubscriptionPage() {
           country,
           operator,
           campid: campid || campidRef.current || undefined,
+          trackingCampid: trackingCampid || trackingCampidRef.current || undefined,
           fromPage,
           action,
           phone: phoneRef.current,
@@ -1726,6 +1820,7 @@ function SubscriptionPage() {
         country,
         operator,
         campid,
+        trackingCampid,
         visitIdRef,
         phoneRef,
         packRef: selectedPackRef,
@@ -1745,7 +1840,7 @@ function SubscriptionPage() {
       shadow.removeEventListener('click', handleAnchorClick)
       if (otpCleanup) otpCleanup()
     }
-  }, [pageData, country, operator, campid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
+  }, [pageData, country, operator, campid, trackingCampid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
 
   if (!country || !operator) {
     return (

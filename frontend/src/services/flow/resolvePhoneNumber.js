@@ -73,6 +73,10 @@ export async function resolvePhoneFromOperator(context = {}) {
       failRedirectUrl: res.failRedirectUrl || null,
       successRedirectUrl: res.successRedirectUrl || null,
       cgRedirectUrl: res.cgRedirectUrl || null,
+      visitId: res.visitId || null,
+      clickId: res.clickId || null,
+      rcid: res.rcid || null,
+      campaignId: res.campaignId || null,
     }
   } catch (err) {
     console.warn('[resolvePhoneFromOperator] detection failed:', err)
@@ -108,6 +112,12 @@ export function appendHeAttributionToUrl(rawUrl, attrs = {}) {
   const rcid = String(attrs.rcid || '').trim()
   const msisdn = normalizeMsisdn(attrs.msisdn || attrs.phone || '')
   const campid = attrs.campid != null ? String(attrs.campid) : ''
+  const trackingCampid =
+    attrs.trackingCampid != null
+      ? String(attrs.trackingCampid)
+      : attrs.tracking_campid != null
+        ? String(attrs.tracking_campid)
+        : ''
 
   const vars = {
     click_id: clickId,
@@ -116,6 +126,7 @@ export function appendHeAttributionToUrl(rawUrl, attrs = {}) {
     msisdn,
     phone: msisdn,
     campid,
+    tracking_campid: trackingCampid,
   }
   const original = url
   for (const [key, val] of Object.entries(vars)) {
@@ -139,6 +150,9 @@ export function appendHeAttributionToUrl(rawUrl, attrs = {}) {
     }
     if (campid && !u.searchParams.has('campid')) {
       u.searchParams.set('campid', campid)
+    }
+    if (trackingCampid && !u.searchParams.has('tracking_campid')) {
+      u.searchParams.set('tracking_campid', trackingCampid)
     }
     return u.toString()
   } catch {
@@ -169,12 +183,20 @@ function redirectFields(operatorRes) {
       failRedirectUrl: null,
       successRedirectUrl: null,
       cgRedirectUrl: null,
+      visitId: null,
+      clickId: null,
+      rcid: null,
+      campaignId: null,
     }
   }
   return {
     failRedirectUrl: operatorRes.failRedirectUrl || null,
     successRedirectUrl: operatorRes.successRedirectUrl || null,
     cgRedirectUrl: operatorRes.cgRedirectUrl || null,
+    visitId: operatorRes.visitId || null,
+    clickId: operatorRes.clickId || null,
+    rcid: operatorRes.rcid || null,
+    campaignId: operatorRes.campaignId || null,
   }
 }
 

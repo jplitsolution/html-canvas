@@ -177,9 +177,9 @@ export function getCampaignPreviewUrl(campaign, options = {}) {
   })
 
   if (campaign.trackingId) {
-    params.set('campid', campaign.trackingId)
+    params.set('tracking_campid', campaign.trackingId)
   } else if (campaign.id) {
-    params.set('campid', String(campaign.id))
+    params.set('tracking_campid', String(campaign.id))
   }
 
   if (campaign.trackings && campaign.trackings.length > 0) {
@@ -205,9 +205,9 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options =
   })
 
   if (campaign.trackingId) {
-    params.set('campid', campaign.trackingId)
+    params.set('tracking_campid', campaign.trackingId)
   } else if (campaign.id) {
-    params.set('campid', String(campaign.id))
+    params.set('tracking_campid', String(campaign.id))
   }
 
   if (campaign.trackings && campaign.trackings.length > 0) {

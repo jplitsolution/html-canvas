@@ -500,7 +500,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               <Input
                 value={heFields.successRedirectUrl}
                 onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
-                placeholder="https://…/next (leave empty to show HOME)"
+                placeholder="https://dsdp-cg.safaricom.com/300002437"
               />
             </Field>
             <Field label="Fail redirect" hint="optional — else campaign CG">
