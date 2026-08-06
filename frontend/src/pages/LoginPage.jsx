@@ -52,7 +52,7 @@ function LoginPage() {
         <div className="w-full max-w-sm animate-slide-up">
           <div className="flex flex-col items-center text-center mb-8">
             <BrandLogo size="lg" showWordmark={false} className="mb-4" />
-            <h1 className="text-2xl font-semibold text-fg">TemplateCraft</h1>
+            <h1 className="text-2xl font-semibold text-fg">WAP Manager</h1>
             <p className="text-sm text-fg-muted mt-1">
               Campaign management platform
             </p>
