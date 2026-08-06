@@ -6,8 +6,7 @@ const MAX_BODY = 8000;
 
 const truncate = (value) => {
   if (value == null) return null;
-  const str =
-    typeof value === 'string' ? value : JSON.stringify(value);
+  const str = typeof value === 'string' ? value : JSON.stringify(value);
   return str.length > MAX_BODY ? str.slice(0, MAX_BODY) : str;
 };
 
@@ -24,12 +23,8 @@ export const createApiCallLogService = () => {
   const record = async (input) => {
     const row = getRepo().create({
       visitId: input.visitId ? parseInt(input.visitId, 10) : null,
-      campaignId: input.campaignId
-        ? parseInt(input.campaignId, 10)
-        : null,
-      msisdn: input.msisdn
-        ? String(input.msisdn).replace(/\D/g, '')
-        : null,
+      campaignId: input.campaignId ? parseInt(input.campaignId, 10) : null,
+      msisdn: input.msisdn ? String(input.msisdn).replace(/\D/g, '') : null,
       rcid: input.rcid || null,
       clickId: input.clickId || null,
       callType: input.callType,
@@ -45,8 +40,7 @@ export const createApiCallLogService = () => {
     const saved = await getRepo().save(row);
 
     const statusLabel =
-      input.statusLabel ||
-      (saved.success ? 'SUCCESS' : 'FAILED');
+      input.statusLabel || (saved.success ? 'SUCCESS' : 'FAILED');
 
     // ES is the scalable log layer; DB remains source of truth.
     void searchService.indexEvent({

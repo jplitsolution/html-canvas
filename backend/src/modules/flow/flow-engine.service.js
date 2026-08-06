@@ -24,7 +24,11 @@ export const createFlowEngineService = () => {
     if (!raw) return null;
     try {
       const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      if (!parsed || !Array.isArray(parsed.nodes) || !Array.isArray(parsed.edges)) {
+      if (
+        !parsed ||
+        !Array.isArray(parsed.nodes) ||
+        !Array.isArray(parsed.edges)
+      ) {
         return null;
       }
       return parsed;
@@ -80,10 +84,18 @@ export const createFlowEngineService = () => {
 
     if (mode === 'HEADER_INJECTION') {
       edges.push(
-        edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'HEADER_RESOLVED'),
+        edge(
+          CampaignPageType.HOME,
+          CampaignPageType.CONFIRM,
+          'HEADER_RESOLVED',
+        ),
       );
       edges.push(
-        edge(CampaignPageType.HOME, CampaignPageType.ERROR, 'HEADER_UNRESOLVED'),
+        edge(
+          CampaignPageType.HOME,
+          CampaignPageType.ERROR,
+          'HEADER_UNRESOLVED',
+        ),
       );
     } else if (mode === 'OTP_ONLY') {
       nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
@@ -94,7 +106,11 @@ export const createFlowEngineService = () => {
     } else {
       nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
       edges.push(
-        edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'HEADER_RESOLVED'),
+        edge(
+          CampaignPageType.HOME,
+          CampaignPageType.CONFIRM,
+          'HEADER_RESOLVED',
+        ),
       );
       edges.push(
         edge(CampaignPageType.HOME, CampaignPageType.OTP, 'HEADER_UNRESOLVED'),
@@ -111,7 +127,11 @@ export const createFlowEngineService = () => {
       edge(CampaignPageType.CONFIRM, CampaignPageType.INPROGRESS, 'PENDING'),
     );
     edges.push(
-      edge(CampaignPageType.CONFIRM, CampaignPageType.LOW_BALANCE, 'LOW_BALANCE'),
+      edge(
+        CampaignPageType.CONFIRM,
+        CampaignPageType.LOW_BALANCE,
+        'LOW_BALANCE',
+      ),
     );
     edges.push(
       edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'),
@@ -227,7 +247,9 @@ export const createFlowEngineService = () => {
         errors.push(
           `Unreachable from start page (${entryPage}): ${unreachable
             .map((n) => n.pageType)
-            .join(', ')}. Connect them from "${entryPage}" or set a different start page.`,
+            .join(
+              ', ',
+            )}. Connect them from "${entryPage}" or set a different start page.`,
         );
       }
     }

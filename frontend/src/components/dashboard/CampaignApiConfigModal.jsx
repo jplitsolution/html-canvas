@@ -415,16 +415,27 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               placeholder="Please use mobile data"
             />
           </Field>
-          <Field
-            label="Fail redirect URL"
-            hint="optional — else campaign CG URL"
-          >
-            <Input
-              value={heFields.failRedirectUrl}
-              onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
-              placeholder="https://cg.example/fallback"
-            />
-          </Field>
+          <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-fg">After HE resolve</p>
+            <p className="text-[11px] text-fg-muted leading-relaxed">
+              Both URLs set → HOME skip: success URL if number found, fail/CG if not.
+              Empty success URL = stay on HOME only when MSISDN is found.
+            </p>
+            <Field label="Success redirect" hint="optional — empty = stay on HOME">
+              <Input
+                value={heFields.successRedirectUrl}
+                onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
+                placeholder="https://…/next (leave empty to show HOME)"
+              />
+            </Field>
+            <Field label="Fail redirect" hint="optional — else campaign CG">
+              <Input
+                value={heFields.failRedirectUrl}
+                onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
+                placeholder="https://cg.example/fallback"
+              />
+            </Field>
+          </div>
         </div>
       )}
 
@@ -434,7 +445,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             <p className="text-sm font-semibold text-fg">Token → MSISDN APIs</p>
             <p className="mt-0.5 text-xs text-fg-muted">
               Safaricom Kenya: POST token with <code className="font-mono text-[11px]">X-Session-ID</code>,
-              then GET masked MSISDN with Bearer + partner headers. Fail → CG / fail redirect.
+              then GET masked MSISDN with Bearer + partner headers.
             </p>
           </div>
 
@@ -465,15 +476,34 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 border-t border-border pt-4 sm:grid-cols-2">
-            <Field label="Fail message" hint="optional">
+          <Field label="Fail message" hint="optional">
+            <Input
+              value={heFields.failMessage}
+              onChange={(e) => setHeField('failMessage', e.target.value)}
+              placeholder="Please use Safaricom Mobile Data"
+            />
+          </Field>
+
+          <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
+            <p className="text-xs font-semibold text-fg">After HE resolve</p>
+            <p className="text-[11px] text-fg-muted leading-relaxed">
+              With both URLs set, <strong>HOME is never shown</strong> — only a
+              loading screen, then redirect:
+              <br />
+              <strong>MSISDN found</strong> → Success redirect (+ msisdn + click_id).
+              <br />
+              <strong>MSISDN missing</strong> → Fail redirect / campaign CG (+ click_id).
+              <br />
+              Leave success empty only if you want the HOME funnel when number is found.
+            </p>
+            <Field label="Success redirect" hint="optional — empty = stay on HOME">
               <Input
-                value={heFields.failMessage}
-                onChange={(e) => setHeField('failMessage', e.target.value)}
-                placeholder="Please use Safaricom Mobile Data"
+                value={heFields.successRedirectUrl}
+                onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
+                placeholder="https://…/next (leave empty to show HOME)"
               />
             </Field>
-            <Field label="Fail redirect" hint="optional — else CG URL">
+            <Field label="Fail redirect" hint="optional — else campaign CG">
               <Input
                 value={heFields.failRedirectUrl}
                 onChange={(e) => setHeField('failRedirectUrl', e.target.value)}

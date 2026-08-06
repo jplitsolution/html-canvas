@@ -29,12 +29,17 @@ describe('MSISDN & Operator Header Resolution', () => {
   })
 
   it('resolves phone from URL search parameters first', async () => {
+    detectMsisdnApi.mockResolvedValueOnce({
+      phone: '',
+      successRedirectUrl: 'https://success.example/next',
+    })
     const searchParams = new URLSearchParams('msisdn=919876543210')
     const result = await resolvePhoneNumber(searchParams)
 
     expect(result.phone).toBe('919876543210')
     expect(result.source).toBe('url')
-    expect(detectMsisdnApi).not.toHaveBeenCalled()
+    expect(result.successRedirectUrl).toBe('https://success.example/next')
+    expect(detectMsisdnApi).toHaveBeenCalled()
   })
 
   it('resolves phone from operator header detection when URL does not contain MSISDN', async () => {

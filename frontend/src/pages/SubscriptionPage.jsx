@@ -7,6 +7,7 @@ import {
   persistPhone,
   pickHeFailRedirectUrl,
   appendHeAttributionToUrl,
+  isHeRedirectUrl,
 } from '../services/flow/resolvePhoneNumber'
 import { evaluatePriorityApiMatch } from '../services/flow/priorityApiMatch'
 import { getApiBase } from '../services/api/client'
@@ -506,6 +507,8 @@ function SubscriptionPage() {
 
   const [phone, setPhone] = useState('')
   const [phoneResolving, setPhoneResolving] = useState(true)
+  /** When successRedirectUrl is set — keep overlay, never flash HOME. */
+  const [heExitPending, setHeExitPending] = useState(false)
   const [booting, setBooting] = useState(true)
   const [transitioning, setTransitioning] = useState(false)
   const [error, setError] = useState('')
@@ -521,6 +524,7 @@ function SubscriptionPage() {
   const selectedPackRef = useRef('daily')
   const phoneRef = useRef('')
   const phoneResolvingRef = useRef(true)
+  const heExitPendingRef = useRef(false)
   const heMetaRef = useRef({
     done: false,
     heProvider: null,
@@ -584,13 +588,17 @@ function SubscriptionPage() {
   useEffect(() => {
     if (!country || !operator) {
       phoneResolvingRef.current = false
+      heExitPendingRef.current = false
       setPhoneResolving(false)
+      setHeExitPending(false)
       return undefined
     }
 
     let cancelled = false
     phoneResolvingRef.current = true
+    heExitPendingRef.current = false
     setPhoneResolving(true)
+    setHeExitPending(false)
     heMetaRef.current = {
       done: false,
       heProvider: null,
@@ -600,7 +608,6 @@ function SubscriptionPage() {
       cgRedirectUrl: null,
     }
 
-    // HOME boots in parallel — do not block the page on HE.
     const resolveWithTimeout = Promise.race([
       resolvePhoneNumber(new URLSearchParams(window.location.search), {
         country,
@@ -617,7 +624,6 @@ function SubscriptionPage() {
         if (cancelled) return
         const {
           phone: resolved,
-          source,
           failRedirectUrl,
           successRedirectUrl,
           cgRedirectUrl,
@@ -637,11 +643,52 @@ function SubscriptionPage() {
         if (resolved) {
           phoneRef.current = resolved
           setPhone(resolved)
+          persistPhone(resolved)
           const currentParams = new URLSearchParams(window.location.search)
           if (!resolvePhoneFromUrl(currentParams)) {
             currentParams.set('msisdn', resolved)
             setSearchParams(currentParams, { replace: true })
           }
+
+          // Success URL set → never show HOME; overlay until leave.
+          if (isHeRedirectUrl(successRedirectUrl)) {
+            heExitPendingRef.current = true
+            setHeExitPending(true)
+            const go = () => {
+              if (cancelled) return
+              const dest = appendHeAttributionToUrl(successRedirectUrl, {
+                clickId:
+                  clickIdRef.current ||
+                  currentParams.get('click_id') ||
+                  currentParams.get('clickId') ||
+                  '',
+                rcid: rcidRef.current || currentParams.get('rcid') || '',
+                msisdn: resolved,
+                campid: campidRef.current || campid,
+              })
+              if (!dest) {
+                heExitPendingRef.current = false
+                setHeExitPending(false)
+                phoneResolvingRef.current = false
+                setPhoneResolving(false)
+                return
+              }
+              console.log('[HE] MSISDN resolved — success redirect (skip HOME)', dest)
+              window.location.replace(dest)
+            }
+            const started = Date.now()
+            const tick = () => {
+              if (cancelled) return
+              if (clickIdRef.current || Date.now() - started > 2500) {
+                go()
+                return
+              }
+              window.setTimeout(tick, 150)
+            }
+            tick()
+            return
+          }
+          // No success URL → stay on HOME / funnel
           return
         }
 
@@ -653,26 +700,91 @@ function SubscriptionPage() {
             phoneRef.current = sessionPhone
             setPhone(sessionPhone)
             persistPhone(sessionPhone)
+            if (isHeRedirectUrl(successRedirectUrl)) {
+              heExitPendingRef.current = true
+              setHeExitPending(true)
+              const dest = appendHeAttributionToUrl(successRedirectUrl, {
+                clickId: clickIdRef.current,
+                rcid: rcidRef.current,
+                msisdn: sessionPhone,
+                campid: campidRef.current || campid,
+              })
+              if (dest) {
+                console.log('[HE] session MSISDN — success redirect (skip HOME)', dest)
+                window.location.replace(dest)
+                return
+              }
+              heExitPendingRef.current = false
+              setHeExitPending(false)
+            }
+            return
           }
         } catch {
           /* ignore */
         }
 
-        // Do NOT auto-redirect on fail — HOME stays visible; warn on CTA click.
-        if (source !== 'timeout' && (failRedirectUrl || cgRedirectUrl || heError)) {
-          console.log('[HE] no MSISDN — HOME stays; warn on button press', {
-            heError,
-            failRedirectUrl,
-            cgRedirectUrl,
-          })
+        // No MSISDN + fail/CG URL → never show HOME; redirect immediately.
+        const provider = String(heProvider || '').toLowerCase()
+        const isApiHe =
+          provider === 'safaricom_masked' ||
+          provider === 'custom_http' ||
+          provider === 'custom'
+        const baseFailUrl = pickHeFailRedirectUrl({
+          failRedirectUrl,
+          cgRedirectUrl,
+        })
+        if (isApiHe && baseFailUrl) {
+          heExitPendingRef.current = true
+          setHeExitPending(true)
+          const goFail = () => {
+            if (cancelled) return
+            const q = new URLSearchParams(window.location.search)
+            const dest = appendHeAttributionToUrl(baseFailUrl, {
+              clickId:
+                clickIdRef.current ||
+                q.get('click_id') ||
+                q.get('clickId') ||
+                '',
+              rcid: rcidRef.current || q.get('rcid') || '',
+              msisdn: '',
+              campid: campidRef.current || campid,
+            })
+            if (!dest) {
+              heExitPendingRef.current = false
+              setHeExitPending(false)
+              phoneResolvingRef.current = false
+              setPhoneResolving(false)
+              return
+            }
+            console.log('[HE] no MSISDN — fail redirect (skip HOME)', {
+              dest,
+              heError,
+            })
+            window.location.replace(dest)
+          }
+          const started = Date.now()
+          const tick = () => {
+            if (cancelled) return
+            if (clickIdRef.current || Date.now() - started > 2500) {
+              goFail()
+              return
+            }
+            window.setTimeout(tick, 150)
+          }
+          tick()
+          return
         }
+
+        console.log('[HE] no MSISDN and no fail URL — show HOME / OTP path', {
+          heError,
+        })
       })
       .catch(() => {
-        /* detection is best-effort — continue without MSISDN */
         heMetaRef.current = { ...heMetaRef.current, done: true }
       })
       .finally(() => {
-        if (!cancelled) {
+        // Keep overlay if we are about to leave (success or fail redirect).
+        if (!cancelled && !heExitPendingRef.current) {
           phoneResolvingRef.current = false
           setPhoneResolving(false)
         }
@@ -681,15 +793,11 @@ function SubscriptionPage() {
     return () => {
       cancelled = true
     }
-    // setSearchParams omitted from deps on purpose — including it re-runs detection
-    // on every URL step sync and covers the page with the detecting overlay.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, operator, campid])
 
-  /** HOME CTA without MSISDN after API HE → warning (+ optional CG redirect). */
+  /** HOME CTA: fail → warn+CG; success+successRedirectUrl → external (backup if immediate missed). */
   const warnIfHeUnresolved = useCallback(() => {
-    if (phoneRef.current) return false
-
     const meta = heMetaRef.current
     const provider = String(meta.heProvider || '').toLowerCase()
     const isApiHe =
@@ -705,6 +813,23 @@ function SubscriptionPage() {
 
     // Only gate Token/Custom HE flows (OTP / header paths continue normally).
     if (!isApiHe) return false
+
+    // MSISDN found + success redirect configured → leave funnel on CTA too.
+    if (phoneRef.current && isHeRedirectUrl(meta.successRedirectUrl)) {
+      const dest = appendHeAttributionToUrl(meta.successRedirectUrl, {
+        clickId: clickIdRef.current,
+        rcid: rcidRef.current,
+        msisdn: phoneRef.current,
+        campid: campidRef.current || campid,
+      })
+      if (dest) {
+        console.log('[HE] CTA — success redirect', dest)
+        window.location.assign(dest)
+        return true
+      }
+    }
+
+    if (phoneRef.current) return false
 
     const baseFailUrl = pickHeFailRedirectUrl({
       failRedirectUrl: meta.failRedirectUrl,
@@ -1638,8 +1763,10 @@ function SubscriptionPage() {
     )
   }
 
-  const showBootSpinner = booting && !pageData
-  const showFatalError = Boolean(error && !pageData && !showBootSpinner)
+  const hideHomeForHe =
+    phoneResolving || heExitPending
+  const showBootSpinner = (booting && !pageData) || hideHomeForHe
+  const showFatalError = Boolean(error && !pageData && !hideHomeForHe && !(booting && !pageData))
   const notAvailable =
     showFatalError &&
     (/not available|not active|inactive/i.test(error) || error === 'This offer is not available')
@@ -1649,21 +1776,22 @@ function SubscriptionPage() {
   return (
     <div className="flow-runtime-root relative min-h-screen w-full">
       {transitioning && <div className="flow-runtime-progress" aria-hidden="true" />}
-      {error && pageData && (
+      {error && pageData && !hideHomeForHe && (
         <div className="fixed top-0 left-0 right-0 z-40 bg-amber-100 text-amber-900 text-sm text-center py-2.5 px-4 animate-fade-in border-b border-amber-200">
           {error}
-        </div>
-      )}
-      {phoneResolving && pageData && (
-        <div className="pointer-events-none fixed bottom-3 left-1/2 z-30 -translate-x-1/2 rounded-full border border-border bg-bg-elevated/95 px-3 py-1.5 text-[11px] text-fg-muted shadow-sm">
-          Detecting number…
         </div>
       )}
       {showBootSpinner && (
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#f8fafc]">
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
-            <p className="text-slate-500 text-sm">Loading...</p>
+            <p className="text-slate-500 text-sm">
+              {heExitPending
+                ? 'Redirecting…'
+                : phoneResolving
+                  ? 'Detecting mobile number…'
+                  : 'Loading...'}
+            </p>
           </div>
         </div>
       )}
@@ -1688,6 +1816,7 @@ function SubscriptionPage() {
         ref={hostRef}
         className="flow-runtime-host is-visible"
         aria-hidden={showBootSpinner || showFatalError || !pageData?.html}
+        style={hideHomeForHe ? { visibility: 'hidden' } : undefined}
       />
     </div>
   )
