@@ -201,10 +201,27 @@ export const createPartnerApiService = () => {
         );
       }
 
-      const status =
+      const apiStatus = String(nested.status || data.status || '')
+        .trim()
+        .toLowerCase();
+      const reason = String(nested.reason || data.reason || '')
+        .trim()
+        .toLowerCase();
+
+      let status =
         currentStatus ||
         subscriptionStatus ||
         (isActive ? 'active' : 'unknown');
+
+      // Partner returns serviceNotExists / empty status when MSISDN has no sub yet.
+      if (
+        !isActive &&
+        !currentStatus &&
+        !subscriptionStatus &&
+        (reason === 'servicenotexists' || apiStatus === 'new')
+      ) {
+        status = 'new';
+      }
 
       // Safwap parity: only brand-new MSISDNs enter subscribe/confirm.
       const shouldSkipSubscribe =
