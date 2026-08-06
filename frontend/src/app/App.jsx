@@ -15,6 +15,8 @@ import CampaignLogsPage from '../pages/CampaignLogsPage'
 import SessionDetailPage from '../pages/SessionDetailPage'
 import VendorsPage from '../pages/VendorsPage'
 import CallbackDocsPage from '../pages/CallbackDocsPage'
+import PostbacksPage from '../pages/PostbacksPage'
+import PostbackDetailPage from '../pages/PostbackDetailPage'
 import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
 import UsersPage from '../pages/UsersPage'
@@ -70,6 +72,11 @@ function App() {
                 element={<Protected><SessionDetailPage /></Protected>}
               />
               <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
+              <Route path="/postbacks" element={<Protected><PostbacksPage /></Protected>} />
+              <Route
+                path="/postbacks/:postbackId"
+                element={<Protected><PostbackDetailPage /></Protected>}
+              />
               <Route path="/docs/callbacks" element={<Protected><CallbackDocsPage /></Protected>} />
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />

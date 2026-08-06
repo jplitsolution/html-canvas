@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook } from 'lucide-react'
+import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook, Send } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logout } from '../../services/api/auth'
 import Button from './Button'
@@ -11,10 +11,27 @@ const baseNavLinks = [
   { to: '/markets', label: 'Markets', icon: FolderKanban },
   { to: '/vendors', label: 'Vendors', icon: Store },
   { to: '/analytics', label: 'Campaign Logs', icon: BarChart3 },
+  { to: '/postbacks', label: 'Postbacks', icon: Send },
+]
+
+const footerNavLinks = [
   { to: '/docs/callbacks', label: 'Callbacks', icon: Webhook },
 ]
 
 const adminNavLink = { to: '/users', label: 'User Management', icon: UserCog }
+
+function NavLinkItem({ to, label, icon: Icon, pathname }) {
+  const active = pathname === to || pathname.startsWith(`${to}/`)
+  return (
+    <Link
+      to={to}
+      className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : 'sidebar-nav-link-inactive'}`}
+    >
+      <Icon className="w-4 h-4 shrink-0" />
+      {label}
+    </Link>
+  )
+}
 
 function AppShell({ children, actions, minimal = false }) {
   const location = useLocation()
@@ -74,22 +91,17 @@ function AppShell({ children, actions, minimal = false }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-0.5" aria-label="Main navigation">
-          {navLinks.map(({ to, label, icon: Icon }) => {
-            const active = location.pathname === to || location.pathname.startsWith(`${to}/`)
-            return (
-              <Link
-                key={to}
-                to={to}
-                className={`sidebar-nav-link ${active ? 'sidebar-nav-link-active' : 'sidebar-nav-link-inactive'}`}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                {label}
-              </Link>
-            )
-          })}
+          {navLinks.map((item) => (
+            <NavLinkItem key={item.to} {...item} pathname={location.pathname} />
+          ))}
         </nav>
 
-        <div className="shrink-0 px-3 py-4 border-t border-border bg-bg-elevated">
+        <div className="shrink-0 px-3 py-4 border-t border-border bg-bg-elevated space-y-2">
+          <div className="space-y-0.5 pb-2">
+            {footerNavLinks.map((item) => (
+              <NavLinkItem key={item.to} {...item} pathname={location.pathname} />
+            ))}
+          </div>
           {loading ? (
             <div className="animate-pulse h-8 bg-bg-muted rounded w-full"></div>
           ) : isAuthenticated ? (
@@ -150,6 +162,23 @@ function AppShell({ children, actions, minimal = false }) {
                         </Link>
                       )
                     })}
+                    <div className="mt-2 pt-2 border-t border-border">
+                      {footerNavLinks.map(({ to, label, icon: Icon }) => {
+                        const active = location.pathname === to || location.pathname.startsWith(`${to}/`)
+                        return (
+                          <Link
+                            key={to}
+                            to={to}
+                            className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
+                              active ? 'text-accent bg-accent-muted' : 'text-fg hover:bg-bg-subtle'
+                            }`}
+                          >
+                            <Icon className="w-4 h-4" />
+                            {label}
+                          </Link>
+                        )
+                      })}
+                    </div>
                     <div className="mt-2 pt-2 border-t border-border px-4">
                       {loading ? (
                         <div className="animate-pulse h-8 bg-bg-muted rounded w-full"></div>
