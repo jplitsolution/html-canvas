@@ -97,24 +97,23 @@ describe('MSISDN & Operator Header Resolution', () => {
     expect(pickHeFailRedirectUrl({})).toBe('')
   })
 
-  it('appendHeAttributionToUrl adds click_id and msisdn for vendor postbacks', () => {
+  it('appendHeAttributionToUrl opens URL as-is without click_id or campid', () => {
     const url = appendHeAttributionToUrl('https://dsdp-cg.safaricom.com/300002437', {
       clickId: 'our-click-1',
       rcid: 'vendor-rcid-9',
       msisdn: '254712345678',
+      campid: 'vendor-camp',
     })
-    const parsed = new URL(url)
-    expect(parsed.searchParams.get('click_id')).toBe('our-click-1')
-    expect(parsed.searchParams.get('rcid')).toBe('vendor-rcid-9')
-    expect(parsed.searchParams.get('msisdn')).toBe('254712345678')
+    expect(url).toBe('https://dsdp-cg.safaricom.com/300002437')
   })
 
-  it('appendHeAttributionToUrl fills placeholders', () => {
+  it('appendHeAttributionToUrl fills only msisdn placeholders', () => {
     const url = appendHeAttributionToUrl(
-      'https://cg.example/path?cid={{click_id}}&m={{msisdn}}',
-      { clickId: 'abc', msisdn: '2547' },
+      'https://cg.example/path?m={{msisdn}}',
+      { clickId: 'abc', msisdn: '2547', campid: 'c1' },
     )
-    expect(url).toContain('cid=abc')
     expect(url).toContain('m=2547')
+    expect(url).not.toContain('click')
+    expect(url).not.toContain('campid')
   })
 })

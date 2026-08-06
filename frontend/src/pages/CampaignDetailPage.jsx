@@ -517,10 +517,10 @@ function CampaignDetailPage() {
                   With flow mode <strong>None</strong> and this URL set, users are redirected here
                   on landing. HE/OTP is not required. Also used as the HOME fallback when API HE
                   (<code>safaricom_masked</code> / <code>custom_http</code>) cannot resolve MSISDN
-                  and no <code>failRedirectUrl</code> is set in HE config.{' '}
-                  <code className="font-mono">{'{{click_id}}'}</code> = our generated id;{' '}
-                  <code className="font-mono">{'{rcid}'}</code> = network original click (otherwise auto{' '}
-                  <code className="font-mono">?click_id=</code> with our id).
+                  and no <code>failRedirectUrl</code> is set in HE config. HE success/fail redirects
+                  open the configured URL as-is (no <code>click_id</code> / <code>campid</code>).
+                  Optional placeholders like <code className="font-mono">{'{{msisdn}}'}</code> are
+                  filled when present in the URL.
                 </p>
               </div>
               <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">

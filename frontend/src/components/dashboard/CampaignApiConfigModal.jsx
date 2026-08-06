@@ -490,9 +490,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               With both URLs set, <strong>HOME is never shown</strong> — only a
               loading screen, then redirect:
               <br />
-              <strong>MSISDN found</strong> → Success redirect (+ msisdn + click_id).
+              <strong>MSISDN found</strong> → Success redirect (URL as configured; no click_id/campid).
               <br />
-              <strong>MSISDN missing</strong> → Fail redirect / campaign CG (+ click_id).
+              <strong>MSISDN missing</strong> → Fail redirect / campaign CG (URL as configured; no click_id/campid).
               <br />
               Leave success empty only if you want the HOME funnel when number is found.
             </p>

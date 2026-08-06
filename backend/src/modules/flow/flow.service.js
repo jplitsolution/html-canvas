@@ -72,8 +72,10 @@ export const createFlowService = () => {
   };
 
   /**
-   * Null-flow / HE CG redirect: {{click_id}} = our id; {{rcid}} = affiliate original.
-   * Also supports {{msisdn}} / {{phone}}. Default append: click_id (+ msisdn when known).
+   * Null-flow / HE CG redirect.
+   * Never auto-append click_id / campid / rcid to third-party URLs — keep those
+   * internal only. Only substitute placeholders that are already in the URL,
+   * and optionally append msisdn when known and not already present.
    */
   const buildCgRedirectUrl = (rawUrl, attrs = {}) => {
     const ourClickId = String(attrs.clickId || '').trim();
@@ -102,31 +104,17 @@ export const createFlowService = () => {
       url = url.split(`{${key}}`).join(encodeURIComponent(val));
     }
 
-    const hadClickPlaceholder =
-      /\{\{?(?:click_id|rcid|clickId)\}?\}/.test(original);
     const hadMsisdnPlaceholder = /\{\{?(?:msisdn|phone)\}?\}/.test(original);
 
     try {
       const u = new URL(url);
-      if (ourClickId && !hadClickPlaceholder) {
-        if (!u.searchParams.has('click_id') && !u.searchParams.has('rcid')) {
-          u.searchParams.set('click_id', ourClickId);
-        }
-      }
-      // Keep affiliate original when we have both.
-      if (rcid && !u.searchParams.has('rcid') && rcid !== ourClickId) {
-        u.searchParams.set('rcid', rcid);
-      }
+      // Do not append click_id / rcid / campid — open configured URL as-is.
       if (msisdn && !hadMsisdnPlaceholder && !u.searchParams.has('msisdn')) {
         u.searchParams.set('msisdn', msisdn);
       }
       return u.toString();
     } catch {
       let out = url;
-      if (ourClickId && !hadClickPlaceholder && !/[?&]click_id=/.test(out)) {
-        const sep = out.includes('?') ? '&' : '?';
-        out = `${out}${sep}click_id=${encodeURIComponent(ourClickId)}`;
-      }
       if (msisdn && !hadMsisdnPlaceholder && !/[?&]msisdn=/.test(out)) {
         const sep = out.includes('?') ? '&' : '?';
         out = `${out}${sep}msisdn=${encodeURIComponent(msisdn)}`;
@@ -1680,17 +1668,14 @@ export const createFlowService = () => {
         .catch(() => {});
     }
 
-    const dualRedirect = splitDualCampids(input);
-    const redirectVars = {
+    // HE success/fail: open configured URL as-is. Never inject click_id / campid /
+    // rcid for third parties — those stay internal (visit + api_call_logs only).
+    // Only {{msisdn}} / {{phone}} / country / operator placeholders are filled.
+    const heRedirectVars = {
       msisdn: rawPhone,
       phone: rawPhone,
-      campid: dualRedirect.vendorCampid || '',
-      tracking_campid:
-        dualRedirect.trackingCampid || campaign?.trackingId || '',
       country: input.country || campaign?.country || '',
       operator: input.operator || campaign?.operator || '',
-      click_id: visitCtx.clickId || '',
-      rcid: visitCtx.rcid || '',
     };
 
     // Fail redirect: explicit heConfig.failRedirectUrl, else campaign CG URL
@@ -1701,34 +1686,12 @@ export const createFlowService = () => {
     }
 
     const failRedirectUrl = rawFail
-      ? buildCgRedirectUrl(
-          applyHeRedirectVars(rawFail, redirectVars) || rawFail,
-          {
-            clickId: visitCtx.clickId,
-            rcid: visitCtx.rcid,
-            campid: dualRedirect.vendorCampid || '',
-            trackingCampid:
-              dualRedirect.trackingCampid || campaign?.trackingId || '',
-            msisdn: rawPhone,
-            phone: rawPhone,
-          },
-        )
+      ? applyHeRedirectVars(rawFail, heRedirectVars) || rawFail
       : '';
 
     const successRedirectUrl = heMeta.successRedirectUrl
-      ? buildCgRedirectUrl(
-          applyHeRedirectVars(heMeta.successRedirectUrl, redirectVars) ||
-            heMeta.successRedirectUrl,
-          {
-            clickId: visitCtx.clickId,
-            rcid: visitCtx.rcid,
-            campid: dualRedirect.vendorCampid || '',
-            trackingCampid:
-              dualRedirect.trackingCampid || campaign?.trackingId || '',
-            msisdn: rawPhone,
-            phone: rawPhone,
-          },
-        )
+      ? applyHeRedirectVars(heMeta.successRedirectUrl, heRedirectVars) ||
+        heMeta.successRedirectUrl
       : '';
 
     const mappedStatusPage = pageTypeForSubscriptionStatus(

@@ -29,6 +29,8 @@ export const createPartnerApiService = () => {
 
   const buildVars = (input) => {
     const phone = input.phone ?? '';
+    // Never expose click_id / campid / rcid to third-party partner URLs —
+    // those stay on our visit / api_call_logs only.
     return {
       phone,
       msisdn: phone,
@@ -38,11 +40,23 @@ export const createPartnerApiService = () => {
       planId: input.planId ?? '',
       pack: input.planId ?? 'daily',
       subServiceId: mapSubServiceId(input.planId),
-      click_id: input.clickId ?? '',
-      rcid: input.rcid ?? '',
-      visit_id:
-        input.visitId != null ? String(input.visitId) : '',
     };
+  };
+
+  /** Body sent to partners — strip internal attribution fields. */
+  const partnerRequestBody = (input = {}) => {
+    const {
+      clickId,
+      click_id,
+      rcid,
+      campid,
+      trackingCampid,
+      tracking_campid,
+      visitId,
+      campaignId,
+      ...rest
+    } = input;
+    return rest;
   };
 
   const serializeBody = (data) => {
@@ -88,12 +102,13 @@ export const createPartnerApiService = () => {
   const sendRequest = async (rawUrl, input, headers, label) => {
     const url = resolveTemplate(rawUrl, buildVars(input));
     const useGet = url.includes('?');
+    const body = partnerRequestBody(input);
     console.log(`${label} → ${useGet ? 'GET' : 'POST'} ${url}`);
     return {
       url,
       response: useGet
         ? await axios.get(url, { headers, timeout: 5000 })
-        : await axios.post(url, input, { headers, timeout: 5000 }),
+        : await axios.post(url, body, { headers, timeout: 5000 }),
     };
   };
 
@@ -384,6 +399,7 @@ export const createPartnerApiService = () => {
     resolveTemplate,
     mapSubServiceId,
     buildVars,
+    partnerRequestBody,
     sendRequest,
     resolveMsisdn,
     checkSubscription,
