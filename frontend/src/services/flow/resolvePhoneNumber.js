@@ -196,10 +196,32 @@ function detectDecisionFields(operatorRes) {
  *   nextPage?: string|null,
  * }>}
  */
+function isApiHeProviderName(heProvider) {
+  const p = String(heProvider || '').toLowerCase()
+  return p === 'safaricom_masked' || p === 'custom_http' || p === 'custom'
+}
+
 export async function resolvePhoneNumber(searchParams, context = {}) {
   const fromUrl = resolvePhoneFromUrl(searchParams)
   // Still hit detect for HE redirect URLs even when msisdn is already in the query.
   const operatorRes = await resolvePhoneFromOperator(context)
+  const apiHeNoPhone =
+    isApiHeProviderName(operatorRes?.heProvider) &&
+    operatorRes &&
+    !normalizeMsisdn(operatorRes.phone)
+
+  // API HE failed (no phone from partner) — ignore stale URL/custom msisdn so
+  // failRedirectUrl runs instead of getting stuck on "Redirecting…".
+  if (apiHeNoPhone) {
+    return {
+      phone: '',
+      source: 'operator',
+      ...detectDecisionFields(operatorRes),
+      heProvider: operatorRes.heProvider,
+      heError: operatorRes.heError,
+      ...redirectFields(operatorRes),
+    }
+  }
 
   if (fromUrl) {
     persistPhone(fromUrl)
@@ -240,12 +262,7 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
   }
 
   // Token/API HE with no MSISDN — do not fall back to storage/window; use fail redirect.
-  const heProvider = String(operatorRes?.heProvider || '').toLowerCase()
-  const isApiHe =
-    heProvider === 'safaricom_masked' ||
-    heProvider === 'custom_http' ||
-    heProvider === 'custom'
-  if (isApiHe && operatorRes) {
+  if (isApiHeProviderName(operatorRes?.heProvider) && operatorRes) {
     return {
       phone: '',
       source: 'operator',

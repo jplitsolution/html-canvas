@@ -685,42 +685,24 @@ function SubscriptionPage() {
 
     const runHeFailRedirect = (baseFailUrl, errMsg) => {
       if (!baseFailUrl) return false
+      // Fail URL opens as-is — no clickId wait (we do not append attribution).
+      const dest = appendHeAttributionToUrl(baseFailUrl, { msisdn: '' })
+      if (!dest) {
+        heExitPendingRef.current = false
+        setHeExitPending(false)
+        heOnlyModeRef.current = false
+        setHeFunnelSuppressed(false)
+        phoneResolvingRef.current = false
+        setPhoneResolving(false)
+        return false
+      }
       heExitPendingRef.current = true
       setHeExitPending(true)
-      const goFail = () => {
-        const dest = appendHeAttributionToUrl(baseFailUrl, {
-          clickId: clickIdRef.current || '',
-          rcid: rcidRef.current || '',
-          msisdn: '',
-          campid: campidRef.current || campid,
-          trackingCampid: trackingCampidRef.current || trackingCampid,
-        })
-        if (!dest) {
-          heExitPendingRef.current = false
-          setHeExitPending(false)
-          phoneResolvingRef.current = false
-          setPhoneResolving(false)
-          return
-        }
-        console.log('[HE] no MSISDN — fail redirect (skip HOME)', {
-          dest,
-          heError: errMsg,
-        })
-        window.location.replace(dest)
-      }
-      if (clickIdRef.current) {
-        goFail()
-      } else {
-        const started = Date.now()
-        const tick = () => {
-          if (clickIdRef.current || Date.now() - started > 2500) {
-            goFail()
-            return
-          }
-          window.setTimeout(tick, 150)
-        }
-        tick()
-      }
+      console.log('[HE] no MSISDN — fail redirect (skip HOME)', {
+        dest,
+        heError: errMsg,
+      })
+      window.location.replace(dest)
       return true
     }
     phoneResolvingRef.current = true
@@ -789,26 +771,6 @@ function SubscriptionPage() {
           /* keep existing affiliate rcid */
         }
 
-        if (heVisitId || heClickId || heRcid) {
-          setSearchParams((prev) => {
-            const next = new URLSearchParams(prev)
-            let changed = false
-            if (heClickId && next.get('click_id') !== String(heClickId)) {
-              next.set('click_id', String(heClickId))
-              changed = true
-            }
-            if (heRcid && next.get('rcid') !== String(heRcid)) {
-              next.set('rcid', String(heRcid))
-              changed = true
-            }
-            if (heVisitId && next.get('visitId') !== String(heVisitId)) {
-              next.set('visitId', String(heVisitId))
-              changed = true
-            }
-            return changed ? next : prev
-          }, { replace: true })
-        }
-
         heMetaRef.current = {
           done: true,
           heProvider: heProvider || null,
@@ -828,7 +790,9 @@ function SubscriptionPage() {
           setHeFunnelSuppressed(true)
         }
 
-        // No MSISDN + fail URL → redirect before HOME boot or session fallbacks.
+        // No MSISDN + fail URL → leave immediately BEFORE setSearchParams.
+        // Updating React Router history first races with location.replace and can
+        // leave the overlay stuck on "Redirecting…".
         if (!resolved) {
           const baseFailUrl = pickHeFailRedirectUrl({
             failRedirectUrl,
@@ -837,6 +801,32 @@ function SubscriptionPage() {
           if (runHeFailRedirect(baseFailUrl, heError)) {
             return
           }
+          // API HE with no fail URL — keep overlay; never infinite "Redirecting"
+          // without an actual navigation.
+          if (!isApiHeProvider(heProvider)) {
+            heOnlyModeRef.current = false
+            setHeFunnelSuppressed(false)
+          }
+        }
+
+        if (heVisitId || heClickId || heRcid) {
+          setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            let changed = false
+            if (heClickId && next.get('click_id') !== String(heClickId)) {
+              next.set('click_id', String(heClickId))
+              changed = true
+            }
+            if (heRcid && next.get('rcid') !== String(heRcid)) {
+              next.set('rcid', String(heRcid))
+              changed = true
+            }
+            if (heVisitId && next.get('visitId') !== String(heVisitId)) {
+              next.set('visitId', String(heVisitId))
+              changed = true
+            }
+            return changed ? next : prev
+          }, { replace: true })
         }
 
         if (resolved) {
