@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, startTransition, useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage, transitionFlow, priorityCheckApi } from '../services/api/flow'
 import {
@@ -35,6 +35,18 @@ const VALID_PAGES = [
   'ERROR',
 ]
 
+/** Token/API HE: never paint internal HOME or OTP — redirect or status pages only. */
+const HE_SUPPRESSED_FUNNEL_PAGES = new Set(['HOME', 'OTP'])
+
+function isApiHeProvider(provider) {
+  const p = String(provider || '').toLowerCase()
+  return p === 'safaricom_masked' || p === 'custom_http' || p === 'custom'
+}
+
+function isHeSuppressedFunnelPage(page) {
+  return HE_SUPPRESSED_FUNNEL_PAGES.has(String(page || '').toUpperCase())
+}
+
 function pageForChecksubStatus(currentStatus) {
   const s = String(currentStatus || '')
     .trim()
@@ -44,6 +56,11 @@ function pageForChecksubStatus(currentStatus) {
   if (s === 'grace' || s === 'parking') return 'LOW_BALANCE'
   if (s && s !== 'new' && s !== 'unknown') return 'INPROGRESS'
   return null
+}
+
+function normalizeDetectNextPage(page) {
+  const normalized = String(page || '').trim().toUpperCase()
+  return VALID_PAGES.includes(normalized) ? normalized : null
 }
 
 /** Editor stores campaign page links as bare tokens (href="CONFIRM"), not full URLs. */
@@ -245,7 +262,9 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
         initialResendAttempts = parsed.resendAttempts
       }
     }
-  } catch (e) {}
+  } catch {
+    /* ignore malformed session state */
+  }
   let resendAttempts = initialResendAttempts
 
   // Country-code dropdown disabled for now — campaign country isn't mapped to a
@@ -326,7 +345,9 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
         sessionObj.resendAttempts = resendAttempts
         sessionObj.phone = msisdn
         sessionStorage.setItem(`tc_session_${country}_${operator}`, JSON.stringify(sessionObj))
-      } catch (err) {}
+      } catch {
+        /* ignore sessionStorage write failures */
+      }
 
       if (resendAttempts >= 5) {
         if (sendBtn) {
@@ -522,6 +543,8 @@ function SubscriptionPage() {
   const [phoneResolving, setPhoneResolving] = useState(true)
   /** When successRedirectUrl is set — keep overlay, never flash HOME. */
   const [heExitPending, setHeExitPending] = useState(false)
+  /** API HE — block internal HOME/OTP; overlay until external redirect. */
+  const [heFunnelSuppressed, setHeFunnelSuppressed] = useState(false)
   const [booting, setBooting] = useState(true)
   const [transitioning, setTransitioning] = useState(false)
   const [error, setError] = useState('')
@@ -545,7 +568,17 @@ function SubscriptionPage() {
     failRedirectUrl: null,
     successRedirectUrl: null,
     cgRedirectUrl: null,
+    nextPage: null,
+    blocked: false,
+    blockReason: null,
+    subscriptionStatus: null,
+    isActive: false,
   })
+  const loadPageRef = useRef(null)
+  const detectKeyRef = useRef('')
+  const detectInFlightRef = useRef(false)
+  const heDetectSettledRef = useRef(false)
+  const heOnlyModeRef = useRef(false)
   const loadGenerationRef = useRef(0)
   // Our click_id is empty until detect-msisdn /flow/page returns it; affiliate seed goes in rcid.
   const clickIdRef = useRef('')
@@ -595,16 +628,13 @@ function SubscriptionPage() {
     if (trackingCampid) trackingCampidRef.current = trackingCampid
   }, [urlClickId, urlRcid, vid, affId, campid, trackingCampid])
 
-  const queryKey = useMemo(
-    () => `${country}|${operator}|${phone}`,
-    [country, operator, phone],
-  )
-
   // Keep ref in sync, but never wipe a phone set mid-async (e.g. OTP verify)
   // with a stale empty React state before setPhone commits.
-  if (phone || !phoneRef.current) {
-    phoneRef.current = phone
-  }
+  useEffect(() => {
+    if (phone || !phoneRef.current) {
+      phoneRef.current = phone
+    }
+  }, [phone])
 
   // Helper to load session
   const getSavedSession = useCallback(() => {
@@ -622,8 +652,8 @@ function SubscriptionPage() {
       const current = getSavedSession() || {}
       const updated = { ...current, ...data }
       sessionStorage.setItem(`tc_session_${country}_${operator}`, JSON.stringify(updated))
-    } catch (e) {
-      console.warn('Failed to save session:', e)
+    } catch (err) {
+      console.warn('Failed to save session:', err)
     }
   }, [country, operator, getSavedSession])
 
@@ -631,16 +661,77 @@ function SubscriptionPage() {
     if (!country || !operator) {
       phoneResolvingRef.current = false
       heExitPendingRef.current = false
-      setPhoneResolving(false)
-      setHeExitPending(false)
+      window.setTimeout(() => {
+        startTransition(() => {
+          setPhoneResolving(false)
+          setHeExitPending(false)
+        })
+      }, 0)
       return undefined
     }
 
+    const detectKey = `${country}|${operator}|${campid}|${trackingCampid}`
+    if (detectKeyRef.current !== detectKey) {
+      detectKeyRef.current = detectKey
+      detectInFlightRef.current = false
+      heDetectSettledRef.current = false
+      heOnlyModeRef.current = false
+      setHeFunnelSuppressed(false)
+    }
+    if (detectInFlightRef.current) return undefined
+    detectInFlightRef.current = true
+
     let cancelled = false
+
+    const runHeFailRedirect = (baseFailUrl, errMsg) => {
+      if (!baseFailUrl) return false
+      heExitPendingRef.current = true
+      setHeExitPending(true)
+      const goFail = () => {
+        const dest = appendHeAttributionToUrl(baseFailUrl, {
+          clickId: clickIdRef.current || '',
+          rcid: rcidRef.current || '',
+          msisdn: '',
+          campid: campidRef.current || campid,
+          trackingCampid: trackingCampidRef.current || trackingCampid,
+        })
+        if (!dest) {
+          heExitPendingRef.current = false
+          setHeExitPending(false)
+          phoneResolvingRef.current = false
+          setPhoneResolving(false)
+          return
+        }
+        console.log('[HE] no MSISDN — fail redirect (skip HOME)', {
+          dest,
+          heError: errMsg,
+        })
+        window.location.replace(dest)
+      }
+      if (clickIdRef.current) {
+        goFail()
+      } else {
+        const started = Date.now()
+        const tick = () => {
+          if (clickIdRef.current || Date.now() - started > 2500) {
+            goFail()
+            return
+          }
+          window.setTimeout(tick, 150)
+        }
+        tick()
+      }
+      return true
+    }
     phoneResolvingRef.current = true
     heExitPendingRef.current = false
-    setPhoneResolving(true)
-    setHeExitPending(false)
+    window.setTimeout(() => {
+      if (cancelled) return
+      startTransition(() => {
+        setPhoneResolving(true)
+        setHeExitPending(false)
+      })
+    }, 0)
     heMetaRef.current = {
       done: false,
       heProvider: null,
@@ -648,6 +739,11 @@ function SubscriptionPage() {
       failRedirectUrl: null,
       successRedirectUrl: null,
       cgRedirectUrl: null,
+      nextPage: null,
+      blocked: false,
+      blockReason: null,
+      subscriptionStatus: null,
+      isActive: false,
     }
 
     const resolveWithTimeout = Promise.race([
@@ -668,12 +764,16 @@ function SubscriptionPage() {
 
     resolveWithTimeout
       .then((result) => {
-        if (cancelled) return
         const {
           phone: resolved,
           failRedirectUrl,
           successRedirectUrl,
           cgRedirectUrl,
+          nextPage,
+          blocked,
+          blockReason,
+          subscriptionStatus,
+          isActive,
           heError,
           heProvider,
           visitId: heVisitId,
@@ -716,6 +816,27 @@ function SubscriptionPage() {
           failRedirectUrl: failRedirectUrl || null,
           successRedirectUrl: successRedirectUrl || null,
           cgRedirectUrl: cgRedirectUrl || null,
+          nextPage: normalizeDetectNextPage(nextPage),
+          blocked: Boolean(blocked),
+          blockReason: blockReason || null,
+          subscriptionStatus: subscriptionStatus || null,
+          isActive: Boolean(isActive),
+        }
+
+        if (isApiHeProvider(heProvider)) {
+          heOnlyModeRef.current = true
+          setHeFunnelSuppressed(true)
+        }
+
+        // No MSISDN + fail URL → redirect before HOME boot or session fallbacks.
+        if (!resolved) {
+          const baseFailUrl = pickHeFailRedirectUrl({
+            failRedirectUrl,
+            cgRedirectUrl,
+          })
+          if (runHeFailRedirect(baseFailUrl, heError)) {
+            return
+          }
         }
 
         if (resolved) {
@@ -731,12 +852,36 @@ function SubscriptionPage() {
             setSearchParams(currentParams, { replace: true })
           }
 
+          const detectedNextPage = normalizeDetectNextPage(nextPage)
+          if (
+            detectedNextPage &&
+            !(heOnlyModeRef.current && isHeSuppressedFunnelPage(detectedNextPage))
+          ) {
+            phoneResolvingRef.current = false
+            setPhoneResolving(false)
+            setHeExitPending(false)
+            setSearchParams((prev) => {
+              const nextParams = new URLSearchParams(prev)
+              if (nextParams.get('step') === detectedNextPage) return prev
+              nextParams.set('step', detectedNextPage)
+              return nextParams
+            }, { replace: true })
+            window.setTimeout(() => {
+              loadPageRef.current?.(detectedNextPage, { direct: true })
+            }, 0)
+            return
+          }
+          if (heOnlyModeRef.current && detectedNextPage) {
+            phoneResolvingRef.current = true
+            setPhoneResolving(true)
+            return
+          }
+
           // Success URL set → never show HOME; overlay until leave.
           if (isHeRedirectUrl(successRedirectUrl)) {
             heExitPendingRef.current = true
             setHeExitPending(true)
             const go = () => {
-              if (cancelled) return
               const dest = appendHeAttributionToUrl(successRedirectUrl, {
                 clickId: clickIdRef.current || '',
                 rcid: rcidRef.current || '',
@@ -760,7 +905,6 @@ function SubscriptionPage() {
             } else {
               const started = Date.now()
               const tick = () => {
-                if (cancelled) return
                 if (clickIdRef.current || Date.now() - started > 2500) {
                   go()
                   return
@@ -771,15 +915,24 @@ function SubscriptionPage() {
             }
             return
           }
-          // No success URL → stay on HOME / funnel
+          // API HE without outbound URL — keep overlay; never show HOME/OTP.
+          if (heOnlyModeRef.current) {
+            phoneResolvingRef.current = true
+            setPhoneResolving(true)
+            return
+          }
+          if (!cancelled) {
+            phoneResolvingRef.current = false
+            setPhoneResolving(false)
+          }
           return
         }
 
-        // Fall back to session phone from a prior OTP in this tab
+        // Fall back to session phone from a prior OTP in this tab (not for failed API HE).
         try {
           const saved = sessionStorage.getItem(`tc_session_${country}_${operator}`)
           const sessionPhone = saved ? JSON.parse(saved)?.phone : ''
-          if (sessionPhone) {
+          if (sessionPhone && !(isApiHeProvider(heProvider) && heError)) {
             phoneRef.current = sessionPhone
             setPhone(sessionPhone)
             persistPhone(sessionPhone)
@@ -801,74 +954,35 @@ function SubscriptionPage() {
               heExitPendingRef.current = false
               setHeExitPending(false)
             }
+            if (heOnlyModeRef.current) {
+              phoneResolvingRef.current = true
+              setPhoneResolving(true)
+            }
             return
           }
         } catch {
           /* ignore */
         }
 
-        // No MSISDN + fail/CG URL → never show HOME; redirect immediately.
-        const provider = String(heProvider || '').toLowerCase()
-        const isApiHe =
-          provider === 'safaricom_masked' ||
-          provider === 'custom_http' ||
-          provider === 'custom'
-        const baseFailUrl = pickHeFailRedirectUrl({
-          failRedirectUrl,
-          cgRedirectUrl,
-        })
-        if (isApiHe && baseFailUrl) {
-          heExitPendingRef.current = true
-          setHeExitPending(true)
-          const goFail = () => {
-            if (cancelled) return
-            const dest = appendHeAttributionToUrl(baseFailUrl, {
-              clickId: clickIdRef.current || '',
-              rcid: rcidRef.current || '',
-              msisdn: '',
-              campid: campidRef.current || campid,
-          trackingCampid: trackingCampidRef.current || trackingCampid,
-            })
-            if (!dest) {
-              heExitPendingRef.current = false
-              setHeExitPending(false)
-              phoneResolvingRef.current = false
-              setPhoneResolving(false)
-              return
-            }
-            console.log('[HE] no MSISDN — fail redirect (skip HOME)', {
-              dest,
-              heError,
-            })
-            window.location.replace(dest)
-          }
-          if (clickIdRef.current) {
-            goFail()
-          } else {
-            const started = Date.now()
-            const tick = () => {
-              if (cancelled) return
-              if (clickIdRef.current || Date.now() - started > 2500) {
-                goFail()
-                return
-              }
-              window.setTimeout(tick, 150)
-            }
-            tick()
-          }
-          return
-        }
-
-        console.log('[HE] no MSISDN and no fail URL — show HOME / OTP path', {
+        console.log('[HE] no MSISDN and no fail URL — HE-only overlay (no HOME/OTP)', {
           heError,
         })
+        if (heOnlyModeRef.current) {
+          phoneResolvingRef.current = true
+          setPhoneResolving(true)
+        } else if (!cancelled) {
+          phoneResolvingRef.current = false
+          setPhoneResolving(false)
+        }
       })
       .catch(() => {
         heMetaRef.current = { ...heMetaRef.current, done: true }
       })
       .finally(() => {
+        detectInFlightRef.current = false
+        heDetectSettledRef.current = true
         // Keep overlay if we are about to leave (success or fail redirect).
-        if (!cancelled && !heExitPendingRef.current) {
+        if (!cancelled && !heExitPendingRef.current && !heOnlyModeRef.current) {
           phoneResolvingRef.current = false
           setPhoneResolving(false)
         }
@@ -876,18 +990,15 @@ function SubscriptionPage() {
 
     return () => {
       cancelled = true
+      detectInFlightRef.current = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [country, operator, campid])
+  }, [country, operator, campid, trackingCampid, setSearchParams])
 
-  /** HOME CTA: fail → warn+CG; success+successRedirectUrl → external (backup if immediate missed). */
+  /** HOME CTA: follow detect decision first, then fail → warn+CG. */
   const warnIfHeUnresolved = useCallback(() => {
     const meta = heMetaRef.current
-    const provider = String(meta.heProvider || '').toLowerCase()
-    const isApiHe =
-      provider === 'safaricom_masked' ||
-      provider === 'custom_http' ||
-      provider === 'custom'
+    const isApiHe = isApiHeProvider(meta.heProvider)
 
     // Still detecting — ask user to wait instead of bouncing.
     if (phoneResolvingRef.current || !meta.done) {
@@ -897,6 +1008,17 @@ function SubscriptionPage() {
 
     // Only gate Token/Custom HE flows (OTP / header paths continue normally).
     if (!isApiHe) return false
+
+    const nextPage = normalizeDetectNextPage(meta.nextPage)
+    if (phoneRef.current && nextPage) {
+      setSearchParams((prev) => {
+        const nextParams = new URLSearchParams(prev)
+        nextParams.set('step', nextPage)
+        return nextParams
+      }, { replace: true })
+      loadPageRef.current?.(nextPage, { direct: true })
+      return true
+    }
 
     // MSISDN found + success redirect configured → leave funnel on CTA too.
     if (phoneRef.current && isHeRedirectUrl(meta.successRedirectUrl)) {
@@ -944,10 +1066,14 @@ function SubscriptionPage() {
       }, 2000)
     }
     return true
-  }, [campid])
+  }, [campid, trackingCampid, setSearchParams])
 
   const cachePage = useCallback((data) => {
     if (!data?.pageType) return
+    if (heOnlyModeRef.current && isHeSuppressedFunnelPage(data.pageType)) {
+      console.log('[HE] suppressing funnel page render:', data.pageType)
+      return
+    }
     if (data.entryPage) entryPageRef.current = data.entryPage
     pageCacheRef.current.set(data.pageType, data)
     if (data.visitId) visitIdRef.current = data.visitId
@@ -1088,6 +1214,13 @@ function SubscriptionPage() {
         setBooting(false)
         return
       }
+      if (heOnlyModeRef.current && isHeSuppressedFunnelPage(requested)) {
+        console.log('[HE] suppressing funnel page load:', requested)
+        phoneResolvingRef.current = true
+        setPhoneResolving(true)
+        setBooting(false)
+        return
+      }
       setError('')
       const generation = ++loadGenerationRef.current
 
@@ -1134,6 +1267,9 @@ function SubscriptionPage() {
     },
     [country, operator, cachePage, campid, trackingCampid, vid, affId],
   )
+  useEffect(() => {
+    loadPageRef.current = loadPage
+  }, [loadPage])
 
   useEffect(() => {
     const existing = document.querySelector('link[data-flow-font]')
@@ -1146,11 +1282,22 @@ function SubscriptionPage() {
     }
   }, [])
 
-  // Boot HOME immediately — HE detect runs in parallel and must not block first paint.
+  // Fresh landing: wait for HE detect before HOME so fail/success redirects never flash HOME.
   // Do NOT depend on searchParams — cachePage updates step/msisdn and would re-boot in a loop.
   useEffect(() => {
     if (!country || !operator) return undefined
     let cancelled = false
+
+    async function waitForHeDetect(maxMs = 12000) {
+      const start = Date.now()
+      while (!heDetectSettledRef.current && Date.now() - start < maxMs) {
+        if (cancelled || heExitPendingRef.current) return false
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 40)
+        })
+      }
+      return heDetectSettledRef.current
+    }
 
     async function boot() {
       const savedSession = getSavedSession()
@@ -1163,8 +1310,13 @@ function SubscriptionPage() {
           setPhone(savedSession.phone)
         }
         setBooting(true)
+        const resumeStep = urlStep || savedSession.step || entryPageRef.current || 'HOME'
+        if (isHeSuppressedFunnelPage(resumeStep)) {
+          await waitForHeDetect()
+          if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
+        }
         if (!cancelled) {
-          await loadPage(urlStep || savedSession.step || entryPageRef.current || 'HOME')
+          await loadPage(resumeStep)
         }
         return
       }
@@ -1178,17 +1330,38 @@ function SubscriptionPage() {
       setBooting(true)
 
       if (urlStep) {
+        if (isHeSuppressedFunnelPage(urlStep)) {
+          await waitForHeDetect()
+          if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
+        }
         if (!cancelled) await loadPage(urlStep)
         return
       }
 
+      // API HE may redirect away — do not paint HOME until detect settles.
+      await waitForHeDetect()
+      if (cancelled || heExitPendingRef.current) return
+      const meta = heMetaRef.current
+      if (
+        !phoneRef.current &&
+        pickHeFailRedirectUrl({
+          failRedirectUrl: meta.failRedirectUrl,
+          cgRedirectUrl: meta.cgRedirectUrl,
+        })
+      ) {
+        return
+      }
+      if (heOnlyModeRef.current) return
+
       try {
         const { entryPage } = await fetchFlowEntry({ country, operator, campid, trackingCampid })
-        if (cancelled) return
+        if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
         entryPageRef.current = entryPage || 'HOME'
         await loadPage(entryPageRef.current)
       } catch {
-        if (!cancelled) await loadPage('HOME')
+        if (!cancelled && !heExitPendingRef.current && !heOnlyModeRef.current) {
+          await loadPage('HOME')
+        }
       }
     }
 
@@ -1204,6 +1377,7 @@ function SubscriptionPage() {
     if (booting || !pageData) return
     if (!urlStep) return
     if (String(pageData.pageType || '').toUpperCase() === urlStep) return
+    if (heOnlyModeRef.current && isHeSuppressedFunnelPage(urlStep)) return
     // Ignore while a transition is in flight — cachePage will align URL + page together.
     if (transitionLockRef.current) return
     setBooting(true)
@@ -1359,12 +1533,16 @@ function SubscriptionPage() {
                     const parsed = new URL(tempUrl)
                     if (!parsed.hostname) {
                       console.error(`[Priority Chain] ${tag} FAIL — API URL host missing:`, rawUrl)
-                      throw new Error(`Priority ${i + 1} Error: API URL host is missing ("${rawUrl}")`)
+                      throw new Error(`Priority ${i + 1} Error: API URL host is missing ("${rawUrl}")`, {
+                        cause: new Error(String(rawUrl || 'Missing API URL host')),
+                      })
                     }
                   } catch (e) {
                     if (e.message?.startsWith('Priority ')) throw e
                     console.error(`[Priority Chain] ${tag} FAIL — Invalid API URL format:`, rawUrl)
-                    throw new Error(`Priority ${i + 1} Error: Invalid API URL format ("${rawUrl}")`)
+                    throw new Error(`Priority ${i + 1} Error: Invalid API URL format ("${rawUrl}")`, {
+                      cause: e,
+                    })
                   }
                 }
 
@@ -1859,7 +2037,10 @@ function SubscriptionPage() {
   }
 
   const hideHomeForHe =
-    phoneResolving || heExitPending
+    phoneResolving ||
+    heExitPending ||
+    (heFunnelSuppressed &&
+      (!pageData || isHeSuppressedFunnelPage(pageData?.pageType)))
   const showBootSpinner = (booting && !pageData) || hideHomeForHe
   const showFatalError = Boolean(error && !pageData && !hideHomeForHe && !(booting && !pageData))
   const notAvailable =
@@ -1881,7 +2062,7 @@ function SubscriptionPage() {
           <div className="flex flex-col items-center gap-3">
             <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
             <p className="text-slate-500 text-sm">
-              {heExitPending
+              {heExitPending || heFunnelSuppressed
                 ? 'Redirecting…'
                 : phoneResolving
                   ? 'Detecting mobile number…'

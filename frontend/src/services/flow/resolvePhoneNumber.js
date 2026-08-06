@@ -67,7 +67,11 @@ export async function resolvePhoneFromOperator(context = {}) {
     return {
       phone: normalizeMsisdn(res.phone),
       subscribed: res.subscribed,
+      isActive: Boolean(res.isActive),
+      subscriptionStatus: res.subscriptionStatus || null,
       blocked: res.blocked,
+      blockReason: res.blockReason || null,
+      nextPage: res.nextPage || null,
       heProvider: res.heProvider || null,
       heError: res.heError || null,
       failRedirectUrl: res.failRedirectUrl || null,
@@ -183,6 +187,7 @@ function redirectFields(operatorRes) {
       failRedirectUrl: null,
       successRedirectUrl: null,
       cgRedirectUrl: null,
+      nextPage: null,
       visitId: null,
       clickId: null,
       rcid: null,
@@ -193,10 +198,21 @@ function redirectFields(operatorRes) {
     failRedirectUrl: operatorRes.failRedirectUrl || null,
     successRedirectUrl: operatorRes.successRedirectUrl || null,
     cgRedirectUrl: operatorRes.cgRedirectUrl || null,
+    nextPage: operatorRes.nextPage || null,
     visitId: operatorRes.visitId || null,
     clickId: operatorRes.clickId || null,
     rcid: operatorRes.rcid || null,
     campaignId: operatorRes.campaignId || null,
+  }
+}
+
+function detectDecisionFields(operatorRes) {
+  return {
+    subscribed: operatorRes?.subscribed,
+    isActive: Boolean(operatorRes?.isActive),
+    subscriptionStatus: operatorRes?.subscriptionStatus || null,
+    blocked: Boolean(operatorRes?.blocked),
+    blockReason: operatorRes?.blockReason || null,
   }
 }
 
@@ -207,12 +223,16 @@ function redirectFields(operatorRes) {
  *   phone: string,
  *   source: string,
  *   subscribed?: boolean,
+ *   isActive?: boolean,
+ *   subscriptionStatus?: string|null,
  *   blocked?: boolean,
+ *   blockReason?: string|null,
  *   heProvider?: string|null,
  *   heError?: string|null,
  *   failRedirectUrl?: string|null,
  *   successRedirectUrl?: string|null,
  *   cgRedirectUrl?: string|null,
+ *   nextPage?: string|null,
  * }>}
  */
 export async function resolvePhoneNumber(searchParams, context = {}) {
@@ -225,6 +245,7 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
     return {
       phone: fromUrl,
       source: 'url',
+      ...detectDecisionFields(operatorRes),
       heProvider: operatorRes?.heProvider,
       heError: operatorRes?.heError,
       ...redirectFields(operatorRes),
@@ -237,6 +258,7 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
     return {
       phone: fromCustom,
       source: 'custom',
+      ...detectDecisionFields(operatorRes),
       heProvider: operatorRes?.heProvider,
       heError: operatorRes?.heError,
       ...redirectFields(operatorRes),
@@ -249,8 +271,24 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
     return {
       phone,
       source: 'operator',
-      subscribed: operatorRes.subscribed,
-      blocked: operatorRes.blocked,
+      ...detectDecisionFields(operatorRes),
+      heProvider: operatorRes.heProvider,
+      heError: operatorRes.heError,
+      ...redirectFields(operatorRes),
+    }
+  }
+
+  // Token/API HE with no MSISDN — do not fall back to storage/window; use fail redirect.
+  const heProvider = String(operatorRes?.heProvider || '').toLowerCase()
+  const isApiHe =
+    heProvider === 'safaricom_masked' ||
+    heProvider === 'custom_http' ||
+    heProvider === 'custom'
+  if (isApiHe && operatorRes) {
+    return {
+      phone: '',
+      source: 'operator',
+      ...detectDecisionFields(operatorRes),
       heProvider: operatorRes.heProvider,
       heError: operatorRes.heError,
       ...redirectFields(operatorRes),
@@ -262,6 +300,7 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
     return {
       phone: fromStorage,
       source: 'storage',
+      ...detectDecisionFields(operatorRes),
       heProvider: operatorRes?.heProvider,
       heError: operatorRes?.heError,
       ...redirectFields(operatorRes),
@@ -274,6 +313,7 @@ export async function resolvePhoneNumber(searchParams, context = {}) {
     return {
       phone: fromWindow,
       source: 'window',
+      ...detectDecisionFields(operatorRes),
       heProvider: operatorRes?.heProvider,
       heError: operatorRes?.heError,
       ...redirectFields(operatorRes),

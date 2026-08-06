@@ -24,12 +24,30 @@ import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pag
 import { otpService } from '../otp/otp.service.js';
 import { heService } from './he.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
-import { ApiCallType } from './entities/api-call-log.entity.js';
+import { ApiCallLog, ApiCallType } from './entities/api-call-log.entity.js';
 import getConfig from '../../config/configuration.js';
 
 export const createFlowService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
+  const getApiCallLogRepo = () => getRepository(ApiCallLog);
   const isFlowCacheEnabled = () => getConfig().flowCacheEnabled !== false;
+
+  const API_HE_PROVIDERS = new Set([
+    'safaricom_masked',
+    'custom_http',
+    'custom',
+  ]);
+
+  const isApiHeProvider = (provider) =>
+    API_HE_PROVIDERS.has(String(provider || '').toLowerCase());
+
+  const visitHasDetectPartnerChecks = async (visitId) => {
+    if (!visitId) return false;
+    const row = await getApiCallLogRepo().findOne({
+      where: { visitId, callType: ApiCallType.CHECKSUB },
+    });
+    return Boolean(row);
+  };
 
   const normalizePack = (pack) => {
     const value = (pack || 'daily').toLowerCase();
@@ -668,8 +686,9 @@ export const createFlowService = () => {
 
       const guardModeForSub =
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
-      // Null/CG flow: no checksub/blocklist — just store visit + redirect
-      if (guardModeForSub !== 'NONE' && phone) {
+      const partnerChecksDone = await visitHasDetectPartnerChecks(visitId);
+      // detect-msisdn already ran checksub/blocklist — do not duplicate on HOME load.
+      if (guardModeForSub !== 'NONE' && phone && !partnerChecksDone) {
         const partnerCtx = {
           phone,
           serviceId,
@@ -1556,7 +1575,7 @@ export const createFlowService = () => {
   };
 
   const detectMsisdn = async (input) => {
-    let rawPhone = heService.normalizePhone(input.phone || '');
+    const hintPhone = heService.normalizePhone(input.phone || '');
     const campaign = await resolveCampaign(input).catch(() => null);
     let apiConfig = null;
     let serviceId = campaign?.serviceId || '';
@@ -1573,8 +1592,22 @@ export const createFlowService = () => {
       });
     }
 
+    if (input.visitId && isFlowCacheEnabled()) {
+      const earlyCached = await redisService.get(
+        `flow:detect:result:${input.visitId}`,
+      );
+      if (earlyCached) return earlyCached;
+    }
+
     // Visit-first: mint our click_id before any HE / partner HTTP so logs attach.
     const visitCtx = await ensureVisitForDetect(campaign, input);
+    if (visitCtx.visitId && isFlowCacheEnabled()) {
+      const cached = await redisService.get(
+        `flow:detect:result:${visitCtx.visitId}`,
+      );
+      if (cached) return cached;
+    }
+
     const attrCtx = {
       visitId: visitCtx.visitId,
       campaignId: campaign?.id || null,
@@ -1582,18 +1615,26 @@ export const createFlowService = () => {
       rcid: visitCtx.rcid,
     };
 
+    const configuredHeProvider = apiConfig?.heProvider || 'header';
+
     if (apiConfig) {
       heMeta = await heService.resolve(apiConfig, {
-        phone: rawPhone,
-        hint: rawPhone,
+        phone: hintPhone,
+        hint: hintPhone,
         country: input.country || campaign?.country,
         operator: input.operator || campaign?.operator,
         sessionId: input.sessionId,
         ...attrCtx,
       });
-      if (heMeta.phone) {
-        rawPhone = heMeta.phone;
-      }
+    }
+
+    const heProviderResolved = heMeta.provider || configuredHeProvider;
+    // Token/API HE: only MSISDN from partner APIs counts — not query/header fallback.
+    let rawPhone = '';
+    if (isApiHeProvider(heProviderResolved)) {
+      rawPhone = heMeta.phone ? heService.normalizePhone(heMeta.phone) : '';
+    } else {
+      rawPhone = heService.normalizePhone(heMeta.phone || hintPhone || '');
     }
 
     let subscribed = false;
@@ -1601,8 +1642,11 @@ export const createFlowService = () => {
     let isActive = false;
     let blocked = false;
     let blockReason = null;
+    const hasChecksub = Boolean(apiConfig?.subscriptionApi);
+    const hasBlocklist = Boolean(apiConfig?.blocklistApi);
 
-    if (rawPhone && apiConfig) {
+    // Phone mila → checksub + blocklist (only when configured).
+    if (rawPhone && apiConfig && (hasChecksub || hasBlocklist)) {
       const partnerCtx = {
         phone: rawPhone,
         serviceId,
@@ -1611,12 +1655,16 @@ export const createFlowService = () => {
         ...attrCtx,
       };
       const [subRes, blockRes] = await Promise.all([
-        partnerApiService
-          .checkSubscription(apiConfig, partnerCtx)
-          .catch(() => null),
-        partnerApiService
-          .checkBlocked(apiConfig, partnerCtx)
-          .catch(() => ({ blocked: false })),
+        hasChecksub
+          ? partnerApiService
+              .checkSubscription(apiConfig, partnerCtx)
+              .catch(() => null)
+          : Promise.resolve(null),
+        hasBlocklist
+          ? partnerApiService
+              .checkBlocked(apiConfig, partnerCtx)
+              .catch(() => ({ blocked: false }))
+          : Promise.resolve({ blocked: false }),
       ]);
 
       subscribed = Boolean(subRes?.shouldSkipSubscribe);
@@ -1645,21 +1693,10 @@ export const createFlowService = () => {
       rcid: visitCtx.rcid || '',
     };
 
-    const heProvider = heMeta.provider || apiConfig?.heProvider || 'header';
-    const apiHeProviders = new Set([
-      'safaricom_masked',
-      'custom_http',
-      'custom',
-    ]);
-
     // Fail redirect: explicit heConfig.failRedirectUrl, else campaign CG URL
     // when using token/API HE (so OTP-only campaigns with a CG field are untouched).
     let rawFail = String(heMeta.failRedirectUrl || '').trim();
-    if (
-      !rawPhone &&
-      !rawFail &&
-      apiHeProviders.has(String(heProvider).toLowerCase())
-    ) {
+    if (!rawPhone && !rawFail && isApiHeProvider(heProviderResolved)) {
       rawFail = String(campaign?.cgRedirectUrl || '').trim();
     }
 
@@ -1694,19 +1731,71 @@ export const createFlowService = () => {
         )
       : '';
 
+    const mappedStatusPage = pageTypeForSubscriptionStatus(
+      subscriptionStatus,
+      isActive,
+    );
+    const normalizedStatus = String(subscriptionStatus || '')
+      .trim()
+      .toLowerCase();
+    const isNewStatus = normalizedStatus === 'new';
+
+    let campaignSuccessRedirectUrl = null;
+    if (rawPhone && campaign?.successRedirectUrl?.trim()) {
+      campaignSuccessRedirectUrl = await resolveSuccessRedirect(
+        campaign,
+        visitCtx.visitId,
+        input,
+      );
+    }
+
+    let nextPage = null;
+    let outboundFailRedirectUrl = failRedirectUrl || null;
+    let outboundSuccessRedirectUrl = successRedirectUrl || null;
+
+    if (rawPhone && hasBlocklist && blocked) {
+      nextPage = 'BLOCKED';
+      outboundSuccessRedirectUrl = null;
+      outboundFailRedirectUrl = null;
+    } else if (rawPhone && hasChecksub) {
+      if (isActive) {
+        outboundSuccessRedirectUrl = campaignSuccessRedirectUrl || null;
+        if (!outboundSuccessRedirectUrl) {
+          nextPage = 'THANKYOU';
+        }
+      } else if (isNewStatus) {
+        outboundSuccessRedirectUrl = successRedirectUrl || null;
+        outboundFailRedirectUrl = null;
+      } else if (mappedStatusPage) {
+        outboundSuccessRedirectUrl = null;
+        nextPage = mappedStatusPage;
+        outboundFailRedirectUrl = null;
+      } else {
+        outboundSuccessRedirectUrl = null;
+        outboundFailRedirectUrl = null;
+      }
+    } else if (rawPhone && !hasChecksub) {
+      // No checksub configured — legacy: phone + HE success URL.
+      outboundSuccessRedirectUrl = successRedirectUrl || null;
+    }
+
     // Log redirect decision against the same visit (visible in Session Detail).
     let redirectOutcome = 'stay';
     let redirectUrl = null;
-    if (rawPhone && successRedirectUrl) {
-      redirectOutcome = 'success';
-      redirectUrl = successRedirectUrl;
+    if (rawPhone && nextPage === 'BLOCKED') {
+      redirectOutcome = 'blocked';
+    } else if (rawPhone && nextPage) {
+      redirectOutcome = String(nextPage).toLowerCase();
+    } else if (rawPhone && outboundSuccessRedirectUrl) {
+      redirectOutcome = isActive ? 'campaign_success' : 'he_success';
+      redirectUrl = outboundSuccessRedirectUrl;
     } else if (
       !rawPhone &&
-      failRedirectUrl &&
-      apiHeProviders.has(String(heProvider).toLowerCase())
+      outboundFailRedirectUrl &&
+      isApiHeProvider(heProviderResolved)
     ) {
       redirectOutcome = 'fail';
-      redirectUrl = failRedirectUrl;
+      redirectUrl = outboundFailRedirectUrl;
     }
 
     if (visitCtx.visitId || campaign?.id) {
@@ -1721,13 +1810,19 @@ export const createFlowService = () => {
           requestUrl: redirectUrl,
           requestBody: JSON.stringify({
             outcome: redirectOutcome,
-            heProvider,
+            heProvider: heProviderResolved,
             heError: heMeta.error || null,
+            subscriptionStatus: subscriptionStatus || null,
+            isActive,
+            blocked,
+            blockReason,
+            nextPage,
           }),
           responseStatus: null,
           responseBody: null,
           success:
-            redirectOutcome === 'success'
+            redirectOutcome === 'he_success' ||
+            redirectOutcome === 'campaign_success'
               ? true
               : redirectOutcome === 'fail'
                 ? false
@@ -1735,18 +1830,28 @@ export const createFlowService = () => {
           errorMessage:
             redirectOutcome === 'fail' ? heMeta.error || null : null,
           statusLabel:
-            redirectOutcome === 'success'
-              ? 'SUCCESS'
-              : redirectOutcome === 'fail'
-                ? 'FAILED'
-                : 'STAY',
+            redirectOutcome === 'he_success'
+              ? 'HE_SUCCESS'
+              : redirectOutcome === 'campaign_success'
+                ? 'CAMPAIGN_SUCCESS'
+                : redirectOutcome === 'fail'
+                  ? 'FAILED'
+                  : redirectOutcome === 'blocked'
+                    ? 'BLOCKED'
+                    : nextPage
+                      ? String(nextPage).toUpperCase()
+                      : 'STAY',
         });
       } catch (err) {
         console.warn(`he_redirect log failed: ${err.message}`);
       }
     }
 
-    return {
+    if (!rawPhone) {
+      outboundSuccessRedirectUrl = null;
+    }
+
+    const result = {
       phone: rawPhone,
       hasMsisdn: Boolean(rawPhone),
       subscribed,
@@ -1754,10 +1859,11 @@ export const createFlowService = () => {
       subscriptionStatus,
       blocked,
       blockReason,
-      heProvider,
+      heProvider: heProviderResolved,
       heError: heMeta.error || null,
-      failRedirectUrl: failRedirectUrl || null,
-      successRedirectUrl: successRedirectUrl || null,
+      nextPage,
+      failRedirectUrl: outboundFailRedirectUrl || null,
+      successRedirectUrl: outboundSuccessRedirectUrl || null,
       cgRedirectUrl: campaign?.cgRedirectUrl || null,
       country: input.country || campaign?.country,
       operator: input.operator || campaign?.operator,
@@ -1766,6 +1872,16 @@ export const createFlowService = () => {
       clickId: visitCtx.clickId,
       rcid: visitCtx.rcid,
     };
+
+    if (visitCtx.visitId && isFlowCacheEnabled()) {
+      await redisService.set(
+        `flow:detect:result:${visitCtx.visitId}`,
+        result,
+        60,
+      );
+    }
+
+    return result;
   };
 
   const getFlowEntry = async (input) => {
