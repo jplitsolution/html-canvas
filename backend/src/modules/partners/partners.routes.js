@@ -1,4 +1,5 @@
 import { partnersService } from './partners.service.js';
+import { postbackService } from './postback.service.js';
 
 export async function partnersRoutes(fastify, options) {
   fastify.addHook('onRequest', fastify.authenticate);
@@ -27,5 +28,22 @@ export async function partnersRoutes(fastify, options) {
   fastify.delete('/vendors/:id', async (request, reply) => {
     await partnersService.removeVendor(request.params.id, request.user.id);
     return { message: 'Vendor deleted' };
+  });
+
+  // --- Postbacks admin (user-scoped) ---
+  fastify.get('/postbacks/summary', async (request) => {
+    const days = request.query?.days;
+    return postbackService.getSummary(request.user.id, { days });
+  });
+
+  fastify.get('/postbacks', async (request) => {
+    return postbackService.listPostbacks(request.user.id, request.query || {});
+  });
+
+  fastify.get('/postbacks/:id', async (request) => {
+    return postbackService.getPostbackById(
+      request.params.id,
+      request.user.id,
+    );
   });
 }
