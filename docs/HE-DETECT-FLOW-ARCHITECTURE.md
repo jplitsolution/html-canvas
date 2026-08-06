@@ -88,7 +88,9 @@ Dono parallel (`Promise.all`).
 - `serviceNotExists` / empty serviceId → status **`new`** (pehle `unknown` tha jo HOME dikha deta tha)
 
 ### Step 4 — Redirect URL build
-Variables inject: `{{msisdn}}`, `{{click_id}}`, `{{rcid}}`, campid, etc.
+HE success/fail: configured URL opens **as-is**. `click_id` / `campid` / `rcid` are **never**
+appended or sent to third parties — they stay on our visit + `api_call_logs` only.
+Optional placeholders in the URL: `{{msisdn}}`, `{{phone}}`, country, operator.
 
 | URL | Source |
 |-----|--------|
@@ -186,7 +188,7 @@ Detect result
 
 **Fail redirect pehle** — session phone / HOME boot se pehle.
 
-**Attribution:** `appendHeAttributionToUrl` — `click_id`, `rcid`, `msisdn` query me append.
+**Attribution:** HE redirects open the configured URL as-is — no `click_id` / `campid` / `rcid` query append.
 
 ### 5.3 HE-only mode (HOME + OTP suppressed)
 

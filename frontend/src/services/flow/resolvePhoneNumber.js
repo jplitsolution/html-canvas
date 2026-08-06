@@ -104,64 +104,25 @@ export function pickHeFailRedirectUrl({ failRedirectUrl, cgRedirectUrl } = {}) {
 }
 
 /**
- * Ensure outbound CG / HE redirect carries attribution for postbacks:
- * click_id (ours), rcid (vendor/affiliate original), msisdn when known.
- * Replaces {{click_id}} / {{msisdn}} etc., or appends query params.
+ * Open HE success/fail URL as configured.
+ * Never append click_id / campid / rcid — those stay internal only.
+ * Only fills {{msisdn}} / {{phone}} placeholders when present; does not
+ * auto-append query params.
  */
 export function appendHeAttributionToUrl(rawUrl, attrs = {}) {
   let url = String(rawUrl || '').trim()
   if (!isHeRedirectUrl(url)) return ''
 
-  const clickId = String(attrs.clickId || attrs.click_id || '').trim()
-  const rcid = String(attrs.rcid || '').trim()
   const msisdn = normalizeMsisdn(attrs.msisdn || attrs.phone || '')
-  const campid = attrs.campid != null ? String(attrs.campid) : ''
-  const trackingCampid =
-    attrs.trackingCampid != null
-      ? String(attrs.trackingCampid)
-      : attrs.tracking_campid != null
-        ? String(attrs.tracking_campid)
-        : ''
-
   const vars = {
-    click_id: clickId,
-    clickId,
-    rcid,
     msisdn,
     phone: msisdn,
-    campid,
-    tracking_campid: trackingCampid,
   }
-  const original = url
   for (const [key, val] of Object.entries(vars)) {
     url = url.split(`{{${key}}}`).join(encodeURIComponent(val))
     url = url.split(`{${key}}`).join(encodeURIComponent(val))
   }
-
-  const hadClick = /\{\{?(?:click_id|clickId|rcid)\}?\}/.test(original)
-  const hadMsisdn = /\{\{?(?:msisdn|phone)\}?\}/.test(original)
-
-  try {
-    const u = new URL(url)
-    if (clickId && !hadClick && !u.searchParams.has('click_id')) {
-      u.searchParams.set('click_id', clickId)
-    }
-    if (rcid && rcid !== clickId && !u.searchParams.has('rcid')) {
-      u.searchParams.set('rcid', rcid)
-    }
-    if (msisdn && !hadMsisdn && !u.searchParams.has('msisdn')) {
-      u.searchParams.set('msisdn', msisdn)
-    }
-    if (campid && !u.searchParams.has('campid')) {
-      u.searchParams.set('campid', campid)
-    }
-    if (trackingCampid && !u.searchParams.has('tracking_campid')) {
-      u.searchParams.set('tracking_campid', trackingCampid)
-    }
-    return u.toString()
-  } catch {
-    return url
-  }
+  return url
 }
 
 async function resolveCustomHook() {
