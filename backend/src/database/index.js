@@ -58,6 +58,7 @@ export const initDatabase = async () => {
   await dataSource.initialize();
   await ensureUserStatusColumn(dataSource);
   await ensureTrackingCampidColumns(dataSource);
+  await ensureUniqueMsisdnOnPostbacks(dataSource);
   return dataSource;
 };
 
@@ -111,6 +112,28 @@ async function ensureTrackingCampidColumns(ds) {
     }
   } catch (err) {
     console.warn('ensureTrackingCampidColumns:', err.message);
+  }
+}
+
+/** Idempotent: one conversion_postbacks row per msisdn. */
+async function ensureUniqueMsisdnOnPostbacks(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        DELETE FROM "conversion_postbacks" a
+        USING "conversion_postbacks" b
+        WHERE a.msisdn = b.msisdn
+          AND a.id < b.id
+      `);
+      await ds.query(`DROP INDEX IF EXISTS "IDX_postbacks_msisdn_status"`);
+      await ds.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS "UQ_conversion_postbacks_msisdn"
+        ON "conversion_postbacks" ("msisdn")
+      `);
+    }
+  } catch (err) {
+    console.warn('ensureUniqueMsisdnOnPostbacks:', err.message);
   }
 }
 

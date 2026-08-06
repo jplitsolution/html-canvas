@@ -119,7 +119,11 @@ export const ConversionPostbackSchema = new EntitySchema({
     },
   },
   indices: [
-    { name: 'IDX_postbacks_msisdn_status', columns: ['msisdn', 'status'] },
+    {
+      name: 'UQ_conversion_postbacks_msisdn',
+      columns: ['msisdn'],
+      unique: true,
+    },
     { name: 'IDX_postbacks_visit', columns: ['visitId'] },
     { name: 'IDX_postbacks_campid', columns: ['campid'] },
   ],
