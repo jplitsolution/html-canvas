@@ -1761,6 +1761,30 @@ export const createFlowService = () => {
       redirectUrl = outboundFailRedirectUrl;
     }
 
+    // HE new + success redirect: upsert conversion_postbacks by msisdn.
+    // No MSISDN / fail / active / blocked / stay → no callback row from this path.
+    if (
+      rawPhone &&
+      hasChecksub &&
+      isNewStatus &&
+      redirectOutcome === 'he_success'
+    ) {
+      const dualIds = splitDualCampids(input);
+      try {
+        await postbackService.registerPending({
+          visitId: visitCtx.visitId,
+          msisdn: rawPhone,
+          campaignId: campaign?.id,
+          campid: dualIds.vendorCampid,
+          trackingCampid: dualIds.trackingCampid || campaign?.trackingId || '',
+          clickId: visitCtx.clickId,
+          rcid: visitCtx.rcid,
+        });
+      } catch (err) {
+        console.warn(`detectMsisdn registerPending failed: ${err.message}`);
+      }
+    }
+
     if (visitCtx.visitId || campaign?.id) {
       try {
         await apiCallLogService.record({

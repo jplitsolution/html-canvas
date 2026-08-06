@@ -106,27 +106,30 @@ Phone **nahi** + API HE + fail URL set:
 ```
 → outboundFailRedirectUrl = fail URL
 → redirectOutcome = "fail"
+→ conversion_postbacks me **koi entry nahi**
 ```
 
 Phone **mila** + checksub configured:
 
-| Condition | Outcome |
-|-----------|---------|
-| Blocklist hit | `nextPage = BLOCKED` |
-| `isActive` | Campaign **successRedirectUrl** (ya `THANKYOU` agar URL nahi) |
-| status = **`new`** | HE **successRedirectUrl** |
-| parking / grace / etc. | `nextPage` = LOW_BALANCE, etc. |
-| inconclusive | URLs clear, stay |
+| Condition | Outcome | Callback table |
+|-----------|---------|----------------|
+| Blocklist hit | `nextPage = BLOCKED` | no write |
+| `isActive` | Campaign **successRedirectUrl** (ya `THANKYOU` agar URL nahi) | no write |
+| status = **`new`** | HE **successRedirectUrl** | **upsert** `conversion_postbacks` by MSISDN (insert, ya same MSISDN pe `click_id` / `rcid` / vendor `campid` update + status → pending) |
+| parking / grace / etc. | `nextPage` = LOW_BALANCE, etc. | no write |
+| inconclusive | URLs clear, stay | no write |
 
 Phone **mila** + checksub **nahi**:
 ```
-→ Legacy: HE successRedirectUrl
+→ Legacy: HE successRedirectUrl (is path se bhi callback write nahi — sirf checksub `new`)
 ```
 
 ### Step 6 — Session logging
 `ApiCallType.HE_REDIRECT` log — Session Detail me dikhta hai:
 - outcome: `fail`, `he_success`, `campaign_success`, `blocked`, `stay`, etc.
 - heProvider, heError, subscriptionStatus, nextPage
+
+Jab `he_success` + status `new`: `registerPending` MSISDN-unique upsert — bina number ke kabhi nahi.
 
 ### API response (frontend ko)
 ```
@@ -322,7 +325,7 @@ flowchart TD
   D --> E{Phone?}
 
   E -->|No + API HE| F{failRedirectUrl?}
-  F -->|Yes| G[External fail redirect]
+  F -->|Yes| G[External fail redirect no callback row]
   F -->|No| H[Overlay - no HOME/OTP]
 
   E -->|Yes| I{checksub configured?}
@@ -332,7 +335,7 @@ flowchart TD
   K -->|No| M{isActive?}
   M -->|Yes| N[Campaign success redirect]
   M -->|No| O{status new?}
-  O -->|Yes| P[HE success redirect]
+  O -->|Yes| P[HE success redirect + upsert conversion_postbacks]
   O -->|No| Q{mapped status page?}
   Q -->|Yes| R[LOW_BALANCE etc.]
   Q -->|No| H
@@ -342,7 +345,6 @@ flowchart TD
   P --> S
   J --> S
 ```
-
 ---
 
 *Yeh document code ki jagah architecture explain karta hai. Implementation detail ke liye upar wale files dekho.*

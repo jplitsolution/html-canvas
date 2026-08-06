@@ -91,7 +91,9 @@ export const createPostbackService = () => {
   };
 
   /**
-   * Queue a pending postback after confirm / CG (operator may confirm later).
+   * Queue a pending postback (confirm / CG / HE new redirect).
+   * MSISDN-unique upsert: same number → update clickId, rcid, vendor campid
+   * and reset status to pending (SAFWAP sendcallback=0 parity).
    * campid = vendor; trackingCampid = ours.
    */
   const registerPending = async (input) => {
@@ -142,25 +144,62 @@ export const createPostbackService = () => {
       return { skipped: true, reason: 'no postback_url on vendor' };
     }
 
-    const existingQ = getPostbackRepo()
+    const existing = await getPostbackRepo()
       .createQueryBuilder('p')
       .where('p.msisdn = :msisdn', { msisdn })
-      .andWhere('p.status = :status', {
-        status: ConversionPostbackStatus.PENDING,
-      })
       .orderBy('p.id', 'DESC')
-      .take(1);
-    if (clickId) {
-      existingQ.andWhere('p.clickId = :clickId', { clickId });
-    }
-    const existing = await existingQ.getOne();
+      .take(1)
+      .getOne();
+
+    const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
+
     if (existing) {
-      return { skipped: true, reason: 'already pending', id: existing.id };
+      existing.clickId = clickId || existing.clickId || null;
+      existing.rcid = rcid || existing.rcid || null;
+      existing.campid = campid || existing.campid || null;
+      if (trackingCampid) existing.trackingCampid = trackingCampid;
+      if (parsedVisitId) existing.visitId = parsedVisitId;
+      if (campaignId) existing.campaignId = campaignId;
+      if (vendorId) existing.vendorId = vendorId;
+      existing.postbackUrl = template;
+      existing.status = ConversionPostbackStatus.PENDING;
+      existing.httpStatus = null;
+      existing.responseBody = null;
+      existing.errorMessage = null;
+      existing.sentAt = null;
+      if (input.offerCode) existing.offerCode = input.offerCode;
+
+      const row = await getPostbackRepo().save(existing);
+
+      if (parsedVisitId) {
+        await analyticsService.logEvent(
+          parsedVisitId,
+          VisitEventType.POSTBACK_PENDING,
+          {
+            info: 'Vendor CPA postback updated (msisdn upsert) — waiting for billing callback.',
+            postbackId: row.id,
+            updated: true,
+            rcid: row.rcid,
+            clickId: row.clickId,
+            campid: row.campid,
+            trackingCampid: row.trackingCampid,
+            postbackUrl: template,
+          },
+        );
+      } else {
+        await indexPostbackEvent(row, 'POSTBACK_PENDING', { updated: true });
+      }
+
+      if (input.fireImmediate) {
+        return firePostback(row.id);
+      }
+
+      return { success: true, id: row.id, status: 'pending', updated: true };
     }
 
     const row = await getPostbackRepo().save(
       getPostbackRepo().create({
-        visitId: visitId ? parseInt(visitId, 10) : null,
+        visitId: parsedVisitId,
         campaignId: campaignId || null,
         vendorId: vendorId || null,
         affiliateId: null,
@@ -175,9 +214,9 @@ export const createPostbackService = () => {
       }),
     );
 
-    if (visitId) {
+    if (parsedVisitId) {
       await analyticsService.logEvent(
-        visitId,
+        parsedVisitId,
         VisitEventType.POSTBACK_PENDING,
         {
           info: 'Vendor CPA postback queued — waiting for billing callback.',
