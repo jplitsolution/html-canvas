@@ -77,11 +77,25 @@ function resolveAttributionParams(q = {}) {
   };
 }
 
+/** Vendor campid + our tracking_campid from query/body. */
+function resolveCampidParams(q = {}) {
+  return {
+    campid: q.campid != null ? String(q.campid) : undefined,
+    trackingCampid:
+      q.tracking_campid != null
+        ? String(q.tracking_campid)
+        : q.trackingCampid != null
+          ? String(q.trackingCampid)
+          : undefined,
+  };
+}
+
 export async function flowRoutes(fastify, options) {
   fastify.get('/detect-msisdn', async (request, reply) => {
     const q = request.query || {};
     const allHeaders = { ...(request.headers || {}) };
     const resolved = resolveRequestMsisdn(request.headers, q);
+    const camp = resolveCampidParams(q);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
@@ -96,13 +110,17 @@ export async function flowRoutes(fastify, options) {
     const result = await flowService.detectMsisdn({
       country: q.country,
       operator: q.operator,
-      campid: q.campid,
+      campid: camp.campid,
+      trackingCampid: camp.trackingCampid,
       phone: resolved.phone,
       clickId: q.click_id || q.clickId || q.clickid,
       rcid: q.rcid,
+      visitId: q.visitId ? Number(q.visitId) : undefined,
       sessionId: q.sessionId || q.session_id || request.headers['x-session-id'],
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
+      landingUrl: q.landingUrl || q.landing_url,
+      vid: q.vid,
     });
 
     return {
@@ -115,10 +133,12 @@ export async function flowRoutes(fastify, options) {
 
   fastify.get('/entry', async (request, reply) => {
     const q = request.query || {};
+    const camp = resolveCampidParams(q);
     return flowService.getFlowEntry({
       country: q.country,
       operator: q.operator,
-      campid: q.campid,
+      campid: camp.campid,
+      trackingCampid: camp.trackingCampid,
     });
   });
 
@@ -127,6 +147,7 @@ export async function flowRoutes(fastify, options) {
     const allHeaders = { ...(request.headers || {}) };
     const resolved = resolveRequestMsisdn(request.headers, q);
     const attr = resolveAttributionParams(q);
+    const camp = resolveCampidParams(q);
     const ipAddress =
       request.headers['x-forwarded-for'] || request.socket.remoteAddress;
     const userAgent = request.headers['user-agent'];
@@ -152,7 +173,8 @@ export async function flowRoutes(fastify, options) {
     const result = await flowService.getPage({
       country: q.country,
       operator: q.operator,
-      campid: q.campid,
+      campid: camp.campid,
+      trackingCampid: camp.trackingCampid,
       pageType: String(q.page || CampaignPageType.HOME).toUpperCase(),
       phone: resolved.phone,
       visitId: q.visitId ? Number(q.visitId) : undefined,
@@ -197,6 +219,7 @@ export async function flowRoutes(fastify, options) {
         country: body.country,
         operator: body.operator,
         campid: body.campid,
+        trackingCampid: body.trackingCampid || body.tracking_campid,
         clickId: clickId || undefined,
         rcid: rcid || undefined,
         vid: body.vid,
@@ -364,6 +387,7 @@ export async function flowRoutes(fastify, options) {
       msisdn: body.msisdn || body.phone,
       campaignId: body.campaignId,
       campid: body.campid || body.camp,
+      trackingCampid: body.trackingCampid || body.tracking_campid,
       clickId: body.clickId || body.click_id,
       rcid: body.rcid,
       vendorId: body.vendorId,

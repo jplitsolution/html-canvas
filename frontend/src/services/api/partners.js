@@ -22,18 +22,20 @@ export async function deleteVendor(id) {
 
 /**
  * Build the shareable tracking URL for a campaign + vendor.
- * Leaves click_id as the `{}` macro for the network to fill.
+ * tracking_campid = ours (BF-OBF-11); campid={} + click_id={} for the network.
  */
 export function buildTrackingUrl({ origin, campaign, vendorCode }) {
   const base = origin || window.location.origin
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
-    campid: campaign.trackingId || String(campaign.id),
   })
+  const tracking = campaign.trackingId || String(campaign.id)
   let qs = params.toString()
+  qs += `&tracking_campid=${encodeURIComponent(tracking)}`
   if (vendorCode) qs += `&vid=${encodeURIComponent(vendorCode)}`
-  // click_id kept as a raw macro placeholder (not URL-encoded on purpose).
+  // Macros left raw (not URL-encoded) for the network to fill.
   qs += '&click_id={}'
+  qs += '&campid={}'
   return `${base}/subscription?${qs}`
 }

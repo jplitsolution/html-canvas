@@ -18,10 +18,13 @@ import { redisService } from '../../common/services/redis.service.js';
 import {
   isNumericCampid,
   parseTrackingId,
+  splitDualCampids,
 } from '../markets/tracking-id.util.js';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 import { otpService } from '../otp/otp.service.js';
 import { heService } from './he.service.js';
+import { apiCallLogService } from './api-call-log.service.js';
+import { ApiCallType } from './entities/api-call-log.entity.js';
 import getConfig from '../../config/configuration.js';
 
 export const createFlowService = () => {
@@ -70,6 +73,8 @@ export const createFlowService = () => {
       vid: attrs.vid || '',
       aff_id: attrs.affId || '',
       campid: attrs.campid != null ? String(attrs.campid) : '',
+      tracking_campid:
+        attrs.trackingCampid != null ? String(attrs.trackingCampid) : '',
       msisdn,
       phone: msisdn,
     };
@@ -120,6 +125,9 @@ export const createFlowService = () => {
     let vendorId = input.vendorId || null;
     let affiliateId = input.affiliateId || null;
     let campaignId = input.campaignId || null;
+    const dual = splitDualCampids(input);
+    let campid = dual.vendorCampid;
+    let trackingCampid = dual.trackingCampid;
 
     if (visitId) {
       try {
@@ -132,12 +140,26 @@ export const createFlowService = () => {
           vendorId = vendorId || visit.vendorId || null;
           affiliateId = affiliateId || visit.affiliateId || null;
           campaignId = campaignId || visit.campaignId || null;
+          if (!campid && visit.campid) campid = String(visit.campid);
+          if (!trackingCampid && visit.trackingCampid) {
+            trackingCampid = String(visit.trackingCampid);
+          }
         }
       } catch {
         /* ignore */
       }
     }
-    return { clickId, rcid, vid, affId, vendorId, affiliateId, campaignId };
+    return {
+      clickId,
+      rcid,
+      vid,
+      affId,
+      vendorId,
+      affiliateId,
+      campaignId,
+      campid,
+      trackingCampid,
+    };
   };
 
   const resolveSuccessRedirect = async (campaign, visitId, input = {}) => {
@@ -149,7 +171,8 @@ export const createFlowService = () => {
       rcid: attr.rcid,
       vid: attr.vid,
       affId: attr.affId,
-      campid: attr.campaignId || campaign.id,
+      campid: attr.campid || '',
+      trackingCampid: attr.trackingCampid || campaign.trackingId || '',
     });
     return resolved && /^https?:\/\//i.test(resolved) ? resolved : null;
   };
@@ -166,7 +189,9 @@ export const createFlowService = () => {
       rcid: attr.rcid,
       vid: attr.vid,
       affId: attr.affId,
-      campid: input.campid || campaign.id,
+      campid: attr.campid || '',
+      trackingCampid:
+        attr.trackingCampid || input.trackingCampid || campaign.trackingId || '',
     });
   };
 
@@ -238,8 +263,10 @@ export const createFlowService = () => {
   };
 
   const resolveCampaign = async (input) => {
-    const cacheKey = input.campid
-      ? `flow:campaign:id:${input.campid}`
+    const dual = splitDualCampids(input);
+    const resolveKey = dual.resolveCampid;
+    const cacheKey = resolveKey
+      ? `flow:campaign:id:${resolveKey}`
       : `flow:campaign:co:${String(input.country).toLowerCase()}:${String(input.operator).toLowerCase()}`;
 
     if (isFlowCacheEnabled()) {
@@ -248,17 +275,17 @@ export const createFlowService = () => {
     }
 
     let campaign = null;
-    if (input.campid) {
-      const parsed = parseTrackingId(input.campid);
+    if (resolveKey) {
+      const parsed = parseTrackingId(resolveKey);
       if (parsed) {
         campaign = await campaignsService.findByTrackingId(
           parsed.countryCode,
           parsed.operatorCode,
           parsed.campaignId,
         );
-      } else if (isNumericCampid(input.campid)) {
+      } else if (isNumericCampid(resolveKey)) {
         campaign = await campaignsService.findByIdForFlow(
-          Number(input.campid),
+          Number(resolveKey),
         );
       }
     }
@@ -621,39 +648,11 @@ export const createFlowService = () => {
     }
 
     if (!visitId) {
-      const attrCacheKey = `flow:attr:${input.vid || ''}`;
-      let attribution = await redisService.get(attrCacheKey);
-      if (!attribution) {
-        attribution = await partnersService
-          .resolveAttribution(input.vid)
-          .catch(() => ({
-            vendorId: undefined,
-            affiliateId: null,
-            mismatch: false,
-          }));
-        await redisService.set(attrCacheKey, attribution, 15);
-      }
-      // Dual IDs: network original → rcid; our UUID → click_id (stable for this visit).
-      const networkRcid = String(input.rcid || input.clickId || '').trim() || null;
-      const ourClickId = randomUUID();
-      const visit = await analyticsService.createVisit({
-        campaignId: campaign.id,
-        phone: phone || undefined,
-        country: campaign.country,
-        operator: campaign.operator,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-        landingUrl: input.landingUrl,
-        visitStatus: VisitStatus.VISIT,
-        pageType: resolvedPageType,
-        vendorId: attribution.vendorId,
-        affiliateId: null,
-        clickId: ourClickId,
-        rcid: networkRcid,
-        vidRaw: input.vid,
-        affRaw: null,
+      const landing = await resolveOrCreateLandingVisit(campaign, {
+        ...input,
+        phone,
       });
-      visitId = visit.id;
+      visitId = landing.visitId;
 
       let eventType = VisitEventType.HOME_VIEW;
       if (resolvedPageType === CampaignPageType.OTP) {
@@ -662,6 +661,10 @@ export const createFlowService = () => {
         eventType = VisitEventType.CONFIRM_VIEW;
       }
       await analyticsService.logEvent(visitId, eventType);
+
+      const pageAttrEarly = await loadVisitAttribution(visitId, input);
+      const ourClickId = pageAttrEarly.clickId;
+      const networkRcid = pageAttrEarly.rcid;
 
       const guardModeForSub =
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
@@ -786,7 +789,9 @@ export const createFlowService = () => {
         visitId,
         msisdn: phone,
         campaignId: campaign.id,
-        campid: input.campid || String(campaign.id),
+        campid: pageAttr.campid || '',
+        trackingCampid:
+          pageAttr.trackingCampid || campaign.trackingId || '',
         clickId: pageAttr.clickId,
         rcid: pageAttr.rcid,
         vendorId: pageAttr.vendorId,
@@ -872,6 +877,7 @@ export const createFlowService = () => {
         country: input.country,
         operator: input.operator,
         campid: input.campid,
+        trackingCampid: input.trackingCampid || input.tracking_campid,
       });
     }
     if (!campaign || !campaign.active) {
@@ -931,6 +937,7 @@ export const createFlowService = () => {
             vid: input.vid,
             affId: input.affId,
             campid: input.campid,
+            trackingCampid: input.trackingCampid || input.tracking_campid,
           },
         );
         if (redirect) {
@@ -1118,7 +1125,9 @@ export const createFlowService = () => {
         visitId: input.visitId,
         msisdn: phone,
         campaignId: campaign.id,
-        campid: input.campid || String(campaign.id),
+        campid: confirmAttr.campid || '',
+        trackingCampid:
+          confirmAttr.trackingCampid || campaign.trackingId || '',
         clickId: confirmAttr.clickId,
         rcid: confirmAttr.rcid,
         vendorId: confirmAttr.vendorId,
@@ -1388,6 +1397,164 @@ export const createFlowService = () => {
     return url;
   };
 
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  /**
+   * One landing click → one visit. detect-msisdn and /page race; lock on rcid,
+   * then reconcile to the oldest visit if two slipped through.
+   */
+  const resolveOrCreateLandingVisit = async (campaign, input = {}) => {
+    const networkRcid =
+      String(input.rcid || input.clickId || '').trim() || null;
+    const dualIds = splitDualCampids(input);
+
+    const attrCacheKey = `flow:attr:${input.vid || ''}`;
+    let attribution = await redisService.get(attrCacheKey);
+    if (!attribution) {
+      attribution = await partnersService
+        .resolveAttribution(input.vid)
+        .catch(() => ({
+          vendorId: undefined,
+          affiliateId: null,
+          mismatch: false,
+        }));
+      await redisService.set(attrCacheKey, attribution, 15);
+    }
+
+    const patchMeta = async (visitId) => {
+      await analyticsService.ensureVisitAttribution(visitId, {
+        campid: dualIds.vendorCampid,
+        trackingCampid: dualIds.trackingCampid || campaign.trackingId || '',
+        vidRaw: input.vid,
+        vendorId: attribution.vendorId,
+      });
+    };
+
+    const reuse = async (visit) => {
+      await patchMeta(visit.id);
+      if (input.phone) {
+        await analyticsService.setVisitPhone(visit.id, input.phone);
+      }
+      return {
+        visitId: visit.id,
+        clickId: visit.clickId || null,
+        rcid: visit.rcid || networkRcid,
+        created: false,
+      };
+    };
+
+    if (input.visitId) {
+      const existing = await analyticsService.getVisit(input.visitId);
+      if (existing && existing.campaignId === campaign.id) {
+        return reuse(existing);
+      }
+    }
+
+    if (networkRcid) {
+      const recent = await analyticsService.findRecentVisitByRcid(
+        campaign.id,
+        networkRcid,
+      );
+      if (recent) return reuse(recent);
+    }
+
+    const createFresh = async () => {
+      const ourClickId = randomUUID();
+      const visit = await analyticsService.createVisit({
+        campaignId: campaign.id,
+        phone: heService.normalizePhone(input.phone) || undefined,
+        country: campaign.country,
+        operator: campaign.operator,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+        landingUrl: input.landingUrl,
+        visitStatus: VisitStatus.VISIT,
+        pageType: CampaignPageType.HOME,
+        vendorId: attribution.vendorId,
+        affiliateId: null,
+        clickId: ourClickId,
+        rcid: networkRcid,
+        campid: dualIds.vendorCampid || null,
+        trackingCampid:
+          dualIds.trackingCampid || campaign.trackingId || null,
+        vidRaw: input.vid || null,
+        affRaw: null,
+      });
+      return { visit, ourClickId };
+    };
+
+    /** If a parallel request won, drop our orphan and use the oldest visit. */
+    const reconcile = async (createdVisit, ourClickId) => {
+      if (!networkRcid) {
+        return {
+          visitId: createdVisit.id,
+          clickId: ourClickId,
+          rcid: networkRcid,
+          created: true,
+        };
+      }
+      const winner = await analyticsService.findRecentVisitByRcid(
+        campaign.id,
+        networkRcid,
+      );
+      if (winner && winner.id !== createdVisit.id) {
+        await analyticsService
+          .abandonOrphanVisit(createdVisit.id)
+          .catch(() => {});
+        return reuse(winner);
+      }
+      return {
+        visitId: createdVisit.id,
+        clickId: ourClickId,
+        rcid: networkRcid,
+        created: true,
+      };
+    };
+
+    const lockKey = networkRcid
+      ? `flow:vlock:${campaign.id}:${networkRcid}`
+      : null;
+
+    if (lockKey) {
+      for (let i = 0; i < 25; i++) {
+        const got = await redisService.setNx(lockKey, '1', 8);
+        if (got) {
+          try {
+            const again = await analyticsService.findRecentVisitByRcid(
+              campaign.id,
+              networkRcid,
+            );
+            if (again) return reuse(again);
+            const { visit, ourClickId } = await createFresh();
+            return reconcile(visit, ourClickId);
+          } finally {
+            await redisService.del(lockKey);
+          }
+        }
+        await sleep(40);
+        const raced = await analyticsService.findRecentVisitByRcid(
+          campaign.id,
+          networkRcid,
+        );
+        if (raced) return reuse(raced);
+      }
+    }
+
+    const { visit, ourClickId } = await createFresh();
+    return reconcile(visit, ourClickId);
+  };
+
+  /**
+   * Ensure visit + dual click IDs before HE HTTP so api_call_logs always have visitId.
+   * HOME_VIEW is still logged on getPage — only VISIT event here (via createVisit).
+   */
+  const ensureVisitForDetect = async (campaign, input) => {
+    if (!campaign?.id) {
+      return { visitId: null, clickId: null, rcid: null };
+    }
+    return resolveOrCreateLandingVisit(campaign, input);
+  };
+
   const detectMsisdn = async (input) => {
     let rawPhone = heService.normalizePhone(input.phone || '');
     const campaign = await resolveCampaign(input).catch(() => null);
@@ -1406,6 +1573,15 @@ export const createFlowService = () => {
       });
     }
 
+    // Visit-first: mint our click_id before any HE / partner HTTP so logs attach.
+    const visitCtx = await ensureVisitForDetect(campaign, input);
+    const attrCtx = {
+      visitId: visitCtx.visitId,
+      campaignId: campaign?.id || null,
+      clickId: visitCtx.clickId,
+      rcid: visitCtx.rcid,
+    };
+
     if (apiConfig) {
       heMeta = await heService.resolve(apiConfig, {
         phone: rawPhone,
@@ -1413,6 +1589,7 @@ export const createFlowService = () => {
         country: input.country || campaign?.country,
         operator: input.operator || campaign?.operator,
         sessionId: input.sessionId,
+        ...attrCtx,
       });
       if (heMeta.phone) {
         rawPhone = heMeta.phone;
@@ -1426,19 +1603,19 @@ export const createFlowService = () => {
     let blockReason = null;
 
     if (rawPhone && apiConfig) {
+      const partnerCtx = {
+        phone: rawPhone,
+        serviceId,
+        country: input.country || campaign?.country,
+        operator: input.operator || campaign?.operator,
+        ...attrCtx,
+      };
       const [subRes, blockRes] = await Promise.all([
         partnerApiService
-          .checkSubscription(apiConfig, {
-            phone: rawPhone,
-            serviceId,
-            country: input.country || campaign?.country,
-            operator: input.operator || campaign?.operator,
-          })
+          .checkSubscription(apiConfig, partnerCtx)
           .catch(() => null),
         partnerApiService
-          .checkBlocked(apiConfig, {
-            phone: rawPhone,
-          })
+          .checkBlocked(apiConfig, partnerCtx)
           .catch(() => ({ blocked: false })),
       ]);
 
@@ -1449,14 +1626,23 @@ export const createFlowService = () => {
       blockReason = blockRes?.reason || null;
     }
 
+    if (rawPhone && visitCtx.visitId) {
+      await analyticsService
+        .setVisitPhone(visitCtx.visitId, rawPhone)
+        .catch(() => {});
+    }
+
+    const dualRedirect = splitDualCampids(input);
     const redirectVars = {
       msisdn: rawPhone,
       phone: rawPhone,
-      campid: input.campid || campaign?.id || '',
+      campid: dualRedirect.vendorCampid || '',
+      tracking_campid:
+        dualRedirect.trackingCampid || campaign?.trackingId || '',
       country: input.country || campaign?.country || '',
       operator: input.operator || campaign?.operator || '',
-      click_id: input.clickId || '',
-      rcid: input.rcid || '',
+      click_id: visitCtx.clickId || '',
+      rcid: visitCtx.rcid || '',
     };
 
     const heProvider = heMeta.provider || apiConfig?.heProvider || 'header';
@@ -1481,9 +1667,11 @@ export const createFlowService = () => {
       ? buildCgRedirectUrl(
           applyHeRedirectVars(rawFail, redirectVars) || rawFail,
           {
-            clickId: input.clickId,
-            rcid: input.rcid,
-            campid: input.campid || campaign?.id,
+            clickId: visitCtx.clickId,
+            rcid: visitCtx.rcid,
+            campid: dualRedirect.vendorCampid || '',
+            trackingCampid:
+              dualRedirect.trackingCampid || campaign?.trackingId || '',
             msisdn: rawPhone,
             phone: rawPhone,
           },
@@ -1495,14 +1683,68 @@ export const createFlowService = () => {
           applyHeRedirectVars(heMeta.successRedirectUrl, redirectVars) ||
             heMeta.successRedirectUrl,
           {
-            clickId: input.clickId,
-            rcid: input.rcid,
-            campid: input.campid || campaign?.id,
+            clickId: visitCtx.clickId,
+            rcid: visitCtx.rcid,
+            campid: dualRedirect.vendorCampid || '',
+            trackingCampid:
+              dualRedirect.trackingCampid || campaign?.trackingId || '',
             msisdn: rawPhone,
             phone: rawPhone,
           },
         )
       : '';
+
+    // Log redirect decision against the same visit (visible in Session Detail).
+    let redirectOutcome = 'stay';
+    let redirectUrl = null;
+    if (rawPhone && successRedirectUrl) {
+      redirectOutcome = 'success';
+      redirectUrl = successRedirectUrl;
+    } else if (
+      !rawPhone &&
+      failRedirectUrl &&
+      apiHeProviders.has(String(heProvider).toLowerCase())
+    ) {
+      redirectOutcome = 'fail';
+      redirectUrl = failRedirectUrl;
+    }
+
+    if (visitCtx.visitId || campaign?.id) {
+      try {
+        await apiCallLogService.record({
+          visitId: visitCtx.visitId,
+          campaignId: campaign?.id,
+          msisdn: rawPhone || null,
+          rcid: visitCtx.rcid,
+          clickId: visitCtx.clickId,
+          callType: ApiCallType.HE_REDIRECT,
+          requestUrl: redirectUrl,
+          requestBody: JSON.stringify({
+            outcome: redirectOutcome,
+            heProvider,
+            heError: heMeta.error || null,
+          }),
+          responseStatus: null,
+          responseBody: null,
+          success:
+            redirectOutcome === 'success'
+              ? true
+              : redirectOutcome === 'fail'
+                ? false
+                : null,
+          errorMessage:
+            redirectOutcome === 'fail' ? heMeta.error || null : null,
+          statusLabel:
+            redirectOutcome === 'success'
+              ? 'SUCCESS'
+              : redirectOutcome === 'fail'
+                ? 'FAILED'
+                : 'STAY',
+        });
+      } catch (err) {
+        console.warn(`he_redirect log failed: ${err.message}`);
+      }
+    }
 
     return {
       phone: rawPhone,
@@ -1520,6 +1762,9 @@ export const createFlowService = () => {
       country: input.country || campaign?.country,
       operator: input.operator || campaign?.operator,
       campaignId: campaign?.id || null,
+      visitId: visitCtx.visitId,
+      clickId: visitCtx.clickId,
+      rcid: visitCtx.rcid,
     };
   };
 

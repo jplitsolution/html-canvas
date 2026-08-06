@@ -19,6 +19,7 @@ function buildQuery(params = {}) {
     'visitId',
     'interval',
     'timezone',
+    'view',
   ]
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null && params[key] !== '') {

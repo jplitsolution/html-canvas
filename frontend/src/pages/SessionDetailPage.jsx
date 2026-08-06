@@ -86,6 +86,26 @@ function eventDescription(eventType) {
       return 'Partner blocklist check.'
     case 'API_RESOLVE_MSISDN':
       return 'Partner MSISDN resolve call.'
+    case 'API_HE_TOKEN':
+      return 'HE token exchange.'
+    case 'API_HE_MSISDN':
+      return 'HE masked MSISDN fetch.'
+    case 'API_HE_RESOLVE':
+      return 'HE custom MSISDN resolve.'
+    case 'API_HE_REDIRECT':
+      return 'HE success/fail redirect decision.'
+    case 'API_BILLING_CALLBACK':
+      return 'Billing / operator callback received on our endpoint.'
+    case 'API_VENDOR_POSTBACK':
+      return 'Outbound vendor / affiliate CPA postback we fired.'
+    case 'CALLBACK_RECEIVED':
+      return 'Billing callback hit our server — next we fire the vendor postback.'
+    case 'POSTBACK_PENDING':
+      return 'Vendor CPA postback queued, waiting for billing confirmation.'
+    case 'POSTBACK_SENT':
+      return 'Vendor / affiliate postback fired successfully.'
+    case 'POSTBACK_FAILED':
+      return 'Vendor / affiliate postback failed or returned an error.'
     default:
       return null
   }
@@ -349,6 +369,22 @@ function SessionDetailPage() {
                   <p className="font-mono text-gray-700 mt-1 break-all">{visit.rcid}</p>
                 </div>
               )}
+              {visit?.campid && (
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Campid
+                  </span>
+                  <p className="font-mono text-gray-700 mt-1 break-all">{visit.campid}</p>
+                </div>
+              )}
+              {visit?.trackingCampid && (
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    Tracking ID
+                  </span>
+                  <p className="font-mono text-gray-700 mt-1 break-all">{visit.trackingCampid}</p>
+                </div>
+              )}
               {visit?.userAgent && (
                 <div className="col-span-2 md:col-span-4">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
@@ -372,6 +408,8 @@ function SessionDetailPage() {
                       defaultOpen={
                         call.callType === 'checksub' ||
                         call.callType === 'priority' ||
+                        call.callType === 'vendor_postback' ||
+                        call.callType === 'billing_callback' ||
                         idx === 0
                       }
                     />
@@ -435,6 +473,28 @@ function SessionDetailPage() {
                           )}
                           {item.kind === 'event' && item.metadata?.info && (
                             <p className="text-xs text-gray-600 mt-1">{item.metadata.info}</p>
+                          )}
+                          {item.kind === 'event' && item.metadata?.url && (
+                            <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
+                              {item.metadata.url}
+                              {item.metadata.httpStatus != null
+                                ? ` · HTTP ${item.metadata.httpStatus}`
+                                : ''}
+                            </p>
+                          )}
+                          {item.kind === 'event' && item.metadata?.responseBody != null && (
+                            <JsonBlock
+                              label="Response"
+                              value={item.metadata.responseBody}
+                            />
+                          )}
+                          {item.kind === 'api' && apiCall?.requestUrl && (
+                            <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
+                              {apiCall.requestUrl}
+                              {apiCall.responseStatus != null
+                                ? ` · HTTP ${apiCall.responseStatus}`
+                                : ''}
+                            </p>
                           )}
                         </div>
                       </div>

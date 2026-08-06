@@ -58,6 +58,22 @@ export const createRedisService = () => {
         // silently fail
       }
     },
+    /** SET key NX EX — returns true if lock acquired. */
+    setNx: async (key, value, ttlSeconds = 10) => {
+      if (!redisClient) return true;
+      try {
+        const result = await redisClient.set(
+          key,
+          JSON.stringify(value ?? '1'),
+          'EX',
+          ttlSeconds,
+          'NX',
+        );
+        return result === 'OK';
+      } catch {
+        return true;
+      }
+    },
     del: async (key) => {
       if (!redisClient) return;
       try {

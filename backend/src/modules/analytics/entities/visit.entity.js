@@ -75,6 +75,22 @@ export const VisitSchema = new EntitySchema({
       type: 'varchar',
       nullable: true,
     },
+    /**
+     * Vendor / network campid from tracking URL (?campid=).
+     * Used for postback {campid} — not our BF-OBF-11.
+     */
+    campid: {
+      type: 'varchar',
+      length: 128,
+      nullable: true,
+    },
+    /** Our tracking id from ?tracking_campid= (e.g. BF-OBF-11). */
+    trackingCampid: {
+      name: 'tracking_campid',
+      type: 'varchar',
+      length: 128,
+      nullable: true,
+    },
     vidRaw: {
       name: 'vid_raw',
       type: 'varchar',
@@ -124,5 +140,7 @@ export const VisitSchema = new EntitySchema({
     { name: 'IDX_VISIT_AFFILIATE_ID', columns: ['affiliateId'] },
     { name: 'IDX_VISIT_CLICK_ID', columns: ['clickId'] },
     { name: 'IDX_VISIT_RCID', columns: ['rcid'] },
+    { name: 'IDX_VISIT_CAMPID', columns: ['campid'] },
+    { name: 'IDX_VISIT_TRACKING_CAMPID', columns: ['trackingCampid'] },
   ],
 });

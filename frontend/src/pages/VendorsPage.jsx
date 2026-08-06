@@ -164,7 +164,8 @@ function VendorsPage() {
             <code className="font-mono">{'{{click_id}}'}</code>,{' '}
             <code className="font-mono">{'{rcid}'}</code>,{' '}
             <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
-            <code className="font-mono">{'{{campid}}'}</code>.{' '}
+            <code className="font-mono">{'{{campid}}'}</code> (vendor),{' '}
+            <code className="font-mono">{'{{tracking_campid}}'}</code> (ours).{' '}
             <Link
               to="/docs/callbacks"
               className="inline-flex items-center gap-1 text-accent hover:underline font-medium"

@@ -582,7 +582,11 @@ function CampaignDetailPage() {
                     <div>
                       <h2 className="text-sm font-semibold text-fg">Attribution &amp; tracking</h2>
                       <p className="text-xs text-fg-muted mt-0.5">
-                        Assign vendors to generate shareable tracking URLs
+                        Assign vendors to generate shareable tracking URLs.{' '}
+                        <code className="font-mono text-[10px]">tracking_campid</code> = ours;{' '}
+                        <code className="font-mono text-[10px]">campid=&#123;&#125;</code> +{' '}
+                        <code className="font-mono text-[10px]">click_id=&#123;&#125;</code> = vendor
+                        macros (they fill their campid / click).
                       </p>
                     </div>
                   </div>

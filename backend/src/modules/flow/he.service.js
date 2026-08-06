@@ -1,5 +1,7 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
+import { apiCallLogService } from './api-call-log.service.js';
+import { ApiCallType } from './entities/api-call-log.entity.js';
 
 /**
  * Header Enrichment providers (config-driven — no per-campaign redeploy).
@@ -26,7 +28,7 @@ import { randomUUID } from 'crypto';
  *   GET maskedUrl, headers: {
  *     Authorization: Bearer <token>,
  *     X-App: he-partner,
- *     X-MessageID: <id>,
+ *     X-MessageID: 1234,
  *     X-Source-System: he-partner
  *   }
  */
@@ -93,14 +95,63 @@ export const createHeService = () => {
     const configured = String(
       heConfig.messageId || heConfig.xMessageId || '',
     ).trim();
+    // Safaricom Kenya sample uses fixed "1234" when not overridden in heConfigJson.
     if (configured) return configured;
-    return String(Date.now() % 1000000000);
+    return '1234';
+  };
+
+  const serializeBody = (data) => {
+    if (data == null) return null;
+    try {
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return String(data);
+    }
+  };
+
+  /** Pass-through for session logs — keep full HE token / response for debugging. */
+  const redactSecrets = (data) => data;
+
+  const safeHeadersForLog = (headers = {}) => {
+    // Log Authorization as-is so Session Detail can show the full bearer token.
+    return { ...headers };
+  };
+
+  const logCall = async ({
+    callType,
+    input,
+    requestUrl,
+    requestBody,
+    response,
+    success,
+    errorMessage,
+    statusLabel,
+  }) => {
+    try {
+      await apiCallLogService.record({
+        visitId: input.visitId,
+        campaignId: input.campaignId,
+        msisdn: input.phone || input.hint || null,
+        rcid: input.rcid,
+        clickId: input.clickId,
+        callType,
+        requestUrl,
+        requestBody: serializeBody(requestBody),
+        responseStatus: response?.status ?? null,
+        responseBody: serializeBody(redactSecrets(response?.data)),
+        success,
+        errorMessage,
+        statusLabel,
+      });
+    } catch (err) {
+      console.warn(`api_call_logs HE write failed: ${err.message}`);
+    }
   };
 
   /**
    * Safaricom Kenya WAP: POST hetoken → GET fetchMaskedMsisdn with partner headers.
    * @param {object} heConfig
-   * @param {{ sessionId?: string }} [input]
+   * @param {{ sessionId?: string, visitId?: number, campaignId?: number, clickId?: string, rcid?: string }} [input]
    */
   const resolveSafaricomMasked = async (heConfig, input = {}) => {
     const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl;
@@ -114,18 +165,41 @@ export const createHeService = () => {
 
     const sessionId = makeSessionId(input.sessionId || heConfig.sessionId);
     const tokenMethod = String(heConfig.tokenMethod || 'POST').toUpperCase();
+    // Partner contract: POST {} with only X-Session-ID (same as getBasicToken sample).
     const tokenHeaders = mergeHeaders(
-      { 'X-Session-ID': sessionId },
+      {
+        'X-Session-ID': sessionId,
+        'Content-Type': 'application/json',
+      },
       heConfig.tokenHeaders,
     );
+    const tokenBody = heConfig.tokenBody || {};
 
-    const tokenRes =
-      tokenMethod === 'GET'
-        ? await axios.get(tokenUrl, { timeout: 12000, headers: tokenHeaders })
-        : await axios.post(tokenUrl, heConfig.tokenBody || {}, {
-            timeout: 12000,
-            headers: tokenHeaders,
-          });
+    let tokenRes;
+    try {
+      tokenRes =
+        tokenMethod === 'GET'
+          ? await axios.get(tokenUrl, { timeout: 12000, headers: tokenHeaders })
+          : await axios.post(tokenUrl, tokenBody, {
+              timeout: 12000,
+              headers: tokenHeaders,
+            });
+    } catch (err) {
+      await logCall({
+        callType: ApiCallType.HE_TOKEN,
+        input,
+        requestUrl: tokenUrl,
+        requestBody: {
+          method: tokenMethod,
+          headers: safeHeadersForLog(tokenHeaders),
+          body: tokenBody,
+        },
+        response: err.response,
+        success: false,
+        errorMessage: err.message,
+      });
+      throw err;
+    }
 
     const token =
       tokenRes.data?.access_token ||
@@ -134,12 +208,27 @@ export const createHeService = () => {
       tokenRes.data?.data?.token ||
       (typeof tokenRes.data === 'string' ? tokenRes.data : null);
 
+    await logCall({
+      callType: ApiCallType.HE_TOKEN,
+      input,
+      requestUrl: tokenUrl,
+      requestBody: {
+        method: tokenMethod,
+        headers: safeHeadersForLog(tokenHeaders),
+        body: tokenBody,
+      },
+      response: tokenRes,
+      success: Boolean(token),
+      errorMessage: token ? null : 'HE token missing from tokenUrl response',
+    });
+
     if (!token) {
       return { phone: '', error: 'HE token missing from tokenUrl response' };
     }
 
     const maskedHeaders = mergeHeaders(
       {
+        // Exact Safaricom Kenya partner headers (fetchMaskedMsisdn sample).
         Authorization: `Bearer ${token}`,
         'X-App': heConfig.xApp || 'he-partner',
         'X-MessageID': makeMessageId(heConfig),
@@ -148,10 +237,27 @@ export const createHeService = () => {
       heConfig.maskedHeaders,
     );
 
-    const maskedRes = await axios.get(maskedUrl, {
-      timeout: 12000,
-      headers: maskedHeaders,
-    });
+    let maskedRes;
+    try {
+      maskedRes = await axios.get(maskedUrl, {
+        timeout: 12000,
+        headers: maskedHeaders,
+      });
+    } catch (err) {
+      await logCall({
+        callType: ApiCallType.HE_MSISDN,
+        input,
+        requestUrl: maskedUrl,
+        requestBody: {
+          method: 'GET',
+          headers: safeHeadersForLog(maskedHeaders),
+        },
+        response: err.response,
+        success: false,
+        errorMessage: err.message,
+      });
+      throw err;
+    }
 
     const body = maskedRes.data || {};
     const phone =
@@ -170,6 +276,19 @@ export const createHeService = () => {
       'Please use Safaricom Mobile Data';
 
     const normalized = normalizePhone(phone);
+    await logCall({
+      callType: ApiCallType.HE_MSISDN,
+      input: { ...input, phone: normalized || input.phone },
+      requestUrl: maskedUrl,
+      requestBody: {
+        method: 'GET',
+        headers: safeHeadersForLog(maskedHeaders),
+      },
+      response: maskedRes,
+      success: Boolean(normalized),
+      errorMessage: normalized ? null : failMessage,
+    });
+
     if (!normalized) {
       return { phone: '', error: failMessage, sessionId };
     }
@@ -187,39 +306,70 @@ export const createHeService = () => {
     }
 
     const method = String(heConfig.method || 'GET').toUpperCase();
-    const response =
-      method === 'POST'
-        ? await axios.post(
-            url,
-            {
-              country: input.country,
-              operator: input.operator,
-              hint: input.hint,
-            },
-            { timeout: 10000 },
-          )
-        : await axios.get(url, {
-            timeout: 10000,
-            params: {
-              country: input.country,
-              operator: input.operator,
-              msisdn: input.hint || undefined,
-            },
-          });
+    const requestPayload = {
+      country: input.country,
+      operator: input.operator,
+      hint: input.hint,
+    };
 
-    const data = response.data ?? {};
-    const nested = data.data ?? data;
-    const phone = normalizePhone(
-      nested.msisdn || nested.phone || data.msisdn || data.phone || '',
-    );
-    return phone
-      ? { phone, error: null }
-      : { phone: '', error: heConfig.failMessage || 'MSISDN not found' };
+    try {
+      const response =
+        method === 'POST'
+          ? await axios.post(url, requestPayload, { timeout: 10000 })
+          : await axios.get(url, {
+              timeout: 10000,
+              params: {
+                country: input.country,
+                operator: input.operator,
+                msisdn: input.hint || undefined,
+              },
+            });
+
+      const data = response.data ?? {};
+      const nested = data.data ?? data;
+      const phone = normalizePhone(
+        nested.msisdn || nested.phone || data.msisdn || data.phone || '',
+      );
+      const failMessage = heConfig.failMessage || 'MSISDN not found';
+
+      await logCall({
+        callType: ApiCallType.HE_RESOLVE,
+        input: { ...input, phone: phone || input.phone },
+        requestUrl: url,
+        requestBody: {
+          method,
+          ...(method === 'POST'
+            ? { body: requestPayload }
+            : { params: requestPayload }),
+        },
+        response,
+        success: Boolean(phone),
+        errorMessage: phone ? null : failMessage,
+      });
+
+      return phone ? { phone, error: null } : { phone: '', error: failMessage };
+    } catch (err) {
+      await logCall({
+        callType: ApiCallType.HE_RESOLVE,
+        input,
+        requestUrl: url,
+        requestBody: {
+          method,
+          ...(method === 'POST'
+            ? { body: requestPayload }
+            : { params: requestPayload }),
+        },
+        response: err.response,
+        success: false,
+        errorMessage: err.message,
+      });
+      throw err;
+    }
   };
 
   /**
    * @param {object} apiConfig
-   * @param {{ phone?: string, country?: string, operator?: string, hint?: string, sessionId?: string }} input
+   * @param {{ phone?: string, country?: string, operator?: string, hint?: string, sessionId?: string, visitId?: number, campaignId?: number, clickId?: string, rcid?: string }} input
    *   input.phone = already extracted from HTTP headers / query
    */
   const resolve = async (apiConfig, input = {}) => {
@@ -247,8 +397,15 @@ export const createHeService = () => {
       };
     }
 
-    // Prefer header if already present (operator gateway injected)
-    if (headerPhone) {
+    // Prefer gateway header for non-API providers only.
+    // safaricom_masked / custom_http must always hit partner APIs (token → MSISDN)
+    // so Session Detail gets he_token / he_msisdn logs — even when HE_DUMMY or a
+    // query msisdn is present for local testing.
+    const apiHe = provider === 'safaricom_masked' ||
+      provider === 'custom_http' ||
+      provider === 'custom';
+
+    if (headerPhone && !apiHe) {
       return {
         phone: headerPhone,
         provider,

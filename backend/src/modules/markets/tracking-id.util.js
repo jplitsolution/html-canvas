@@ -24,6 +24,36 @@ export function isNumericCampid(campid) {
   return /^\d+$/.test(campid.trim());
 }
 
+/**
+ * Split dual campaign ids from tracking URL.
+ * - tracking_campid = ours (BF-OBF-11) for resolve
+ * - campid = vendor/network id for postback {campid}
+ *
+ * Legacy: only campid present and it looks like our tracking id → treat as ours.
+ */
+export function splitDualCampids(input = {}) {
+  let trackingCampid = String(
+    input.trackingCampid || input.tracking_campid || '',
+  ).trim();
+  let vendorCampid = String(input.campid || '').trim();
+
+  if (
+    !trackingCampid &&
+    vendorCampid &&
+    (parseTrackingId(vendorCampid) || isNumericCampid(vendorCampid))
+  ) {
+    trackingCampid = vendorCampid;
+    vendorCampid = '';
+  }
+
+  return {
+    trackingCampid: trackingCampid || '',
+    vendorCampid: vendorCampid || '',
+    /** Prefer tracking for resolve; legacy numeric/composite already mapped. */
+    resolveCampid: trackingCampid || '',
+  };
+}
+
 const KNOWN_COUNTRY_CODES = {
   india: 'IN',
   pakistan: 'PK',

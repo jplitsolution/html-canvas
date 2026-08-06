@@ -23,6 +23,7 @@ export async function logsRoutes(fastify, options) {
       size: query.size ? Number(query.size) : undefined,
       interval,
       timezone: query.timezone || undefined,
+      view: query.view === 'sessions' ? 'sessions' : 'events',
     };
   };
 

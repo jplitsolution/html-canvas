@@ -17,7 +17,7 @@ const STEPS = [
   {
     n: '1',
     title: 'User lands on tracking URL',
-    body: 'Vendor traffic hits /subscription with campid, vid, and click_id (network macro). We create a visit, keep the network click as rcid, and issue our own click_id.',
+    body: 'Vendor traffic hits /subscription with tracking_campid (ours), campid (vendor), vid, and click_id. We create a visit, keep the network click as rcid, and issue our own click_id. Vendor campid is stored for CPA postback {campid}.',
   },
   {
     n: '2',
@@ -40,7 +40,8 @@ const PLACEHOLDERS = [
   { key: '{{msisdn}}', meaning: 'Subscriber MSISDN (digits)' },
   { key: '{{click_id}}', meaning: 'Our generated click id for the visit' },
   { key: '{{rcid}}', meaning: 'Network / vendor original click id' },
-  { key: '{{campid}} / {{camp}}', meaning: 'Campaign tracking id' },
+  { key: '{{campid}} / {{camp}}', meaning: 'Vendor / network campid from tracking URL (?campid=)' },
+  { key: '{{tracking_campid}}', meaning: 'Our tracking id (BF-OBF-11) from ?tracking_campid=' },
   { key: '{{offer_code}}', meaning: 'Optional offer code if provided' },
   { key: '{{visit_id}}', meaning: 'Internal visit id' },
   { key: '{{vendor}}', meaning: 'Vendor code (e.g. ADM01)' },
@@ -209,6 +210,17 @@ Content-Type: application/json
             </p>
             <CodeBlock>
               {`https://partner.example/pb?click={{click_id}}&rcid={{rcid}}&msisdn={{msisdn}}&camp={{campid}}`}
+            </CodeBlock>
+            <p className="text-xs text-fg-muted">
+              <code className="font-mono">{'{{campid}}'}</code> is the <strong>vendor</strong> campid
+              from the tracking URL (<code className="font-mono">?campid=</code>), not our{' '}
+              <code className="font-mono">tracking_campid</code> (BF-OBF-11).
+            </p>
+            <p className="text-xs text-fg-muted mt-2">
+              Shareable tracking URL shape:
+            </p>
+            <CodeBlock>
+              {`/subscription?country=…&operator=…&tracking_campid=BF-OBF-11&vid=MB02&click_id={}&campid={}`}
             </CodeBlock>
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-left text-xs">

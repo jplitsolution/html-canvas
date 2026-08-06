@@ -57,6 +57,7 @@ export const initDatabase = async () => {
 
   await dataSource.initialize();
   await ensureUserStatusColumn(dataSource);
+  await ensureTrackingCampidColumns(dataSource);
   return dataSource;
 };
 
@@ -83,6 +84,33 @@ async function ensureUserStatusColumn(ds) {
     }
   } catch (err) {
     console.warn('ensureUserStatusColumn:', err.message);
+  }
+}
+
+/** Idempotent: vendor campid + our tracking_campid on visits / postbacks. */
+async function ensureTrackingCampidColumns(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(
+        `ALTER TABLE "visits" ADD COLUMN IF NOT EXISTS "campid" varchar(128)`,
+      );
+      await ds.query(
+        `ALTER TABLE "visits" ADD COLUMN IF NOT EXISTS "tracking_campid" varchar(128)`,
+      );
+      await ds.query(
+        `ALTER TABLE "conversion_postbacks" ADD COLUMN IF NOT EXISTS "tracking_campid" varchar(128)`,
+      );
+      await ds.query(
+        `ALTER TABLE "conversion_postbacks" ADD COLUMN IF NOT EXISTS "campid" varchar(128)`,
+      );
+      await ds.query(`ALTER TABLE "visits" DROP COLUMN IF EXISTS "offer_id"`);
+      await ds.query(
+        `ALTER TABLE "conversion_postbacks" DROP COLUMN IF EXISTS "offer_id"`,
+      );
+    }
+  } catch (err) {
+    console.warn('ensureTrackingCampidColumns:', err.message);
   }
 }
 
