@@ -22,14 +22,14 @@ function BrandLogo({ size = 'md', showWordmark = true, className = '' }) {
       <span className="inline-flex items-center justify-center rounded-lg bg-white p-1 shadow-sm ring-1 ring-black/5">
         <img
           src="/logos/platform-logo.png"
-          alt="TemplateCraft"
+          alt="WAP Manager"
           className={`${LOGO_HEIGHTS[size]} w-auto object-contain`}
           draggable="false"
         />
       </span>
       {showWordmark && (
         <span className={`font-semibold text-fg tracking-tight ${WORDMARK_SIZES[size]}`}>
-          TemplateCraft
+          WAP Manager
         </span>
       )}
     </span>
