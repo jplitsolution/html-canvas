@@ -1,38 +1,20 @@
-import { uploadService } from './upload.service.js';
+import { Router } from 'express';
+import multer from 'multer';
+import { authenticate } from '../../common/middleware/auth.middleware.js';
+import { uploadController } from './upload.controller.js';
 
-export async function uploadRoutes(fastify, options) {
-  fastify.post(
-    '/',
-    { onRequest: [fastify.authenticate] },
-    async (request, reply) => {
-      const data = await request.file();
-      if (!data) {
-        reply.status(400);
-        return { statusCode: 400, message: 'Please provide a file in the form field "file"' };
-      }
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype || !file.mimetype.startsWith('image/')) {
+      return cb(new Error('Only image files are allowed'));
+    }
+    return cb(null, true);
+  },
+});
 
-      if (!data.mimetype || !data.mimetype.startsWith('image/')) {
-        reply.status(400);
-        return { statusCode: 400, message: 'Only image files are allowed' };
-      }
+const router = Router();
 
-      const buffer = await data.toBuffer();
-      const fileObj = {
-        buffer,
-        mimetype: data.mimetype,
-        filename: data.filename,
-        originalname: data.filename,
-        size: buffer.length,
-      };
+router.post('/', authenticate, upload.single('file'), uploadController.upload);
 
-      const uploadResult = await uploadService.uploadImage(fileObj);
-      reply.status(201);
-      return {
-        url: uploadResult.url,
-        publicId: uploadResult.key,
-        format: uploadResult.format,
-        bytes: uploadResult.bytes,
-      };
-    },
-  );
-}
+export default router;

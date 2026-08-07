@@ -23,13 +23,14 @@ const start = async () => {
 
     const app = await createApp();
 
-    await app.listen({ port, host: '0.0.0.0' });
-    console.log(`🚀 Fastify Server running on http://localhost:${port}/api`);
-    if (config.environment !== 'production') {
-      console.log(
-        `📚 Swagger Docs available at http://localhost:${port}/api/docs`,
-      );
-    }
+    app.listen(port, '0.0.0.0', () => {
+      console.log(`🚀 Express Server running on http://localhost:${port}/api`);
+      if (config.environment !== 'production') {
+        console.log(
+          `📚 Swagger Docs available at http://localhost:${port}/api/docs`,
+        );
+      }
+    });
   } catch (err) {
     console.error('Fatal error during server startup:', err);
     process.exit(1);

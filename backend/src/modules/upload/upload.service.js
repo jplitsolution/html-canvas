@@ -1,8 +1,8 @@
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
 import getConfig from '../../config/configuration.js';
-import { s3UploadService } from './s3-upload.service.js';
-import { localUploadService } from './local-upload.service.js';
+import { s3UploadService } from './helpers/s3-upload.service.js';
+import { localUploadService } from './helpers/local-upload.service.js';
 
 export const createUploadService = () => {
   const config = getConfig();

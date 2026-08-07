@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { getRepository } from '../index.js';
-import { Template } from '../../modules/templates/entities/template.entity.js';
+import { Template } from '../entities/template.entity.js';
 
 export const seedPrebuiltTemplates = async () => {
   const templateRepository = getRepository(Template);

@@ -254,7 +254,7 @@ export function createCampaignSlice(set, get) {
       try {
         const result = await campaignsApi.saveCampaignFlow(campaignId, payload)
         await get().refreshCampaign(campaignId)
-        get().addToast('Flow saved', 'success')
+        get().addToast('Flow settings saved', 'success')
         return result
       } catch (err) {
         get().addToast(err.message || 'Failed to save flow', 'error')

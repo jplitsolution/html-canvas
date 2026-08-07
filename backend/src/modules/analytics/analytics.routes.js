@@ -1,32 +1,13 @@
-import { analyticsService } from './analytics.service.js';
+import { Router } from 'express';
+import { authenticate } from '../../common/middleware/auth.middleware.js';
+import { analyticsController } from './analytics.controller.js';
 
-export async function analyticsRoutes(fastify, options) {
-  fastify.addHook('onRequest', fastify.authenticate);
+const router = Router();
 
-  fastify.get('/campaign/:campaignId', async (request, reply) => {
-    return analyticsService.getCampaignAnalytics(
-      request.params.campaignId,
-      request.user.id,
-    );
-  });
+router.use(authenticate);
 
-  fastify.get('/campaign/:campaignId/logs', async (request, reply) => {
-    return analyticsService.getCampaignActivityLogs(
-      request.params.campaignId,
-      request.user.id,
-      request.query || {},
-    );
-  });
+router.get('/campaign/:campaignId', analyticsController.campaignAnalytics);
+router.get('/campaign/:campaignId/logs', analyticsController.campaignLogs);
+router.get('/visits/:visitId', analyticsController.visitDetail);
 
-  fastify.get('/visits/:visitId', async (request, reply) => {
-    try {
-      return await analyticsService.getVisitDetail(
-        request.params.visitId,
-        request.user.id,
-      );
-    } catch (err) {
-      const code = err.statusCode || 500;
-      return reply.code(code).send({ message: err.message || 'Error' });
-    }
-  });
-}
+export default router;

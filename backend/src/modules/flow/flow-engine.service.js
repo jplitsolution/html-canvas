@@ -1,4 +1,15 @@
-import { CampaignPageType } from '../campaigns/entities/campaign-page.entity.js';
+/**
+ * Flow graph helpers for campaign.flowConfig (nodes/edges) + verificationMode.
+ *
+ * WHY: Layer B of "what happens next" — used only when the user clicks a CTA that
+ * posts to /transition with SUBSCRIBE / CONTINUE / CONFIRM. Canvas "Go to page" /
+ * "Open URL" / Priority Chain do NOT call nextPage() here.
+ *
+ * In practice most campaigns use getDefaultFlowConfig(mode); the React Flow UI
+ * mostly visualizes that default. Prefer changing verificationMode over hand-editing
+ * edges unless you intentionally remapped conditions.
+ */
+import { CampaignPageType } from '../../database/entities/campaign-page.entity.js';
 
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',

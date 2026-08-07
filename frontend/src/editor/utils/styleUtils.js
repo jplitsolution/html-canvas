@@ -1,4 +1,5 @@
 import useStore from '../../store/useStore';
+import { FLOW_RUNTIME_STYLESHEET_HREFS } from '../services/flowRuntimeCss';
 
 /**
  * Encodes every non-ASCII character (emoji, symbols, multi-byte unicode) in an
@@ -134,12 +135,8 @@ export function injectStylesheetsIntoCanvas(editor) {
   const head = iframeDoc.head;
   if (!head) return;
 
-  // 1. Font and icon CDNs
-  const defaultStyles = [
-    'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap',
-    'https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css',
-    'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css',
-  ];
+  // 1. Font and icon CDNs — same list as live shadow (FLOW_RUNTIME_STYLESHEET_HREFS)
+  const defaultStyles = FLOW_RUNTIME_STYLESHEET_HREFS;
 
   defaultStyles.forEach(href => {
     if (!head.querySelector(`link[href="${href}"]`)) {

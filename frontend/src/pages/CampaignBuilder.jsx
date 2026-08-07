@@ -69,6 +69,8 @@ export default function CampaignBuilder() {
     useStore.getState().addToast('Page saved successfully', 'success')
   }, [])
 
+  // Preview = live /subscription with the same shadow mount + FLOW_RUNTIME_CSS
+  // as production (not a separate GrapesJS iframe). Save runs first so WYSIWYG holds.
   const handlePreview = useCallback(() => {
     if (!campaign) return
     const url = getCampaignPagePreviewUrl(campaign, pageType)

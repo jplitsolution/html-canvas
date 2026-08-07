@@ -1,0 +1,244 @@
+import { getRepository } from '../../../database/index.js';
+import { Vendor } from '../../../database/entities/vendor.entity.js';
+import {
+  ConversionPostback,
+  ConversionPostbackStatus,
+} from '../../../database/entities/conversion-postback.entity.js';
+import { Visit } from '../../../database/entities/visit.entity.js';
+import { analyticsService } from '../../analytics/analytics.service.js';
+import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
+import { searchService } from '../../search/search.service.js';
+import { apiCallLogService } from '../../flow/api-call-log.service.js';
+
+export const maskPhone = (phone) => {
+  if (!phone) return undefined;
+  const trimmed = String(phone).trim();
+  if (trimmed.length <= 4) return '****';
+  return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+};
+
+export const serializeBody = (data) => {
+  if (data == null) return null;
+  try {
+    return typeof data === 'string' ? data : JSON.stringify(data);
+  } catch {
+    return String(data);
+  }
+};
+
+export const fillTemplate = (template, vars) => {
+  let url = String(template || '');
+  for (const [key, val] of Object.entries(vars)) {
+    url = url.split(`{{${key}}}`).join(encodeURIComponent(val ?? ''));
+    url = url.split(`{${key}}`).join(encodeURIComponent(val ?? ''));
+  }
+  return url;
+};
+
+export const daysAgo = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d;
+};
+
+export const createPostbackRegister = (deps) => {
+  const {
+    getPostbackRepo = () => getRepository(ConversionPostback),
+    getVendorRepo = () => getRepository(Vendor),
+    getVisitRepo = () => getRepository(Visit),
+  } = deps;
+
+  const resolvePostbackTemplate = async (vendorId) => {
+    let template = '';
+    if (vendorId) {
+      const vendor = await getVendorRepo().findOne({ where: { id: vendorId } });
+      if (vendor?.postbackUrl?.trim()) template = vendor.postbackUrl.trim();
+    }
+    return { template, vendorId };
+  };
+
+  const indexPostbackEvent = async (row, eventType, extra = {}) => {
+    void searchService.indexEvent({
+      campaignId: row.campaignId,
+      visitId: row.visitId,
+      vendorId: row.vendorId,
+      affiliateId: row.affiliateId,
+      clickId: row.clickId,
+      rcid: row.rcid,
+      campid: row.campid,
+      trackingCampid: row.trackingCampid,
+      phoneMasked: maskPhone(row.msisdn),
+      eventType,
+      status: row.status,
+      responseStatus: row.httpStatus,
+      timestamp: new Date().toISOString(),
+      ...extra,
+    });
+  };
+
+  const logApiCall = async (input) => {
+    try {
+      await apiCallLogService.record(input);
+    } catch (err) {
+      console.warn(`postback api_call_logs write failed: ${err.message}`);
+    }
+  };
+
+  /**
+   * Queue a pending postback (confirm / CG / HE new redirect).
+   * MSISDN-unique upsert: same number → update clickId, rcid, vendor campid
+   * and reset status to pending (SAFWAP sendcallback=0 parity).
+   * campid = vendor; trackingCampid = ours.
+   */
+  const registerPending = async (input) => {
+    const { firePostback } = deps;
+    const msisdn = String(input.msisdn || input.phone || '').replace(/\D/g, '');
+    if (!msisdn) {
+      return { skipped: true, reason: 'missing msisdn' };
+    }
+
+    let vendorId = input.vendorId || null;
+    let clickId = input.clickId || '';
+    let rcid = input.rcid || '';
+    let campid = String(input.campid || '').trim();
+    let trackingCampid = String(
+      input.trackingCampid || input.tracking_campid || '',
+    ).trim();
+    let visitId = input.visitId || null;
+    let campaignId = input.campaignId || null;
+
+    if (
+      visitId &&
+      (!vendorId || !clickId || !rcid || !campid || !trackingCampid || !campaignId)
+    ) {
+      const visit = await getVisitRepo().findOne({
+        where: { id: parseInt(visitId, 10) },
+      });
+      if (visit) {
+        vendorId = vendorId || visit.vendorId || null;
+        clickId = clickId || visit.clickId || '';
+        rcid = rcid || visit.rcid || '';
+        campaignId = campaignId || visit.campaignId || null;
+        if (!campid && visit.campid) campid = String(visit.campid);
+        if (!trackingCampid && visit.trackingCampid) {
+          trackingCampid = String(visit.trackingCampid);
+        }
+      }
+    }
+
+    // Legacy rows: if only one id was stored as click_id, treat as rcid for network.
+    if (!rcid && clickId && input.legacyClickAsRcid) {
+      rcid = clickId;
+    }
+
+    const { template, vendorId: resolvedVendorId } =
+      await resolvePostbackTemplate(vendorId);
+    vendorId = resolvedVendorId || vendorId;
+
+    if (!template) {
+      return { skipped: true, reason: 'no postback_url on vendor' };
+    }
+
+    const existing = await getPostbackRepo()
+      .createQueryBuilder('p')
+      .where('p.msisdn = :msisdn', { msisdn })
+      .orderBy('p.id', 'DESC')
+      .take(1)
+      .getOne();
+
+    const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
+
+    if (existing) {
+      existing.clickId = clickId || existing.clickId || null;
+      existing.rcid = rcid || existing.rcid || null;
+      existing.campid = campid || existing.campid || null;
+      if (trackingCampid) existing.trackingCampid = trackingCampid;
+      if (parsedVisitId) existing.visitId = parsedVisitId;
+      if (campaignId) existing.campaignId = campaignId;
+      if (vendorId) existing.vendorId = vendorId;
+      existing.postbackUrl = template;
+      existing.status = ConversionPostbackStatus.PENDING;
+      existing.httpStatus = null;
+      existing.responseBody = null;
+      existing.errorMessage = null;
+      existing.sentAt = null;
+      if (input.offerCode) existing.offerCode = input.offerCode;
+
+      const row = await getPostbackRepo().save(existing);
+
+      if (parsedVisitId) {
+        await analyticsService.logEvent(
+          parsedVisitId,
+          VisitEventType.POSTBACK_PENDING,
+          {
+            info: 'Vendor CPA postback updated (msisdn upsert) — waiting for billing callback.',
+            postbackId: row.id,
+            updated: true,
+            rcid: row.rcid,
+            clickId: row.clickId,
+            campid: row.campid,
+            trackingCampid: row.trackingCampid,
+            postbackUrl: template,
+          },
+        );
+      } else {
+        await indexPostbackEvent(row, 'POSTBACK_PENDING', { updated: true });
+      }
+
+      if (input.fireImmediate) {
+        return firePostback(row.id);
+      }
+
+      return { success: true, id: row.id, status: 'pending', updated: true };
+    }
+
+    const row = await getPostbackRepo().save(
+      getPostbackRepo().create({
+        visitId: parsedVisitId,
+        campaignId: campaignId || null,
+        vendorId: vendorId || null,
+        affiliateId: null,
+        msisdn,
+        campid: campid || null,
+        trackingCampid: trackingCampid || null,
+        clickId: clickId || null,
+        rcid: rcid || null,
+        offerCode: input.offerCode || null,
+        postbackUrl: template,
+        status: ConversionPostbackStatus.PENDING,
+      }),
+    );
+
+    if (parsedVisitId) {
+      await analyticsService.logEvent(
+        parsedVisitId,
+        VisitEventType.POSTBACK_PENDING,
+        {
+          info: 'Vendor CPA postback queued — waiting for billing callback.',
+          postbackId: row.id,
+          rcid: row.rcid,
+          clickId: row.clickId,
+          campid: row.campid,
+          trackingCampid: row.trackingCampid,
+          postbackUrl: template,
+        },
+      );
+    } else {
+      await indexPostbackEvent(row, 'POSTBACK_PENDING');
+    }
+
+    if (input.fireImmediate) {
+      return firePostback(row.id);
+    }
+
+    return { success: true, id: row.id, status: 'pending' };
+  };
+
+  return {
+    fillTemplate,
+    resolvePostbackTemplate,
+    indexPostbackEvent,
+    logApiCall,
+    registerPending,
+  };
+};

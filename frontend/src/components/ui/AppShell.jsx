@@ -42,6 +42,7 @@ function AppShell({ children, actions, minimal = false }) {
   const navLinks = isAdmin ? [...baseNavLinks, adminNavLink] : baseNavLinks
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileNavOpen(false)
   }, [location.pathname])
 

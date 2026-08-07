@@ -1,8 +1,8 @@
 import { getRepository } from '../../database/index.js';
-import { ApiConfig } from '../api-config/entities/api-config.entity.js';
-import { Campaign } from '../campaigns/entities/campaign.entity.js';
-import { Visit } from '../analytics/entities/visit.entity.js';
-import { VisitEvent, VisitEventType } from '../analytics/entities/visit-event.entity.js';
+import { ApiConfig } from '../../database/entities/api-config.entity.js';
+import { Campaign } from '../../database/entities/campaign.entity.js';
+import { Visit } from '../../database/entities/visit.entity.js';
+import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { smsProviderManager } from './providers/sms-provider.manager.js';
 import { redisService } from '../../common/services/redis.service.js';
 

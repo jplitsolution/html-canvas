@@ -1,7 +1,11 @@
 # WAP Manager — Product & Schema Design
 
-> Canonical product brief + target database design.
+> Product brief + target database design.
 > Last updated: 2026-07-29
+>
+> **Runtime subscription / HE / postback flow (current code):**
+> [`docs/FLOW-ARCHITECTURE.md`](./FLOW-ARCHITECTURE.md) — use that as the AI reference.
+> Funnel sketches below may be incomplete (dual campid, API HE, INPROGRESS/LOW_BALANCE, etc.).
 
 ---
 

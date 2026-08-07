@@ -1,8 +1,8 @@
 import { getRepository } from '../../database/index.js';
-import { Country } from './entities/country.entity.js';
-import { Operator } from './entities/operator.entity.js';
-import { Campaign } from '../campaigns/entities/campaign.entity.js';
-import { buildTrackingId, normalizeCode } from './tracking-id.util.js';
+import { Country } from '../../database/entities/country.entity.js';
+import { Operator } from '../../database/entities/operator.entity.js';
+import { Campaign } from '../../database/entities/campaign.entity.js';
+import { buildTrackingId, normalizeCode } from './helpers/tracking-id.util.js';
 
 export const createMarketsService = () => {
   const getCountryRepo = () => getRepository(Country);

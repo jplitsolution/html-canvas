@@ -216,7 +216,7 @@ function MarketCampaignsPage() {
           <div className="surface-card">
             <EmptyState
               title={search ? 'No campaigns found' : 'No campaigns yet'}
-              description="Create a campaign under this market to open the flow builder"
+              description="Create a campaign under this market to configure pages and subscription flow"
               action={
                 !search && (
                   <Button variant="primary" onClick={() => setShowCreate(true)}>

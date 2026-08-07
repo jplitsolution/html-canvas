@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { apiCallLogService } from './api-call-log.service.js';
-import { ApiCallType } from './entities/api-call-log.entity.js';
+import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 
 export const createPartnerApiService = () => {
   const parseHeaders = (headersJson) => {

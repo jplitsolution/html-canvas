@@ -1,5 +1,5 @@
 import { getRepository } from '../../database/index.js';
-import { User } from './entities/user.entity.js';
+import { User } from '../../database/entities/user.entity.js';
 import {
   USER_STATUSES,
   isAdminEmail,

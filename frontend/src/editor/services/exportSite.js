@@ -1,6 +1,13 @@
 import { createZipBlob } from '../../utils/zip'
 import { getActiveStylesheetsContent, transformReactComponentsInHtml } from '../utils/styleUtils'
-import { OVERLAY_STACKING_CSS } from '../utils/overlayStacking'
+import {
+  FLOW_RUNTIME_CSS,
+  FLOW_RUNTIME_STYLESHEET_HREFS,
+  RESPONSIVE_STYLE_RULES,
+} from './flowRuntimeCss'
+
+// Re-export so existing imports (`from './exportSite'`) keep working.
+export { RESPONSIVE_STYLE_RULES }
 
 export function slugifyFilename(value) {
   return value.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toLowerCase() || 'page'
@@ -144,167 +151,6 @@ const ANCHOR_SCROLL_SCRIPT = `(function(){
   if(location.hash)scrollToHash(location.hash);
 })();`
 
-export const RESPONSIVE_STYLE_RULES = `
-/* ── Global overflow prevention ──────────────────────────────── */
-*, *::before, *::after {
-  box-sizing: border-box !important;
-}
-html, body {
-  width: 100% !important;
-  max-width: 100% !important;
-  overflow-x: hidden !important;
-  scroll-behavior: smooth !important;
-}
-img, video, iframe, embed, object {
-  max-width: 100% !important;
-  height: auto !important;
-}
-
-/* ── Mobile breakpoint (≤ 767px) ─────────────────────────────── */
-@media (max-width: 767px) {
-  /* Overflow guard for every structural element */
-  header, nav, section, footer, div, main, article, aside, figure {
-    max-width: 100% !important;
-    overflow-x: hidden !important;
-  }
-
-  /* Hamburger button — show on mobile */
-  .tc-nav-hamburger {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    cursor: pointer !important;
-    font-size: 24px !important;
-    user-select: none !important;
-    color: #0f172a !important;
-    padding: 4px !important;
-    z-index: 100 !important;
-  }
-
-  /* Header: flex-wrap so logo + hamburger sit on one row */
-  header, [data-tc-type="section"] > header {
-    position: relative !important;
-    display: flex !important;
-    flex-wrap: wrap !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    padding: 12px 16px !important;
-    gap: 0 !important;
-  }
-
-  /* Desktop nav — hidden until hamburger toggled.
-     Use maximum specificity to override GrapesJS inline style="display:flex" */
-  header nav,
-  header > nav,
-  header nav[style],
-  header > nav[style] {
-    display: none !important;
-    flex-direction: column !important;
-    width: 100% !important;
-    order: 3 !important;
-    background: #ffffff !important;
-    padding: 12px 16px !important;
-    border-top: 1px solid #e2e8f0 !important;
-    gap: 8px !important;
-    align-items: stretch !important;
-  }
-  header nav a,
-  header > nav a {
-    width: 100% !important;
-    text-align: center !important;
-    padding: 10px 16px !important;
-    display: block !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-  }
-
-  /* CSS-checkbox hamburger toggle — works with any unique id via class */
-  .tc-nav-toggle:checked ~ nav,
-  .tc-nav-toggle:checked ~ nav[style] {
-    display: flex !important;
-  }
-
-  /* Sections — comfortable mobile padding, prevent side overflow */
-  [data-tc-type="section"],
-  section, footer {
-    padding: 32px 16px !important;
-    width: 100% !important;
-  }
-
-  /* Flex rows → vertical stacks on mobile */
-  section > div[style*="display:flex"],
-  section > div[style*="display: flex"],
-  header + section > div[style*="flex"] {
-    flex-direction: column !important;
-    align-items: stretch !important;
-  }
-
-  /* Flex children: take full width */
-  section > div > div[style*="flex:1"],
-  section > div > div[style*="flex: 1"] {
-    min-width: 0 !important;
-    width: 100% !important;
-  }
-
-  /* Hero columns: stack image below text */
-  section[style*="display:flex"],
-  section[style*="display: flex"] {
-    flex-direction: column !important;
-    gap: 24px !important;
-  }
-
-  /* Pricing cards: full width */
-  section div[style*="min-width:260px"],
-  section div[style*="min-width: 260px"],
-  section div[style*="min-width:240px"],
-  section div[style*="min-width: 240px"] {
-    min-width: 0 !important;
-    width: 100% !important;
-    max-width: 100% !important;
-  }
-
-  /* CTA buttons: flex-center + no overflow (skip absolute image overlays) */
-  a[data-tc-type="button"]:not([data-tc-absolute="1"]),
-  a[style*="padding:14px"]:not([data-tc-absolute="1"]),
-  a[style*="padding: 14px"]:not([data-tc-absolute="1"]),
-  button.flow-btn:not([data-tc-absolute="1"]),
-  .flow-btn:not([data-tc-absolute="1"]) {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 100% !important;
-    text-align: center !important;
-    box-sizing: border-box !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    line-height: 1.25 !important;
-  }
-
-  /* Grid columns: single column on mobile */
-  div[style*="grid-template-columns:repeat(auto-fit"],
-  div[style*="grid-template-columns: repeat(auto-fit"] {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Typography scale down */
-  h1 { font-size: clamp(24px, 8vw, 32px) !important; }
-  h2 { font-size: clamp(20px, 6vw, 26px) !important; }
-}
-
-/* ── Tablet breakpoint (768px – 1023px) ──────────────────────── */
-@media (min-width: 768px) and (max-width: 1023px) {
-  header, [data-tc-type="section"] > header {
-    padding: 16px 20px !important;
-  }
-  header nav {
-    gap: 16px !important;
-  }
-  section {
-    padding: 48px 24px !important;
-  }
-}
-`;
-
 export function renderPageDocument(
   title,
   html,
@@ -316,8 +162,12 @@ export function renderPageDocument(
   const compiledHtml = transformReactComponentsInHtml(html)
   const { optimizedHtml, optimizedCss } = optimizePageContent(compiledHtml, css, pages, activePageFilename, isPreview)
   const scrollBehavior = `html { scroll-behavior: smooth; }`
+  // Prefer shared runtime CSS (same as live shadow) over dumping the whole admin app stylesheet.
   const hostCss = getActiveStylesheetsContent()
-  
+  const runtimeLinks = FLOW_RUNTIME_STYLESHEET_HREFS.map(
+    (href) => `<link rel="stylesheet" href="${href}" crossorigin="anonymous">`,
+  ).join('\n  ')
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -326,8 +176,7 @@ export function renderPageDocument(
   <title>${escapeHtml(title)}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+  ${runtimeLinks}
   <script>
     tailwind = {
       config: {
@@ -338,11 +187,11 @@ export function renderPageDocument(
     };
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>${hostCss}
+  <style>${FLOW_RUNTIME_CSS}
 ${optimizedCss}
 ${scrollBehavior}
-${RESPONSIVE_STYLE_RULES}
-${OVERLAY_STACKING_CSS}</style>
+/* Optional host leftovers (admin theme) — runtime CSS above is the WYSIWYG contract */
+${hostCss}</style>
 </head>
 <body id="wrapper">${optimizedHtml}
 <script>${ANCHOR_SCROLL_SCRIPT}</script>
@@ -432,6 +281,12 @@ export function inlineCssInHtml(html, css, wrapperStyle = '') {
   return `<div class="page-wrapper" style="min-height: 100vh; width: 100%; position: relative; ${wrapperStyle}">${innerHtml}</div>`
 }
 
+/**
+ * Canonical save snapshot for campaign pages / templates.
+ * Persists GrapesJS component HTML+CSS only — runtime chrome (responsive, overlay,
+ * fonts) lives in flowRuntimeCss and is injected at Preview/live render time so
+ * canvas and SubscriptionPage stay in sync without bloating DB rows.
+ */
 export function getActivePageSnapshot(editor) {
   const selected = editor.Pages.getSelected()
   const main = selected?.getMainComponent() || editor.getWrapper()

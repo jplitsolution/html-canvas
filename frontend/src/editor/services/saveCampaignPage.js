@@ -18,6 +18,11 @@ function healAllHotspots(editor) {
   walk(wrapper)
 }
 
+/**
+ * Persist campaign page content from GrapesJS.
+ * Snapshot = component html/css + projectData; runtime chrome (responsive/fonts)
+ * is applied at Preview/live via flowRuntimeCss — do not expect those rules in DB css.
+ */
 export async function saveCampaignPage(
   editor,
   campaignId,

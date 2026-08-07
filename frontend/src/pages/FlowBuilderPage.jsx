@@ -20,6 +20,11 @@ import {
   getDefaultCondition,
   getValidConditions,
 } from '../components/flow/flowConditions'
+import {
+  VERIFICATION_MODES,
+  DEFAULT_FLOWS,
+  normalizeModeId,
+} from '../components/flow/verificationModes'
 import useStore from '../store/useStore'
 import { PAGE_TYPE_LABELS } from '../services/api/campaigns'
 import {
@@ -39,29 +44,6 @@ const PAGE_TYPES = [
   'LOW_BALANCE',
   'BLOCKED',
   'ERROR',
-]
-
-const VERIFICATION_MODES = [
-  {
-    id: 'HEADER_INJECTION',
-    label: 'Header Injection',
-    hint: 'Phone from carrier header / ISP. If missing → Error page.',
-  },
-  {
-    id: 'OTP_ONLY',
-    label: 'OTP only',
-    hint: 'After HOME CTA always go to OTP. No header injection.',
-  },
-  {
-    id: 'BOTH',
-    label: 'Header Injection + OTP',
-    hint: 'HOME first. CTA: header OK → Confirm, else → OTP.',
-  },
-  {
-    id: 'NONE',
-    label: 'None (null / CG redirect)',
-    hint: 'No HE/OTP. If a CG URL is set → redirect there on landing with click_id.',
-  },
 ]
 
 function toRfNodes(flowConfig) {
@@ -84,88 +66,16 @@ function toRfEdges(flowConfig) {
   }))
 }
 
-function normalizeModeId(mode) {
-  if (mode === 'MSISDN_ONLY') return 'HEADER_INJECTION'
-  if (mode === 'NULL' || mode === null || mode === undefined || mode === '') return 'BOTH'
-  return mode || 'BOTH'
-}
-
-const DEFAULT_FLOWS = {
-  HEADER_INJECTION: {
-    entryPage: 'HOME',
-    nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
-    ],
-    edges: [
-      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
-      { id: 'HOME-HEADER_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'HEADER_UNRESOLVED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ],
-  },
-  OTP_ONLY: {
-    entryPage: 'HOME',
-    nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-      { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
-    ],
-    edges: [
-      { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
-      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ],
-  },
-  BOTH: {
-    entryPage: 'HOME',
-    nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-      { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
-    ],
-    edges: [
-      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
-      { id: 'HOME-HEADER_UNRESOLVED-OTP', source: 'HOME', target: 'OTP', condition: 'HEADER_UNRESOLVED' },
-      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-    ],
-  },
-  NONE: {
-    entryPage: 'HOME',
-    nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-    ],
-    edges: [],
-  },
-}
-
+/**
+ * LEGACY admin UI for drag-drop flowConfig editing.
+ *
+ * Option A cleanup: primary nav no longer links here; `/…/flow` redirects to
+ * Campaign Detail (mode picker + read-only path). File kept for rollback /
+ * power-user re-enable — do not delete without a separate decision.
+ *
+ * Runtime still uses verificationMode + flowConfig via flow-engine on
+ * SUBSCRIBE/CONFIRM transitions. Mode defaults live in verificationModes.js.
+ */
 function FlowBuilderPage() {
   const { id, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
   const navigate = useNavigate()

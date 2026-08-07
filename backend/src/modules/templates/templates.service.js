@@ -1,5 +1,5 @@
 import { getRepository } from '../../database/index.js';
-import { Template } from './entities/template.entity.js';
+import { Template } from '../../database/entities/template.entity.js';
 
 export const createTemplatesService = () => {
   const getRepo = () => getRepository(Template);

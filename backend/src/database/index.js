@@ -1,39 +1,11 @@
 import { DataSource } from 'typeorm';
-import { UserSchema } from '../modules/users/entities/user.entity.js';
-import { TemplateSchema } from '../modules/templates/entities/template.entity.js';
-import { VendorSchema } from '../modules/partners/entities/vendor.entity.js';
-import { AffiliateSchema } from '../modules/partners/entities/affiliate.entity.js';
-import { CountrySchema } from '../modules/markets/entities/country.entity.js';
-import { OperatorSchema } from '../modules/markets/entities/operator.entity.js';
-import { CampaignSchema } from '../modules/campaigns/entities/campaign.entity.js';
-import { CampaignTrackingSchema } from '../modules/campaigns/entities/campaign-tracking.entity.js';
-import { CampaignPageSchema } from '../modules/campaigns/entities/campaign-page.entity.js';
-import { ApiConfigSchema } from '../modules/api-config/entities/api-config.entity.js';
-import { VisitSchema } from '../modules/analytics/entities/visit.entity.js';
-import { VisitEventSchema } from '../modules/analytics/entities/visit-event.entity.js';
-import { ConversionPostbackSchema } from '../modules/partners/entities/conversion-postback.entity.js';
-import { ApiCallLogSchema } from '../modules/flow/entities/api-call-log.entity.js';
 import getConfig from '../config/configuration.js';
+import { entities } from './entities/index.js';
 
 /** @type {DataSource | null} */
 let dataSource = null;
 
-export const entities = [
-  UserSchema,
-  TemplateSchema,
-  VendorSchema,
-  AffiliateSchema,
-  CountrySchema,
-  OperatorSchema,
-  CampaignSchema,
-  CampaignTrackingSchema,
-  CampaignPageSchema,
-  ApiConfigSchema,
-  VisitSchema,
-  VisitEventSchema,
-  ConversionPostbackSchema,
-  ApiCallLogSchema,
-];
+export { entities };
 
 export const initDatabase = async () => {
   if (dataSource?.isInitialized) {

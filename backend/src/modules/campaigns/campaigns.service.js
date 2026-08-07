@@ -1,13 +1,13 @@
 import { getRepository } from '../../database/index.js';
-import { Campaign } from './entities/campaign.entity.js';
-import { ALL_CAMPAIGN_PAGE_TYPES, CampaignPage, REQUIRED_CAMPAIGN_PAGE_TYPES } from './entities/campaign-page.entity.js';
-import { Template } from '../templates/entities/template.entity.js';
-import { ApiConfig } from '../api-config/entities/api-config.entity.js';
-import { CampaignTracking } from './entities/campaign-tracking.entity.js';
+import { Campaign } from '../../database/entities/campaign.entity.js';
+import { ALL_CAMPAIGN_PAGE_TYPES, CampaignPage, REQUIRED_CAMPAIGN_PAGE_TYPES } from '../../database/entities/campaign-page.entity.js';
+import { Template } from '../../database/entities/template.entity.js';
+import { ApiConfig } from '../../database/entities/api-config.entity.js';
+import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { marketsService } from '../markets/markets.service.js';
-import { buildTrackingId, deriveCountryCode, deriveOperatorCode } from '../markets/tracking-id.util.js';
+import { buildTrackingId, deriveCountryCode, deriveOperatorCode } from '../markets/helpers/tracking-id.util.js';
 import { redisService } from '../../common/services/redis.service.js';
 
 export const createCampaignsService = () => {
