@@ -1,8 +1,8 @@
 import { Client } from '@elastic/elasticsearch';
 import { Brackets } from 'typeorm';
 import { getDataSource, getRepository } from '../../database/index.js';
-import { VisitEvent } from '../analytics/entities/visit-event.entity.js';
-import { Visit } from '../analytics/entities/visit.entity.js';
+import { VisitEvent } from '../../database/entities/visit-event.entity.js';
+import { Visit } from '../../database/entities/visit.entity.js';
 import getConfig from '../../config/configuration.js';
 
 export const createSearchService = () => {

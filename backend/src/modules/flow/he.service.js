@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
 import { apiCallLogService } from './api-call-log.service.js';
-import { ApiCallType } from './entities/api-call-log.entity.js';
+import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 
 /**
  * Header Enrichment providers (config-driven — no per-campaign redeploy).

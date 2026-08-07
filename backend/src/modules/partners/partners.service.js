@@ -1,5 +1,5 @@
 import { getRepository } from '../../database/index.js';
-import { Vendor } from './entities/vendor.entity.js';
+import { Vendor } from '../../database/entities/vendor.entity.js';
 
 export const createPartnersService = () => {
   const getVendorRepo = () => getRepository(Vendor);

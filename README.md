@@ -10,31 +10,22 @@ TemplateCraft is an enterprise-grade SaaS platform for building, deploying, and 
 - **Funnel Routing & Redirections**: Dynamic routing based on operator header parameters, subscriber status, and blocklist guards.
 - **Real-Time Funnel Analytics**: Dynamic dashboards capturing traffic impressions, conversions, subscriber metrics, and a dedicated real-time OTP Analytics Dashboard.
 
+## Documentation
+
+Canonical references live in [`docs/`](./docs/README.md):
+
+| Doc | Purpose |
+|-----|---------|
+| [`FLOW-ARCHITECTURE.md`](./docs/FLOW-ARCHITECTURE.md) | Detect, HE, attribution, redirects, postbacks |
+| [`SAFARICOM_HE_SETUP_GUIDE.md`](./docs/SAFARICOM_HE_SETUP_GUIDE.md) | Safaricom HE admin checklist |
+| [`WAP_MANAGER_DESIGN.md`](./docs/WAP_MANAGER_DESIGN.md) | Product / schema brief |
+
 ---
 
 ## Technical Stack
 
 - **Frontend**: React 19, Vite, Zustand, Tailwind v4 CSS, GrapesJS.
-- **Backend**: NestJS, TypeORM, MySQL / PostgreSQL, JWT.
-
----
-
-## OTP Subsystem Documentation
-
-The upgraded OTP engine is fully documented in [docs/otp/](file:///d:/dddd/docs/otp/):
-
-1. [01_ARCHITECTURE.md](file:///d:/dddd/docs/otp/01_ARCHITECTURE.md) - Conceptual Design
-2. [02_PROVIDER_SYSTEM.md](file:///d:/dddd/docs/otp/02_PROVIDER_SYSTEM.md) - Stateless Adapters
-3. [03_DATABASE.md](file:///d:/dddd/docs/otp/03_DATABASE.md) - Schema Specifications
-4. [04_RUNTIME_ENGINE.md](file:///d:/dddd/docs/otp/04_RUNTIME_ENGINE.md) - Execution Flows
-5. [05_FRONTEND_BINDING.md](file:///d:/dddd/docs/otp/05_FRONTEND_BINDING.md) - GrapesJS Bindings
-6. [06_SECURITY.md](file:///d:/dddd/docs/otp/06_SECURITY.md) - Security Protections
-7. [07_API_REFERENCE.md](file:///d:/dddd/docs/otp/07_API_REFERENCE.md) - Endpoint Index
-8. [08_PROVIDER_GUIDE.md](file:///d:/dddd/docs/otp/08_PROVIDER_GUIDE.md) - Configurations Guide
-9. [09_SEQUENCE_DIAGRAM.md](file:///d:/dddd/docs/otp/09_SEQUENCE_DIAGRAM.md) - Transaction Sequences
-10. [10_FUTURE_IMPROVEMENTS.md](file:///d:/dddd/docs/otp/10_FUTURE_IMPROVEMENTS.md) - Scaling Recommendations
-11. [11_ANALYTICS.md](file:///d:/dddd/docs/otp/11_ANALYTICS.md) - Telemetry & Dashboard
-12. [12_FAILOVER.md](file:///d:/dddd/docs/otp/12_FAILOVER.md) - Automatic Failover Strategy
+- **Backend**: Express, TypeORM, PostgreSQL / MySQL, JWT.
 
 ---
 
@@ -61,8 +52,16 @@ cd frontend
 npm run dev
 ```
 
-### 4. Running Tests
+Or from repo root: `./dev.sh`
 
-- **Backend Unit & Spec**: `npm run test` (inside `backend`)
-- **Backend Integration (E2E)**: `npm run test:e2e` (inside `backend`)
-- **Frontend Unit**: `npm run test` (inside `frontend`)
+### 4. Useful backend scripts
+
+```bash
+cd backend
+npm run db:reset      # drop/recreate DB
+npm run db:cleanup    # schema cleanup helper
+npm run db:seed       # seed_clean.js
+npm run test:api      # API smoke test
+node scripts/e2e-detect-flow.mjs   # detect/checksub E2E
+node scripts/reset-otp-local.mjs   # force local mock OTP
+```

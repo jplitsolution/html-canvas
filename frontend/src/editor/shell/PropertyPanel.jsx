@@ -511,7 +511,10 @@ function ClickActionEditor({
 
       {type === 'flow' && (
         <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
-          Continues the normal signup path. The next page is decided by Flow Builder (phone check, OTP, confirm, etc.).
+          Calls the server signup path (SUBSCRIBE). Next page comes from verification
+          mode (HE / OTP / both / none) — usually set in Flow Builder — not from a
+          fixed page link. For a fixed jump, use &quot;Go to another page&quot; or
+          &quot;Open a website&quot; instead.
         </p>
       )}
 

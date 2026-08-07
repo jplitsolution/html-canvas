@@ -1,54 +1,21 @@
-import { marketsService } from './markets.service.js';
-import { campaignsService } from '../campaigns/campaigns.service.js';
+import { Router } from 'express';
+import { authenticate } from '../../common/middleware/auth.middleware.js';
+import { marketsController } from './markets.controller.js';
 
-export async function marketsRoutes(fastify, options) {
-  fastify.addHook('onRequest', fastify.authenticate);
+const router = Router();
 
-  fastify.get('/', async (request, reply) => {
-    return marketsService.listMarkets(request.user.id);
-  });
+router.use(authenticate);
 
-  fastify.post('/', async (request, reply) => {
-    reply.status(201);
-    return marketsService.createMarket(request.body || {}, request.user.id);
-  });
+router.get('/', marketsController.list);
+router.post('/', marketsController.create);
+router.get('/:countryCode/:operatorCode', marketsController.getOne);
+router.get(
+  '/:countryCode/:operatorCode/campaigns',
+  marketsController.listCampaigns,
+);
+router.post(
+  '/:countryCode/:operatorCode/campaigns',
+  marketsController.createCampaign,
+);
 
-  fastify.get('/:countryCode/:operatorCode', async (request, reply) => {
-    const { countryCode, operatorCode } = request.params;
-    return marketsService.getMarket(countryCode, operatorCode, request.user.id);
-  });
-
-  fastify.get('/:countryCode/:operatorCode/campaigns', async (request, reply) => {
-    const { countryCode, operatorCode } = request.params;
-    return marketsService.listCampaignsForMarket(
-      countryCode,
-      operatorCode,
-      request.user.id,
-    );
-  });
-
-  fastify.post('/:countryCode/:operatorCode/campaigns', async (request, reply) => {
-    const { countryCode, operatorCode } = request.params;
-    const dto = request.body || {};
-    const { country, operator } = await marketsService.findMarketByCodes(
-      countryCode,
-      operatorCode,
-      request.user.id,
-    );
-    reply.status(201);
-    return campaignsService.create(
-      {
-        name: dto.name,
-        country: country.name,
-        operator: operator.name,
-        countryCode: country.code,
-        operatorCode: operator.code,
-        operatorId: operator.id,
-        copyFromCampaignId: dto.copyFromCampaignId
-          ? Number(dto.copyFromCampaignId)
-          : undefined,
-      },
-      request.user.id,
-    );
-  });
-}
+export default router;

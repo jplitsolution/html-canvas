@@ -1,5 +1,5 @@
 import { getRepository } from '../../database/index.js';
-import { ApiCallLog } from './entities/api-call-log.entity.js';
+import { ApiCallLog } from '../../database/entities/api-call-log.entity.js';
 import { searchService } from '../search/search.service.js';
 
 const MAX_BODY = 8000;

@@ -1,4 +1,4 @@
-import { RESPONSIVE_STYLE_RULES } from '../services/exportSite'
+import { RESPONSIVE_STYLE_RULES } from '../services/flowRuntimeCss'
 import { safeGetWrapper } from '../utils/editorUtils'
 import {
   applyTextSizeAlignment,
@@ -267,6 +267,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
         .gjs-selected { outline: 2px solid #2563eb !important; outline-offset: 2px; }
         ${TEXT_SIZE_ALIGN_CANVAS_CSS}
         ${OVERLAY_STACKING_CANVAS_CSS}
+        /* Same responsive rules as live SubscriptionPage shadow (WYSIWYG) */
         ${RESPONSIVE_STYLE_RULES}
       `
   }

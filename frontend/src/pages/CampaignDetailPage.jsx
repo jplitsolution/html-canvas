@@ -10,7 +10,6 @@ import {
   User,
   CheckCircle2,
   Circle,
-  Workflow,
   Copy,
   Store,
   Plus,
@@ -26,7 +25,6 @@ import Button from '../components/ui/Button'
 import { copyToClipboard } from '../utils/clipboard'
 import {
   campaignEditPath,
-  campaignFlowPath,
   marketPath,
   resolveMarketCodes,
 } from '../utils/routes'
@@ -39,6 +37,7 @@ import {
 } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
+import CampaignFlowSummary from '../components/flow/CampaignFlowSummary'
 import { getVisitPagePath } from '../utils/visitPagePath'
 
 function StatusToggle({ active, onToggle, disabled, activating, blockedReason }) {
@@ -89,6 +88,7 @@ function CampaignDetailPage() {
   const error = useStore((s) => s.error)
   const loadCampaign = useStore((s) => s.loadCampaign)
   const updateCampaign = useStore((s) => s.updateCampaign)
+  const saveCampaignFlow = useStore((s) => s.saveCampaignFlow)
   const loadCampaignActivityLogs = useStore((s) => s.loadCampaignActivityLogs)
   const vendors = useStore((s) => s.vendors)
   const fetchVendors = useStore((s) => s.fetchVendors)
@@ -146,6 +146,14 @@ function CampaignDetailPage() {
       setSavingSuccessUrl(false)
     }
   }
+
+  const handleSaveVerificationMode = useCallback(
+    async ({ verificationMode, flowConfig }) => {
+      if (!campaign) return
+      await saveCampaignFlow(campaign.id, { verificationMode, flowConfig })
+    },
+    [campaign, saveCampaignFlow],
+  )
 
   const handleSubmitTracking = async () => {
     if (!campaign || !selectedVendorForAdd) return
@@ -390,7 +398,6 @@ function CampaignDetailPage() {
   const backToMarket = marketPath(countryCode, operatorCode)
   const editBase = (pageType) =>
     campaignEditPath(countryCode, operatorCode, campaign.id, pageType)
-  const flowHref = campaignFlowPath(countryCode, operatorCode, campaign.id)
   const canActivate = campaign.requiredComplete
   const activateBlockedReason =
     !campaign.active && !canActivate
@@ -509,6 +516,11 @@ function CampaignDetailPage() {
                 </div>
               )}
             </div>
+
+            <CampaignFlowSummary
+              campaign={campaign}
+              onSaveMode={handleSaveVerificationMode}
+            />
 
             <div className="surface-card overflow-hidden">
               <div className="px-5 py-4 border-b border-border">
@@ -765,19 +777,12 @@ function CampaignDetailPage() {
 
             {/* Funnel pages */}
             <div className="surface-card overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
-                  <p className="text-xs text-fg-muted mt-0.5">
-                    Edit every page in this campaign — including Blocked and Low balance
-                  </p>
-                </div>
-                <Link to={flowHref}>
-                  <Button variant="outline" size="sm">
-                    <Workflow className="w-3.5 h-3.5" />
-                    Flow builder
-                  </Button>
-                </Link>
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="text-sm font-semibold text-fg">Funnel pages</h2>
+                <p className="text-xs text-fg-muted mt-0.5">
+                  Edit every page in this campaign — including Blocked and Low balance.
+                  Button “When clicked” on the canvas sets page → next (page / URL / Priority).
+                </p>
               </div>
               {pageSections.map((section) => (
                 <div key={section.id} className="border-b border-border last:border-b-0">
@@ -825,108 +830,6 @@ function CampaignDetailPage() {
               ))}
             </div>
 
-            {/* Recent activity */}
-            <div className="surface-card overflow-hidden">
-              <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                <div>
-                  <h2 className="text-sm font-semibold text-fg">Recent activity</h2>
-                  <p className="text-xs text-fg-muted mt-0.5">Latest visitor interactions</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => navigate(`/analytics?campaignId=${campaign.id}`)}
-                >
-                  <FileText className="w-3.5 h-3.5" />
-                  View all
-                </Button>
-              </div>
-              {recentLogsLoading ? (
-                <div className="p-6 text-center text-xs text-fg-muted">Loading...</div>
-              ) : recentLogs.length === 0 ? (
-                <div className="p-6 text-center text-xs text-fg-muted">No activity yet</div>
-              ) : (
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>Phone</th>
-                      <th>Time</th>
-                      <th>Path</th>
-                      <th>Status</th>
-                      <th className="w-12 text-right"> </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentLogs.map((log) => (
-                      <tr key={log.id}>
-                        <td className="font-medium">
-                          {log.phone ? (
-                            <span className="inline-flex items-center gap-1">
-                              <User className="w-3.5 h-3.5 text-fg-subtle" />
-                              {log.phone}
-                            </span>
-                          ) : (
-                            <span className="text-fg-subtle italic">Anonymous</span>
-                          )}
-                        </td>
-                        <td className="text-fg-muted text-xs font-mono">
-                          {new Date(log.createdAt).toLocaleString('en-US', {
-                            month: 'short',
-                            day: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </td>
-                        <td>
-                          <div className="flex flex-wrap items-center gap-1">
-                            {getVisitPagePath(log).map((page, idx, pages) => (
-                              <span
-                                key={`${log.id}-${page}-${idx}`}
-                                className="inline-flex items-center gap-1"
-                              >
-                                <span className="text-xs font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted">
-                                  /{page}
-                                </span>
-                                {idx < pages.length - 1 && (
-                                  <span className="text-fg-subtle text-[10px]">→</span>
-                                )}
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td>
-                          <span
-                            className={`badge ${
-                              log.visitStatus === 'SUCCESS' || log.visitStatus === 'SUBSCRIBED'
-                                ? 'badge-success'
-                                : log.visitStatus === 'BLOCKED' || log.visitStatus === 'FAILED'
-                                  ? 'badge-warning'
-                                  : log.visitStatus === 'OTP_SHOWN' ||
-                                      log.visitStatus === 'CONFIRM_SHOWN'
-                                    ? 'badge-accent'
-                                    : 'badge-muted'
-                            }`}
-                          >
-                            {log.visitStatus}
-                          </span>
-                        </td>
-                        <td className="text-right">
-                          <button
-                            type="button"
-                            title="View session detail"
-                            aria-label="View session detail"
-                            onClick={() => navigate(`/analytics/visits/${log.id}`)}
-                            className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-border text-fg-muted hover:text-accent hover:border-accent/40 hover:bg-accent-muted/40 transition-colors"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
           </div>
 
           {/* Sidebar */}
@@ -990,15 +893,6 @@ function CampaignDetailPage() {
                 >
                   <Settings className="w-4 h-4" />
                   API configuration
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full justify-start"
-                  onClick={() => navigate(flowHref)}
-                >
-                  <Workflow className="w-4 h-4" />
-                  Flow builder
                 </Button>
               </div>
             </div>

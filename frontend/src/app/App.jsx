@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import GlobalErrorBoundary from '../components/common/GlobalErrorBoundary'
 import ToastContainer from '../components/common/Toast'
 import ScreenReaderAnnouncer from '../components/common/ScreenReaderAnnouncer'
@@ -17,10 +17,10 @@ import VendorsPage from '../pages/VendorsPage'
 import CallbackDocsPage from '../pages/CallbackDocsPage'
 import PostbacksPage from '../pages/PostbacksPage'
 import PostbackDetailPage from '../pages/PostbackDetailPage'
-import FlowBuilderPage from '../pages/FlowBuilderPage'
 import ProfilePage from '../pages/ProfilePage'
 import UsersPage from '../pages/UsersPage'
 import RequireAdmin from '../components/auth/RequireAdmin'
+import { campaignDetailPath } from '../utils/routes'
 
 function Protected({ children }) {
   return <RequireAuth>{children}</RequireAuth>
@@ -28,6 +28,12 @@ function Protected({ children }) {
 
 function AdminOnly({ children }) {
   return <RequireAdmin>{children}</RequireAdmin>
+}
+
+/** Old Flow Builder URLs → Campaign Detail (mode picker lives there now). */
+function RedirectFlowBuilderToDetail() {
+  const { id, countryCode, operatorCode } = useParams()
+  return <Navigate to={campaignDetailPath(countryCode, operatorCode, id)} replace />
 }
 
 function App() {
@@ -57,14 +63,14 @@ function App() {
               />
               <Route
                 path="/markets/:countryCode/:operatorCode/campaigns/:id/flow"
-                element={<Protected><FlowBuilderPage /></Protected>}
+                element={<Protected><RedirectFlowBuilderToDetail /></Protected>}
               />
 
               {/* Legacy flat campaign URLs — still work */}
               <Route path="/campaigns" element={<Navigate to="/markets" replace />} />
               <Route path="/campaigns/:id" element={<Protected><CampaignDetailPage /></Protected>} />
               <Route path="/campaigns/:id/edit/:pageType" element={<Protected><CampaignBuilder /></Protected>} />
-              <Route path="/campaigns/:id/flow" element={<Protected><FlowBuilderPage /></Protected>} />
+              <Route path="/campaigns/:id/flow" element={<Protected><RedirectFlowBuilderToDetail /></Protected>} />
 
               <Route path="/analytics" element={<Protected><CampaignLogsPage /></Protected>} />
               <Route

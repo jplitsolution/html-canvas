@@ -1,4 +1,4 @@
-import { CampaignPageType } from '../../modules/campaigns/entities/campaign-page.entity.js';
+import { CampaignPageType } from '../entities/campaign-page.entity.js';
 
 const ff = 'Inter, system-ui, -apple-system, sans-serif';
 

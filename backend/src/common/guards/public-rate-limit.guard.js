@@ -2,7 +2,7 @@ import { getRepository } from '../../database/index.js';
 import {
   VisitEvent,
   VisitEventType,
-} from '../../modules/analytics/entities/visit-event.entity.js';
+} from '../../database/entities/visit-event.entity.js';
 
 const ipStore = new Map();
 
@@ -15,59 +15,62 @@ const getLimitForPath = (path) => {
 
 /**
  * Lightweight in-memory IP rate limiter for public OTP/flow endpoints.
- * Use as a Fastify preHandler.
+ * Express middleware: (req, res, next)
  */
-export const publicRateLimit = async (request, reply) => {
-  const ip = String(
-    request.headers['x-forwarded-for'] ||
-      request.socket?.remoteAddress ||
-      'unknown',
-  )
-    .split(',')[0]
-    .trim();
-  const path = request.url || '';
-  const limit = getLimitForPath(path);
-  const ttlMs = 60 * 1000;
-  const key = `${ip}:${path.split('?')[0]}`;
-  const now = Date.now();
-  const record = ipStore.get(key);
+export const publicRateLimit = async (req, res, next) => {
+  try {
+    const ip = String(
+      req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown',
+    )
+      .split(',')[0]
+      .trim();
+    const path = req.originalUrl || req.url || '';
+    const limit = getLimitForPath(path);
+    const ttlMs = 60 * 1000;
+    const key = `${ip}:${path.split('?')[0]}`;
+    const now = Date.now();
+    const record = ipStore.get(key);
 
-  if (!record || now > record.resetTime) {
-    ipStore.set(key, { count: 1, resetTime: now + ttlMs });
-    return;
-  }
-
-  if (record.count >= limit) {
-    const retryAfter = Math.ceil((record.resetTime - now) / 1000);
-    reply.header('Retry-After', String(retryAfter));
-
-    const visitId = request.body?.visitId || request.query?.visitId;
-    if (visitId) {
-      try {
-        const repo = getRepository(VisitEvent);
-        await repo.insert([
-          {
-            visitId: Number(visitId),
-            eventType: VisitEventType.RATE_LIMIT_HIT,
-            metadata: { ip, path, limit, retryAfter },
-          },
-          {
-            visitId: Number(visitId),
-            eventType: VisitEventType.BLOCKED_REQUEST,
-            metadata: { ip, path, reason: 'IP Rate Limit Exceeded' },
-          },
-        ]);
-      } catch (err) {
-        console.warn(`Failed to log rate limit event: ${err.message}`);
-      }
+    if (!record || now > record.resetTime) {
+      ipStore.set(key, { count: 1, resetTime: now + ttlMs });
+      return next();
     }
 
-    return reply.status(429).send({
-      statusCode: 429,
-      error: 'Too Many Requests',
-      message: 'Too many requests. Please try again later.',
-    });
-  }
+    if (record.count >= limit) {
+      const retryAfter = Math.ceil((record.resetTime - now) / 1000);
+      res.setHeader('Retry-After', String(retryAfter));
 
-  record.count += 1;
+      const visitId = req.body?.visitId || req.query?.visitId;
+      if (visitId) {
+        try {
+          const repo = getRepository(VisitEvent);
+          await repo.insert([
+            {
+              visitId: Number(visitId),
+              eventType: VisitEventType.RATE_LIMIT_HIT,
+              metadata: { ip, path, limit, retryAfter },
+            },
+            {
+              visitId: Number(visitId),
+              eventType: VisitEventType.BLOCKED_REQUEST,
+              metadata: { ip, path, reason: 'IP Rate Limit Exceeded' },
+            },
+          ]);
+        } catch (err) {
+          console.warn(`Failed to log rate limit event: ${err.message}`);
+        }
+      }
+
+      return res.status(429).json({
+        statusCode: 429,
+        error: 'Too Many Requests',
+        message: 'Too many requests. Please try again later.',
+      });
+    }
+
+    record.count += 1;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
 };

@@ -1,49 +1,19 @@
-import { partnersService } from './partners.service.js';
-import { postbackService } from './postback.service.js';
+import { Router } from 'express';
+import { authenticate } from '../../common/middleware/auth.middleware.js';
+import { partnersController } from './partners.controller.js';
 
-export async function partnersRoutes(fastify, options) {
-  fastify.addHook('onRequest', fastify.authenticate);
+const router = Router();
 
-  fastify.get('/vendors', async (request, reply) => {
-    return partnersService.listVendors(request.user.id);
-  });
+router.use(authenticate);
 
-  fastify.post('/vendors', async (request, reply) => {
-    reply.status(201);
-    return partnersService.createVendor(request.body || {}, request.user.id);
-  });
+router.get('/vendors', partnersController.listVendors);
+router.post('/vendors', partnersController.createVendor);
+router.get('/vendors/:id', partnersController.getVendor);
+router.patch('/vendors/:id', partnersController.updateVendor);
+router.delete('/vendors/:id', partnersController.removeVendor);
 
-  fastify.get('/vendors/:id', async (request, reply) => {
-    return partnersService.getVendor(request.params.id, request.user.id);
-  });
+router.get('/postbacks/summary', partnersController.postbacksSummary);
+router.get('/postbacks', partnersController.listPostbacks);
+router.get('/postbacks/:id', partnersController.getPostback);
 
-  fastify.patch('/vendors/:id', async (request, reply) => {
-    return partnersService.updateVendor(
-      request.params.id,
-      request.body || {},
-      request.user.id,
-    );
-  });
-
-  fastify.delete('/vendors/:id', async (request, reply) => {
-    await partnersService.removeVendor(request.params.id, request.user.id);
-    return { message: 'Vendor deleted' };
-  });
-
-  // --- Postbacks admin (user-scoped) ---
-  fastify.get('/postbacks/summary', async (request) => {
-    const days = request.query?.days;
-    return postbackService.getSummary(request.user.id, { days });
-  });
-
-  fastify.get('/postbacks', async (request) => {
-    return postbackService.listPostbacks(request.user.id, request.query || {});
-  });
-
-  fastify.get('/postbacks/:id', async (request) => {
-    return postbackService.getPostbackById(
-      request.params.id,
-      request.user.id,
-    );
-  });
-}
+export default router;
