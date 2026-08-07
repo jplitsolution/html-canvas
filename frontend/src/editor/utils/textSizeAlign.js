@@ -78,15 +78,22 @@ export function isFlowLayoutButton(component) {
   return false
 }
 
-/** Hotspots, image overlays, or explicitly marked absolute widgets. */
+/** Hotspots, image overlays, or Canva absolute-drag placements. */
 export function wasIntentionallyAbsolute(component) {
   if (!component) return false
   const attrs = component.getAttributes?.() || {}
   if (attrs['data-tc-type'] === 'hotspot') return true
   if (attrs['data-tc-absolute'] === '1' || attrs['data-tc-absolute'] === 'true') return true
-  if (isOverImageContext(component)) {
-    const style = component.getStyle?.() || {}
-    if (String(style.position || '').toLowerCase() === 'absolute') return true
+
+  const style = component.getStyle?.() || {}
+  const pos = String(style.position || '').toLowerCase()
+  // Absolute drag mode writes top/left — treat as user placement so
+  // keepFlowButtonInFlow does not snap the button back after drag:end.
+  if (pos === 'absolute' && (style.top != null || style.left != null)) {
+    return true
+  }
+  if (isOverImageContext(component) && pos === 'absolute') {
+    return true
   }
   return false
 }

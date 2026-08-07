@@ -367,15 +367,20 @@ CONFIRM path: `registerPending` → blocklist → checksub skip-if-existing → 
    - phone + `nextPage` (allowed) → `loadPage(nextPage)`
    - API HE + nothing → keep overlay (no HOME/OTP)
 
-### 8.2 HE-only suppress (API HE)
+### 8.2 HE silent-exit vs funnel (API HE)
 
-Blocked: `loadPage('HOME')`, `loadPage('OTP')`, boot HOME, resume HOME/OTP, `?step=HOME`.
+**Silent exit** (success URL set, or no MSISDN + fail/CG URL):
+- Block: `loadPage('HOME')`, `loadPage('OTP')` while redirecting
+- Overlay: “Detecting…” → “Redirecting…”
+- Never flash HOME
 
-Allowed internal: `LOW_BALANCE`, `BLOCKED`, `THANKYOU`, `CONFIRM`, `INPROGRESS`, `ERROR`.
-
-Overlay copy: “Detecting mobile number…” → “Redirecting…”.
+**Funnel mode** (HE success URL empty, and no fail/CG exit when MSISDN missing):
+- After detect settles → **always show HOME**
+- MSISDN (if found) stays on the visit for later CTA / OTP / Priority
+- HOME Subscribe uses verification mode as usual
 
 `hideHomeForHe` = resolving OR exit pending OR (funnel suppressed AND page is empty/HOME/OTP).
+Funnel suppressed only while silent-exit applies — not for every API HE campaign.
 
 ### 8.3 Phone resolve order (`resolvePhoneNumber.js`)
 
@@ -517,7 +522,7 @@ Typical healthy API HE visit chain:
 4. Never leak click/campid/rcid to HE redirects or partner checksub/subscribe bodies.  
 5. API HE always calls partner APIs; phone for routing = API only.  
 6. API HE fail must not use stale browser phone.  
-7. Never flash HOME/OTP under unresolved API HE.  
+7. Never flash HOME/OTP under API HE **when** success/fail exit URLs will redirect; empty exit URLs → show HOME after detect (funnel mode).  
 8. `conversion_postbacks` uniqueness is global MSISDN — changing it changes retry/callback matching.  
 9. `direct=1` is for editor page rendering only.  
 10. Detect-time checksub must not be blindly re-run on every `/page` for the same visit.
@@ -535,24 +540,26 @@ flowchart TD
 
   E -->|No + API HE| F{failRedirectUrl or CG?}
   F -->|Yes| G[External fail redirect - no callback row]
-  F -->|No| H[Overlay - no HOME/OTP]
+  F -->|No| H[Show HOME - funnel mode]
 
   E -->|Yes| I{checksub?}
-  I -->|No| J[HE success URL if set]
+  I -->|No| J{HE success URL?}
+  J -->|Yes| S[Leave site]
+  J -->|No| H
   I -->|Yes| K{blocked?}
   K -->|Yes| L[BLOCKED]
   K -->|No| M{isActive?}
   M -->|Yes| N[Campaign success / THANKYOU]
   M -->|No| O{status new?}
-  O -->|Yes| P[HE success + registerPending]
+  O -->|Yes| P{HE success URL?}
+  P -->|Yes| S
+  P -->|No| H
   O -->|No| Q{mapped status page?}
   Q -->|Yes| R[LOW_BALANCE / INPROGRESS]
   Q -->|No| H
 
-  G --> S[Leave site]
+  G --> S
   N --> S
-  P --> S
-  J --> S
 ```
 
 ---

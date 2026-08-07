@@ -24,6 +24,14 @@ function isStuck(editor) {
     const body = editor.Canvas?.getBody?.()
     if (body?.classList?.contains(`${ppfx}is__grabbing`)) return true
     if (document.body.classList.contains(`${ppfx}is__grabbing`)) return true
+    // Only leftover chrome (not an active pointer) — releaseDrag clears classes
+    if (
+      !editor.Commands?.isActive?.('core:component-drag') &&
+      (document.body.classList.contains('tc-is-dragging') ||
+        document.body.classList.contains('tc-canvas-drop-over'))
+    ) {
+      return true
+    }
     if (editor.Commands?.isActive?.('core:component-drag')) return true
     const st = editor.getSelected?.()?.get?.('status')
     if (st === 'freezed' || st === 'freezed-selected') return true
@@ -82,6 +90,11 @@ export function releaseDrag(editor) {
     editor.Canvas?.getBody?.()?.classList?.remove(`${ppfx}is__grabbing`)
     document.body.classList.remove(`${ppfx}is__grabbing`)
     document.body.classList.remove('tc-is-dragging')
+    document.body.classList.remove('tc-canvas-drop-over')
+    document.querySelectorAll('.tc-drag-preview').forEach((el) => el.remove())
+    document.querySelectorAll('.tc-blocks-mount .gjs-block.__dragging').forEach((el) => {
+      el.classList.remove('__dragging')
+    })
     editor.Canvas?.stopAutoscroll?.()
   } catch (_) {
     /* noop */
@@ -133,9 +146,14 @@ export function setupDragUnstick(editor) {
   // Parent document (release over sidebar / props)
   document.addEventListener('pointerdown', onDown, true)
   document.addEventListener('pointerup', onUp, true)
+  document.addEventListener('pointercancel', onUp, true)
   document.addEventListener('mouseup', onUp, true)
   document.addEventListener('touchend', onUp, true)
+  document.addEventListener('touchcancel', onUp, true)
   window.addEventListener('blur', onUp, true)
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') onUp()
+  })
 
   // Canvas iframe — attach when frame is ready
   const bindFrame = () => {
@@ -145,7 +163,10 @@ export function setupDragUnstick(editor) {
       frameDoc.__tcDragHeal = true
       frameDoc.addEventListener('pointerdown', onDown, true)
       frameDoc.addEventListener('pointerup', onUp, true)
+      frameDoc.addEventListener('pointercancel', onUp, true)
       frameDoc.addEventListener('mouseup', onUp, true)
+      frameDoc.addEventListener('touchend', onUp, true)
+      frameDoc.addEventListener('touchcancel', onUp, true)
     } catch (_) {
       /* noop */
     }
@@ -160,6 +181,11 @@ export function setupDragUnstick(editor) {
   })
   setTimeout(bindFrame, 300)
 
+  // Also heal when Grapes reports drag end but freezed/grabbing leaked
+  const onGrapesDragEnd = () => scheduleHeal()
+  editor.on('component:drag:end', onGrapesDragEnd)
+  editor.on('block:drag:stop', onGrapesDragEnd)
+
   // Escape always frees a stuck cursor
   const onKey = (ev) => {
     if (!alive || ev.key !== 'Escape') return
@@ -172,10 +198,18 @@ export function setupDragUnstick(editor) {
     if (healTimer) clearTimeout(healTimer)
     document.removeEventListener('pointerdown', onDown, true)
     document.removeEventListener('pointerup', onUp, true)
+    document.removeEventListener('pointercancel', onUp, true)
     document.removeEventListener('mouseup', onUp, true)
     document.removeEventListener('touchend', onUp, true)
+    document.removeEventListener('touchcancel', onUp, true)
     window.removeEventListener('blur', onUp, true)
     window.removeEventListener('keydown', onKey, true)
+    try {
+      editor.off('component:drag:end', onGrapesDragEnd)
+      editor.off('block:drag:stop', onGrapesDragEnd)
+    } catch (_) {
+      /* noop */
+    }
   }
 }
 

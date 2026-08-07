@@ -441,6 +441,7 @@ function ClickActionEditor({
   editor,
   update,
 }) {
+  const [chainOpenSignal, setChainOpenSignal] = useState(0)
   const attrs = selected.getAttributes() || {}
   const href = attrs.href || ''
   const type = getClickActionType(attrs)
@@ -468,6 +469,7 @@ function ClickActionEditor({
         ]),
         href: '#',
       })
+      setChainOpenSignal((n) => n + 1)
     } else if (next === 'flow') {
       selected.removeAttributes('data-actions')
       selected.addAttributes({ 'data-action': 'SUBSCRIBE', href: '#' })
@@ -506,7 +508,12 @@ function ClickActionEditor({
       </Field>
 
       {type === 'chain' && (
-        <PriorityChainTrigger selected={selected} editor={editor} update={update} />
+        <PriorityChainTrigger
+          selected={selected}
+          editor={editor}
+          update={update}
+          openSignal={chainOpenSignal}
+        />
       )}
 
       {type === 'flow' && (

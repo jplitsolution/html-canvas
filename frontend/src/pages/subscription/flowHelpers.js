@@ -1,3 +1,7 @@
+import {
+  isHeRedirectUrl,
+  pickHeFailRedirectUrl,
+} from '../../services/flow/resolvePhoneNumber'
 import { HE_SUPPRESSED_FUNNEL_PAGES, VALID_PACKS, VALID_PAGES } from './constants'
 
 function isApiHeProvider(provider) {
@@ -7,6 +11,28 @@ function isApiHeProvider(provider) {
 
 function isHeSuppressedFunnelPage(page) {
   return HE_SUPPRESSED_FUNNEL_PAGES.has(String(page || '').toUpperCase())
+}
+
+/**
+ * Silent exit (skip HOME) vs funnel (show HOME) for token/API HE.
+ *
+ * Contract:
+ * - Success URL set + MSISDN → success redirect (no HOME)
+ * - No MSISDN + fail/CG URL → fail redirect (no HOME)
+ * - Success/fail exit empty → HOME funnel after detect
+ */
+function isHeSilentExitMode({
+  phone,
+  successRedirectUrl,
+  failRedirectUrl,
+  cgRedirectUrl,
+} = {}) {
+  const hasPhone = Boolean(String(phone || '').trim())
+  if (hasPhone && isHeRedirectUrl(successRedirectUrl)) return true
+  if (!hasPhone && pickHeFailRedirectUrl({ failRedirectUrl, cgRedirectUrl })) {
+    return true
+  }
+  return false
 }
 
 function pageForChecksubStatus(currentStatus) {
@@ -54,6 +80,7 @@ function findActionTarget(event) {
 export {
   isApiHeProvider,
   isHeSuppressedFunnelPage,
+  isHeSilentExitMode,
   pageForChecksubStatus,
   normalizeDetectNextPage,
   isCampaignPageHref,

@@ -507,6 +507,16 @@ export default function TemplateEditor({
         promoteOverlayIfNeeded(component)
         return
       }
+      // Lock Canva absolute placements so flow-button heal cannot snap them back
+      const style = component.getStyle?.() || {}
+      const isAbs = String(style.position || '').toLowerCase() === 'absolute'
+      if (
+        isAbs &&
+        (isButtonLikeComponent(component) || isFlowLayoutButton(component)) &&
+        (style.top != null || style.left != null)
+      ) {
+        markAsAbsoluteOverlay(component)
+      }
       // Any absolute button/link over or near an image → mark overlay + z-index 40
       if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) {
         promoteOverlayIfNeeded(component)

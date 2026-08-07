@@ -9,12 +9,17 @@ import {
 } from '../../services/flow/resolvePhoneNumber'
 import {
   isApiHeProvider,
+  isHeSilentExitMode,
   isHeSuppressedFunnelPage,
   normalizeDetectNextPage,
 } from './flowHelpers'
 
 /**
  * HE detect-msisdn resolve + HOME CTA gate (warnIfHeUnresolved).
+ *
+ * Product contract (token/API HE):
+ * - Success/fail (or CG fail) URL set → silent exit, never flash HOME
+ * - Both exit URLs empty → show HOME after detect (funnel mode)
  */
 function useHeDetect({
   country,
@@ -172,9 +177,22 @@ function useHeDetect({
           isActive: Boolean(isActive),
         }
 
-        if (isApiHeProvider(heProvider)) {
+        // Silent exit only when success URL (phone) or fail/CG URL (no phone).
+        // Empty exit URLs → funnel mode: allow HOME after detect.
+        const silentExit =
+          isApiHeProvider(heProvider) &&
+          isHeSilentExitMode({
+            phone: resolved,
+            successRedirectUrl,
+            failRedirectUrl,
+            cgRedirectUrl,
+          })
+        if (silentExit) {
           heOnlyModeRef.current = true
           setHeFunnelSuppressed(true)
+        } else {
+          heOnlyModeRef.current = false
+          setHeFunnelSuppressed(false)
         }
 
         // No MSISDN + fail URL → leave immediately BEFORE setSearchParams.
@@ -188,12 +206,9 @@ function useHeDetect({
           if (runHeFailRedirect(baseFailUrl, heError)) {
             return
           }
-          // API HE with no fail URL — keep overlay; never infinite "Redirecting"
-          // without an actual navigation.
-          if (!isApiHeProvider(heProvider)) {
-            heOnlyModeRef.current = false
-            setHeFunnelSuppressed(false)
-          }
+          // No fail exit URL → drop overlay so boot can paint HOME.
+          heOnlyModeRef.current = false
+          setHeFunnelSuppressed(false)
         }
 
         if (heVisitId || heClickId || heRcid) {
@@ -256,6 +271,8 @@ function useHeDetect({
 
           // Success URL set → never show HOME; overlay until leave.
           if (isHeRedirectUrl(successRedirectUrl)) {
+            heOnlyModeRef.current = true
+            setHeFunnelSuppressed(true)
             heExitPendingRef.current = true
             setHeExitPending(true)
             const go = () => {
@@ -269,6 +286,8 @@ function useHeDetect({
               if (!dest) {
                 heExitPendingRef.current = false
                 setHeExitPending(false)
+                heOnlyModeRef.current = false
+                setHeFunnelSuppressed(false)
                 phoneResolvingRef.current = false
                 setPhoneResolving(false)
                 return
@@ -292,12 +311,9 @@ function useHeDetect({
             }
             return
           }
-          // API HE without outbound URL — keep overlay; never show HOME/OTP.
-          if (heOnlyModeRef.current) {
-            phoneResolvingRef.current = true
-            setPhoneResolving(true)
-            return
-          }
+          // Phone found, no success URL → funnel mode (HOME).
+          heOnlyModeRef.current = false
+          setHeFunnelSuppressed(false)
           if (!cancelled) {
             phoneResolvingRef.current = false
             setPhoneResolving(false)
@@ -314,6 +330,8 @@ function useHeDetect({
             setPhone(sessionPhone)
             persistPhone(sessionPhone)
             if (isHeRedirectUrl(successRedirectUrl)) {
+              heOnlyModeRef.current = true
+              setHeFunnelSuppressed(true)
               heExitPendingRef.current = true
               setHeExitPending(true)
               const dest = appendHeAttributionToUrl(successRedirectUrl, {
@@ -321,7 +339,7 @@ function useHeDetect({
                 rcid: rcidRef.current,
                 msisdn: sessionPhone,
                 campid: campidRef.current || campid,
-          trackingCampid: trackingCampidRef.current || trackingCampid,
+                trackingCampid: trackingCampidRef.current || trackingCampid,
               })
               if (dest) {
                 console.log('[HE] session MSISDN — success redirect (skip HOME)', dest)
@@ -330,10 +348,15 @@ function useHeDetect({
               }
               heExitPendingRef.current = false
               setHeExitPending(false)
+              heOnlyModeRef.current = false
+              setHeFunnelSuppressed(false)
             }
-            if (heOnlyModeRef.current) {
-              phoneResolvingRef.current = true
-              setPhoneResolving(true)
+            // Session phone, no success URL → funnel (HOME).
+            heOnlyModeRef.current = false
+            setHeFunnelSuppressed(false)
+            if (!cancelled) {
+              phoneResolvingRef.current = false
+              setPhoneResolving(false)
             }
             return
           }
@@ -341,19 +364,21 @@ function useHeDetect({
           /* ignore */
         }
 
-        console.log('[HE] no MSISDN and no fail URL — HE-only overlay (no HOME/OTP)', {
+        // No MSISDN and no fail URL → funnel mode: show HOME.
+        console.log('[HE] no MSISDN and no fail URL — show HOME (funnel mode)', {
           heError,
         })
-        if (heOnlyModeRef.current) {
-          phoneResolvingRef.current = true
-          setPhoneResolving(true)
-        } else if (!cancelled) {
+        heOnlyModeRef.current = false
+        setHeFunnelSuppressed(false)
+        if (!cancelled) {
           phoneResolvingRef.current = false
           setPhoneResolving(false)
         }
       })
       .catch(() => {
         heMetaRef.current = { ...heMetaRef.current, done: true }
+        heOnlyModeRef.current = false
+        setHeFunnelSuppressed(false)
       })
       .finally(() => {
         detectInFlightRef.current = false
@@ -372,7 +397,7 @@ function useHeDetect({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [country, operator, campid, trackingCampid, setSearchParams])
 
-  /** HOME CTA: follow detect decision first, then fail → warn+CG. */
+  /** HOME CTA: silent-exit URLs still redirect; empty exit URLs allow funnel. */
   const warnIfHeUnresolved = useCallback(() => {
     const meta = heMetaRef.current
     const isApiHe = isApiHeProvider(meta.heProvider)
@@ -413,17 +438,13 @@ function useHeDetect({
       }
     }
 
+    // Phone present (no success URL) → funnel CTA may proceed.
     if (phoneRef.current) return false
 
     const baseFailUrl = pickHeFailRedirectUrl({
       failRedirectUrl: meta.failRedirectUrl,
       cgRedirectUrl: meta.cgRedirectUrl,
     })
-    const message =
-      meta.heError ||
-      'Could not detect your mobile number. Please use operator mobile data.'
-
-    // Rebuild at CTA time so we send latest click_id (+ msisdn if any) for vendor postbacks.
     const failUrl = baseFailUrl
       ? appendHeAttributionToUrl(baseFailUrl, {
           clickId: clickIdRef.current,
@@ -434,14 +455,17 @@ function useHeDetect({
         })
       : ''
 
+    // No phone + no fail exit → funnel mode (HOME Subscribe / OTP).
+    if (!failUrl) return false
+
+    const message =
+      meta.heError ||
+      'Could not detect your mobile number. Please use operator mobile data.'
     setError(message)
     console.warn('[HE] CTA blocked — no MSISDN', { message, failUrl })
-
-    if (failUrl) {
-      window.setTimeout(() => {
-        window.location.assign(failUrl)
-      }, 2000)
-    }
+    window.setTimeout(() => {
+      window.location.assign(failUrl)
+    }, 2000)
     return true
   }, [campid, trackingCampid, setSearchParams, setError, heMetaRef, phoneResolvingRef, phoneRef, clickIdRef, rcidRef, campidRef, trackingCampidRef, loadPageRef])
 
