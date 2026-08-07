@@ -82,15 +82,25 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
   overflow: visible !important;
 }
 
-/* Hide default GrapesJS panels & badges */
+/* Hide default GrapesJS panels & badges — keep toolbar so Move/Clone/Delete stay usable */
 .tc-builder .gjs-pn-panels,
 .tc-builder .gjs-pn-commands,
 .tc-builder .gjs-pn-options,
-.tc-builder .gjs-toolbar,
 .tc-builder .gjs-badge,
 .tc-builder .gjs-com-badge,
 .tc-builder .gjs-off-prv {
   display: none !important;
+}
+
+/* Floating move/clone/delete on selection — needed when grab feels unclear */
+.tc-builder .gjs-toolbar {
+  display: flex !important;
+  opacity: 1 !important;
+  background: #111827;
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+  z-index: 50;
 }
 
 /* Keep selection & resize handles visible */

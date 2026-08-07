@@ -296,9 +296,27 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     /* noop */
   }
 
-  editor.on('component:add', () => syncCanvasFrameHeight(editor))
-  editor.on('component:remove', () => syncCanvasFrameHeight(editor))
-  editor.on('component:update', () => syncCanvasFrameHeight(editor))
+  const isLiveDrag = () => {
+    try {
+      if (typeof document !== 'undefined' && document.body.classList.contains('tc-is-dragging')) {
+        return true
+      }
+      if (editor.Commands?.isActive?.('core:component-drag')) return true
+      if (editor.Commands?.isActive?.('core:component-resize')) return true
+    } catch (_) {
+      /* noop */
+    }
+    return false
+  }
+
+  const syncHeightIfIdle = () => {
+    if (isLiveDrag()) return
+    syncCanvasFrameHeight(editor)
+  }
+
+  editor.on('component:add', syncHeightIfIdle)
+  editor.on('component:remove', syncHeightIfIdle)
+  editor.on('component:update', syncHeightIfIdle)
 
   editor.on('device:select', (device) => {
     if (!device) return
@@ -412,9 +430,9 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   })
   editor.on('component:styleUpdate', (component) => {
     if (!component) return
+    // Never mutate layout mid-drag/resize — fights Grapes absolute sorter
+    if (isLiveDrag()) return
     if (isFlowLayoutButton(component) && !wasIntentionallyAbsolute(component)) {
-      // Only heal flow layout when user isn't in an active absolute drag
-      if (editor.Commands?.isActive?.('core:component-drag')) return
       protectFlowButton(component)
       return
     }

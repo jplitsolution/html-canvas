@@ -178,7 +178,9 @@ function hrefIsNavigationTarget(href) {
 /**
  * Repair hotspots after load / bad saves / drag-end:
  * - Ensure data-action so preview clicks fire the flow (only when no URL/page target)
- * - Drop HTML draggable attr (Grapes model.draggable is enough; native drag fights absolute mode)
+ * - Keep HTML5 draggable=true — Grapes ComponentView listens to dragstart → tlb-move
+ *   (absolute Canva drag). Stripping it made hotspots un-grabbable while the toolbar
+ *   move handle is also hidden.
  * - Convert px geometry → % so preview stays aligned
  * - Strip cursor:move leftovers from absolute drag
  */
@@ -187,10 +189,6 @@ export function healEditorHotspot(component, editor) {
 
   const attrs = { ...(component.getAttributes?.() || {}) }
   let attrsChanged = false
-  if ('draggable' in attrs) {
-    delete attrs.draggable
-    attrsChanged = true
-  }
   if (attrs['data-tc-absolute']) {
     delete attrs['data-tc-absolute']
     attrsChanged = true
@@ -242,9 +240,9 @@ export function healEditorHotspot(component, editor) {
   }
 
   const el = component.getEl?.()
-  // Never leave HTML5 draggable=true — it steals Grapes absolute drag
-  if (el?.hasAttribute?.('draggable')) {
-    el.removeAttribute('draggable')
+  // Grapes initiates absolute drag via HTML5 dragstart → tlb-move. Must stay true.
+  if (el) {
+    el.setAttribute('draggable', 'true')
   }
 
   const parent = component.parent?.()
@@ -634,7 +632,10 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
   [data-tc-type="hotspot"] {
     z-index: ${Z_HOTSPOT};
     pointer-events: auto;
-    cursor: pointer;
+    cursor: grab;
+  }
+  [data-tc-type="hotspot"]:active {
+    cursor: grabbing;
   }
 
   /* Buttons on images keep content size — never stretch (exclude hotspots) */

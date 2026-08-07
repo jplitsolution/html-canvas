@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Modal from '../../components/common/Modal'
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import { normalizeApiRules } from '../../services/flow/priorityApiMatch'
@@ -113,6 +113,9 @@ export function PriorityChainModal({
   editor,
   update,
 }) {
+  const dragFromRef = useRef(null)
+  const [dragOverIdx, setDragOverIdx] = useState(null)
+
   if (!selected) return null
 
   const attrs = selected.getAttributes() || {}
@@ -203,6 +206,15 @@ export function PriorityChainModal({
     saveActions(next)
   }
 
+  const reorderStep = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex || fromIndex < 0 || toIndex < 0) return
+    if (fromIndex >= actions.length || toIndex >= actions.length) return
+    const next = [...actions]
+    const [moved] = next.splice(fromIndex, 1)
+    next.splice(toIndex, 0, moved)
+    saveActions(next)
+  }
+
   const sectionOptions = (() => {
     const sections = []
     const wrapper = editor?.getWrapper?.()
@@ -232,8 +244,9 @@ export function PriorityChainModal({
     >
       <div className="space-y-4">
         <p className="text-sm text-fg-muted leading-relaxed">
-          Steps run top to bottom for this button. For a status check, add rules like:
-          if status = active → Thank you page. First match wins; later steps are skipped.
+          Steps run top to bottom for this button. Drag the ⋮⋮ handle to reorder, or use ↑↓.
+          For a status check, add rules like: if status = active → Thank you page.
+          First match wins; later steps are skipped.
         </p>
 
         <div className="space-y-3">
@@ -244,10 +257,51 @@ export function PriorityChainModal({
             return (
               <div
                 key={idx}
-                className="rounded-xl border border-border bg-bg-muted/30 p-4 space-y-3"
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragOverIdx !== idx) setDragOverIdx(idx)
+                }}
+                onDragLeave={() => {
+                  if (dragOverIdx === idx) setDragOverIdx(null)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  const from =
+                    dragFromRef.current ??
+                    Number.parseInt(e.dataTransfer.getData('text/plain'), 10)
+                  setDragOverIdx(null)
+                  dragFromRef.current = null
+                  if (Number.isFinite(from)) reorderStep(from, idx)
+                }}
+                className={`rounded-xl border bg-bg-muted/30 p-4 space-y-3 transition-colors ${
+                  dragOverIdx === idx
+                    ? 'border-indigo-400 ring-2 ring-indigo-200'
+                    : 'border-border'
+                }`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-bold text-indigo-600">Step {idx + 1}</span>
+                  <span className="text-sm font-bold text-indigo-600 flex items-center gap-2">
+                    <span
+                      draggable
+                      title="Drag to reorder"
+                      onDragStart={(e) => {
+                        dragFromRef.current = idx
+                        setDragOverIdx(idx)
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', String(idx))
+                      }}
+                      onDragEnd={() => {
+                        dragFromRef.current = null
+                        setDragOverIdx(null)
+                      }}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-md border border-border bg-bg text-fg-muted cursor-grab active:cursor-grabbing select-none text-[10px] tracking-tighter"
+                      aria-label={`Drag step ${idx + 1} to reorder`}
+                    >
+                      ⋮⋮
+                    </span>
+                    Step {idx + 1}
+                  </span>
                   <div className="flex items-center gap-1">
                     {idx > 0 && (
                       <button
@@ -546,8 +600,14 @@ export function PriorityChainTrigger({
   selected,
   editor,
   update,
+  openSignal = 0,
 }) {
   const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (openSignal > 0) setOpen(true)
+  }, [openSignal])
+
   const attrs = selected?.getAttributes?.() || {}
   let count = 0
   let ruleCount = 0
@@ -568,12 +628,13 @@ export function PriorityChainTrigger({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="w-full py-2.5 px-3 rounded-xl border border-indigo-300 bg-indigo-50 text-indigo-800 text-xs font-semibold hover:bg-indigo-100 transition-colors text-left"
+        className="w-full py-2.5 px-3 rounded-xl border border-indigo-400 bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors text-left shadow-sm"
       >
-        <span className="block">Edit checks &amp; routing…</span>
-        <span className="block text-[10px] font-medium text-indigo-600/80 mt-0.5">
+        <span className="block">Edit Priority Chain…</span>
+        <span className="block text-[10px] font-medium text-indigo-100 mt-0.5">
           {count} step{count === 1 ? '' : 's'}
           {ruleCount > 0 ? ` · ${ruleCount} status rule${ruleCount === 1 ? '' : 's'}` : ''}
+          {' · '}drag to reorder
         </span>
       </button>
       <PriorityChainModal

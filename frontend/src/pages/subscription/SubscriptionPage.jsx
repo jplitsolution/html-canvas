@@ -65,7 +65,7 @@ function SubscriptionPage() {
   const [phoneResolving, setPhoneResolving] = useState(true)
   /** When successRedirectUrl is set — keep overlay, never flash HOME. */
   const [heExitPending, setHeExitPending] = useState(false)
-  /** API HE — block internal HOME/OTP; overlay until external redirect. */
+  /** API HE silent-exit only — block HOME/OTP while redirecting out. */
   const [heFunnelSuppressed, setHeFunnelSuppressed] = useState(false)
   const [booting, setBooting] = useState(true)
   const [transitioning, setTransitioning] = useState(false)

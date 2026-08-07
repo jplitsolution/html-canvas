@@ -418,8 +418,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-fg">After HE resolve</p>
             <p className="text-[11px] text-fg-muted leading-relaxed">
-              Both URLs set → HOME skip: success URL if number found, fail/CG if not.
-              Empty success URL = stay on HOME only when MSISDN is found.
+              Success/fail filled → HOME skip (silent redirect). Both empty → show
+              HOME after detect; MSISDN still used on Subscribe / OTP.
             </p>
             <Field label="Success redirect" hint="optional — empty = stay on HOME">
               <Input
@@ -487,14 +487,11 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-fg">After HE resolve</p>
             <p className="text-[11px] text-fg-muted leading-relaxed">
-              With both URLs set, <strong>HOME is never shown</strong> — only a
-              loading screen, then redirect:
+              <strong>Success/fail filled</strong> → HOME never shown; loading then
+              redirect (MSISDN → success, missing → fail/CG).
               <br />
-              <strong>MSISDN found</strong> → Success redirect (URL as configured; no click_id/campid).
-              <br />
-              <strong>MSISDN missing</strong> → Fail redirect / campaign CG (URL as configured; no click_id/campid).
-              <br />
-              Leave success empty only if you want the HOME funnel when number is found.
+              <strong>Both empty</strong> → show HOME after detect (funnel). Number
+              still used later on Subscribe / OTP / Priority.
             </p>
             <Field label="Success redirect" hint="optional — empty = stay on HOME">
               <Input
