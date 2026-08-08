@@ -54,6 +54,21 @@ function useFlowPages({
       console.log('[HE] suppressing funnel page render:', data.pageType)
       return
     }
+
+    // Immediate portal redirect: leave before painting thank-you (or any page with resolved URL).
+    const mode = String(data.successRedirectMode || 'thankyou').toLowerCase()
+    const dest = String(data.successRedirect || '').trim()
+    if (
+      mode === 'immediate' &&
+      dest &&
+      /^https?:\/\//i.test(dest) &&
+      String(data.pageType || '').toUpperCase() === 'THANKYOU'
+    ) {
+      if (data.visitId) visitIdRef.current = data.visitId
+      window.location.assign(dest)
+      return
+    }
+
     if (data.entryPage) entryPageRef.current = data.entryPage
     pageCacheRef.current.set(data.pageType, data)
     if (data.visitId) visitIdRef.current = data.visitId
@@ -139,9 +154,13 @@ function useFlowPages({
     }
   }, [pageData?.externalRedirect])
 
-  // THANKYOU → optional success/content portal (show page first, then redirect)
+  // THANKYOU → optional success/content portal
+  // thankyou mode: show page ~2s then redirect; immediate handled in cachePage
   useEffect(() => {
     if (String(pageData?.pageType || '').toUpperCase() !== 'THANKYOU') return undefined
+    if (String(pageData?.successRedirectMode || 'thankyou').toLowerCase() === 'immediate') {
+      return undefined
+    }
     const dest = String(
       pageData?.successRedirect || pageData?.successRedirectUrl || '',
     ).trim()
@@ -150,7 +169,12 @@ function useFlowPages({
       window.location.assign(dest)
     }, 2000)
     return () => window.clearTimeout(timer)
-  }, [pageData?.pageType, pageData?.successRedirect, pageData?.successRedirectUrl])
+  }, [
+    pageData?.pageType,
+    pageData?.successRedirect,
+    pageData?.successRedirectUrl,
+    pageData?.successRedirectMode,
+  ])
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {

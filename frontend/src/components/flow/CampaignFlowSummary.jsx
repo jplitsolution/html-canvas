@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import { Workflow, ArrowRight } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Workflow, ArrowRight, GitBranch } from 'lucide-react'
 import Button from '../ui/Button'
 import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import {
@@ -7,11 +8,13 @@ import {
   normalizeModeId,
   buildDefaultFlow,
   buildFlowPathSummary,
+  resolveAfterOtpTarget,
 } from './verificationModes'
+import { campaignFlowPath, resolveMarketCodes } from '../../utils/routes'
 
 /**
  * Mode picker + read-only signup path on Campaign Detail.
- * Replaces the primary Flow Builder drag-drop UX (Option A cleanup).
+ * Advanced edge remaps live in Flow Builder (/flow).
  */
 function CampaignFlowSummary({ campaign, onSaveMode }) {
   const currentMode = normalizeModeId(campaign?.verificationMode)
@@ -19,24 +22,39 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     String(campaign?.flowConfig?.entryPage || 'HOME').toUpperCase() === 'OTP'
       ? 'OTP'
       : 'HOME'
+  const savedAfterOtp = resolveAfterOtpTarget(campaign?.flowConfig)
   const [draftMode, setDraftMode] = useState(currentMode)
   const [draftEntry, setDraftEntry] = useState(savedEntry)
+  const [draftAfterOtp, setDraftAfterOtp] = useState(savedAfterOtp)
   const [saving, setSaving] = useState(false)
 
-  // Keep draft in sync when campaign reloads
   useEffect(() => {
     setDraftMode(currentMode)
     setDraftEntry(savedEntry)
-  }, [campaign?.id, currentMode, savedEntry])
+    setDraftAfterOtp(savedAfterOtp)
+  }, [campaign?.id, currentMode, savedEntry, savedAfterOtp])
 
   const previewConfig = useMemo(() => {
-    if (draftMode === currentMode && draftEntry === savedEntry) {
+    if (
+      draftMode === currentMode &&
+      draftEntry === savedEntry &&
+      draftAfterOtp === savedAfterOtp
+    ) {
       return campaign?.flowConfig || null
     }
     return buildDefaultFlow(draftMode, {
       entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
+      afterOtp: draftMode === 'OTP_ONLY' ? draftAfterOtp : 'CONFIRM',
     })
-  }, [draftMode, currentMode, draftEntry, savedEntry, campaign?.flowConfig])
+  }, [
+    draftMode,
+    currentMode,
+    draftEntry,
+    savedEntry,
+    draftAfterOtp,
+    savedAfterOtp,
+    campaign?.flowConfig,
+  ])
 
   const summary = useMemo(
     () =>
@@ -48,12 +66,14 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
 
   const dirty =
     draftMode !== currentMode ||
-    (draftMode === 'OTP_ONLY' && draftEntry !== savedEntry)
+    (draftMode === 'OTP_ONLY' &&
+      (draftEntry !== savedEntry || draftAfterOtp !== savedAfterOtp))
 
   const handleModeChange = (nextMode) => {
     setDraftMode(nextMode)
     if (nextMode !== 'OTP_ONLY') {
       setDraftEntry('HOME')
+      setDraftAfterOtp('CONFIRM')
     }
   }
 
@@ -63,6 +83,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     try {
       const flowConfig = buildDefaultFlow(draftMode, {
         entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
+        afterOtp: draftMode === 'OTP_ONLY' ? draftAfterOtp : 'CONFIRM',
       })
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
@@ -71,6 +92,8 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
   }
 
   const labelFor = (pageType) => PAGE_TYPE_LABELS[pageType] || pageType
+  const { countryCode, operatorCode } = resolveMarketCodes({}, campaign)
+  const advancedPath = campaignFlowPath(countryCode, operatorCode, campaign?.id)
 
   return (
     <div className="surface-card overflow-hidden">
@@ -80,11 +103,24 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
             <Workflow className="w-4 h-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold text-fg">Subscription flow</h2>
-            <p className="text-xs text-fg-muted mt-0.5">
-              Pick how the Subscribe CTA moves between pages. Canvas button “When clicked”
-              (page / URL / Priority) can override this for individual buttons.
-            </p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <h2 className="text-sm font-semibold text-fg">Subscription flow</h2>
+                <p className="text-xs text-fg-muted mt-0.5">
+                  Pick how the Subscribe CTA moves between pages. Canvas button “When clicked”
+                  (page / URL / Priority) can override this for individual buttons.
+                </p>
+              </div>
+              {campaign?.id && (
+                <Link
+                  to={advancedPath}
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline shrink-0 pt-0.5"
+                >
+                  <GitBranch className="w-3.5 h-3.5" />
+                  Edit advanced path
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -115,46 +151,85 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
         </div>
 
         {draftMode === 'OTP_ONLY' && (
-          <div>
-            <p className="text-xs font-medium text-fg mb-2">Landing page</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setDraftEntry('HOME')}
-                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                  draftEntry === 'HOME'
-                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
-                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
-                }`}
-              >
-                <p className="text-sm font-semibold text-fg">HOME first</p>
-                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                  Show intro / Subscribe CTA, then OTP.
-                </p>
-              </button>
-              <button
-                type="button"
-                onClick={() => setDraftEntry('OTP')}
-                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                  draftEntry === 'OTP'
-                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
-                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
-                }`}
-              >
-                <p className="text-sm font-semibold text-fg">OTP first</p>
-                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                  Skip HOME — open PIN page on landing.
-                </p>
-              </button>
+          <>
+            <div>
+              <p className="text-xs font-medium text-fg mb-2">Landing page</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftEntry('HOME')}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    draftEntry === 'HOME'
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">HOME first</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                    Show intro / Subscribe CTA, then OTP.
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftEntry('OTP')}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    draftEntry === 'OTP'
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">OTP first</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                    Skip HOME — open PIN page on landing.
+                  </p>
+                </button>
+              </div>
             </div>
-          </div>
+
+            <div>
+              <p className="text-xs font-medium text-fg mb-2">After OTP verified</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDraftAfterOtp('CONFIRM')}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    draftAfterOtp === 'CONFIRM'
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">Confirm page</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                    Pack / subscribe CTA after PIN (classic funnel).
+                  </p>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftAfterOtp('THANKYOU')}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    draftAfterOtp === 'THANKYOU'
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">Skip Confirm</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                    PIN verify = subscribe → Thank you / portal (no Confirm).
+                  </p>
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         {dirty && (
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-warning">
               Saving resets the signup path to the default for this mode
-              {draftMode === 'OTP_ONLY' ? ` (${draftEntry} landing)` : ''}.
+              {draftMode === 'OTP_ONLY'
+                ? ` (${draftEntry} landing → ${draftAfterOtp === 'THANKYOU' ? 'Thank you' : 'Confirm'})`
+                : ''}
+              .
             </p>
             <Button
               type="button"
@@ -188,7 +263,10 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
               {summary.edges
                 .filter((e) => ['HOME', 'OTP'].includes(e.source))
                 .map((e) => (
-                  <li key={`${e.source}-${e.condition}-${e.target}`} className="text-[11px] text-fg-muted">
+                  <li
+                    key={`${e.source}-${e.condition}-${e.target}`}
+                    className="text-[11px] text-fg-muted"
+                  >
                     <span className="font-mono text-fg">{labelFor(e.source)}</span>
                     <span className="mx-1.5 text-fg-subtle">—{e.conditionLabel}→</span>
                     <span className="font-mono text-fg">{labelFor(e.target)}</span>

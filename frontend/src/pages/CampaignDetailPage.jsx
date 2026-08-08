@@ -104,7 +104,10 @@ function CampaignDetailPage() {
   const [cgUrlDraft, setCgUrlDraft] = useState('')
   const [savingCg, setSavingCg] = useState(false)
   const [successUrlDraft, setSuccessUrlDraft] = useState('')
+  const [successModeDraft, setSuccessModeDraft] = useState('thankyou')
   const [savingSuccessUrl, setSavingSuccessUrl] = useState(false)
+  const [postbackAtDraft, setPostbackAtDraft] = useState('confirm')
+  const [savingPostbackAt, setSavingPostbackAt] = useState(false)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -119,7 +122,15 @@ function CampaignDetailPage() {
 
   useEffect(() => {
     setSuccessUrlDraft(campaign?.successRedirectUrl || '')
-  }, [campaign?.id, campaign?.successRedirectUrl])
+    setSuccessModeDraft(
+      campaign?.successRedirectMode === 'immediate' ? 'immediate' : 'thankyou',
+    )
+  }, [campaign?.id, campaign?.successRedirectUrl, campaign?.successRedirectMode])
+
+  useEffect(() => {
+    const v = campaign?.postbackRegisterAt
+    setPostbackAtDraft(v === 'otp' || v === 'both' ? v : 'confirm')
+  }, [campaign?.id, campaign?.postbackRegisterAt])
 
   useEffect(() => {
     setNameDraft(campaign?.name || '')
@@ -161,12 +172,30 @@ function CampaignDetailPage() {
     try {
       await updateCampaign(campaign.id, {
         successRedirectUrl: successUrlDraft.trim() || null,
+        successRedirectMode: successModeDraft === 'immediate' ? 'immediate' : 'thankyou',
       })
-      useStore.getState().addToast('Success redirect URL saved', 'success')
+      useStore.getState().addToast('Success redirect saved', 'success')
     } catch {
       // toast in slice
     } finally {
       setSavingSuccessUrl(false)
+    }
+  }
+
+  const handleSavePostbackAt = async () => {
+    if (!campaign) return
+    setSavingPostbackAt(true)
+    try {
+      const mode =
+        postbackAtDraft === 'otp' || postbackAtDraft === 'both'
+          ? postbackAtDraft
+          : 'confirm'
+      await updateCampaign(campaign.id, { postbackRegisterAt: mode })
+      useStore.getState().addToast('Callback timing saved', 'success')
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingPostbackAt(false)
     }
   }
 
@@ -332,31 +361,54 @@ function CampaignDetailPage() {
     return order
   }, [campaign])
 
-  const pageSections = useMemo(
-    () => [
+  const flowRequiredPageTypes = useMemo(() => {
+    const nodes = campaign?.flowConfig?.nodes
+    if (nodes?.length) {
+      return [...new Set(nodes.map((n) => n.pageType).filter(Boolean))]
+    }
+    return REQUIRED_PAGE_TYPES
+  }, [campaign?.flowConfig])
+
+  const pageSections = useMemo(() => {
+    const coreTypes = orderedPageTypes.filter((type) =>
+      flowRequiredPageTypes.includes(type),
+    )
+    const statusTypes = orderedPageTypes.filter(
+      (type) =>
+        OPTIONAL_PAGE_TYPES.includes(type) ||
+        (!flowRequiredPageTypes.includes(type) &&
+          !REQUIRED_PAGE_TYPES.includes(type)),
+    )
+    // Pages that are traditionally "core" but not in this flow still stay editable under status
+    const extraCore = orderedPageTypes.filter(
+      (type) =>
+        REQUIRED_PAGE_TYPES.includes(type) &&
+        !flowRequiredPageTypes.includes(type),
+    )
+    return [
       {
         id: 'core',
         title: 'Core funnel',
-        subtitle: 'Required before activation: Home, OTP, Confirm, Thank you',
-        types: orderedPageTypes.filter((type) => REQUIRED_PAGE_TYPES.includes(type)),
+        subtitle: `Required by this flow: ${flowRequiredPageTypes.map((t) => PAGE_TYPE_LABELS[t] || t).join(', ')}`,
+        types: coreTypes,
       },
       {
         id: 'status',
         title: 'Status & outcome pages',
-        subtitle: 'Shown for parking, blocked, pending, or errors — customize per campaign',
-        types: orderedPageTypes.filter((type) => OPTIONAL_PAGE_TYPES.includes(type)),
+        subtitle:
+          'Shown for parking, blocked, pending, or errors — customize per campaign',
+        types: [...new Set([...statusTypes, ...extraCore])],
       },
-    ],
-    [orderedPageTypes],
-  )
+    ]
+  }, [orderedPageTypes, flowRequiredPageTypes])
 
   const pagesReadyCount = useMemo(() => {
     if (!campaign) return 0
-    return REQUIRED_PAGE_TYPES.filter((type) => {
+    return flowRequiredPageTypes.filter((type) => {
       const page = campaign.pages?.find((p) => p.pageType === type)
       return page?.hasContent
     }).length
-  }, [campaign])
+  }, [campaign, flowRequiredPageTypes])
 
   const handleToggleActive = async () => {
     if (!campaign) return
@@ -424,7 +476,7 @@ function CampaignDetailPage() {
   const canActivate = campaign.requiredComplete
   const activateBlockedReason =
     !campaign.active && !canActivate
-      ? 'Complete HOME, CONFIRM, and THANKYOU pages first'
+      ? 'Complete the pages required by this flow first'
       : null
   const trackings = vendorTrackings
 
@@ -550,7 +602,7 @@ function CampaignDetailPage() {
                     Required pages
                   </p>
                   <p className="text-lg font-semibold text-fg mt-1 tabular-nums">
-                    {pagesReadyCount}/{REQUIRED_PAGE_TYPES.length}
+                    {pagesReadyCount}/{flowRequiredPageTypes.length}
                   </p>
                 </div>
                 <div className="rounded-lg bg-bg-muted/60 border border-border px-3.5 py-3">
@@ -579,7 +631,7 @@ function CampaignDetailPage() {
                   <div className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-muted/40 px-3.5 py-2.5 text-xs text-fg-muted">
                     <AlertCircle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
                     <span>
-                      Finish editing HOME, CONFIRM, and THANKYOU before you can activate this
+                      Finish editing pages required by this flow before you can activate this
                       campaign.
                     </span>
                   </div>
@@ -628,28 +680,142 @@ function CampaignDetailPage() {
               <div className="px-5 py-4 border-b border-border">
                 <h2 className="text-sm font-semibold text-fg">Success / content URL</h2>
                 <p className="text-xs text-fg-muted mt-1">
-                  After the thank-you page (new subscribe or already subscribed), users are
-                  redirected here. Leave empty to stay on thank-you.{' '}
+                  Portal / content URL after a successful subscribe (or already subscribed).
+                  Leave empty to stay on thank-you.{' '}
+                  <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
                   <code className="font-mono">{'{{click_id}}'}</code> /{' '}
                   <code className="font-mono">{'{rcid}'}</code> supported like CG redirect.
                 </p>
               </div>
-              <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">
-                <input
-                  className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
-                  value={successUrlDraft}
-                  onChange={(e) => setSuccessUrlDraft(e.target.value)}
-                  placeholder="https://content.example/portal"
-                />
-                <Button
-                  type="button"
-                  variant="primary"
-                  size="sm"
-                  disabled={savingSuccessUrl}
-                  onClick={handleSaveSuccessUrl}
-                >
-                  {savingSuccessUrl ? 'Saving...' : 'Save'}
-                </Button>
+              <div className="px-5 py-4 space-y-3">
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono"
+                    value={successUrlDraft}
+                    onChange={(e) => setSuccessUrlDraft(e.target.value)}
+                    placeholder="https://content.example/portal?msisdn={{msisdn}}"
+                  />
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={savingSuccessUrl}
+                    onClick={handleSaveSuccessUrl}
+                  >
+                    {savingSuccessUrl ? 'Saving...' : 'Save'}
+                  </Button>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-fg mb-2">After success</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSuccessModeDraft('thankyou')}
+                      className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                        successModeDraft === 'thankyou'
+                          ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                          : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-fg">Show thank-you</p>
+                      <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                        Show thank-you ~2s, then redirect to the portal URL.
+                      </p>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSuccessModeDraft('immediate')}
+                      className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                        successModeDraft === 'immediate'
+                          ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                          : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-fg">Redirect immediately</p>
+                      <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                        Skip thank-you paint — go straight to the portal URL.
+                      </p>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-fg-subtle mt-2">
+                    Click Save above to persist the URL and this mode together.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="surface-card overflow-hidden">
+              <div className="px-5 py-4 border-b border-border">
+                <h2 className="text-sm font-semibold text-fg">Vendor CPA callback</h2>
+                <p className="text-xs text-fg-muted mt-1">
+                  When to queue a pending postback (fired later when the operator hits{' '}
+                  <code className="font-mono">/api/flow/callback</code>). HE success+new and
+                  null-flow CG still register on their own paths.
+                </p>
+              </div>
+              <div className="px-5 py-4 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPostbackAtDraft('confirm')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      postbackAtDraft === 'confirm'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">On Confirm</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      Classic — queue when user clicks Confirm / subscribe.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPostbackAtDraft('otp')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      postbackAtDraft === 'otp'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">On OTP verify</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      Pin = subscribe / Skip Confirm — queue right after OTP continue.
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPostbackAtDraft('both')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      postbackAtDraft === 'both'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">Both</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      OTP continue and Confirm click (upsert same MSISDN row).
+                    </p>
+                  </button>
+                </div>
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={
+                      savingPostbackAt ||
+                      postbackAtDraft ===
+                        (campaign?.postbackRegisterAt === 'otp' ||
+                        campaign?.postbackRegisterAt === 'both'
+                          ? campaign.postbackRegisterAt
+                          : 'confirm')
+                    }
+                    onClick={handleSavePostbackAt}
+                  >
+                    {savingPostbackAt ? 'Saving...' : 'Save callback timing'}
+                  </Button>
+                </div>
               </div>
             </div>
 

@@ -62,6 +62,23 @@ export const CampaignSchema = new EntitySchema({
       length: 1024,
       nullable: true,
     },
+    /** thankyou = show THANKYOU then redirect; immediate = skip THANKYOU paint */
+    successRedirectMode: {
+      name: 'success_redirect_mode',
+      type: 'varchar',
+      length: 16,
+      default: 'thankyou',
+    },
+    /**
+     * When to queue conversion_postbacks pending:
+     * confirm | otp | both
+     */
+    postbackRegisterAt: {
+      name: 'postback_register_at',
+      type: 'varchar',
+      length: 16,
+      default: 'confirm',
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

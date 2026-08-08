@@ -15,6 +15,7 @@ export function createFlowPageResponse(deps) {
     buildSubscriptionUrl,
     loadVisitAttribution,
     resolveSuccessRedirect,
+    normalizeSuccessRedirectMode,
   } = deps;
 
   const getActions = (pageType) => {
@@ -55,8 +56,12 @@ export function createFlowPageResponse(deps) {
     // After thank-you: redirect to campaign success/content URL when configured.
     const successRedirect =
       pageType === CampaignPageType.THANKYOU
-        ? await resolveSuccessRedirect(campaign, visitId)
+        ? await resolveSuccessRedirect(campaign, visitId, {
+            phone: variables?.phone || variables?.msisdn,
+            msisdn: variables?.phone || variables?.msisdn,
+          })
         : null;
+    const successRedirectMode = normalizeSuccessRedirectMode(campaign);
     return {
       campaignId: campaign.id,
       visitId,
@@ -78,6 +83,7 @@ export function createFlowPageResponse(deps) {
       cgRedirectUrl: campaign.cgRedirectUrl || null,
       successRedirectUrl: campaign.successRedirectUrl || null,
       successRedirect,
+      successRedirectMode,
       subscriptionStatus: options.subscriptionStatus || null,
       clickId: attr.clickId || null,
       rcid: attr.rcid || null,

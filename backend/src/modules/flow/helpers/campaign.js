@@ -61,6 +61,15 @@ export function createFlowCampaignFns(deps) {
     const raw = campaign?.successRedirectUrl?.trim();
     if (!raw) return null;
     const attr = await loadVisitAttribution(visitId, input);
+    let phone = String(input.phone || input.msisdn || '').replace(/\D/g, '');
+    if (!phone && visitId) {
+      try {
+        const visit = await analyticsService.getVisit(visitId);
+        phone = String(visit?.phone || '').replace(/\D/g, '');
+      } catch {
+        /* ignore */
+      }
+    }
     const resolved = buildCgRedirectUrl(raw, {
       clickId: attr.clickId,
       rcid: attr.rcid,
@@ -68,8 +77,34 @@ export function createFlowCampaignFns(deps) {
       affId: attr.affId,
       campid: attr.campid || '',
       trackingCampid: attr.trackingCampid || campaign.trackingId || '',
+      msisdn: phone,
+      phone,
     });
     return resolved && /^https?:\/\//i.test(resolved) ? resolved : null;
+  };
+
+  const normalizeSuccessRedirectMode = (campaign) => {
+    const mode = String(campaign?.successRedirectMode || 'thankyou')
+      .trim()
+      .toLowerCase();
+    return mode === 'immediate' ? 'immediate' : 'thankyou';
+  };
+
+  /** confirm | otp | both — when funnel should queue vendor CPA pending. */
+  const normalizePostbackRegisterAt = (campaign) => {
+    const mode = String(campaign?.postbackRegisterAt || 'confirm')
+      .trim()
+      .toLowerCase();
+    if (mode === 'otp' || mode === 'both') return mode;
+    return 'confirm';
+  };
+
+  const shouldRegisterPostbackAt = (campaign, trigger) => {
+    const mode = normalizePostbackRegisterAt(campaign);
+    const t = String(trigger || '').toLowerCase();
+    if (t === 'otp') return mode === 'otp' || mode === 'both';
+    if (t === 'confirm') return mode === 'confirm' || mode === 'both';
+    return false;
   };
 
   const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
@@ -208,6 +243,9 @@ export function createFlowCampaignFns(deps) {
   return {
     loadVisitAttribution,
     resolveSuccessRedirect,
+    normalizeSuccessRedirectMode,
+    normalizePostbackRegisterAt,
+    shouldRegisterPostbackAt,
     maybeNullFlowCgRedirect,
     resolveCampaign,
     assertTrackingAssignmentAvailable,

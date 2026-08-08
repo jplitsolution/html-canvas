@@ -67,14 +67,13 @@ function toRfEdges(flowConfig) {
 }
 
 /**
- * LEGACY admin UI for drag-drop flowConfig editing.
+ * Advanced admin UI for drag-drop flowConfig editing.
  *
- * Option A cleanup: primary nav no longer links here; `/…/flow` redirects to
- * Campaign Detail (mode picker + read-only path). File kept for rollback /
- * power-user re-enable — do not delete without a separate decision.
+ * Primary UX: Campaign Detail mode picker. This page is linked as
+ * “Edit advanced path” for edge remaps (e.g. OTP → THANKYOU).
  *
  * Runtime still uses verificationMode + flowConfig via flow-engine on
- * SUBSCRIBE/CONFIRM transitions. Mode defaults live in verificationModes.js.
+ * SUBSCRIBE/CONFIRM/OTP transitions. Mode defaults live in verificationModes.js.
  */
 function FlowBuilderPage() {
   const { id, countryCode: routeCountry, operatorCode: routeOperator } = useParams()

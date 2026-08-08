@@ -662,11 +662,8 @@ function CampaignLogsPage() {
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
                         {viewMode === 'events' ? (
-                          <td className="px-4 py-3 text-xs font-medium" onClick={(e) => {
-                            e.stopPropagation()
-                            if (row.eventType) updateFilter('eventType', row.eventType)
-                          }}>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border hover:underline ${getEventBadgeClass(row.eventType)}`} title="Click to filter by event type">
+                          <td className="px-4 py-3 text-xs font-medium">
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
                               {row.eventType || '—'}
                             </span>
                           </td>
@@ -685,14 +682,9 @@ function CampaignLogsPage() {
                           </>
                         )}
                         {selectedId === 'all' && (
-                          <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap" onClick={(e) => {
-                            e.stopPropagation()
-                            if (row.campaignId) {
-                              setSelectedId(row.campaignId)
-                            }
-                          }}>
+                          <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                             {row.campaignId ? (
-                              <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline cursor-pointer" title="Click to filter by this campaign">
+                              <span className="font-semibold text-gray-800">
                                 {getCampaignLabel(row.campaignId)}
                               </span>
                             ) : <span className="text-gray-300">—</span>}
@@ -712,13 +704,9 @@ function CampaignLogsPage() {
                             </span>
                           ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-xs text-gray-700" onClick={(e) => {
-                          e.stopPropagation()
-                          const val = row.vidRaw || String(row.vendorId || '')
-                          if (val) updateFilter('q', val)
-                        }}>
+                        <td className="px-4 py-3 text-xs text-gray-700">
                           {row.vidRaw || row.vendorId ? (
-                            <span className="font-semibold text-gray-800 hover:text-indigo-600 hover:underline" title="Click to search by vendor">
+                            <span className="font-semibold text-gray-800">
                               {row.vidRaw || row.vendorId}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
@@ -726,22 +714,12 @@ function CampaignLogsPage() {
                         <td className="px-4 py-3 text-xs font-mono text-gray-700 whitespace-nowrap max-w-[140px] truncate" title={row.campid || ''}>
                           {row.campid || <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-indigo-600 font-medium whitespace-nowrap" onClick={(e) => {
-                          e.stopPropagation()
-                          if (row.clickId) updateFilter('clickId', row.clickId)
-                        }}>
-                          {row.clickId ? (
-                            <span className="hover:underline" title="Click to filter by click ID">
-                              {row.clickId}
-                            </span>
-                          ) : <span className="text-gray-300">—</span>}
+                        <td className="px-4 py-3 text-xs font-mono text-gray-700 font-medium whitespace-nowrap">
+                          {row.clickId || <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap" onClick={(e) => {
-                          e.stopPropagation()
-                          if (row.phoneMasked) updateFilter('q', row.phoneMasked)
-                        }}>
+                        <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
                           {row.phoneMasked ? (
-                            <span className="flex items-center gap-1 hover:text-indigo-650 hover:underline" title="Click to search by phone">
+                            <span className="flex items-center gap-1">
                               <Shield className="w-3 h-3 text-emerald-500" />
                               {row.phoneMasked}
                             </span>

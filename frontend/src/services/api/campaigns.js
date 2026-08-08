@@ -83,6 +83,17 @@ function mapCampaign(campaign) {
     cgRedirectUrl: campaign.cgRedirectUrl || campaign.cg_redirect_url || null,
     successRedirectUrl:
       campaign.successRedirectUrl || campaign.success_redirect_url || null,
+    successRedirectMode:
+      String(campaign.successRedirectMode || campaign.success_redirect_mode || 'thankyou')
+        .toLowerCase() === 'immediate'
+        ? 'immediate'
+        : 'thankyou',
+    postbackRegisterAt: (() => {
+      const v = String(
+        campaign.postbackRegisterAt || campaign.postback_register_at || 'confirm',
+      ).toLowerCase()
+      return v === 'otp' || v === 'both' ? v : 'confirm'
+    })(),
     pages,
     requiredComplete,
     flowConfig,
