@@ -153,17 +153,18 @@ export const createFlowEngineService = () => {
   };
 
   const getEntryPage = (config) => {
-    if (!config || config.nodes.length === 0) {
+    if (!config || !config.nodes || config.nodes.length === 0) {
       return CampaignPageType.HOME;
     }
-    if (config.nodes.some((n) => n.pageType === CampaignPageType.HOME)) {
-      return CampaignPageType.HOME;
-    }
+    // Prefer explicit entryPage when that node exists (OTP-first, etc.).
     if (
       config.entryPage &&
       config.nodes.some((n) => n.pageType === config.entryPage)
     ) {
       return config.entryPage;
+    }
+    if (config.nodes.some((n) => n.pageType === CampaignPageType.HOME)) {
+      return CampaignPageType.HOME;
     }
     return config.nodes[0].pageType;
   };

@@ -5,6 +5,7 @@ import {
   FLOW_RUNTIME_STYLESHEET_HREFS,
   RESPONSIVE_STYLE_RULES,
 } from './flowRuntimeCss'
+import { sanitizeSavedPageHtml } from './wysiwygContract'
 
 // Re-export so existing imports (`from './exportSite'`) keep working.
 export { RESPONSIVE_STYLE_RULES }
@@ -303,9 +304,11 @@ export function getActivePageSnapshot(editor) {
     .join('; ')
 
   const inlinedHtml = `<div class="page-wrapper" style="min-height: 100vh; width: 100%; position: relative; ${wrapperStyle}">${rawHtml}</div>`
+  // Final WYSIWYG gate: never persist stray absolute CTAs that break Preview
+  const sanitized = sanitizeSavedPageHtml(inlinedHtml)
 
   return {
-    html: cleanLocalhostUrls(inlinedHtml),
+    html: cleanLocalhostUrls(sanitized),
     css: cleanLocalhostUrls(css),
   }
 }
@@ -357,7 +360,7 @@ export function collectPageExports(editor) {
       id: pageId,
       name: pageName,
       filename: pageExportFilename(pageName, pageId, isHome),
-      html: cleanLocalhostUrls(inlinedHtml),
+      html: cleanLocalhostUrls(sanitizeSavedPageHtml(inlinedHtml)),
       css: cleanLocalhostUrls(css),
     }
   })

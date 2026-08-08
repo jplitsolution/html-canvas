@@ -449,9 +449,8 @@ export const createCampaignsService = () => {
     }
 
     campaign.verificationMode = mode;
-    if (flowConfig.nodes.some((n) => n.pageType === 'HOME')) {
-      flowConfig.entryPage = 'HOME';
-    }
+    // Honor flowConfig.entryPage (e.g. OTP-first). Do not force HOME.
+    flowConfig.entryPage = flowEngineService.getEntryPage(flowConfig);
     campaign.flowConfig = JSON.stringify(flowConfig);
     await getCampaignRepo().save(campaign);
     await invalidateFlowCampaignCache(campaign);
@@ -581,6 +580,7 @@ export const createCampaignsService = () => {
     const allowed = {
       blocklistApi: payload.blocklistApi,
       subscriptionApi: payload.subscriptionApi,
+      subscribeApi: payload.subscribeApi,
       headersJson: payload.headersJson,
       otpConfigJson: payload.otpConfigJson,
       resolveMsisdnUrl: payload.resolveMsisdnUrl,
@@ -591,8 +591,12 @@ export const createCampaignsService = () => {
     Object.keys(allowed).forEach((k) => {
       if (allowed[k] === undefined) delete allowed[k];
     });
-    // Never store subscribe URL — billing is via OTP validate / Priority Chain
-    allowed.subscribeApi = null;
+    // Empty string → null (clear subscribe URL)
+    if (Object.prototype.hasOwnProperty.call(allowed, 'subscribeApi')) {
+      const raw = allowed.subscribeApi;
+      allowed.subscribeApi =
+        raw == null || String(raw).trim() === '' ? null : String(raw).trim();
+    }
 
     let config = await getApiConfigRepo().findOne({
       where: { campaignId: parseInt(campaignId, 10) },

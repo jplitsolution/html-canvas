@@ -3,8 +3,10 @@ import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
 import { Visit } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
+import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 import { smsProviderManager } from './providers/sms-provider.manager.js';
 import { redisService } from '../../common/services/redis.service.js';
+import { apiCallLogService } from '../flow/api-call-log.service.js';
 
 /**
  * Partner-API OTP only.
@@ -37,6 +39,11 @@ export const createOtpService = () => {
     return getApiConfigRepo().findOne({ where: { campaignId } });
   };
 
+  const loadVisit = async (visitId) => {
+    if (!visitId) return null;
+    return getVisitRepo().findOne({ where: { id: parseInt(visitId, 10) } });
+  };
+
   const logOtpEvent = async (visitId, eventType, metadata) => {
     if (!visitId) return;
     try {
@@ -48,6 +55,44 @@ export const createOtpService = () => {
       await getVisitEventRepo().insert(eventEntity);
     } catch (err) {
       console.warn(`Failed to log OTP event: ${err.message}`);
+    }
+  };
+
+  const serializeBody = (data) => {
+    if (data == null) return null;
+    try {
+      return typeof data === 'string' ? data : JSON.stringify(data);
+    } catch {
+      return String(data);
+    }
+  };
+
+  /** Persist partner OTP HTTP to api_call_logs (Campaign Logs API tab). */
+  const logOtpApiCall = async ({
+    callType,
+    visit,
+    campaignId,
+    phone,
+    result,
+  }) => {
+    try {
+      await apiCallLogService.record({
+        visitId: visit?.id || null,
+        campaignId: campaignId || visit?.campaignId || null,
+        msisdn: phone,
+        rcid: visit?.rcid || null,
+        clickId: visit?.clickId || null,
+        callType,
+        requestUrl: result?.requestUrl || null,
+        requestBody: result?.requestBody || null,
+        responseStatus: result?.httpStatus ?? null,
+        responseBody: serializeBody(result?.rawResponse),
+        success: Boolean(result?.success),
+        errorMessage: result?.success ? null : result?.error || null,
+        statusLabel: result?.success ? 'SUCCESS' : 'FAILED',
+      });
+    } catch (err) {
+      console.warn(`OTP api_call_logs write failed: ${err.message}`);
     }
   };
 
@@ -97,6 +142,7 @@ export const createOtpService = () => {
       throw err;
     }
 
+    const visit = await loadVisit(visitId);
     const campaign = await getCampaignFromInput(campaignId, visitId);
     const apiConfig = await getApiConfigForCampaign(campaign?.id);
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
@@ -123,6 +169,25 @@ export const createOtpService = () => {
       context,
     );
 
+    await logOtpApiCall({
+      callType: ApiCallType.OTP_SEND,
+      visit,
+      campaignId: campaign?.id,
+      phone: String(phone).trim(),
+      result: sendResult,
+    });
+
+    if (visitId) {
+      await logOtpEvent(visitId, VisitEventType.OTP_SEND, {
+        phone: String(phone).trim(),
+        campaignId: campaign?.id,
+        provider: 'partner',
+        responseCode: sendResult?.responseCode ?? null,
+        success: Boolean(sendResult?.success),
+        error: sendResult?.success ? undefined : sendResult?.error,
+      });
+    }
+
     if (!sendResult?.success) {
       const err = new Error(sendResult?.error || 'Failed to send OTP');
       err.statusCode = 502;
@@ -142,12 +207,6 @@ export const createOtpService = () => {
     }
 
     if (visitId) {
-      await logOtpEvent(visitId, VisitEventType.OTP_SEND, {
-        phone: String(phone).trim(),
-        campaignId: campaign?.id,
-        provider: 'partner',
-        responseCode: sendResult.responseCode,
-      });
       try {
         await getVisitRepo().update(
           { id: parseInt(visitId, 10) },
@@ -194,6 +253,7 @@ export const createOtpService = () => {
       throw err;
     }
 
+    const visit = await loadVisit(visitId);
     const campaign = await getCampaignFromInput(campaignId, visitId);
     const apiConfig = await getApiConfigForCampaign(campaign?.id);
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
@@ -221,6 +281,25 @@ export const createOtpService = () => {
       providerConfig,
     );
 
+    await logOtpApiCall({
+      callType: ApiCallType.OTP_VERIFY,
+      visit,
+      campaignId: campaign?.id,
+      phone: String(phone).trim(),
+      result: verifyResult,
+    });
+
+    if (visitId) {
+      await logOtpEvent(visitId, VisitEventType.OTP_VERIFY, {
+        phone: String(phone).trim(),
+        status: verifyResult?.success ? 'verified' : 'failed',
+        provider: 'partner',
+        responseCode: verifyResult?.responseCode ?? null,
+        success: Boolean(verifyResult?.success),
+        error: verifyResult?.success ? undefined : verifyResult?.error,
+      });
+    }
+
     if (!verifyResult?.success) {
       const err = new Error(verifyResult?.error || 'OTP verification failed');
       err.statusCode = 400;
@@ -237,12 +316,6 @@ export const createOtpService = () => {
         },
       );
       await redisService.del(pendingKey(visitId, phone));
-      await logOtpEvent(vId, VisitEventType.OTP_VERIFY, {
-        phone: String(phone).trim(),
-        status: 'verified',
-        provider: 'partner',
-        responseCode: verifyResult.responseCode,
-      });
     }
 
     return {

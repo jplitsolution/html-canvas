@@ -8,6 +8,8 @@ export const ApiCallType = {
   BLOCKLIST: 'blocklist',
   RESOLVE_MSISDN: 'resolve_msisdn',
   PRIORITY: 'priority',
+  OTP_SEND: 'otp_send',
+  OTP_VERIFY: 'otp_verify',
   HE_TOKEN: 'he_token',
   HE_MSISDN: 'he_msisdn',
   HE_RESOLVE: 'he_resolve',

@@ -481,6 +481,18 @@ export const createAnalyticsService = () => {
         statusLabel = checksubStatusLabel(responseBody, row.success);
       } else if (row.callType === 'priority') {
         statusLabel = checksubStatusLabel(responseBody, row.success);
+      } else if (row.callType === 'otp_send' || row.callType === 'otp_verify') {
+        const nestedOtp = responseBody?.data ?? responseBody ?? {};
+        statusLabel =
+          row.success === false
+            ? 'FAILED'
+            : nestedOtp.response
+              ? String(nestedOtp.response).toUpperCase()
+              : row.success
+                ? 'SUCCESS'
+                : null;
+      } else if (row.callType === 'subscribe' && responseBody?.skipped) {
+        statusLabel = 'SKIPPED_NO_URL';
       }
       return {
         id: row.id,
@@ -508,7 +520,21 @@ export const createAnalyticsService = () => {
                 priority: requestBody?.priority ?? null,
                 pageType: requestBody?.pageType ?? null,
               }
-            : null,
+            : row.callType === 'otp_send' ||
+                row.callType === 'otp_verify' ||
+                row.callType === 'subscribe'
+              ? {
+                  response: nested.response ?? null,
+                  responseCode:
+                    nested.responseCode ?? responseBody?.responseCode ?? null,
+                  responseMessage:
+                    nested.responseMessage ||
+                    nested.errorMessage ||
+                    responseBody?.responseMessage ||
+                    null,
+                  skipped: nested.skipped ?? null,
+                }
+              : null,
       };
     });
 

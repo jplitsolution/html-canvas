@@ -65,7 +65,8 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
     const basePhone = phoneInput ? phoneInput.value.trim() : ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
     
-    if (cleanBasePhone.length < 8) {
+    // No fixed MSISDN length — markets differ (local / with country code).
+    if (!cleanBasePhone) {
       setSlotText(errorSlot, 'Please enter a valid mobile number', true)
       return
     }
@@ -176,6 +177,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
       setSlotText(errorSlot, 'Please enter the verification code', true)
       return
     }
+    // OTP length is partner-defined (4, 5, 6, …) — do not enforce a fixed size.
 
     const originalStatusText = statusSlot ? statusSlot.textContent : ''
 
@@ -242,7 +244,16 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
 
   const handleOtpInput = (e) => {
     const val = e.target.value.trim()
-    if (val.length === 6) {
+    // Auto-submit only when the template sets maxlength (e.g. 4 or 6).
+    // Never hardcode 6 — PIN length is campaign/partner specific.
+    const maxAttr = e.target.getAttribute('maxlength')
+    const max =
+      maxAttr != null && maxAttr !== ''
+        ? parseInt(maxAttr, 10)
+        : Number(e.target.maxLength) > 0 && Number(e.target.maxLength) < 100000
+          ? Number(e.target.maxLength)
+          : NaN
+    if (Number.isFinite(max) && max > 0 && val.length === max) {
       handleVerifyClick({ preventDefault: () => {} })
     }
   }

@@ -4,8 +4,8 @@ import Button from '../ui/Button'
 import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import {
   VERIFICATION_MODES,
-  DEFAULT_FLOWS,
   normalizeModeId,
+  buildDefaultFlow,
   buildFlowPathSummary,
 } from './verificationModes'
 
@@ -15,31 +15,55 @@ import {
  */
 function CampaignFlowSummary({ campaign, onSaveMode }) {
   const currentMode = normalizeModeId(campaign?.verificationMode)
+  const savedEntry =
+    String(campaign?.flowConfig?.entryPage || 'HOME').toUpperCase() === 'OTP'
+      ? 'OTP'
+      : 'HOME'
   const [draftMode, setDraftMode] = useState(currentMode)
+  const [draftEntry, setDraftEntry] = useState(savedEntry)
   const [saving, setSaving] = useState(false)
 
   // Keep draft in sync when campaign reloads
   useEffect(() => {
     setDraftMode(currentMode)
-  }, [campaign?.id, currentMode])
+    setDraftEntry(savedEntry)
+  }, [campaign?.id, currentMode, savedEntry])
+
+  const previewConfig = useMemo(() => {
+    if (draftMode === currentMode && draftEntry === savedEntry) {
+      return campaign?.flowConfig || null
+    }
+    return buildDefaultFlow(draftMode, {
+      entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
+    })
+  }, [draftMode, currentMode, draftEntry, savedEntry, campaign?.flowConfig])
 
   const summary = useMemo(
     () =>
-      buildFlowPathSummary(
-        draftMode,
-        draftMode === currentMode ? campaign?.flowConfig : null,
-        { cgRedirectUrl: campaign?.cgRedirectUrl },
-      ),
-    [draftMode, currentMode, campaign?.flowConfig, campaign?.cgRedirectUrl],
+      buildFlowPathSummary(draftMode, previewConfig, {
+        cgRedirectUrl: campaign?.cgRedirectUrl,
+      }),
+    [draftMode, previewConfig, campaign?.cgRedirectUrl],
   )
 
-  const dirty = draftMode !== currentMode
+  const dirty =
+    draftMode !== currentMode ||
+    (draftMode === 'OTP_ONLY' && draftEntry !== savedEntry)
+
+  const handleModeChange = (nextMode) => {
+    setDraftMode(nextMode)
+    if (nextMode !== 'OTP_ONLY') {
+      setDraftEntry('HOME')
+    }
+  }
 
   const handleSave = async () => {
     if (!dirty || !onSaveMode) return
     setSaving(true)
     try {
-      const flowConfig = DEFAULT_FLOWS[draftMode] || DEFAULT_FLOWS.BOTH
+      const flowConfig = buildDefaultFlow(draftMode, {
+        entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
+      })
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
       setSaving(false)
@@ -75,7 +99,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                 <button
                   key={m.id}
                   type="button"
-                  onClick={() => setDraftMode(m.id)}
+                  onClick={() => handleModeChange(m.id)}
                   className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
                     selected
                       ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
@@ -88,23 +112,61 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
               )
             })}
           </div>
-          {dirty && (
-            <div className="mt-3 flex items-center justify-between gap-3">
-              <p className="text-[11px] text-warning">
-                Saving resets the signup path to the default for this mode.
-              </p>
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                disabled={saving}
-                onClick={handleSave}
-              >
-                {saving ? 'Saving…' : 'Save mode'}
-              </Button>
-            </div>
-          )}
         </div>
+
+        {draftMode === 'OTP_ONLY' && (
+          <div>
+            <p className="text-xs font-medium text-fg mb-2">Landing page</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setDraftEntry('HOME')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  draftEntry === 'HOME'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">HOME first</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Show intro / Subscribe CTA, then OTP.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftEntry('OTP')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  draftEntry === 'OTP'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">OTP first</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Skip HOME — open PIN page on landing.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {dirty && (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] text-warning">
+              Saving resets the signup path to the default for this mode
+              {draftMode === 'OTP_ONLY' ? ` (${draftEntry} landing)` : ''}.
+            </p>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={saving}
+              onClick={handleSave}
+            >
+              {saving ? 'Saving…' : 'Save flow'}
+            </Button>
+          </div>
+        )}
 
         <div className="rounded-lg border border-border bg-bg-muted/40 px-3.5 py-3">
           <p className="text-[11px] uppercase tracking-wide text-fg-subtle font-medium mb-2">

@@ -1,8 +1,10 @@
 import { healLiveHotspots } from '../../editor/utils/overlayStacking'
+import { healLiveFlowButtons } from '../../editor/utils/textSizeAlign'
 import {
   FLOW_RUNTIME_CSS,
   flowRuntimeStylesheetLinks,
 } from '../../editor/services/flowRuntimeCss'
+import { sanitizeSavedPageHtml } from '../../editor/services/wysiwygContract'
 import { normalizePack } from './flowHelpers'
 
 /**
@@ -15,10 +17,11 @@ function mountPageInShadow(shadow, pageData) {
 
   let inlineStyles = ''
   if (customWidth) {
-    inlineStyles += `width: ${customWidth}px; max-width: ${customWidth}px; `
+    // Use !important so FLOW_HOST_CSS width:100% cannot blow custom canvas size
+    inlineStyles += `width: ${customWidth}px !important; max-width: ${customWidth}px !important; `
   }
   if (customHeight) {
-    inlineStyles += `height: ${customHeight}px; min-height: ${customHeight}px; overflow: hidden; position: relative; `
+    inlineStyles += `height: ${customHeight}px !important; min-height: ${customHeight}px !important; overflow: hidden; position: relative; `
   }
 
   // Transform <body> tag to <div> to avoid invalid nested <body> inside Shadow DOM,
@@ -27,6 +30,8 @@ function mountPageInShadow(shadow, pageData) {
   if (cleanedHtml.trim().toLowerCase().startsWith('<body')) {
     cleanedHtml = cleanedHtml.replace(/^<body/i, '<div').replace(/<\/body>$/i, '</div>')
   }
+  // WYSIWYG: strip accidental absolute CTAs from older saves before paint
+  cleanedHtml = sanitizeSavedPageHtml(cleanedHtml)
 
   const cleanCss = (pageData.css || '').replace(/#wrapper\s*/gi, '')
 
@@ -39,13 +44,18 @@ function mountPageInShadow(shadow, pageData) {
 
   // Bad editor saves: missing data-action, px boxes, cursor:move — repair for clicks
   healLiveHotspots(shadow, pageData.pageType)
+  // Accidental absolute CTAs (no data-tc-absolute) break card layout in Preview
+  healLiveFlowButtons(shadow)
   // Re-run after images give the container real height (first pass can see 0-height parents)
   const imgs = shadow.querySelectorAll('img')
   if (imgs.length) {
     let left = imgs.length
     const redo = () => {
       left -= 1
-      if (left <= 0) healLiveHotspots(shadow, pageData.pageType)
+      if (left <= 0) {
+        healLiveHotspots(shadow, pageData.pageType)
+        healLiveFlowButtons(shadow)
+      }
     }
     imgs.forEach((img) => {
       if (img.complete) redo()
@@ -55,7 +65,10 @@ function mountPageInShadow(shadow, pageData) {
       }
     })
   } else {
-    requestAnimationFrame(() => healLiveHotspots(shadow, pageData.pageType))
+    requestAnimationFrame(() => {
+      healLiveHotspots(shadow, pageData.pageType)
+      healLiveFlowButtons(shadow)
+    })
   }
 }
 

@@ -4,6 +4,10 @@
  * Contract: canvas iframe (non-editor chrome) and live SubscriptionPage shadow DOM
  * must inject the SAME rules so Save → Preview matches what operators see while editing.
  * Editor-only chrome (hover outlines, hotspot dashed borders) stays OUT of this file.
+ *
+ * Guardrails: frontend/src/editor/services/wysiwygContract.js
+ * CI: tests/unit/wysiwygContract.test.js
+ * Cursor rule: .cursor/rules/canvas-preview-wysiwyg.mdc
  */
 import { OVERLAY_STACKING_CSS } from '../utils/overlayStacking'
 import { TEXT_SIZE_ALIGN_CANVAS_CSS } from '../utils/textSizeAlign'
@@ -20,9 +24,14 @@ export const RESPONSIVE_STYLE_RULES = `
 *, *::before, *::after {
   box-sizing: border-box !important;
 }
-html, body, :host, .flow-page-inner {
+html, body, :host {
   width: 100% !important;
   max-width: 100% !important;
+  overflow-x: hidden !important;
+  scroll-behavior: smooth !important;
+}
+/* .flow-page-inner intentionally omitted — customWidth inline must win in Preview */
+.flow-page-inner {
   overflow-x: hidden !important;
   scroll-behavior: smooth !important;
 }
@@ -187,9 +196,12 @@ export const FLOW_HOST_CSS = `
     width: 100%;
     min-height: 100vh;
   }
+  /* Do NOT force width/max-width:!important here — customWidth inline on #wrapper
+     must win so Save→Preview keeps the canvas frame size (1200×800 etc.). */
   .flow-page-inner {
     display: block;
     width: 100%;
+    max-width: 100%;
     margin: 0 auto;
     opacity: 1;
     min-height: 100vh;

@@ -78,7 +78,15 @@ export function isFlowLayoutButton(component) {
   return false
 }
 
-/** Hotspots, image overlays, or Canva absolute-drag placements. */
+/**
+ * Hotspots, marked image overlays, or absolute controls sitting on an image.
+ *
+ * IMPORTANT: bare `position:absolute` + top/left is NOT enough. Grapes Canva-drag
+ * often leaves those styles on in-card OTP/SUBSCRIBE CTAs without data-tc-absolute.
+ * Preview then positions them against page-wrapper (full width) → button floats
+ * outside the card while the canvas still looks fine (class says relative).
+ * drag:end must call markAsAbsoluteOverlay so real overlays get the flag.
+ */
 export function wasIntentionallyAbsolute(component) {
   if (!component) return false
   const attrs = component.getAttributes?.() || {}
@@ -87,14 +95,7 @@ export function wasIntentionallyAbsolute(component) {
 
   const style = component.getStyle?.() || {}
   const pos = String(style.position || '').toLowerCase()
-  // Absolute drag mode writes top/left — treat as user placement so
-  // keepFlowButtonInFlow does not snap the button back after drag:end.
-  if (pos === 'absolute' && (style.top != null || style.left != null)) {
-    return true
-  }
-  if (isOverImageContext(component) && pos === 'absolute') {
-    return true
-  }
+  if (pos === 'absolute' && isOverImageContext(component)) return true
   return false
 }
 
@@ -107,6 +108,33 @@ function stripAbsoluteFromEl(el) {
     el.style.right = ''
     el.style.bottom = ''
     el.style.zIndex = ''
+  }
+}
+
+/** Clear leftover HTML style="" absolute geometry (wins over CssComposer classes). */
+function stripAbsoluteStyleAttribute(component) {
+  const attrs = component.getAttributes?.() || {}
+  const raw = attrs.style
+  if (raw == null || raw === '') return
+  const next = String(raw)
+    .replace(/(?:^|;)\s*position\s*:\s*absolute\s*/gi, ';')
+    .replace(/(?:^|;)\s*position\s*:\s*fixed\s*/gi, ';')
+    .replace(/(?:^|;)\s*top\s*:\s*[^;]+/gi, ';')
+    .replace(/(?:^|;)\s*left\s*:\s*[^;]+/gi, ';')
+    .replace(/(?:^|;)\s*right\s*:\s*[^;]+/gi, ';')
+    .replace(/(?:^|;)\s*bottom\s*:\s*[^;]+/gi, ';')
+    .replace(/(?:^|;)\s*z-index\s*:\s*[^;]+/gi, ';')
+    .replace(/;;+/g, ';')
+    .replace(/^;|;$/g, '')
+    .trim()
+  if (next === String(raw).trim()) return
+  try {
+    const patched = { ...attrs }
+    if (next) patched.style = next
+    else delete patched.style
+    component.setAttributes?.(patched)
+  } catch (_) {
+    /* noop */
   }
 }
 
@@ -136,14 +164,43 @@ function syncFlowButtonDom(el, minHeightPx) {
 
 /**
  * In-card CTA only — never run on image overlays (data-tc-absolute / over image).
+ * Idempotent: skip setStyle when already in-flow so component:styleUpdate cannot loop.
+ * Always strips leftover style="" absolute (Grapes often keeps class=relative + attr absolute).
  */
 export function keepFlowButtonInFlow(component) {
   if (!component || !isFlowLayoutButton(component)) return
   if (wasIntentionallyAbsolute(component)) return
 
+  stripAbsoluteStyleAttribute(component)
+
   const prev = component.getStyle?.() || {}
   let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
   if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
+
+  const pos = String(prev.position || '').toLowerCase()
+  const hasAbsGeo =
+    pos === 'absolute' ||
+    pos === 'fixed' ||
+    prev.top != null ||
+    prev.left != null ||
+    prev.right != null ||
+    prev.bottom != null
+
+  const el = typeof component.getEl === 'function' ? component.getEl() : null
+  const elPos = String(el?.style?.position || '').toLowerCase()
+  const elHasAbs =
+    elPos === 'absolute' ||
+    elPos === 'fixed' ||
+    !!(el?.style?.top || el?.style?.left || el?.style?.right || el?.style?.bottom)
+
+  const alreadyInFlow =
+    !hasAbsGeo &&
+    !elHasAbs &&
+    (pos === 'relative' || pos === 'static' || pos === '') &&
+    String(prev.width || '') === '100%' &&
+    String(prev['min-height'] || '') === `${minH}px`
+
+  if (alreadyInFlow) return
 
   const style = {
     position: 'relative',
@@ -179,8 +236,17 @@ export function keepFlowButtonInFlow(component) {
   }
 
   component.setStyle(style)
+  try {
+    component.removeStyle?.('top')
+    component.removeStyle?.('left')
+    component.removeStyle?.('right')
+    component.removeStyle?.('bottom')
+    component.removeStyle?.('z-index')
+    component.removeStyle?.('height')
+  } catch (_) {
+    /* noop */
+  }
 
-  const el = typeof component.getEl === 'function' ? component.getEl() : null
   syncFlowButtonDom(el, minH)
 }
 
@@ -282,6 +348,53 @@ export function healFlowButtonsInEditor(editor) {
     cmp.components?.()?.forEach?.(walk)
   }
   walk(wrapper)
+  return healed
+}
+
+/**
+ * Live funnel / Preview: strip accidental absolute px boxes on in-card CTAs.
+ * Real image overlays keep data-tc-absolute="1" and are left alone.
+ */
+export function healLiveFlowButtons(root) {
+  if (!root?.querySelectorAll) return 0
+  let healed = 0
+  const nodes = root.querySelectorAll(
+    'button.flow-btn, .flow-btn, button[data-action], a[data-action], button[data-otp-action], [data-otp-action]',
+  )
+  nodes.forEach((el) => {
+    try {
+      if (el.getAttribute('data-tc-type') === 'hotspot') return
+      if (
+        el.getAttribute('data-tc-absolute') === '1' ||
+        el.getAttribute('data-tc-absolute') === 'true'
+      ) {
+        return
+      }
+      const cs = el.ownerDocument?.defaultView?.getComputedStyle?.(el)
+      const inlinePos = String(el.style?.position || '').toLowerCase()
+      const computedPos = String(cs?.position || '').toLowerCase()
+      const isAbs = inlinePos === 'absolute' || inlinePos === 'fixed' || computedPos === 'absolute'
+      if (!isAbs && !el.style.top && !el.style.left) return
+
+      el.style.position = 'relative'
+      el.style.top = ''
+      el.style.left = ''
+      el.style.right = ''
+      el.style.bottom = ''
+      el.style.zIndex = ''
+      el.style.width = '100%'
+      el.style.maxWidth = '100%'
+      el.style.minWidth = '0'
+      el.style.display = el.style.display || 'flex'
+      el.style.alignItems = el.style.alignItems || 'center'
+      el.style.justifyContent = el.style.justifyContent || 'center'
+      el.style.boxSizing = 'border-box'
+      if (!el.style.minHeight) el.style.minHeight = `${MIN_BTN_HEIGHT}px`
+      healed += 1
+    } catch (_) {
+      /* noop */
+    }
+  })
   return healed
 }
 

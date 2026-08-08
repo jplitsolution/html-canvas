@@ -23,29 +23,36 @@ function mockComponent({ attrs = {}, style = {}, tag = 'button' } = {}) {
     addAttributes: vi.fn((patch) => {
       currentAttrs = { ...currentAttrs, ...patch }
     }),
+    setAttributes: vi.fn((next) => {
+      currentAttrs = { ...next }
+    }),
+    removeStyle: vi.fn((key) => {
+      delete currentStyle[key]
+    }),
     set: vi.fn(),
   }
 }
 
 describe('wasIntentionallyAbsolute / keepFlowButtonInFlow (canvas drag)', () => {
-  it('treats absolute+top/left as intentional Canva placement (CHAIN button)', () => {
+  it('requires data-tc-absolute for Canva overlay — bare absolute+top/left is NOT enough', () => {
     const cmp = mockComponent({
       attrs: { 'data-action': 'CHAIN' },
       style: { position: 'absolute', top: '40%', left: '25%', width: 'auto' },
     })
     expect(isFlowLayoutButton(cmp)).toBe(true)
-    expect(wasIntentionallyAbsolute(cmp)).toBe(true)
+    expect(wasIntentionallyAbsolute(cmp)).toBe(false)
   })
 
-  it('does not snap absolute CHAIN button back to relative after drag', () => {
+  it('heals stray absolute CHAIN/OTP buttons back into document flow', () => {
     const cmp = mockComponent({
       attrs: { 'data-action': 'CHAIN' },
       style: { position: 'absolute', top: '12%', left: '30%' },
     })
     keepFlowButtonInFlow(cmp)
-    expect(cmp.setStyle).not.toHaveBeenCalled()
-    expect(cmp.getStyle().position).toBe('absolute')
-    expect(cmp.getStyle().top).toBe('12%')
+    expect(cmp.setStyle).toHaveBeenCalled()
+    const next = cmp.setStyle.mock.calls[0][0]
+    expect(next.position).toBe('relative')
+    expect(next.width).toBe('100%')
   })
 
   it('still heals in-flow SUBSCRIBE buttons without absolute placement', () => {
@@ -61,7 +68,7 @@ describe('wasIntentionallyAbsolute / keepFlowButtonInFlow (canvas drag)', () => 
     expect(next.width).toBe('100%')
   })
 
-  it('respects data-tc-absolute overlay flag', () => {
+  it('respects data-tc-absolute overlay flag and does not snap back', () => {
     const cmp = mockComponent({
       attrs: { 'data-action': 'SUBSCRIBE', 'data-tc-absolute': '1' },
       style: { position: 'absolute', top: '50%', left: '10%' },
@@ -69,6 +76,22 @@ describe('wasIntentionallyAbsolute / keepFlowButtonInFlow (canvas drag)', () => 
     expect(wasIntentionallyAbsolute(cmp)).toBe(true)
     keepFlowButtonInFlow(cmp)
     expect(cmp.setStyle).not.toHaveBeenCalled()
+  })
+
+  it('strips leftover style="" absolute geometry when healing', () => {
+    const cmp = mockComponent({
+      attrs: {
+        'data-otp-action': 'verify',
+        class: 'flow-btn',
+        style: 'position:absolute;left:311px;top:509px;width:187px;z-index:40;',
+      },
+      style: { position: 'absolute', left: '311px', top: '509px' },
+    })
+    keepFlowButtonInFlow(cmp)
+    expect(cmp.setAttributes).toHaveBeenCalled()
+    const attrs = cmp.setAttributes.mock.calls[0][0]
+    expect(String(attrs.style || '')).not.toMatch(/position\s*:\s*absolute/i)
+    expect(String(attrs.style || '')).not.toMatch(/left\s*:\s*311px/i)
   })
 })
 

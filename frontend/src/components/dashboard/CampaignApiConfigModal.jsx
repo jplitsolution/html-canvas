@@ -119,6 +119,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
 
   const [form, setForm] = useState({
     subscriptionApi: '',
+    subscribeApi: '',
     blocklistApi: '',
     headersJson: '',
     resolveMsisdnUrl: '',
@@ -147,6 +148,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         const parsedHe = parseHeConfig(config.heConfigJson)
         setForm({
           subscriptionApi: config.subscriptionApi || '',
+          subscribeApi: config.subscribeApi || '',
           blocklistApi: config.blocklistApi || '',
           headersJson: config.headersJson || '',
           resolveMsisdnUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
@@ -203,7 +205,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         ...form,
         resolveMsisdnUrl: resolveMsisdnUrl || null,
         heConfigJson: heConfigJson || null,
-        subscribeApi: null,
+        subscribeApi: (form.subscribeApi || '').trim() || null,
         otpConfigJson: JSON.stringify(partnerConfig),
       })
       onClose()
@@ -544,8 +546,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
                 <p className="text-xs leading-relaxed text-fg-muted">
-                  Only checksub and blocklist live here. OTP send/verify is on the
-                  Partner OTP tab. Placeholders:{' '}
+                  Checksub / blocklist / optional Confirm subscribe live here.
+                  OTP send/verify is on the Partner OTP tab. Placeholders:{' '}
                   <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
                   <code className="font-mono text-[11px]">{'{{serviceId}}'}</code>,{' '}
                   <code className="font-mono text-[11px]">{'{{country}}'}</code>,{' '}
@@ -557,6 +559,16 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   value={form.subscriptionApi}
                   onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
                   placeholder="https://…/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
+                />
+              </Field>
+              <Field
+                label="Subscribe URL (Confirm click)"
+                hint="optional — leave empty if billing is OTP verify only"
+              >
+                <Input
+                  value={form.subscribeApi}
+                  onChange={(e) => setForm({ ...form, subscribeApi: e.target.value })}
+                  placeholder="https://…/subscribe?msisdn={{msisdn}}"
                 />
               </Field>
               <Field label="Blocklist / DND URL" hint="optional">
