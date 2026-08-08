@@ -1,5 +1,6 @@
 import { priorityCheckApi, transitionFlow } from '../../services/api/flow'
 import { evaluatePriorityApiMatch } from '../../services/flow/priorityApiMatch'
+import { logPriorityApiStep } from '../../services/flow/apiDebugLog'
 import { VALID_PAGES } from './constants'
 import { pageForChecksubStatus } from './flowHelpers'
 
@@ -172,11 +173,6 @@ async function runPriorityChain({
               fetchFailed = true
               fetchError = proxied?.error || `HTTP ${proxied?.status || 0}`
             }
-            console.log(`[Priority Chain] ${tag} proxy result:`, {
-              ok: resOk,
-              status: proxied?.status,
-              body: json,
-            })
           } else {
             let res = null
             try {
@@ -201,10 +197,15 @@ async function runPriorityChain({
         }
 
         if (fetchFailed || !resOk) {
-          console.warn(
-            `[Priority Chain] ${tag} FAIL (network/CORS/HTTP)`,
-            fetchError,
-          )
+          logPriorityApiStep({
+            tag,
+            url: formattedUrl,
+            ok: false,
+            status: fetchError?.status || null,
+            body: json,
+            outcome: 'FAIL network/CORS/HTTP',
+            error: fetchError,
+          })
           const navigated = await goConfiguredOrContinue(
             step.failAction,
             step.failPage,
@@ -237,26 +238,16 @@ async function runPriorityChain({
           const matchResult = evaluatePriorityApiMatch(json, step)
           const shouldSkipSubscribe = matchResult.matched
 
-          console.log(`[Priority Chain] ${tag} response:`, {
-            matchMode: matchResult.mode,
-            successKey: matchResult.key || step.successKey || '',
-            successValue: step.successValue ?? '',
-            rules: step.rules || [],
-            actual: matchResult.actual,
-            matched: shouldSkipSubscribe,
-            matchedGo: matchResult.go || 'page',
-            matchedPage: matchResult.page || '',
-            matchedUrl: matchResult.url || '',
-            currentStatus: matchResult.currentStatus || '',
-            matchPage: step.matchPage || '',
-            missAction: step.missAction || 'continue',
-            missPage: step.missPage || '',
-            missUrl: step.missUrl || '',
-            failAction: step.failAction || 'continue',
-            failPage: step.failPage || '',
-            failUrl: step.failUrl || '',
-            responseCode: json.responseCode,
+          logPriorityApiStep({
+            tag,
+            url: formattedUrl,
+            ok: true,
+            status: 200,
             body: json,
+            matchResult,
+            outcome: shouldSkipSubscribe
+              ? `MATCH → ${matchResult.go || 'page'} ${matchResult.page || matchResult.url || ''}`
+              : 'NO_MATCH',
           })
 
           if (shouldSkipSubscribe) {

@@ -99,11 +99,10 @@ export const createPartnerApiService = () => {
     }
   };
 
-  const sendRequest = async (rawUrl, input, headers, label) => {
+  const sendRequest = async (rawUrl, input, headers, _label) => {
     const url = resolveTemplate(rawUrl, buildVars(input));
     const useGet = url.includes('?');
     const body = partnerRequestBody(input);
-    console.log(`${label} → ${useGet ? 'GET' : 'POST'} ${url}`);
     return {
       url,
       response: useGet

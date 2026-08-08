@@ -13,6 +13,13 @@ export async function getMarket(countryCode, operatorCode) {
   return apiClient(`/markets/${encodeURIComponent(countryCode)}/${encodeURIComponent(operatorCode)}`)
 }
 
+export async function updateMarket(countryCode, operatorCode, payload) {
+  return apiClient(
+    `/markets/${encodeURIComponent(countryCode)}/${encodeURIComponent(operatorCode)}`,
+    { method: 'PATCH', body: payload },
+  )
+}
+
 export async function listMarketCampaigns(countryCode, operatorCode) {
   const campaigns = await apiClient(
     `/markets/${encodeURIComponent(countryCode)}/${encodeURIComponent(operatorCode)}/campaigns`,

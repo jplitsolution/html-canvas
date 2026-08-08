@@ -19,6 +19,7 @@ import flowRoutes from '../modules/flow/flow.routes.js';
 import otpRoutes from '../modules/otp/otp.routes.js';
 import analyticsRoutes from '../modules/analytics/analytics.routes.js';
 import logsRoutes from '../modules/logs/logs.routes.js';
+import testRoutes from '../modules/test/test.routes.js';
 
 export function registerRoutes(app) {
   app.use('/api/auth', authRoutes);
@@ -32,4 +33,5 @@ export function registerRoutes(app) {
   app.use('/api/otp', otpRoutes);
   app.use('/api/analytics', analyticsRoutes);
   app.use('/api/logs', logsRoutes);
+  app.use('/api/test', testRoutes);
 }

@@ -33,11 +33,13 @@ export const createFlowService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
   const getApiCallLogRepo = () => getRepository(ApiCallLog);
   const isFlowCacheEnabled = () => getConfig().flowCacheEnabled !== false;
+  const getFlowCacheTtl = () => getConfig().flowCacheTtlSeconds || 600;
 
   let deps = {
     getApiConfigRepo,
     getApiCallLogRepo,
     isFlowCacheEnabled,
+    getFlowCacheTtl,
     API_HE_PROVIDERS,
     isApiHeProvider,
     normalizePack,

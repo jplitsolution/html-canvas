@@ -147,6 +147,94 @@ export const createMarketsService = () => {
     };
   };
 
+  const updateMarket = async (countryCode, operatorCode, dto, userId) => {
+    const { country, operator } = await findMarketByCodes(
+      countryCode,
+      operatorCode,
+      userId,
+    );
+
+    const nextCountryName =
+      dto.countryName !== undefined ? String(dto.countryName).trim() : country.name;
+    const nextOperatorName =
+      dto.operatorName !== undefined
+        ? String(dto.operatorName).trim()
+        : operator.name;
+    const nextCountryCode =
+      dto.countryCode !== undefined
+        ? normalizeCode(dto.countryCode)
+        : country.code;
+    const nextOperatorCode =
+      dto.operatorCode !== undefined
+        ? normalizeCode(dto.operatorCode)
+        : operator.code;
+
+    if (!nextCountryName || !nextOperatorName || !nextCountryCode || !nextOperatorCode) {
+      const err = new Error(
+        'countryName, countryCode, operatorName and operatorCode are required',
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (nextCountryCode !== country.code) {
+      const clash = await getCountryRepo().findOne({
+        where: { userId, code: nextCountryCode },
+      });
+      if (clash && clash.id !== country.id) {
+        const err = new Error(`Country code ${nextCountryCode} already exists`);
+        err.statusCode = 409;
+        throw err;
+      }
+      country.code = nextCountryCode;
+    }
+    if (nextCountryName !== country.name) {
+      country.name = nextCountryName;
+    }
+    await getCountryRepo().save(country);
+
+    if (nextOperatorCode !== operator.code) {
+      const clash = await getOperatorRepo().findOne({
+        where: { countryId: country.id, code: nextOperatorCode },
+      });
+      if (clash && clash.id !== operator.id) {
+        const err = new Error(
+          `Operator code ${nextOperatorCode} already exists for ${country.code}`,
+        );
+        err.statusCode = 409;
+        throw err;
+      }
+      operator.code = nextOperatorCode;
+    }
+    if (nextOperatorName !== operator.name) {
+      operator.name = nextOperatorName;
+    }
+    await getOperatorRepo().save(operator);
+
+    // Keep denormalized campaign labels in sync with market names.
+    await getCampaignRepo()
+      .createQueryBuilder()
+      .update(Campaign)
+      .set({ country: country.name, operator: operator.name })
+      .where('operator_id = :operatorId', { operatorId: operator.id })
+      .andWhere('user_id = :userId', { userId })
+      .execute();
+
+    const campaignCount = await getCampaignRepo().count({
+      where: { operatorId: operator.id, userId },
+    });
+
+    return {
+      countryId: country.id,
+      countryName: country.name,
+      countryCode: country.code,
+      operatorId: operator.id,
+      operatorName: operator.name,
+      operatorCode: operator.code,
+      campaignCount,
+    };
+  };
+
   const listCampaignsForMarket = async (countryCode, operatorCode, userId) => {
     const { country, operator } = await findMarketByCodes(
       countryCode,
@@ -251,6 +339,7 @@ export const createMarketsService = () => {
     createMarket,
     findMarketByCodes,
     getMarket,
+    updateMarket,
     listCampaignsForMarket,
     resolveOperatorForCreate,
     attachTrackingId,

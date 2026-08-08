@@ -50,11 +50,35 @@ export const createCampaignsService = () => {
     return campaign;
   };
 
-  const invalidateFlowCampaignCache = async (campaign) => {
+  const invalidateFlowCampaignCache = async (campaignOrPartial) => {
+    if (!campaignOrPartial) return;
+
+    let campaign = campaignOrPartial;
+    if (
+      typeof campaignOrPartial === 'number' ||
+      typeof campaignOrPartial === 'string'
+    ) {
+      const id = parseInt(campaignOrPartial, 10);
+      if (!id || Number.isNaN(id)) return;
+      campaign = await getCampaignRepo().findOne({
+        where: { id },
+        relations: { marketOperator: { country: true } },
+      });
+      if (!campaign) return;
+      withTrackingId(campaign);
+    } else if (campaign?.id && !campaign.trackingId) {
+      withTrackingId(campaign);
+    }
+
+    if (!campaign?.id) return;
+
     const keys = [
       `flow:campaign:id:${campaign.id}`,
       campaign.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
-      `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`,
+      campaign.country && campaign.operator
+        ? `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`
+        : null,
+      `flow:config:${campaign.id}`,
     ].filter(Boolean);
     await Promise.all(keys.map((k) => redisService.del(k)));
   };
@@ -430,6 +454,7 @@ export const createCampaignsService = () => {
     }
     campaign.flowConfig = JSON.stringify(flowConfig);
     await getCampaignRepo().save(campaign);
+    await invalidateFlowCampaignCache(campaign);
     return { verificationMode: mode, flowConfig };
   };
 
@@ -437,6 +462,7 @@ export const createCampaignsService = () => {
     const campaign = await findOne(id, userId);
     campaign.active = false;
     await getCampaignRepo().save(campaign);
+    await invalidateFlowCampaignCache(campaign);
   };
 
   const applyDefaultTemplates = async (id, userId, onlyEmpty = true) => {
@@ -456,6 +482,7 @@ export const createCampaignsService = () => {
       await getTemplateRepo().save(template);
     }
 
+    await invalidateFlowCampaignCache(campaign);
     return findOne(id, userId);
   };
 
@@ -539,6 +566,7 @@ export const createCampaignsService = () => {
     template.data = data;
     await getTemplateRepo().save(template);
 
+    await invalidateFlowCampaignCache(campaignId);
     return getPage(campaignId, normalizedType, userId);
   };
 
@@ -577,7 +605,9 @@ export const createCampaignsService = () => {
     } else {
       Object.assign(config, allowed);
     }
-    return getApiConfigRepo().save(config);
+    const saved = await getApiConfigRepo().save(config);
+    await invalidateFlowCampaignCache(campaignId);
+    return saved;
   };
 
   return {

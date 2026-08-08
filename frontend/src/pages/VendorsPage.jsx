@@ -9,11 +9,13 @@ import {
   Search,
   Link2,
   BookOpen,
+  Pencil,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import EmptyState from '../components/ui/EmptyState'
+import Modal from '../components/common/Modal'
 import useStore from '../store/useStore'
 
 function ActiveSwitch({ active, onToggle, disabled, label }) {
@@ -75,6 +77,71 @@ function PostbackUrlField({ value, onSave, placeholder, saving }) {
   )
 }
 
+function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
+  const [name, setName] = useState('')
+  const [code, setCode] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!vendor || !isOpen) return
+    setName(vendor.name || '')
+    setCode(vendor.code || '')
+  }, [vendor, isOpen])
+
+  const handleSave = async () => {
+    if (!vendor || !name.trim() || !code.trim()) return
+    setSaving(true)
+    try {
+      await onSave(vendor.id, {
+        name: name.trim(),
+        code: code.trim(),
+      })
+      onClose()
+    } catch {
+      // toast in slice
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit vendor" size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-fg mb-1.5">Vendor name</label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Vendor name"
+            autoFocus
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-fg mb-1.5">Code</label>
+          <Input
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            placeholder="CODE"
+            className="font-mono"
+          />
+        </div>
+        <div className="flex justify-end gap-3 pt-2 border-t border-border">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={saving || !name.trim() || !code.trim()}
+          >
+            {saving ? 'Saving...' : 'Save changes'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function VendorsPage() {
   const vendors = useStore((s) => s.vendors)
   const loading = useStore((s) => s.vendorsLoading)
@@ -90,6 +157,7 @@ function VendorsPage() {
   const [togglingId, setTogglingId] = useState(null)
   const [savingUrlId, setSavingUrlId] = useState(null)
   const [search, setSearch] = useState('')
+  const [editingVendor, setEditingVendor] = useState(null)
 
   useEffect(() => {
     fetchVendors({ force: true }).catch(() => {})
@@ -290,6 +358,14 @@ function VendorsPage() {
                       </div>
                       <button
                         type="button"
+                        className="p-1.5 text-fg-muted hover:text-accent rounded-md hover:bg-accent-muted transition-colors"
+                        title="Edit vendor"
+                        onClick={() => setEditingVendor(vendor)}
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
                         className="p-1.5 text-fg-muted hover:text-danger rounded-md hover:bg-danger-muted transition-colors"
                         title="Delete vendor"
                         onClick={() => handleDeleteVendor(vendor.id)}
@@ -323,6 +399,13 @@ function VendorsPage() {
           postback fires after billing callback (or confirm) when a URL is set.
         </p>
       </div>
+
+      <EditVendorModal
+        isOpen={!!editingVendor}
+        vendor={editingVendor}
+        onClose={() => setEditingVendor(null)}
+        onSave={updateVendor}
+      />
     </AppShell>
   )
 }

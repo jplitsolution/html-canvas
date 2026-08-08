@@ -1,3 +1,9 @@
+import { useEffect, useRef } from 'react'
+
+/**
+ * Boot / HE overlays. Detecting & Redirecting copy stays in the browser console —
+ * the screen stays blank so tracker → wap domain → exit feels quieter for end users.
+ */
 function SubscriptionOverlays({
   transitioning,
   error,
@@ -10,6 +16,29 @@ function SubscriptionOverlays({
   heFunnelSuppressed,
   phoneResolving,
 }) {
+  const lastStatusRef = useRef('')
+
+  useEffect(() => {
+    if (!showBootSpinner) {
+      lastStatusRef.current = ''
+      return
+    }
+    const status =
+      heExitPending || heFunnelSuppressed
+        ? 'Redirecting…'
+        : phoneResolving
+          ? 'Detecting mobile number…'
+          : 'Loading…'
+    if (status === lastStatusRef.current) return
+    lastStatusRef.current = status
+    console.log(`[subscription] ${status}`)
+  }, [
+    showBootSpinner,
+    heExitPending,
+    heFunnelSuppressed,
+    phoneResolving,
+  ])
+
   return (
     <>
       {transitioning && <div className="flow-runtime-progress" aria-hidden="true" />}
@@ -19,18 +48,11 @@ function SubscriptionOverlays({
         </div>
       )}
       {showBootSpinner && (
-        <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#f8fafc]">
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-8 w-8 rounded-full border-2 border-[#7C4DFF]/30 border-t-[#7C4DFF] animate-spin" />
-            <p className="text-slate-500 text-sm">
-              {heExitPending || heFunnelSuppressed
-                ? 'Redirecting…'
-                : phoneResolving
-                  ? 'Detecting mobile number…'
-                  : 'Loading...'}
-            </p>
-          </div>
-        </div>
+        <div
+          className="absolute inset-0 z-30 bg-[#f8fafc]"
+          aria-busy="true"
+          aria-label="Loading"
+        />
       )}
       {showFatalError && (
         <div className="absolute inset-0 z-30 flex items-center justify-center p-6 bg-slate-50">

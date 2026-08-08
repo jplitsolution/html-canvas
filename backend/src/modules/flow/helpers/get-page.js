@@ -15,6 +15,7 @@ export function createGetPage(deps) {
   const {
     getApiConfigRepo,
     isFlowCacheEnabled,
+    getFlowCacheTtl,
     normalizePack,
     formatPlanLabel,
     buildSubscriptionUrl,
@@ -60,7 +61,11 @@ export function createGetPage(deps) {
         where: { campaignId: campaign.id },
       });
       if (isFlowCacheEnabled()) {
-        await redisService.set(apiConfigCacheKey, apiConfig ?? '__NULL__', 15);
+        await redisService.set(
+          apiConfigCacheKey,
+          apiConfig ?? '__NULL__',
+          getFlowCacheTtl?.() || 600,
+        );
       }
     } else if (apiConfig === '__NULL__') {
       apiConfig = null;

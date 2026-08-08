@@ -67,6 +67,11 @@ export default () => ({
   // Flow campaign / apiConfig Redis cache. Set FLOW_CACHE_ENABLED=false to always hit DB.
   flowCacheEnabled:
     String(process.env.FLOW_CACHE_ENABLED ?? 'true').toLowerCase() !== 'false',
+  // Campaign + pages + apiConfig TTL (seconds). Edit paths invalidate immediately.
+  flowCacheTtlSeconds: Math.max(
+    30,
+    parseInt(process.env.FLOW_CACHE_TTL_SECONDS || '600', 10) || 600,
+  ),
   archiveRetentionDays: parseInt(
     process.env.ARCHIVE_RETENTION_DAYS || '30',
     10,

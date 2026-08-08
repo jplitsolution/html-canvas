@@ -37,7 +37,12 @@ export const createApp = async () => {
     }),
   );
 
-  app.use(morgan(config.environment === 'production' ? 'combined' : 'dev'));
+  // Terminal: only failed HTTP requests. Successful traffic stays quiet.
+  app.use(
+    morgan(config.environment === 'production' ? 'combined' : 'dev', {
+      skip: (_req, res) => res.statusCode < 400,
+    }),
+  );
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
 

@@ -44,10 +44,8 @@ export function resolveRequestMsisdn(headers, query = {}) {
     const isProd = String(config.environment || '').toLowerCase() === 'production';
     if (isProd) {
       console.warn(
-        `[HE DEBUG] no HE header — using HE_DUMMY_MSISDN=${dummy} (unset on live operator traffic)`,
+        `[HE] no HE header — using HE_DUMMY_MSISDN (unset on live operator traffic)`,
       );
-    } else {
-      console.log(`[HE DEBUG] no HE header — using HE_DUMMY_MSISDN=${dummy}`);
     }
     return { phone: dummy, source: 'he_dummy_msisdn', headerPhone: '' };
   }
