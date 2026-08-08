@@ -19,6 +19,7 @@ export function createHandleConfirm(deps) {
     buildBlockedPageResponse,
     resolveSkipPage,
     checkBlocklist,
+    shouldRegisterPostbackAt,
   } = deps;
 
   return async (input, campaign, apiConfig, phone, serviceId) => {
@@ -58,18 +59,20 @@ export function createHandleConfirm(deps) {
         pack: selectedPack,
       },
     );
-    void postbackService.registerPending({
-      visitId: input.visitId,
-      msisdn: phone,
-      campaignId: campaign.id,
-      campid: confirmAttr.campid || '',
-      trackingCampid:
-        confirmAttr.trackingCampid || campaign.trackingId || '',
-      clickId: confirmAttr.clickId,
-      rcid: confirmAttr.rcid,
-      vendorId: confirmAttr.vendorId,
-      affiliateId: null,
-    });
+    if (shouldRegisterPostbackAt?.(campaign, 'confirm')) {
+      void postbackService.registerPending({
+        visitId: input.visitId,
+        msisdn: phone,
+        campaignId: campaign.id,
+        campid: confirmAttr.campid || '',
+        trackingCampid:
+          confirmAttr.trackingCampid || campaign.trackingId || '',
+        clickId: confirmAttr.clickId,
+        rcid: confirmAttr.rcid,
+        vendorId: confirmAttr.vendorId,
+        affiliateId: null,
+      });
+    }
 
     const blockResult = await checkBlocklist(apiConfig, partnerCtx);
 

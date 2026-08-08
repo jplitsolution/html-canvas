@@ -3,6 +3,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
+import { postbackService } from '../../partners/postback.service.js';
 
 export function createHandleOtpContinue(deps) {
   const {
@@ -12,6 +13,7 @@ export function createHandleOtpContinue(deps) {
     maybeSkipToThankYouIfSubscribed,
     checkBlocklist,
     hasVerifiedOtp,
+    shouldRegisterPostbackAt,
   } = deps;
 
   return async (input, campaign, apiConfig, phone, serviceId) => {
@@ -51,6 +53,21 @@ export function createHandleOtpContinue(deps) {
         blockResult.reason,
         'Blocked after OTP — skip CONFIRM',
       );
+    }
+
+    // Queue vendor CPA pending when campaign says register at OTP (or both).
+    if (shouldRegisterPostbackAt?.(campaign, 'otp')) {
+      void postbackService.registerPending({
+        visitId: input.visitId,
+        msisdn: phone,
+        campaignId: campaign.id,
+        campid: otpAttr.campid || '',
+        trackingCampid: otpAttr.trackingCampid || campaign.trackingId || '',
+        clickId: otpAttr.clickId,
+        rcid: otpAttr.rcid,
+        vendorId: otpAttr.vendorId,
+        affiliateId: null,
+      });
     }
 
     let nextPage =

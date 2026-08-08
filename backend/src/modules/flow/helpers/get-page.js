@@ -24,6 +24,7 @@ export function createGetPage(deps) {
     loadVisitAttribution,
     maybeNullFlowCgRedirect,
     resolveSuccessRedirect,
+    normalizeSuccessRedirectMode,
     getActions,
     hasVerifiedOtp,
     resolveOrCreateLandingVisit,
@@ -365,6 +366,7 @@ export function createGetPage(deps) {
       resolvedPageType === CampaignPageType.THANKYOU
         ? await resolveSuccessRedirect(campaign, visitId, input)
         : null;
+    const successRedirectMode = normalizeSuccessRedirectMode(campaign);
 
     return {
       campaignId: campaign.id,
@@ -381,6 +383,7 @@ export function createGetPage(deps) {
       cgRedirectUrl: campaign.cgRedirectUrl || null,
       successRedirectUrl: campaign.successRedirectUrl || null,
       successRedirect,
+      successRedirectMode,
       subscriptionStatus: lastSubCheck?.status || null,
       blocked: Boolean(lastBlockCheck?.blocked),
       blockReason: lastBlockCheck?.reason || null,

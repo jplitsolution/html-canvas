@@ -380,6 +380,20 @@ export const createCampaignsService = () => {
     if (dto.successRedirectUrl !== undefined) {
       campaign.successRedirectUrl = dto.successRedirectUrl?.trim() || null;
     }
+    if (dto.successRedirectMode !== undefined) {
+      const mode = String(dto.successRedirectMode || '')
+        .trim()
+        .toLowerCase();
+      campaign.successRedirectMode =
+        mode === 'immediate' ? 'immediate' : 'thankyou';
+    }
+    if (dto.postbackRegisterAt !== undefined) {
+      const mode = String(dto.postbackRegisterAt || '')
+        .trim()
+        .toLowerCase();
+      campaign.postbackRegisterAt =
+        mode === 'otp' || mode === 'both' ? mode : 'confirm';
+    }
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });

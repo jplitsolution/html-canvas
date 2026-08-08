@@ -3,8 +3,8 @@
  *
  * WHY: Mode is the real admin knob for SUBSCRIBE/CONFIRM routing.
  * Default graphs match flow-engine.getDefaultFlowConfig — changing mode
- * regenerates these. Drag-drop Flow Builder UI is no longer primary;
- * Campaign Detail hosts the mode picker + read-only path.
+ * regenerates these. Campaign Detail hosts the mode picker; Flow Builder
+ * remains available as Advanced path editing.
  */
 
 export const VERIFICATION_MODES = [
@@ -18,7 +18,7 @@ export const VERIFICATION_MODES = [
     id: 'OTP_ONLY',
     label: 'OTP only',
     hint: 'OTP path. Land on HOME first, or skip HOME and open OTP directly.',
-    pathHint: 'HOME → OTP → Confirm (or OTP → Confirm)',
+    pathHint: 'HOME → OTP → Confirm (or OTP → Thank you)',
   },
   {
     id: 'BOTH',
@@ -109,25 +109,108 @@ export const DEFAULT_FLOWS = {
 
 /**
  * Build default flow for a mode.
- * OTP_ONLY supports entryPage 'HOME' (intro first) or 'OTP' (skip HOME).
+ * OTP_ONLY supports:
+ *   entryPage 'HOME' | 'OTP'
+ *   afterOtp 'CONFIRM' (pack/subscribe page) | 'THANKYOU' (pin-verify = subscribe)
  */
-export function buildDefaultFlow(mode, { entryPage } = {}) {
+export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
   const normalized = normalizeModeId(mode)
   const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
+  const otpEntry = String(entryPage || '').toUpperCase() === 'OTP'
+  const skipConfirm = String(afterOtp || '').toUpperCase() === 'THANKYOU'
 
-  if (normalized === 'OTP_ONLY' && String(entryPage || '').toUpperCase() === 'OTP') {
-    return {
-      version: 1,
-      entryPage: 'OTP',
-      nodes: [
-        { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-        { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-        ...OUTCOME_NODES.map((n) => ({ ...n })),
-      ],
-      edges: [
-        { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-        ...CONFIRM_EDGES.map((e) => ({ ...e })),
-      ],
+  if (normalized === 'OTP_ONLY') {
+    const outcomes = OUTCOME_NODES.map((n) => ({ ...n }))
+    if (skipConfirm) {
+      // Only pages reachable from OTP — avoid validate() unreachable errors.
+      const thankYouOnly = [
+        { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
+        { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
+        { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
+      ]
+      const otpToThankYou = {
+        id: 'OTP-OTP_VERIFIED-THANKYOU',
+        source: 'OTP',
+        target: 'THANKYOU',
+        condition: 'OTP_VERIFIED',
+      }
+      if (otpEntry) {
+        return {
+          version: 1,
+          entryPage: 'OTP',
+          nodes: [
+            { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+            ...thankYouOnly,
+          ],
+          edges: [
+            otpToThankYou,
+            {
+              id: 'OTP-BLOCKED-BLOCKED',
+              source: 'OTP',
+              target: 'BLOCKED',
+              condition: 'BLOCKED',
+            },
+            {
+              id: 'OTP-ERROR-ERROR',
+              source: 'OTP',
+              target: 'ERROR',
+              condition: 'ERROR',
+            },
+          ],
+        }
+      }
+      return {
+        version: 1,
+        entryPage: 'HOME',
+        nodes: [
+          { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+          { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+          ...thankYouOnly,
+        ],
+        edges: [
+          { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
+          otpToThankYou,
+          {
+            id: 'OTP-BLOCKED-BLOCKED',
+            source: 'OTP',
+            target: 'BLOCKED',
+            condition: 'BLOCKED',
+          },
+          {
+            id: 'OTP-ERROR-ERROR',
+            source: 'OTP',
+            target: 'ERROR',
+            condition: 'ERROR',
+          },
+          {
+            id: 'HOME-BLOCKED-BLOCKED',
+            source: 'HOME',
+            target: 'BLOCKED',
+            condition: 'BLOCKED',
+          },
+        ],
+      }
+    }
+
+    if (otpEntry) {
+      return {
+        version: 1,
+        entryPage: 'OTP',
+        nodes: [
+          { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+          { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+          ...outcomes,
+        ],
+        edges: [
+          {
+            id: 'OTP-OTP_VERIFIED-CONFIRM',
+            source: 'OTP',
+            target: 'CONFIRM',
+            condition: 'OTP_VERIFIED',
+          },
+          ...CONFIRM_EDGES.map((e) => ({ ...e })),
+        ],
+      }
     }
   }
 
@@ -160,13 +243,28 @@ function resolveEntryPage(config) {
   return nodes[0].pageType
 }
 
+/** Infer after-OTP target from saved edges (CONFIRM vs THANKYOU). */
+export function resolveAfterOtpTarget(flowConfig) {
+  const edges = flowConfig?.edges || []
+  const otpVerified = edges.find(
+    (e) =>
+      (e.source === 'OTP' || e.source === 'otp') &&
+      String(e.condition || '').toUpperCase() === 'OTP_VERIFIED',
+  )
+  if (!otpVerified) return 'CONFIRM'
+  const target = String(otpVerified.target || '').toUpperCase()
+  return target === 'THANKYOU' ? 'THANKYOU' : 'CONFIRM'
+}
+
 /**
  * Build a compact read-only path for Campaign Detail.
  * Prefers saved flowConfig edges; falls back to DEFAULT_FLOWS for the mode.
  */
 export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectUrl } = {}) {
   const mode = normalizeModeId(verificationMode)
-  const modeMeta = VERIFICATION_MODES.find((m) => m.id === mode) || VERIFICATION_MODES.find((m) => m.id === 'BOTH')
+  const modeMeta =
+    VERIFICATION_MODES.find((m) => m.id === mode) ||
+    VERIFICATION_MODES.find((m) => m.id === 'BOTH')
   const config = flowConfig?.nodes?.length
     ? flowConfig
     : DEFAULT_FLOWS[mode] || DEFAULT_FLOWS.BOTH
@@ -198,7 +296,6 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     return n?.pageType || id
   }
 
-  // Prefer entry page outgoing edges, then HOME/OTP/CONFIRM for the story.
   const prioritySources = [entryPage, 'HOME', 'OTP', 'CONFIRM'].filter(
     (v, i, arr) => arr.indexOf(v) === i,
   )
@@ -215,7 +312,6 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     }
   }
 
-  // Unique ordered steps along BFS from entry page
   const steps = []
   const visited = new Set()
   const entryNode = (config.nodes || []).find((n) => n.pageType === entryPage)
@@ -230,14 +326,22 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
       const targetNode = nodesById[e.target]
       const type = targetNode?.pageType || e.target
       if (visited.has(type)) continue
-      // Skip status-only outcomes in the main breadcrumb (still listed in edges)
-      if (['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'].includes(type)) continue
+      if (['INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'].includes(type)) continue
+      const otpGoesThankYou = edges.some(
+        (ed) => ed.source === 'OTP' && ed.target === 'THANKYOU',
+      )
+      if (type === 'THANKYOU' && !otpGoesThankYou) continue
       visited.add(type)
       steps.push({ id: type, label: type })
       queue.push(e.target)
     }
   }
-  steps.push({ id: 'outcomes', label: 'outcomes' })
+  if (
+    !steps.some((s) => s.id === 'outcomes') &&
+    resolveAfterOtpTarget(config) === 'CONFIRM'
+  ) {
+    steps.push({ id: 'outcomes', label: 'outcomes' })
+  }
 
   return {
     mode,
@@ -248,7 +352,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     edges,
     note:
       entryPage === 'OTP'
-        ? 'Landing opens OTP directly (HOME skipped). Canvas “Go to page / URL / Priority” can still override.'
+        ? 'Landing opens OTP directly (HOME skipped). Use Advanced flow to remap edges.'
         : 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
   }
 }

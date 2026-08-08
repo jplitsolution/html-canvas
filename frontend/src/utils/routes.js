@@ -4,7 +4,7 @@
  *   /markets/:countryCode/:operatorCode
  *   /markets/:countryCode/:operatorCode/campaigns/:id
  *   /markets/:countryCode/:operatorCode/campaigns/:id/edit/:pageType
- *   /markets/.../campaigns/:id/flow  → redirects to campaign detail (mode picker)
+ *   /markets/.../campaigns/:id/flow  → Advanced Flow Builder
  */
 
 export function marketPath(countryCode, operatorCode) {

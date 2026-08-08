@@ -31,8 +31,62 @@ export const initDatabase = async () => {
   await ensureUserStatusColumn(dataSource);
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
+  await ensureSuccessRedirectModeColumn(dataSource);
+  await ensurePostbackRegisterAtColumn(dataSource);
   return dataSource;
 };
+
+/** Idempotent: thankyou | immediate after success / portal URL. */
+async function ensureSuccessRedirectModeColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "campaigns"
+        ADD COLUMN IF NOT EXISTS "success_redirect_mode" varchar(16) NOT NULL DEFAULT 'thankyou'
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaigns' AND COLUMN_NAME = 'success_redirect_mode'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`campaigns\` ADD COLUMN \`success_redirect_mode\` varchar(16) NOT NULL DEFAULT 'thankyou'`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureSuccessRedirectModeColumn:', err.message);
+  }
+}
+
+/** Idempotent: confirm | otp | both — when to queue vendor CPA pending. */
+async function ensurePostbackRegisterAtColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "campaigns"
+        ADD COLUMN IF NOT EXISTS "postback_register_at" varchar(16) NOT NULL DEFAULT 'confirm'
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaigns' AND COLUMN_NAME = 'postback_register_at'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`campaigns\` ADD COLUMN \`postback_register_at\` varchar(16) NOT NULL DEFAULT 'confirm'`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensurePostbackRegisterAtColumn:', err.message);
+  }
+}
 
 /** Idempotent: users.status for admin user-management (active|inactive|suspended). */
 async function ensureUserStatusColumn(ds) {
