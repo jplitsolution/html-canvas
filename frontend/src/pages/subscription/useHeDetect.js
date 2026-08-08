@@ -402,9 +402,11 @@ function useHeDetect({
     const meta = heMetaRef.current
     const isApiHe = isApiHeProvider(meta.heProvider)
 
-    // Still detecting — ask user to wait instead of bouncing.
+    // Still detecting — block CTA; status stays in console (not on-screen copy).
     if (phoneResolvingRef.current || !meta.done) {
-      setError('Detecting your mobile number… please wait a moment and try again.')
+      console.log(
+        '[subscription] Detecting mobile number… please wait a moment and try again.',
+      )
       return true
     }
 

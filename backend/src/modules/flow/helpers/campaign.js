@@ -10,7 +10,7 @@ import {
 } from '../../markets/helpers/tracking-id.util.js';
 
 export function createFlowCampaignFns(deps) {
-  const { isFlowCacheEnabled, buildCgRedirectUrl } = deps;
+  const { isFlowCacheEnabled, getFlowCacheTtl, buildCgRedirectUrl } = deps;
 
   const loadVisitAttribution = async (visitId, input = {}) => {
     let clickId = String(input.clickId || '').trim();
@@ -125,13 +125,14 @@ export function createFlowCampaignFns(deps) {
     }
   
     if (campaign && isFlowCacheEnabled()) {
-      await redisService.set(cacheKey, campaign, 15);
-      await redisService.set(`flow:campaign:id:${campaign.id}`, campaign, 15);
+      const ttl = getFlowCacheTtl?.() || 600;
+      await redisService.set(cacheKey, campaign, ttl);
+      await redisService.set(`flow:campaign:id:${campaign.id}`, campaign, ttl);
       if (campaign.trackingId) {
         await redisService.set(
           `flow:campaign:id:${campaign.trackingId}`,
           campaign,
-          15,
+          ttl,
         );
       }
     }

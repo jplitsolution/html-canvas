@@ -124,7 +124,6 @@ export const partnerProvider = {
         : resolveTemplate(bodyTemplate, templateVariables);
 
     try {
-      console.log(`Partner sending OTP via ${method} ${resolvedUrl}`);
       let response;
       if (method === 'GET') {
         response = await axios.get(resolvedUrl, { headers, timeout: 10000 });
@@ -253,12 +252,6 @@ export const partnerProvider = {
         : resolveTemplate(bodyTemplate, templateVariables);
 
     try {
-      if (process.env.NODE_ENV === 'production' && otp) {
-        const maskedUrl = resolvedUrl.replace(otp, '[REDACTED]');
-        console.log(`Partner verifying OTP via ${method} ${maskedUrl}`);
-      } else {
-        console.log(`Partner verifying OTP via ${method} ${resolvedUrl}`);
-      }
       let response;
       if (method === 'GET') {
         response = await axios.get(resolvedUrl, { headers, timeout: 10000 });

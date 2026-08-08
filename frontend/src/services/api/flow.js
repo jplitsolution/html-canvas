@@ -1,4 +1,5 @@
 import { apiClient } from './client'
+import { logFlowApi } from '../flow/apiDebugLog'
 
 export async function fetchFlowPage({
   country,
@@ -34,27 +35,40 @@ export async function fetchFlowPage({
   // Builder page links: skip funnel rewrite guards (CONFIRM→HOME without MSISDN).
   if (direct) params.set('direct', '1')
 
+  const request = Object.fromEntries(params)
   const res = await apiClient(`/flow/page?${params.toString()}`, {
     method: 'GET',
   })
-  logHeDebug('flow/page', res)
-  return res
-}
-
-/** TEMP — always print server-seen headers (or warn if backend not redeployed). */
-function logHeDebug(label, res) {
-  console.log(`%c[HE DEBUG] ${label} response received`, 'color:#0ea5e9;font-weight:bold', res)
+  logFlowApi('flow/page', {
+    request,
+    response: {
+      pageType: res?.pageType,
+      campaignId: res?.campaignId,
+      visitId: res?.visitId,
+      entryPage: res?.entryPage,
+      subscriptionStatus: res?.subscriptionStatus,
+      blocked: res?.blocked,
+      blockReason: res?.blockReason,
+      successRedirect: res?.successRedirect,
+      externalRedirect: res?.externalRedirect,
+      clickId: res?.clickId,
+      rcid: res?.rcid,
+      hasHtml: Boolean(res?.html),
+    },
+    detected: {
+      phone: msisdn || null,
+      subscriptionStatus: res?.subscriptionStatus || null,
+      blocked: Boolean(res?.blocked),
+      blockReason: res?.blockReason || null,
+    },
+  })
   if (res?.debugHeaders) {
-    console.log('%c[HE DEBUG] Full request headers seen by server:', 'color:#0ea5e9;font-weight:bold')
-    console.log(res.debugHeaders)
-    console.table(res.debugHeaders)
-    console.log('[HE DEBUG] extracted MSISDN from headers:', res.debugHeaderPhone || '(none)')
-  } else {
-    console.warn(
-      '[HE DEBUG] debugHeaders missing — backend/frontend deploy may be stale. Re-run ./deploy.sh on the server.',
-      { keys: res ? Object.keys(res) : null },
-    )
+    logFlowApi('flow/page headers', {
+      response: res.debugHeaders,
+      detected: { headerPhone: res.debugHeaderPhone || null },
+    })
   }
+  return res
 }
 
 export async function prefetchFlowPage(params) {
@@ -94,7 +108,12 @@ export async function fetchFlowEntry({ country, operator, campid, trackingCampid
   const params = new URLSearchParams({ country, operator, page: 'HOME' })
   if (campid) params.set('campid', String(campid))
   if (trackingCampid) params.set('tracking_campid', String(trackingCampid))
-  return apiClient(`/flow/entry?${params.toString()}`, { method: 'GET' })
+  const res = await apiClient(`/flow/entry?${params.toString()}`, { method: 'GET' })
+  logFlowApi('flow/entry', {
+    request: Object.fromEntries(params),
+    response: res,
+  })
+  return res
 }
 
 export async function transitionFlow(body) {
@@ -102,11 +121,29 @@ export async function transitionFlow(body) {
     ...body,
     visitId: body.visitId ? Number(body.visitId) : undefined,
   }
-  return apiClient('/flow/transition', {
+  const res = await apiClient('/flow/transition', {
     method: 'POST',
     body: payload,
     dedupe: false,
   })
+  logFlowApi('flow/transition', {
+    request: payload,
+    response: {
+      pageType: res?.pageType,
+      visitId: res?.visitId,
+      nextPage: res?.nextPage,
+      subscriptionStatus: res?.subscriptionStatus,
+      blocked: res?.blocked,
+      successRedirect: res?.successRedirect,
+      hasHtml: Boolean(res?.html),
+    },
+    detected: {
+      phone: payload.phone || null,
+      pageType: res?.pageType || null,
+      subscriptionStatus: res?.subscriptionStatus || null,
+    },
+  })
+  return res
 }
 
 export async function detectMsisdnApi({
@@ -181,32 +218,48 @@ export async function detectMsisdnApi({
     params.set('sessionId', String(sessionId))
   }
 
-  console.log('[HE DEBUG] calling /flow/detect-msisdn…', Object.fromEntries(params))
+  const request = Object.fromEntries(params)
   try {
-    const res = await apiClient(`/flow/detect-msisdn?${params.toString()}`, { method: 'GET' })
-    logHeDebug('detect-msisdn', res)
-    console.log('[HE DEBUG] detect-msisdn result:', {
-      phone: res?.phone,
-      hasMsisdn: res?.hasMsisdn,
-      heProvider: res?.heProvider,
-      heError: res?.heError,
-      failRedirectUrl: res?.failRedirectUrl,
-      successRedirectUrl: res?.successRedirectUrl,
-      cgRedirectUrl: res?.cgRedirectUrl,
-      subscribed: res?.subscribed,
-      isActive: res?.isActive,
-      subscriptionStatus: res?.subscriptionStatus,
-      blocked: res?.blocked,
-      blockReason: res?.blockReason,
-      nextPage: res?.nextPage,
-      visitId: res?.visitId,
-      clickId: res?.clickId,
-      rcid: res?.rcid,
+    const res = await apiClient(`/flow/detect-msisdn?${params.toString()}`, {
+      method: 'GET',
     })
+    logFlowApi('detect-msisdn', {
+      request,
+      response: res,
+      detected: {
+        phone: res?.phone || null,
+        hasMsisdn: res?.hasMsisdn,
+        heProvider: res?.heProvider || null,
+        heError: res?.heError || null,
+        subscribed: res?.subscribed,
+        isActive: res?.isActive,
+        subscriptionStatus: res?.subscriptionStatus || null,
+        blocked: res?.blocked,
+        blockReason: res?.blockReason || null,
+        nextPage: res?.nextPage || null,
+        failRedirectUrl: res?.failRedirectUrl || null,
+        successRedirectUrl: res?.successRedirectUrl || null,
+        cgRedirectUrl: res?.cgRedirectUrl || null,
+        visitId: res?.visitId || null,
+        clickId: res?.clickId || null,
+        rcid: res?.rcid || null,
+        headerPhone: res?.debugHeaderPhone || null,
+      },
+      outcome: res?.hasMsisdn ? 'msisdn_found' : 'msisdn_missing',
+    })
+    if (res?.debugHeaders) {
+      logFlowApi('detect-msisdn headers', {
+        response: res.debugHeaders,
+        detected: { headerPhone: res.debugHeaderPhone || null },
+      })
+    }
     return res
   } catch (err) {
-    console.warn('[HE DEBUG] detectMsisdnApi failed:', err)
+    logFlowApi('detect-msisdn', {
+      request,
+      error: err,
+      outcome: 'fail',
+    })
     return null
   }
 }
-

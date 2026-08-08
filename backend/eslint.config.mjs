@@ -1,5 +1,5 @@
 import eslint from '@eslint/js';
-import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
+import eslintConfigPrettier from 'eslint-config-prettier';
 import globals from 'globals';
 
 export default [
@@ -14,7 +14,6 @@ export default [
     ],
   },
   eslint.configs.recommended,
-  eslintPluginPrettierRecommended,
   {
     languageOptions: {
       ecmaVersion: 2023,
@@ -32,7 +31,8 @@ export default [
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      'prettier/prettier': ['error', { endOfLine: 'auto' }],
     },
   },
+  // Keep Prettier for formatting, but don't report indent/style as ESLint errors
+  eslintConfigPrettier,
 ];

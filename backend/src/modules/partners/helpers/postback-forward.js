@@ -53,7 +53,6 @@ export const createPostbackForward = (deps) => {
     });
 
     try {
-      console.log(`Vendor postback → GET ${url}`);
       const response = await axios.get(url, {
         timeout: 10000,
         validateStatus: () => true,

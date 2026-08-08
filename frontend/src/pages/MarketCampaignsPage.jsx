@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
-import { Search, Plus, ChevronRight, ArrowLeft } from 'lucide-react'
+import { Search, Plus, ChevronRight, ArrowLeft, Pencil } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -9,6 +9,7 @@ import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/common/Modal'
 import useStore from '../store/useStore'
 import * as marketsApi from '../services/api/markets'
+import * as campaignsApi from '../services/api/campaigns'
 import { campaignDetailPath } from '../utils/routes'
 
 function CreateMarketCampaignModal({
@@ -97,6 +98,68 @@ function CreateMarketCampaignModal({
   )
 }
 
+function EditCampaignModal({ isOpen, campaign, onClose, onUpdated }) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const addToast = useStore((s) => s.addToast)
+
+  useEffect(() => {
+    if (!campaign || !isOpen) return
+    setName(campaign.name || '')
+  }, [campaign, isOpen])
+
+  const handleSave = async () => {
+    if (!campaign || !name.trim()) return
+    setSaving(true)
+    try {
+      const updated = await campaignsApi.updateCampaign(campaign.id, {
+        name: name.trim(),
+      })
+      addToast('Campaign updated', 'success')
+      onClose()
+      onUpdated?.(updated)
+    } catch (err) {
+      addToast(err.message || 'Failed to update campaign', 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit campaign" size="md">
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-fg mb-1.5">Campaign name</label>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Wellness WAP"
+            autoFocus
+          />
+        </div>
+        {campaign?.trackingId && (
+          <p className="text-xs text-fg-muted">
+            Tracking ID{' '}
+            <code className="font-mono">{campaign.trackingId}</code> stays the same.
+          </p>
+        )}
+        <div className="flex justify-end gap-3 pt-2 border-t border-border">
+          <Button variant="outline" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+          >
+            {saving ? 'Saving...' : 'Save changes'}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 function MarketCampaignsPage() {
   const { countryCode, operatorCode } = useParams()
   const navigate = useNavigate()
@@ -106,6 +169,7 @@ function MarketCampaignsPage() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [editingCampaign, setEditingCampaign] = useState(null)
   const addToast = useStore((s) => s.addToast)
 
   const load = useCallback(async () => {
@@ -236,7 +300,7 @@ function MarketCampaignsPage() {
                   <th className="col-text">Tracking ID</th>
                   <th className="col-text">Status</th>
                   <th className="col-text">Pages</th>
-                  <th className="col-num w-10" />
+                  <th className="col-num w-20" />
                 </tr>
               </thead>
               <tbody>
@@ -271,7 +335,20 @@ function MarketCampaignsPage() {
                       </span>
                     </td>
                     <td className="col-num">
-                      <ChevronRight className="w-4 h-4 text-fg-subtle inline-block" />
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="p-1.5 text-fg-muted hover:text-accent rounded-md hover:bg-accent-muted transition-colors"
+                          title="Edit campaign"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditingCampaign(campaign)
+                          }}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <ChevronRight className="w-4 h-4 text-fg-subtle" />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -290,6 +367,17 @@ function MarketCampaignsPage() {
         operatorName={market.operatorName}
         campaigns={campaigns}
         onCreated={() => load()}
+      />
+
+      <EditCampaignModal
+        isOpen={!!editingCampaign}
+        campaign={editingCampaign}
+        onClose={() => setEditingCampaign(null)}
+        onUpdated={(updated) => {
+          setCampaigns((prev) =>
+            prev.map((c) => (c.id === updated.id ? { ...c, ...updated } : c)),
+          )
+        }}
       />
     </AppShell>
   )

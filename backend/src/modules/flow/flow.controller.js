@@ -19,15 +19,7 @@ export const flowController = {
       req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    console.log(
-      '[HE DEBUG] /detect-msisdn headers:',
-      JSON.stringify(allHeaders, null, 2),
-    );
-    console.log(
-      '[HE DEBUG] extracted MSISDN:',
-      resolved.phone || '(none)',
-      resolved.source ? `(${resolved.source})` : '',
-    );
+    // HE debug headers are returned in the JSON body; frontend logs them in the browser.
 
     const result = await flowService.detectMsisdn({
       country: q.country,
@@ -75,17 +67,7 @@ export const flowController = {
       req.headers['x-forwarded-for'] || req.socket.remoteAddress;
     const userAgent = req.headers['user-agent'];
 
-    console.log(
-      '[HE DEBUG] /flow/page headers:',
-      JSON.stringify(allHeaders, null, 2),
-    );
-    console.log(
-      '[HE DEBUG] /flow/page extracted MSISDN:',
-      resolved.phone || '(none)',
-      resolved.source ? `(${resolved.source})` : '',
-      'page=',
-      q.page,
-    );
+    // HE debug headers are returned in the JSON body; frontend logs them in the browser.
 
     const direct =
       q.direct === '1' ||

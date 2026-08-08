@@ -9,6 +9,7 @@ router.use(authenticate);
 router.get('/', marketsController.list);
 router.post('/', marketsController.create);
 router.get('/:countryCode/:operatorCode', marketsController.getOne);
+router.patch('/:countryCode/:operatorCode', marketsController.update);
 router.get(
   '/:countryCode/:operatorCode/campaigns',
   marketsController.listCampaigns,

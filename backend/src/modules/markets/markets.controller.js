@@ -23,6 +23,17 @@ export const marketsController = {
     res.json(data);
   }),
 
+  update: asyncHandler(async (req, res) => {
+    const { countryCode, operatorCode } = req.params;
+    const data = await marketsService.updateMarket(
+      countryCode,
+      operatorCode,
+      req.body || {},
+      req.user.id,
+    );
+    res.json(data);
+  }),
+
   listCampaigns: asyncHandler(async (req, res) => {
     const { countryCode, operatorCode } = req.params;
     const data = await marketsService.listCampaignsForMarket(

@@ -22,6 +22,7 @@ import {
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
+import Input from '../components/ui/Input'
 import { copyToClipboard } from '../utils/clipboard'
 import {
   campaignEditPath,
@@ -104,6 +105,9 @@ function CampaignDetailPage() {
   const [savingCg, setSavingCg] = useState(false)
   const [successUrlDraft, setSuccessUrlDraft] = useState('')
   const [savingSuccessUrl, setSavingSuccessUrl] = useState(false)
+  const [editingName, setEditingName] = useState(false)
+  const [nameDraft, setNameDraft] = useState('')
+  const [savingName, setSavingName] = useState(false)
 
   useEffect(() => {
     fetchVendors().catch(() => {})
@@ -116,6 +120,25 @@ function CampaignDetailPage() {
   useEffect(() => {
     setSuccessUrlDraft(campaign?.successRedirectUrl || '')
   }, [campaign?.id, campaign?.successRedirectUrl])
+
+  useEffect(() => {
+    setNameDraft(campaign?.name || '')
+    setEditingName(false)
+  }, [campaign?.id, campaign?.name])
+
+  const handleSaveName = async () => {
+    if (!campaign || !nameDraft.trim()) return
+    setSavingName(true)
+    try {
+      await updateCampaign(campaign.id, { name: nameDraft.trim() })
+      useStore.getState().addToast('Campaign name updated', 'success')
+      setEditingName(false)
+    } catch {
+      // toast in slice
+    } finally {
+      setSavingName(false)
+    }
+  }
 
   const handleSaveCgUrl = async () => {
     if (!campaign) return
@@ -446,7 +469,54 @@ function CampaignDetailPage() {
             </Link>
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="page-header-title">{campaign.name}</h1>
+            {editingName ? (
+              <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                <Input
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  className="max-w-md"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveName()
+                    if (e.key === 'Escape') {
+                      setNameDraft(campaign.name || '')
+                      setEditingName(false)
+                    }
+                  }}
+                />
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSaveName}
+                  disabled={savingName || !nameDraft.trim()}
+                >
+                  {savingName ? 'Saving...' : 'Save'}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNameDraft(campaign.name || '')
+                    setEditingName(false)
+                  }}
+                  disabled={savingName}
+                >
+                  Cancel
+                </Button>
+              </div>
+            ) : (
+              <>
+                <h1 className="page-header-title">{campaign.name}</h1>
+                <button
+                  type="button"
+                  className="p-1.5 text-fg-muted hover:text-accent rounded-md hover:bg-accent-muted transition-colors"
+                  title="Edit campaign name"
+                  onClick={() => setEditingName(true)}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              </>
+            )}
             <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
               {campaign.active ? 'Active' : 'Draft'}
             </span>
