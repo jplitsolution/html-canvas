@@ -67,7 +67,12 @@ const isBusinessSuccess = (data, config) => {
   const { key, value } = getSuccessRule(config);
   const actual = getFieldValue(data, key);
   if (actual === undefined || actual === null) {
-    // No configured key present — unknown
+    // AE-style partners: { "response": "SUCCESS" | "FAIL" } when key is responseCode
+    if (data.response != null) {
+      const r = String(data.response).toUpperCase();
+      if (r === 'SUCCESS') return true;
+      if (r === 'FAIL' || r === 'FAILED') return false;
+    }
     return null;
   }
   return String(actual) === value;
@@ -88,6 +93,22 @@ const formatPartnerError = (data, config, fallback) => {
   return fallback;
 };
 
+/** Mask PIN/OTP in logged URLs/bodies so Campaign Logs stay useful without leaking codes. */
+const redactSecrets = (value, otp) => {
+  if (value == null) return value;
+  let out = String(value);
+  if (otp) out = out.split(String(otp)).join('****');
+  out = out.replace(/([?&](?:pin|otp|code|passwd|password)=)[^&]*/gi, '$1****');
+  out = out.replace(/("(?:pin|otp|code)"\s*:\s*")[^"]*"/gi, '$1****"');
+  return out;
+};
+
+const withRequestMeta = (result, { requestUrl, requestBody, otp }) => ({
+  ...result,
+  requestUrl: redactSecrets(requestUrl, otp) || null,
+  requestBody: requestBody ? redactSecrets(requestBody, otp) : null,
+});
+
 export const partnerProvider = {
   sendOtp: async (phone, otp, config, context) => {
     const sendUrl = config?.sendUrl || config?.send_url || config?.url;
@@ -102,7 +123,10 @@ export const partnerProvider = {
     if (!sendUrl) {
       const errorMsg = 'Partner Send OTP URL missing (sendUrl)';
       console.error(errorMsg);
-      return { success: false, error: errorMsg, successRule };
+      return withRequestMeta(
+        { success: false, error: errorMsg, successRule },
+        { requestUrl: null, requestBody: null, otp },
+      );
     }
 
     const pack = (context?.pack || 'daily').toLowerCase();
@@ -122,6 +146,7 @@ export const partnerProvider = {
       typeof bodyTemplate === 'object'
         ? JSON.stringify(bodyTemplate)
         : resolveTemplate(bodyTemplate, templateVariables);
+    const meta = { requestUrl: resolvedUrl, requestBody: resolvedBodyStr || null, otp };
 
     try {
       let response;
@@ -145,26 +170,32 @@ export const partnerProvider = {
       if (codeSuccess === false) {
         const msg = formatPartnerError(data, config, 'OTP send failed');
         console.warn(`Partner send rejected: ${msg}`);
-        return {
-          success: false,
-          error: msg,
-          responseCode: businessCode,
-          successRule,
-          rawResponse: data,
-          httpStatus: response.status,
-        };
+        return withRequestMeta(
+          {
+            success: false,
+            error: msg,
+            responseCode: businessCode,
+            successRule,
+            rawResponse: data,
+            httpStatus: response.status,
+          },
+          meta,
+        );
       }
 
       if (codeSuccess === null) {
         // Configured success key missing from body — do not treat bare HTTP 200 as OTP success
-        return {
-          success: false,
-          error: `Partner response missing "${successRule.key}". Expected ${successRule.key}=${successRule.value} for success.`,
-          responseCode: businessCode,
-          successRule,
-          rawResponse: data,
-          httpStatus: response.status,
-        };
+        return withRequestMeta(
+          {
+            success: false,
+            error: `Partner response missing "${successRule.key}". Expected ${successRule.key}=${successRule.value} for success.`,
+            responseCode: businessCode,
+            successRule,
+            rawResponse: data,
+            httpStatus: response.status,
+          },
+          meta,
+        );
       }
 
       const providerRequestId = String(
@@ -182,18 +213,21 @@ export const partnerProvider = {
           'partner-txn-id',
       );
 
-      return {
-        success: true,
-        providerRequestId,
-        responseCode: businessCode,
-        successRule,
-        rawResponse: data,
-        httpStatus: response.status,
-        message:
-          data?.responseMessage ||
-          data?.response_message ||
-          `OTP send OK (${successRule.key}=${successRule.value})`,
-      };
+      return withRequestMeta(
+        {
+          success: true,
+          providerRequestId,
+          responseCode: businessCode,
+          successRule,
+          rawResponse: data,
+          httpStatus: response.status,
+          message:
+            data?.responseMessage ||
+            data?.response_message ||
+            `OTP send OK (${successRule.key}=${successRule.value})`,
+        },
+        meta,
+      );
     } catch (error) {
       const data = error.response?.data;
       const errorMsg = formatPartnerError(
@@ -202,14 +236,17 @@ export const partnerProvider = {
         data?.message || error.message || 'OTP send failed',
       );
       console.error(`Partner send failed: ${errorMsg}`);
-      return {
-        success: false,
-        error: errorMsg,
-        responseCode: getBusinessCode(data, config),
-        successRule,
-        rawResponse: data || null,
-        httpStatus: error.response?.status,
-      };
+      return withRequestMeta(
+        {
+          success: false,
+          error: errorMsg,
+          responseCode: getBusinessCode(data, config),
+          successRule,
+          rawResponse: data || null,
+          httpStatus: error.response?.status,
+        },
+        meta,
+      );
     }
   },
 
@@ -233,7 +270,10 @@ export const partnerProvider = {
     if (!verifyUrl) {
       const errorMsg = 'Partner Verify OTP URL missing (verifyUrl)';
       console.error(errorMsg);
-      return { success: false, error: errorMsg, successRule };
+      return withRequestMeta(
+        { success: false, error: errorMsg, successRule },
+        { requestUrl: null, requestBody: null, otp },
+      );
     }
 
     const templateVariables = {
@@ -250,6 +290,7 @@ export const partnerProvider = {
       typeof bodyTemplate === 'object'
         ? JSON.stringify(bodyTemplate)
         : resolveTemplate(bodyTemplate, templateVariables);
+    const meta = { requestUrl: resolvedUrl, requestBody: resolvedBodyStr || null, otp };
 
     try {
       let response;
@@ -271,39 +312,48 @@ export const partnerProvider = {
       const businessCode = getBusinessCode(data, config);
 
       if (codeSuccess === true) {
-        return {
-          success: true,
-          responseCode: businessCode,
-          successRule,
-          rawResponse: data,
-          httpStatus: response.status,
-          message:
-            data?.responseMessage ||
-            data?.response_message ||
-            `OTP verify OK (${successRule.key}=${successRule.value})`,
-        };
+        return withRequestMeta(
+          {
+            success: true,
+            responseCode: businessCode,
+            successRule,
+            rawResponse: data,
+            httpStatus: response.status,
+            message:
+              data?.responseMessage ||
+              data?.response_message ||
+              `OTP verify OK (${successRule.key}=${successRule.value})`,
+          },
+          meta,
+        );
       }
 
       if (codeSuccess === false) {
         const msg = formatPartnerError(data, config, 'OTP verification failed');
-        return {
+        return withRequestMeta(
+          {
+            success: false,
+            error: msg,
+            responseCode: businessCode,
+            successRule,
+            rawResponse: data,
+            httpStatus: response.status,
+          },
+          meta,
+        );
+      }
+
+      return withRequestMeta(
+        {
           success: false,
-          error: msg,
+          error: `Partner response missing "${successRule.key}". Expected ${successRule.key}=${successRule.value} for success.`,
           responseCode: businessCode,
           successRule,
           rawResponse: data,
           httpStatus: response.status,
-        };
-      }
-
-      return {
-        success: false,
-        error: `Partner response missing "${successRule.key}". Expected ${successRule.key}=${successRule.value} for success.`,
-        responseCode: businessCode,
-        successRule,
-        rawResponse: data,
-        httpStatus: response.status,
-      };
+        },
+        meta,
+      );
     } catch (error) {
       const data = error.response?.data;
       const errorMsg = formatPartnerError(
@@ -312,14 +362,17 @@ export const partnerProvider = {
         data?.message || error.message || 'OTP verification failed',
       );
       console.error(`Partner verification failed with error: ${errorMsg}`);
-      return {
-        success: false,
-        error: errorMsg,
-        responseCode: getBusinessCode(data, config),
-        successRule,
-        rawResponse: data || null,
-        httpStatus: error.response?.status,
-      };
+      return withRequestMeta(
+        {
+          success: false,
+          error: errorMsg,
+          responseCode: getBusinessCode(data, config),
+          successRule,
+          rawResponse: data || null,
+          httpStatus: error.response?.status,
+        },
+        meta,
+      );
     }
   },
 };

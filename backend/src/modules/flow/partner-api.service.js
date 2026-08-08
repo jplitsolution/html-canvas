@@ -336,6 +336,19 @@ export const createPartnerApiService = () => {
     }
 
     if (!config?.subscribeApi) {
+      // Soft success when no partner subscribe URL — still leave an audit row.
+      await logCall({
+        callType: ApiCallType.SUBSCRIBE,
+        input,
+        requestUrl: null,
+        requestBody: serializeBody({
+          info: 'No subscribeApi configured — soft success (billing via OTP verify / Priority)',
+          planId: input.planId || null,
+        }),
+        response: { status: null, data: { skipped: true, reason: 'no_subscribe_api' } },
+        success: true,
+        statusLabel: 'SKIPPED_NO_URL',
+      });
       return true;
     }
 
@@ -369,6 +382,9 @@ export const createPartnerApiService = () => {
         success = code === '0' || code === 0;
       } else if (typeof data.success === 'boolean') {
         success = data.success;
+      } else if (data.response != null) {
+        // AE-style partners: { "response": "SUCCESS" | "FAIL" }
+        success = String(data.response).toUpperCase() === 'SUCCESS';
       } else {
         success = true;
       }

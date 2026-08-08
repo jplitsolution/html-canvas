@@ -1,0 +1,27 @@
+---
+description: Keep campaign canvas and Preview/live visually identical (WYSIWYG)
+globs: frontend/src/editor/**/*.{js,jsx},frontend/src/pages/subscription/**/*.{js,jsx}
+alwaysApply: false
+---
+
+# Canvas ↔ Preview WYSIWYG
+
+Campaign pages must look the same in GrapesJS canvas and Preview (`/subscription` shadow).
+
+## Do
+
+- Put shared runtime CSS only in `flowRuntimeCss.js` (`FLOW_RUNTIME_CSS`, `FLOW_HOST_CSS`, `RESPONSIVE_STYLE_RULES`).
+- Inject that bundle in live `shadowDom.js` and shared pieces in `canvasEnhancements.js`.
+- Heal/sanitize in-card CTAs on save (`healFlowButtonsInEditor` + `sanitizeSavedPageHtml`) and on live mount (`healLiveFlowButtons`).
+- Mark real image overlays with `data-tc-absolute="1"` (or hotspot). Never rely on bare `position:absolute` + px.
+
+## Don't
+
+- Add canvas-only or preview-only layout CSS that changes button/card geometry.
+- Force `.flow-page-inner { width: 100% !important }` (breaks customWidth frames).
+- Force `display:flex` on `.page-wrapper` / first child (rewrites author layouts).
+- Treat bare `position:absolute`+top/left as intentional overlay without `data-tc-absolute`.
+
+## Verify
+
+Run: `npm test -- --run tests/unit/wysiwygContract.test.js`

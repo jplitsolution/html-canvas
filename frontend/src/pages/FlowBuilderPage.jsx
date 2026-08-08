@@ -22,7 +22,7 @@ import {
 } from '../components/flow/flowConditions'
 import {
   VERIFICATION_MODES,
-  DEFAULT_FLOWS,
+  buildDefaultFlow,
   normalizeModeId,
 } from '../components/flow/verificationModes'
 import useStore from '../store/useStore'
@@ -107,24 +107,41 @@ function FlowBuilderPage() {
   const [newConnCondition, setNewConnCondition] = useState('DEFAULT')
   const [selectedNodeId, setSelectedNodeId] = useState(null)
 
-  const handleResetFlow = useCallback((targetMode) => {
+  const handleResetFlow = useCallback((targetMode, targetEntry) => {
     const currentMode = targetMode || mode
-    const def = DEFAULT_FLOWS[currentMode]
+    const entry =
+      currentMode === 'OTP_ONLY' && String(targetEntry || entryPage).toUpperCase() === 'OTP'
+        ? 'OTP'
+        : (targetEntry || entryPage || 'HOME')
+    const def = buildDefaultFlow(currentMode, { entryPage: entry })
     setNodes(toRfNodes(def))
     setEdges(toRfEdges(def))
     setEntryPage(def.entryPage || 'HOME')
     setErrors([])
     addToast('Flow graph reset to default template', 'success')
-  }, [mode, setNodes, setEdges, addToast])
+  }, [mode, entryPage, setNodes, setEdges, addToast])
 
   const handleModeChange = useCallback((newMode) => {
     setMode(newMode)
-    const def = DEFAULT_FLOWS[newMode]
+    const def = buildDefaultFlow(newMode, { entryPage: 'HOME' })
     setNodes(toRfNodes(def))
     setEdges(toRfEdges(def))
     setEntryPage(def.entryPage || 'HOME')
     setErrors([])
   }, [setNodes, setEdges])
+
+  const handleEntryPageChange = useCallback(
+    (nextEntry) => {
+      const next = String(nextEntry || 'HOME').toUpperCase()
+      setEntryPage(next)
+      if (mode === 'OTP_ONLY') {
+        const def = buildDefaultFlow('OTP_ONLY', { entryPage: next })
+        setNodes(toRfNodes(def))
+        setEdges(toRfEdges(def))
+      }
+    },
+    [mode, setNodes, setEdges],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -381,7 +398,7 @@ function FlowBuilderPage() {
 
     const flowConfig = {
       version: 1,
-      entryPage: 'HOME',
+      entryPage: entryPage || 'HOME',
       nodes: nodes.map((n) => ({
         id: n.id,
         pageType: n.data.pageType,
@@ -498,11 +515,24 @@ function FlowBuilderPage() {
             <div className="surface-card p-3 shrink-0">
               <h3 className="text-sm font-semibold text-fg mb-1">Start page</h3>
               <p className="text-xs text-fg-muted mb-2">
-                Trust-first: users always land on HOME (intro). OTP / Confirm come after CTA.
+                {mode === 'OTP_ONLY'
+                  ? 'OTP only: land on HOME (intro) or skip straight to OTP.'
+                  : 'Users land on this page after detect. OTP / Confirm come after CTA.'}
               </p>
-              <div className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-muted text-fg font-medium">
-                HOME (locked)
-              </div>
+              {mode === 'OTP_ONLY' ? (
+                <select
+                  className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-base text-fg font-medium"
+                  value={entryPage === 'OTP' ? 'OTP' : 'HOME'}
+                  onChange={(ev) => handleEntryPageChange(ev.target.value)}
+                >
+                  <option value="HOME">HOME (intro first)</option>
+                  <option value="OTP">OTP (skip HOME)</option>
+                </select>
+              ) : (
+                <div className="w-full text-sm border border-border rounded-md px-3 py-2 bg-bg-muted text-fg font-medium">
+                  HOME (locked)
+                </div>
+              )}
             </div>
 
             {selectedNode && (

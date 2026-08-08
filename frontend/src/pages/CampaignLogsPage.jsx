@@ -129,13 +129,16 @@ function getEventBadgeClass(type) {
   if (t.includes('FAILED') || t.includes('LIMIT') || t.includes('BRUTE') || t.includes('BLOCKED')) {
     return 'bg-rose-50 text-rose-700 border-rose-200/50';
   }
-  if (t.includes('OTP_VERIFY')) {
+  if (t.includes('API_SUBSCRIBE') || t === 'SUBSCRIBE' || t.includes('SUBSCRIBE_CLICK')) {
+    return 'bg-indigo-50 text-indigo-700 border-indigo-200/50';
+  }
+  if (t.includes('OTP_VERIFY') || t.includes('API_OTP_VERIFY')) {
     return 'bg-violet-50 text-violet-700 border-violet-200/50';
   }
-  if (t.includes('OTP_SEND') || t.includes('OTP_VIEW') || t.includes('OTP_SHOWN') || t.includes('OTP')) {
+  if (t.includes('OTP_SEND') || t.includes('API_OTP_SEND') || t.includes('OTP_VIEW') || t.includes('OTP_SHOWN') || t.includes('OTP')) {
     return 'bg-amber-50 text-amber-700 border-amber-200/50';
   }
-  if (t.includes('SUBSCRIBE_CLICK') || t.includes('CLICK')) {
+  if (t.includes('CLICK')) {
     return 'bg-indigo-50 text-indigo-700 border-indigo-200/50';
   }
   if (t.includes('HOME_VIEW') || t.includes('HOME')) {

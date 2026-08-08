@@ -1,4 +1,5 @@
 import { transformReactComponentsInHtml } from '../utils/styleUtils'
+import { sanitizeSavedPageHtml } from './wysiwygContract'
 
 export function loadIntoEditor(editor, data) {
   const hasProjectData =
@@ -12,7 +13,10 @@ export function loadIntoEditor(editor, data) {
   }
 
   editor.setStyle(data.css || '')
-  const compiledHtml = transformReactComponentsInHtml(data.html || '')
+  // Sanitize before setComponents so stray absolute CTAs never enter the canvas off-card
+  const compiledHtml = transformReactComponentsInHtml(
+    sanitizeSavedPageHtml(data.html || ''),
+  )
   editor.setComponents(compiledHtml)
 }
 

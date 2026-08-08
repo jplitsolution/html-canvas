@@ -1,6 +1,7 @@
 import { getActivePageSnapshot } from './exportSite'
 import * as campaignsApi from '../../services/api/campaigns'
 import { healEditorHotspot } from '../utils/overlayStacking'
+import { healFlowButtonsInEditor } from '../utils/textSizeAlign'
 
 function healAllHotspots(editor) {
   const wrapper = editor?.getWrapper?.()
@@ -32,6 +33,8 @@ export async function saveCampaignPage(
 ) {
   // Persist hotspot geometry as % so live preview matches the canvas
   healAllHotspots(editor)
+  // Strip accidental absolute CTAs before save (keeps in-card OTP/SUBSCRIBE in flow)
+  healFlowButtonsInEditor(editor)
 
   const projectData = editor.getProjectData()
   if (customWidth) projectData.customWidth = customWidth

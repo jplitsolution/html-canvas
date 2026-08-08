@@ -654,6 +654,7 @@ export default function TemplateEditor({
           cmp.components().forEach(walk)
         }
         walk(wrapper)
+        // One-shot heal; styleUpdate handler is reentrancy-guarded so this cannot freeze the tab
         healFlowButtonsInEditor(ed)
 
         // DOM boxes ready after first paint — fix blown hotspots, then clear dirty

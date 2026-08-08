@@ -17,8 +17,8 @@ export const VERIFICATION_MODES = [
   {
     id: 'OTP_ONLY',
     label: 'OTP only',
-    hint: 'After HOME CTA always go to OTP. No header injection.',
-    pathHint: 'HOME → OTP → Confirm → outcomes',
+    hint: 'OTP path. Land on HOME first, or skip HOME and open OTP directly.',
+    pathHint: 'HOME → OTP → Confirm (or OTP → Confirm)',
   },
   {
     id: 'BOTH',
@@ -40,6 +40,22 @@ export function normalizeModeId(mode) {
   return mode || 'BOTH'
 }
 
+const OUTCOME_NODES = [
+  { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
+  { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
+  { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
+  { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
+  { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
+]
+
+const CONFIRM_EDGES = [
+  { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
+  { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
+  { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
+  { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
+  { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+]
+
 /** Default flowConfig graphs — keep in sync with FlowBuilder / flow-engine defaults. */
 export const DEFAULT_FLOWS = {
   HEADER_INJECTION: {
@@ -47,20 +63,12 @@ export const DEFAULT_FLOWS = {
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
+      ...OUTCOME_NODES,
     ],
     edges: [
       { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
       { id: 'HOME-HEADER_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'HEADER_UNRESOLVED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+      ...CONFIRM_EDGES,
     ],
   },
   OTP_ONLY: {
@@ -69,20 +77,12 @@ export const DEFAULT_FLOWS = {
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
+      ...OUTCOME_NODES,
     ],
     edges: [
       { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
       { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+      ...CONFIRM_EDGES,
     ],
   },
   BOTH: {
@@ -91,21 +91,13 @@ export const DEFAULT_FLOWS = {
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
       { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-      { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },
-      { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { x: 880, y: 280 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
+      ...OUTCOME_NODES,
     ],
     edges: [
       { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
       { id: 'HOME-HEADER_UNRESOLVED-OTP', source: 'HOME', target: 'OTP', condition: 'HEADER_UNRESOLVED' },
       { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-      { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-      { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-      { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-      { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
+      ...CONFIRM_EDGES,
     ],
   },
   NONE: {
@@ -113,6 +105,38 @@ export const DEFAULT_FLOWS = {
     nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }],
     edges: [],
   },
+}
+
+/**
+ * Build default flow for a mode.
+ * OTP_ONLY supports entryPage 'HOME' (intro first) or 'OTP' (skip HOME).
+ */
+export function buildDefaultFlow(mode, { entryPage } = {}) {
+  const normalized = normalizeModeId(mode)
+  const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
+
+  if (normalized === 'OTP_ONLY' && String(entryPage || '').toUpperCase() === 'OTP') {
+    return {
+      version: 1,
+      entryPage: 'OTP',
+      nodes: [
+        { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+        { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+        ...OUTCOME_NODES.map((n) => ({ ...n })),
+      ],
+      edges: [
+        { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
+        ...CONFIRM_EDGES.map((e) => ({ ...e })),
+      ],
+    }
+  }
+
+  return {
+    version: 1,
+    entryPage: base.entryPage || 'HOME',
+    nodes: base.nodes.map((n) => ({ ...n })),
+    edges: base.edges.map((e) => ({ ...e })),
+  }
 }
 
 const CONDITION_LABELS = {
@@ -125,6 +149,15 @@ const CONDITION_LABELS = {
   LOW_BALANCE: 'low balance',
   BLOCKED: 'blocked',
   ERROR: 'error',
+}
+
+function resolveEntryPage(config) {
+  const nodes = config?.nodes || []
+  if (!nodes.length) return 'HOME'
+  const wanted = String(config?.entryPage || '').toUpperCase()
+  if (wanted && nodes.some((n) => n.pageType === wanted)) return wanted
+  if (nodes.some((n) => n.pageType === 'HOME')) return 'HOME'
+  return nodes[0].pageType
 }
 
 /**
@@ -143,6 +176,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
       mode,
       modeLabel: modeMeta.label,
       modeHint: modeMeta.hint,
+      entryPage: 'HOME',
       steps: cgRedirectUrl
         ? [
             { id: 'land', label: 'Landing' },
@@ -157,14 +191,17 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     }
   }
 
+  const entryPage = resolveEntryPage(config)
   const nodesById = Object.fromEntries((config.nodes || []).map((n) => [n.id, n]))
   const pageLabel = (id) => {
     const n = nodesById[id]
     return n?.pageType || id
   }
 
-  // Prefer HOME outgoing edges for the “at a glance” story, then OTP, then CONFIRM.
-  const prioritySources = ['HOME', 'OTP', 'CONFIRM']
+  // Prefer entry page outgoing edges, then HOME/OTP/CONFIRM for the story.
+  const prioritySources = [entryPage, 'HOME', 'OTP', 'CONFIRM'].filter(
+    (v, i, arr) => arr.indexOf(v) === i,
+  )
   const edges = []
   for (const source of prioritySources) {
     for (const e of config.edges || []) {
@@ -178,12 +215,14 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     }
   }
 
-  // Unique ordered steps along BFS from HOME
+  // Unique ordered steps along BFS from entry page
   const steps = []
   const visited = new Set()
-  const queue = ['HOME']
-  visited.add('HOME')
-  steps.push({ id: 'HOME', label: 'HOME' })
+  const entryNode = (config.nodes || []).find((n) => n.pageType === entryPage)
+  const startId = entryNode?.id || entryPage
+  const queue = [startId]
+  visited.add(entryPage)
+  steps.push({ id: entryPage, label: entryPage })
   while (queue.length) {
     const cur = queue.shift()
     for (const e of config.edges || []) {
@@ -204,8 +243,12 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     mode,
     modeLabel: modeMeta.label,
     modeHint: modeMeta.hint,
+    entryPage,
     steps,
     edges,
-    note: 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
+    note:
+      entryPage === 'OTP'
+        ? 'Landing opens OTP directly (HOME skipped). Canvas “Go to page / URL / Priority” can still override.'
+        : 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
   }
 }

@@ -1,4 +1,4 @@
-import { RESPONSIVE_STYLE_RULES } from '../services/flowRuntimeCss'
+import { RESPONSIVE_STYLE_RULES, FLOW_HOST_CSS } from '../services/flowRuntimeCss'
 import { safeGetWrapper } from '../utils/editorUtils'
 import {
   applyTextSizeAlignment,
@@ -265,7 +265,10 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
         [data-gjs-type="wrapper"] { min-height: 0; }
         *:hover { outline: 1px dashed rgba(79, 70, 229, 0.35); outline-offset: 2px; }
         .gjs-selected { outline: 2px solid #2563eb !important; outline-offset: 2px; }
+        /* Shared host chrome with live Preview (WYSIWYG) — no width:!important */
+        ${FLOW_HOST_CSS}
         ${TEXT_SIZE_ALIGN_CANVAS_CSS}
+        /* Canvas overlay CSS omits position:!important so Grapes drag works */
         ${OVERLAY_STACKING_CANVAS_CSS}
         /* Same responsive rules as live SubscriptionPage shadow (WYSIWYG) */
         ${RESPONSIVE_STYLE_RULES}
@@ -368,12 +371,17 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     (payload?.getStyle ? payload : null) ||
     editor.getSelected?.()
 
+  // Prevent styleUpdate → keepFlowButtonInFlow → setStyle → styleUpdate storms
+  // (freezes the tab on "Loading editor..." / blank canvas).
+  let healingFlowButton = false
+
   // Flow CTAs: only heal on resize end / select — NOT on drag end
   // (absolute drag mode must be free to move them without snapping back)
   const protectFlowButton = (payload) => {
-    if (!alive) return
+    if (!alive || healingFlowButton) return
     const component = resolveComponent(payload)
     if (!component) return
+    healingFlowButton = true
     try {
       if (wasIntentionallyAbsolute(component)) {
         configureFlowButtonResizable(component)
@@ -384,11 +392,13 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
       configureFlowButtonResizable(component)
     } catch (_) {
       /* noop */
+    } finally {
+      healingFlowButton = false
     }
   }
 
   const alignSizedText = (payload) => {
-    if (!alive) return
+    if (!alive || healingFlowButton) return
     const component = resolveComponent(payload)
     if (!component) return
     try {
@@ -429,7 +439,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     }
   })
   editor.on('component:styleUpdate', (component) => {
-    if (!component) return
+    if (!component || healingFlowButton) return
     // Never mutate layout mid-drag/resize — fights Grapes absolute sorter
     if (isLiveDrag()) return
     if (isFlowLayoutButton(component) && !wasIntentionallyAbsolute(component)) {
@@ -442,14 +452,36 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
 
   editor.on('load', () => {
     setTimeout(() => {
-      if (!alive) return
-      healFlowButtonsInEditor(editor)
+      if (!alive || healingFlowButton) return
+      healingFlowButton = true
+      try {
+        healFlowButtonsInEditor(editor)
+      } finally {
+        healingFlowButton = false
+      }
     }, 100)
+  })
+  // Frame DOM ready — getEl() works; re-heal so absolute style="" cannot clip CTAs off-card
+  editor.on('canvas:frame:load', () => {
+    setTimeout(() => {
+      if (!alive || healingFlowButton) return
+      healingFlowButton = true
+      try {
+        healFlowButtonsInEditor(editor)
+      } finally {
+        healingFlowButton = false
+      }
+    }, 120)
   })
   editor.on('page:select', () => {
     setTimeout(() => {
-      if (!alive) return
-      healFlowButtonsInEditor(editor)
+      if (!alive || healingFlowButton) return
+      healingFlowButton = true
+      try {
+        healFlowButtonsInEditor(editor)
+      } finally {
+        healingFlowButton = false
+      }
     }, 80)
   })
 
