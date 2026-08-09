@@ -77,6 +77,7 @@ export function createHandleOtpContinue(deps) {
         'OTP_VERIFIED',
       ) || CampaignPageType.CONFIRM;
 
+    // OTP verified → number mil gaya → checksub (with visitId so Session Detail shows it).
     const skipAfterOtp = await maybeSkipToThankYouIfSubscribed(
       flowConfig,
       apiConfig,
@@ -85,6 +86,12 @@ export function createHandleOtpContinue(deps) {
       phone,
       CampaignPageType.OTP,
       nextPage,
+      {
+        visitId: input.visitId,
+        campaignId: campaign.id,
+        clickId: otpAttr.clickId || input.clickId,
+        rcid: otpAttr.rcid || input.rcid,
+      },
     );
     nextPage = skipAfterOtp.nextPage;
     const skipSubOtp = skipAfterOtp.sub;
