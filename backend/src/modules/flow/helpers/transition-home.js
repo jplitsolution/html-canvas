@@ -86,8 +86,9 @@ export function createHandleHomeSubscribe(deps) {
       resolvedPhone = routed.resolvedPhone || resolvedPhone;
     }
 
+    let subscribeAttr = null;
     if (mode !== 'NONE' && resolvedPhone) {
-      const subscribeAttr = await loadVisitAttribution(input.visitId, input);
+      subscribeAttr = await loadVisitAttribution(input.visitId, input);
       const blockResult = await checkBlocklist(apiConfig, {
         phone: resolvedPhone,
         visitId: input.visitId,
@@ -110,6 +111,9 @@ export function createHandleHomeSubscribe(deps) {
       }
     }
 
+    if (!subscribeAttr) {
+      subscribeAttr = await loadVisitAttribution(input.visitId, input);
+    }
     const skipResult = await maybeSkipToThankYouIfSubscribed(
       flowConfig,
       apiConfig,
@@ -118,6 +122,12 @@ export function createHandleHomeSubscribe(deps) {
       resolvedPhone,
       CampaignPageType.HOME,
       nextPage,
+      {
+        visitId: input.visitId,
+        campaignId: campaign.id,
+        clickId: subscribeAttr.clickId || input.clickId,
+        rcid: subscribeAttr.rcid || input.rcid,
+      },
     );
     nextPage = skipResult.nextPage;
     const skipSub = skipResult.sub;

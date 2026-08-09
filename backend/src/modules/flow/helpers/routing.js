@@ -92,19 +92,37 @@ export function createFlowRouting(deps) {
     phone,
     fromPage,
     nextPage,
+    attr = {},
   ) => {
-    if (nextPage !== CampaignPageType.CONFIRM || !phone) {
+    if (!phone) {
       return { nextPage, sub: null };
     }
+
+    // Number mil gaya → checksub. OTP path always (phone just verified);
+    // HOME path when heading to CONFIRM (skip already-subscribed).
+    const shouldCheck =
+      fromPage === CampaignPageType.OTP ||
+      nextPage === CampaignPageType.CONFIRM;
+    if (!shouldCheck) {
+      return { nextPage, sub: null };
+    }
+
     const sub = await partnerApiService
       .checkSubscription(apiConfig, {
         phone,
         serviceId,
         country: campaign.country,
         operator: campaign.operator,
+        visitId: attr.visitId,
+        campaignId: attr.campaignId ?? campaign?.id,
+        clickId: attr.clickId,
+        rcid: attr.rcid,
       })
       .catch(() => null);
-    if (!sub?.shouldSkipSubscribe) return { nextPage, sub };
+
+    if (nextPage !== CampaignPageType.CONFIRM || !sub?.shouldSkipSubscribe) {
+      return { nextPage, sub };
+    }
     const skipPage = resolveSkipPage(flowConfig, fromPage, sub);
     return { nextPage: skipPage || CampaignPageType.THANKYOU, sub };
   };
