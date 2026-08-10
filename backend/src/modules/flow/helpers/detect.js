@@ -1,6 +1,7 @@
 import {
   pageTypeForSubscriptionStatus,
 } from '../../../database/entities/campaign-page.entity.js';
+import getConfig from '../../../config/configuration.js';
 import { partnerApiService } from '../partner-api.service.js';
 import { postbackService } from '../../partners/postback.service.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
@@ -316,22 +317,24 @@ export function createDetectMsisdn(deps) {
     }
 
     // HE new + success redirect: upsert conversion_postbacks by msisdn.
-    // TEMP: HE_DUMMY_MSISDN fallback also queues pending so postback/callback
-    // flow can be tested end-to-end (unset env to disable).
-    // No MSISDN / fail / active / blocked / stay → no callback row from this path
-    // (except dummy fallback).
+    // TEMP: HE_DUMMY_MSISDN (fallback or exact match) also queues pending so
+    // postback/callback flow can be tested end-to-end (unset env to disable).
+    const dummyEnv = String(getConfig().heDummyMsisdn || '').replace(/\D/g, '');
+    const isDummyPhone =
+      Boolean(heMeta?.heDummyFallback) ||
+      (Boolean(dummyEnv) && rawPhone === dummyEnv);
     const shouldQueuePostback =
       Boolean(rawPhone) &&
       !blocked &&
       ((hasChecksub &&
         isNewStatus &&
         redirectOutcome === 'he_success') ||
-        Boolean(heMeta?.heDummyFallback));
+        isDummyPhone);
 
     if (shouldQueuePostback) {
       const dualIds = splitDualCampids(input);
       try {
-        await postbackService.registerPending({
+        const queued = await postbackService.registerPending({
           visitId: visitCtx.visitId,
           msisdn: rawPhone,
           campaignId: campaign?.id,
@@ -340,6 +343,15 @@ export function createDetectMsisdn(deps) {
           clickId: visitCtx.clickId,
           rcid: visitCtx.rcid,
         });
+        if (queued?.skipped) {
+          console.warn(
+            `detectMsisdn registerPending skipped: ${queued.reason || 'unknown'} (msisdn=${rawPhone})`,
+          );
+        } else if (queued?.id) {
+          console.log(
+            `detectMsisdn registerPending ok id=${queued.id} msisdn=${rawPhone} dummy=${isDummyPhone}`,
+          );
+        }
       } catch (err) {
         console.warn(`detectMsisdn registerPending failed: ${err.message}`);
       }
