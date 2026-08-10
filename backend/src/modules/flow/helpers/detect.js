@@ -316,13 +316,19 @@ export function createDetectMsisdn(deps) {
     }
 
     // HE new + success redirect: upsert conversion_postbacks by msisdn.
-    // No MSISDN / fail / active / blocked / stay → no callback row from this path.
-    if (
-      rawPhone &&
-      hasChecksub &&
-      isNewStatus &&
-      redirectOutcome === 'he_success'
-    ) {
+    // TEMP: HE_DUMMY_MSISDN fallback also queues pending so postback/callback
+    // flow can be tested end-to-end (unset env to disable).
+    // No MSISDN / fail / active / blocked / stay → no callback row from this path
+    // (except dummy fallback).
+    const shouldQueuePostback =
+      Boolean(rawPhone) &&
+      !blocked &&
+      ((hasChecksub &&
+        isNewStatus &&
+        redirectOutcome === 'he_success') ||
+        Boolean(heMeta?.heDummyFallback));
+
+    if (shouldQueuePostback) {
       const dualIds = splitDualCampids(input);
       try {
         await postbackService.registerPending({
