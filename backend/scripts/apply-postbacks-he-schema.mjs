@@ -141,6 +141,15 @@ async function main() {
   );
 
   await run(
+    'campaign_trackings.active',
+    `ALTER TABLE "campaign_trackings" ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true`,
+  );
+  await run(
+    'campaign_trackings.updated_at',
+    `ALTER TABLE "campaign_trackings" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP NOT NULL DEFAULT now()`,
+  );
+
+  await run(
     'api_call_logs table',
     `
     CREATE TABLE IF NOT EXISTS "api_call_logs" (

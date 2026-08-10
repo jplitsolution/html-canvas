@@ -33,6 +33,7 @@ export const initDatabase = async () => {
   await ensurePostbacksAndHeSchema(dataSource);
   await ensureRcidAndApiCallLogsSchema(dataSource);
   await ensureSuccessRedirectUrlColumn(dataSource);
+  await ensureCampaignTrackingsSchema(dataSource);
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
   await ensureSuccessRedirectModeColumn(dataSource);
@@ -177,6 +178,27 @@ async function ensureSuccessRedirectUrlColumn(ds) {
     }
   } catch (err) {
     console.warn('ensureSuccessRedirectUrlColumn:', err.message);
+  }
+}
+
+/**
+ * Idempotent: campaign_trackings.active + updated_at (migrations 180 / 181).
+ * Prod was created from older trackings DDL without updated_at → campaigns list 500.
+ */
+async function ensureCampaignTrackingsSchema(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  if (!isPostgres) return;
+  try {
+    await ds.query(`
+      ALTER TABLE "campaign_trackings"
+      ADD COLUMN IF NOT EXISTS "active" boolean NOT NULL DEFAULT true
+    `);
+    await ds.query(`
+      ALTER TABLE "campaign_trackings"
+      ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+    `);
+  } catch (err) {
+    console.warn('ensureCampaignTrackingsSchema:', err.message);
   }
 }
 
