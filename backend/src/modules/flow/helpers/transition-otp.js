@@ -96,6 +96,46 @@ export function createHandleOtpContinue(deps) {
     nextPage = skipAfterOtp.nextPage;
     const skipSubOtp = skipAfterOtp.sub;
 
+    if (
+      skipAfterOtp.externalRedirect &&
+      /^https?:\/\//i.test(skipAfterOtp.externalRedirect)
+    ) {
+      await analyticsService.updateVisit(
+        input.visitId,
+        VisitStatus.SUBSCRIBED,
+        CampaignPageType.THANKYOU,
+        phone,
+      );
+      await analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.SUBSCRIBE_SUCCESS,
+        {
+          info: `Checksub external redirect after OTP — status=${skipSubOtp?.status || ''}`,
+          currentStatus: skipSubOtp?.currentStatus,
+          isActive: skipSubOtp?.isActive,
+        },
+      );
+      return {
+        ...(await buildPageResponse(
+          campaign,
+          CampaignPageType.OTP,
+          {
+            phone,
+            country: campaign.country,
+            operator: campaign.operator,
+            service_id: serviceId,
+            plan: '',
+          },
+          input.visitId,
+          undefined,
+          undefined,
+          undefined,
+          { subscriptionStatus: skipSubOtp?.status || null },
+        )),
+        externalRedirect: skipAfterOtp.externalRedirect,
+      };
+    }
+
     const skippedAfterOtp = [
       CampaignPageType.THANKYOU,
       CampaignPageType.INPROGRESS,

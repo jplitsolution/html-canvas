@@ -120,6 +120,10 @@ export function createFlowRouting(deps) {
       })
       .catch(() => null);
 
+    if (sub?.go === 'external' && sub?.url) {
+      return { nextPage, sub, externalRedirect: sub.url };
+    }
+
     if (nextPage !== CampaignPageType.CONFIRM || !sub?.shouldSkipSubscribe) {
       return { nextPage, sub };
     }

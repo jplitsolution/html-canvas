@@ -1,6 +1,10 @@
 import axios from 'axios';
 import { apiCallLogService } from './api-call-log.service.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
+import {
+  evaluateChecksubRules,
+  parseChecksubConfig,
+} from './helpers/checksub-rules.js';
 
 export const createPartnerApiService = () => {
   const parseHeaders = (headersJson) => {
@@ -167,6 +171,7 @@ export const createPartnerApiService = () => {
    * - isActive: currentStatus/subscriptionStatus === active (content access)
    * - shouldSkipSubscribe: not a brand-new user — do not send to CONFIRM/CG
    *   (active | parking | grace | pending | …). Only `new` continues funnel.
+   * - go/page/url: set when campaign checksubConfigJson rules match (optional)
    */
   const checkSubscription = async (config, input) => {
     const empty = {
@@ -175,6 +180,9 @@ export const createPartnerApiService = () => {
       status: 'unknown',
       isActive: false,
       shouldSkipSubscribe: false,
+      go: null,
+      page: null,
+      url: null,
     };
 
     if (!config?.subscriptionApi || !input.phone) {
@@ -189,7 +197,35 @@ export const createPartnerApiService = () => {
         headers,
         'checkSubscription',
       );
-      const data = response.data ?? {};
+      const rawData = response.data ?? {};
+
+      const ruleConfig = parseChecksubConfig(config.checksubConfigJson);
+      if (ruleConfig) {
+        const ruled = evaluateChecksubRules(rawData, ruleConfig);
+        if (ruled) {
+          const statusLabel = (ruled.status || 'UNKNOWN').toUpperCase();
+          await logCall({
+            callType: ApiCallType.CHECKSUB,
+            input,
+            requestUrl: url,
+            response,
+            success: true,
+            statusLabel,
+          });
+          return ruled;
+        }
+      }
+
+      const data =
+        typeof rawData === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(rawData);
+              } catch {
+                return {};
+              }
+            })()
+          : rawData;
       const nested = data.data ?? data;
       const currentStatus = String(nested.currentStatus || '')
         .trim()
@@ -259,6 +295,9 @@ export const createPartnerApiService = () => {
         status,
         isActive,
         shouldSkipSubscribe,
+        go: null,
+        page: null,
+        url: null,
       };
     } catch (err) {
       console.warn(`checkSubscription failed: ${err.message}`);

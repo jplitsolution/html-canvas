@@ -9,6 +9,8 @@ import { splitDualCampids } from '../../markets/helpers/tracking-id.util.js';
 import { heService } from '../he.service.js';
 import { apiCallLogService } from '../api-call-log.service.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
+import { flowEngineService } from '../flow-engine.service.js';
+import { shouldRunHeOnDetect } from './he-detect-gate.js';
 
 export function createDetectMsisdn(deps) {
   const {
@@ -62,9 +64,18 @@ export function createDetectMsisdn(deps) {
       rcid: visitCtx.rcid,
     };
 
-    const configuredHeProvider = apiConfig?.heProvider || 'header';
+    const verificationMode =
+      flowEngineService.normalizeMode(campaign?.verificationMode) || 'BOTH';
+    const configuredHeProvider = String(
+      apiConfig?.heProvider || 'header',
+    )
+      .toLowerCase()
+      .trim();
+    // OTP_ONLY / NONE never run HE. Also skip when heProvider is explicitly `none`.
+    const runHe =
+      shouldRunHeOnDetect(verificationMode) && configuredHeProvider !== 'none';
 
-    if (apiConfig) {
+    if (apiConfig && runHe) {
       heMeta = await heService.resolve(apiConfig, {
         phone: hintPhone,
         hint: hintPhone,
@@ -73,12 +84,25 @@ export function createDetectMsisdn(deps) {
         sessionId: input.sessionId,
         ...attrCtx,
       });
+    } else if (!runHe) {
+      heMeta = {
+        phone: '',
+        provider: 'none',
+        error: null,
+        failRedirectUrl: '',
+        successRedirectUrl: '',
+      };
     }
 
-    const heProviderResolved = heMeta.provider || configuredHeProvider;
+    const heProviderResolved = runHe
+      ? heMeta.provider || configuredHeProvider
+      : 'none';
     // Token/API HE: only MSISDN from partner APIs counts — not query/header fallback.
+    // OTP_ONLY / NONE / heProvider=none: never adopt header/query hint as MSISDN.
     let rawPhone = '';
-    if (isApiHeProvider(heProviderResolved)) {
+    if (!runHe) {
+      rawPhone = '';
+    } else if (isApiHeProvider(heProviderResolved)) {
       rawPhone = heMeta.phone ? heService.normalizePhone(heMeta.phone) : '';
     } else {
       rawPhone = heService.normalizePhone(heMeta.phone || hintPhone || '');
@@ -89,6 +113,8 @@ export function createDetectMsisdn(deps) {
     let isActive = false;
     let blocked = false;
     let blockReason = null;
+    /** @type {{ go?: string|null, page?: string|null, url?: string|null } | null} */
+    let subRes = null;
     const hasChecksub = Boolean(apiConfig?.subscriptionApi);
     const hasBlocklist = Boolean(apiConfig?.blocklistApi);
 
@@ -101,7 +127,7 @@ export function createDetectMsisdn(deps) {
         operator: input.operator || campaign?.operator,
         ...attrCtx,
       };
-      const [subRes, blockRes] = await Promise.all([
+      const [checksubResult, blockRes] = await Promise.all([
         hasChecksub
           ? partnerApiService
               .checkSubscription(apiConfig, partnerCtx)
@@ -114,6 +140,7 @@ export function createDetectMsisdn(deps) {
           : Promise.resolve({ blocked: false }),
       ]);
 
+      subRes = checksubResult;
       subscribed = Boolean(subRes?.shouldSkipSubscribe);
       isActive = Boolean(subRes?.isActive);
       subscriptionStatus = subRes?.status || null;
@@ -153,14 +180,19 @@ export function createDetectMsisdn(deps) {
         heMeta.successRedirectUrl
       : '';
 
-    const mappedStatusPage = pageTypeForSubscriptionStatus(
-      subscriptionStatus,
-      isActive,
-    );
+    const mappedStatusPage =
+      subRes?.go === 'page' && subRes?.page
+        ? subRes.page
+        : pageTypeForSubscriptionStatus(subscriptionStatus, isActive);
     const normalizedStatus = String(subscriptionStatus || '')
       .trim()
       .toLowerCase();
-    const isNewStatus = normalizedStatus === 'new';
+    const isNewStatus =
+      subRes?.go === 'continue' || normalizedStatus === 'new';
+    const ruleExternalUrl =
+      subRes?.go === 'external' && subRes?.url
+        ? applyHeRedirectVars(subRes.url, heRedirectVars) || subRes.url
+        : null;
 
     let campaignSuccessRedirectUrl = null;
     if (rawPhone && campaign?.successRedirectUrl?.trim()) {
@@ -180,7 +212,11 @@ export function createDetectMsisdn(deps) {
       outboundSuccessRedirectUrl = null;
       outboundFailRedirectUrl = null;
     } else if (rawPhone && hasChecksub) {
-      if (isActive) {
+      if (ruleExternalUrl) {
+        outboundSuccessRedirectUrl = ruleExternalUrl;
+        outboundFailRedirectUrl = null;
+        nextPage = null;
+      } else if (isActive) {
         outboundSuccessRedirectUrl = campaignSuccessRedirectUrl || null;
         if (!outboundSuccessRedirectUrl) {
           nextPage = 'THANKYOU';
@@ -209,7 +245,11 @@ export function createDetectMsisdn(deps) {
     } else if (rawPhone && nextPage) {
       redirectOutcome = String(nextPage).toLowerCase();
     } else if (rawPhone && outboundSuccessRedirectUrl) {
-      redirectOutcome = isActive ? 'campaign_success' : 'he_success';
+      redirectOutcome = ruleExternalUrl
+        ? 'checksub_external'
+        : isActive
+          ? 'campaign_success'
+          : 'he_success';
       redirectUrl = outboundSuccessRedirectUrl;
     } else if (
       !rawPhone &&
@@ -244,7 +284,8 @@ export function createDetectMsisdn(deps) {
       }
     }
 
-    if (visitCtx.visitId || campaign?.id) {
+    // OTP_ONLY / NONE: no HE attempt → no he_redirect noise in Session Detail.
+    if (runHe && (visitCtx.visitId || campaign?.id)) {
       try {
         await apiCallLogService.record({
           visitId: visitCtx.visitId,
@@ -263,6 +304,7 @@ export function createDetectMsisdn(deps) {
             blocked,
             blockReason,
             nextPage,
+            verificationMode,
           }),
           responseStatus: null,
           responseBody: null,

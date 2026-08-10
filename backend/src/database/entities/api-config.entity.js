@@ -59,6 +59,12 @@ export const ApiConfigSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
+    /** Checksub status mapping: { statusField, rules[], missGo, missPage, missUrl } */
+    checksubConfigJson: {
+      name: 'checksub_config_json',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

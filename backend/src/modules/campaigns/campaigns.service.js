@@ -600,6 +600,7 @@ export const createCampaignsService = () => {
       resolveMsisdnUrl: payload.resolveMsisdnUrl,
       heProvider: payload.heProvider,
       heConfigJson: payload.heConfigJson,
+      checksubConfigJson: payload.checksubConfigJson,
     };
     // Strip undefined so we don't wipe fields the client omitted
     Object.keys(allowed).forEach((k) => {
@@ -609,6 +610,11 @@ export const createCampaignsService = () => {
     if (Object.prototype.hasOwnProperty.call(allowed, 'subscribeApi')) {
       const raw = allowed.subscribeApi;
       allowed.subscribeApi =
+        raw == null || String(raw).trim() === '' ? null : String(raw).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(allowed, 'checksubConfigJson')) {
+      const raw = allowed.checksubConfigJson;
+      allowed.checksubConfigJson =
         raw == null || String(raw).trim() === '' ? null : String(raw).trim();
     }
 

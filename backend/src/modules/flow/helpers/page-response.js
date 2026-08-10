@@ -91,7 +91,13 @@ export function createFlowPageResponse(deps) {
   };
 
   const resolveSkipPage = (flowConfig, fromPage, sub) => {
-    const byStatus = pageTypeForSubscriptionStatus(sub?.status, sub?.isActive);
+    // Campaign checksub rules win when present.
+    if (sub?.go === 'continue') return null;
+    if (sub?.go === 'external') return null;
+    const byStatus =
+      sub?.go === 'page' && sub?.page
+        ? sub.page
+        : pageTypeForSubscriptionStatus(sub?.status, sub?.isActive);
     if (!byStatus) return null;
   
     let condition = 'SUBSCRIBED';

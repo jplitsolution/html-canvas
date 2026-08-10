@@ -17,13 +17,13 @@ export const VERIFICATION_MODES = [
   {
     id: 'OTP_ONLY',
     label: 'OTP only',
-    hint: 'OTP path. Land on HOME first, or skip HOME and open OTP directly.',
+    hint: 'No landing HE. OTP path only — land on HOME first, or skip HOME and open OTP directly.',
     pathHint: 'HOME → OTP → Confirm (or OTP → Thank you)',
   },
   {
     id: 'BOTH',
     label: 'Header Injection + OTP',
-    hint: 'HOME first. CTA: header OK → Confirm, else → OTP.',
+    hint: 'Landing HE first. CTA: header OK → Confirm, else → OTP.',
     pathHint: 'HOME → Confirm (HE) / OTP (no HE) → Confirm → outcomes',
   },
   {

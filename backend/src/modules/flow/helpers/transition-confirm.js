@@ -94,9 +94,43 @@ export function createHandleConfirm(deps) {
       apiConfig,
       partnerCtx,
     );
+    if (subAtConfirm?.go === 'external' && subAtConfirm?.url) {
+      await analyticsService.updateVisit(
+        input.visitId,
+        VisitStatus.SUBSCRIBED,
+        CampaignPageType.THANKYOU,
+        phone,
+      );
+      await analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.SUBSCRIBE_SUCCESS,
+        {
+          info: `Checksub external redirect at confirm — status=${subAtConfirm.status}`,
+          currentStatus: subAtConfirm.currentStatus,
+          isActive: subAtConfirm.isActive,
+        },
+      );
+      return {
+        ...(await buildPageResponse(
+          campaign,
+          CampaignPageType.CONFIRM,
+          confirmVariables,
+          input.visitId,
+          'ALREADY_SUBSCRIBED',
+          selectedPack,
+          subscriptionUrl,
+          { subscriptionStatus: subAtConfirm.status },
+        )),
+        externalRedirect: subAtConfirm.url,
+      };
+    }
+
     if (subAtConfirm?.shouldSkipSubscribe) {
       const nextPage =
         resolveSkipPage(flowConfig, CampaignPageType.CONFIRM, subAtConfirm) ||
+        (subAtConfirm.go === 'page' && subAtConfirm.page
+          ? subAtConfirm.page
+          : null) ||
         pageTypeForSubscriptionStatus(
           subAtConfirm.status,
           subAtConfirm.isActive,
