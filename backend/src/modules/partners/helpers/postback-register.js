@@ -1,5 +1,6 @@
 import { getRepository } from '../../../database/index.js';
 import { Vendor } from '../../../database/entities/vendor.entity.js';
+import { CampaignTracking } from '../../../database/entities/campaign-tracking.entity.js';
 import {
   ConversionPostback,
   ConversionPostbackStatus,
@@ -46,6 +47,7 @@ export const createPostbackRegister = (deps) => {
     getPostbackRepo = () => getRepository(ConversionPostback),
     getVendorRepo = () => getRepository(Vendor),
     getVisitRepo = () => getRepository(Visit),
+    getTrackingRepo = () => getRepository(CampaignTracking),
   } = deps;
 
   const resolvePostbackTemplate = async (vendorId) => {
@@ -55,6 +57,24 @@ export const createPostbackRegister = (deps) => {
       if (vendor?.postbackUrl?.trim()) template = vendor.postbackUrl.trim();
     }
     return { template, vendorId };
+  };
+
+  /** Visit often has no vendorId when opened without ?vid= — use campaign trackings. */
+  const resolveVendorFromCampaign = async (campaignId) => {
+    if (!campaignId) return { vendorId: null, template: '' };
+    const trackings = await getTrackingRepo().find({
+      where: { campaignId: parseInt(campaignId, 10), active: true },
+      order: { id: 'ASC' },
+      take: 20,
+    });
+    for (const t of trackings) {
+      if (!t.vendorId) continue;
+      const { template, vendorId } = await resolvePostbackTemplate(t.vendorId);
+      if (template) return { vendorId, template };
+    }
+    // Prefer any linked vendor even without URL (row still visible in Postbacks UI).
+    const firstVendorId = trackings.find((t) => t.vendorId)?.vendorId || null;
+    return { vendorId: firstVendorId, template: '' };
   };
 
   const indexPostbackEvent = async (row, eventType, extra = {}) => {
@@ -131,12 +151,23 @@ export const createPostbackRegister = (deps) => {
       rcid = clickId;
     }
 
-    const { template, vendorId: resolvedVendorId } =
+    let { template, vendorId: resolvedVendorId } =
       await resolvePostbackTemplate(vendorId);
     vendorId = resolvedVendorId || vendorId;
 
+    // No vendor on visit (opened without tracking vid) → campaign's assigned vendor.
     if (!template) {
-      return { skipped: true, reason: 'no postback_url on vendor' };
+      const fromCampaign = await resolveVendorFromCampaign(campaignId);
+      if (fromCampaign.vendorId) vendorId = vendorId || fromCampaign.vendorId;
+      if (fromCampaign.template) template = fromCampaign.template;
+    }
+
+    if (!template) {
+      // Still queue pending so Postbacks UI + billing callback lookup by msisdn work.
+      // Vendor fire will fail until a postback URL is on the resolved vendor.
+      console.warn(
+        `[postback] queueing pending without postback_url (msisdn=${msisdn}, vendorId=${vendorId || 'none'}, campaignId=${campaignId || 'none'})`,
+      );
     }
 
     const existing = await getPostbackRepo()
@@ -147,6 +178,7 @@ export const createPostbackRegister = (deps) => {
       .getOne();
 
     const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
+    const savedTemplate = template || null;
 
     if (existing) {
       existing.clickId = clickId || existing.clickId || null;
@@ -156,7 +188,7 @@ export const createPostbackRegister = (deps) => {
       if (parsedVisitId) existing.visitId = parsedVisitId;
       if (campaignId) existing.campaignId = campaignId;
       if (vendorId) existing.vendorId = vendorId;
-      existing.postbackUrl = template;
+      if (savedTemplate) existing.postbackUrl = savedTemplate;
       existing.status = ConversionPostbackStatus.PENDING;
       existing.httpStatus = null;
       existing.responseBody = null;
@@ -178,7 +210,7 @@ export const createPostbackRegister = (deps) => {
             clickId: row.clickId,
             campid: row.campid,
             trackingCampid: row.trackingCampid,
-            postbackUrl: template,
+            postbackUrl: row.postbackUrl,
           },
         );
       } else {
@@ -204,7 +236,7 @@ export const createPostbackRegister = (deps) => {
         clickId: clickId || null,
         rcid: rcid || null,
         offerCode: input.offerCode || null,
-        postbackUrl: template,
+        postbackUrl: savedTemplate,
         status: ConversionPostbackStatus.PENDING,
       }),
     );
@@ -220,7 +252,7 @@ export const createPostbackRegister = (deps) => {
           clickId: row.clickId,
           campid: row.campid,
           trackingCampid: row.trackingCampid,
-          postbackUrl: template,
+          postbackUrl: row.postbackUrl,
         },
       );
     } else {

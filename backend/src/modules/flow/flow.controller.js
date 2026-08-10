@@ -33,7 +33,8 @@ export const flowController = {
       .toLowerCase()
       .trim();
 
-    // Browser Safaricom HE: trust only the client-reported MSISDN (never HE_DUMMY).
+    // Browser Safaricom HE: hint from client body only (HE_DUMMY applied in he.service
+    // if masked MSISDN fails and HE_DUMMY_MSISDN is set).
     const browserPhone = String(body.msisdn || body.phone || '')
       .replace(/\D/g, '');
     const phoneForDetect =
