@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { randomUUID } from 'crypto';
+import getConfig from '../../config/configuration.js';
 import { apiCallLogService } from './api-call-log.service.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 
@@ -48,6 +49,29 @@ export const createHeService = () => {
   };
 
   const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+
+  /**
+   * TEMP: when safaricom_masked cannot resolve MSISDN, adopt HE_DUMMY_MSISDN so
+   * checksub / blocklist / postback / Session Detail run like a real HE hit.
+   * Unset HE_DUMMY_MSISDN to disable. Never applies while needsClientHe (browser
+   * still fetching masked MSISDN).
+   */
+  const applySafaricomDummyFallback = (result) => {
+    if (!result || result.needsClientHe) return result;
+    if (normalizePhone(result.phone)) return result;
+    const dummy = normalizePhone(getConfig().heDummyMsisdn || '');
+    if (!dummy) return result;
+    console.warn(
+      `[HE] safaricom_masked MSISDN failed — using HE_DUMMY_MSISDN=${dummy} (unset env to disable)`,
+    );
+    return {
+      ...result,
+      phone: dummy,
+      error: null,
+      source: 'he_dummy_msisdn',
+      heDummyFallback: true,
+    };
+  };
 
   const pickRedirectUrl = (heConfig, ...keys) => {
     for (const key of keys) {
@@ -611,7 +635,11 @@ export const createHeService = () => {
     try {
       if (provider === 'safaricom_masked') {
         const result = await resolveSafaricomMasked(heConfig, input);
-        return { ...result, provider, ...redirects };
+        return applySafaricomDummyFallback({
+          ...result,
+          provider,
+          ...redirects,
+        });
       }
       if (provider === 'custom_http' || provider === 'custom') {
         const result = await resolveCustomHttp(apiConfig, heConfig, input);
@@ -625,12 +653,15 @@ export const createHeService = () => {
       };
     } catch (err) {
       console.warn(`HE resolve failed (${provider}): ${err.message}`);
-      return {
+      const failed = {
         phone: '',
         provider,
         error: heConfig.failMessage || err.message,
         ...redirects,
       };
+      return provider === 'safaricom_masked'
+        ? applySafaricomDummyFallback(failed)
+        : failed;
     }
   };
 
