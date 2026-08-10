@@ -1,6 +1,12 @@
 /**
- * Safaricom Kenya HE — browser-side token → masked MSISDN.
- * Matches safwap-server-backup SPA (identity.safaricom.com must see handset IP).
+ * Safaricom Kenya HE — browser masked MSISDN step.
+ *
+ * Hybrid with backend:
+ *   - Server fetches evisaf hetoken (avoids browser CORS on wap → evisaf)
+ *   - Browser calls identity.safaricom.com/fetchMaskedMsisdn (needs mobile-data IP)
+ *
+ * If heClientConfig.accessToken / skipBrowserToken is set, skip browser token call.
+ * Fallback: browser token+MSISDN (safwap-style) when no server token provided.
  */
 
 function normalizeMsisdn(value) {
@@ -53,39 +59,15 @@ async function readJsonSafe(res) {
   }
 }
 
-/**
- * @param {object} heClientConfig — from detect-msisdn needsClientHe response
- * @param {{ sessionId?: string }} [opts]
- * @returns {Promise<{
- *   phone: string,
- *   error: string|null,
- *   sessionId: string,
- *   heClientLogs: { token: object, msisdn?: object }
- * }>}
- */
-export async function resolveSafaricomMaskedInBrowser(heClientConfig, opts = {}) {
-  const cfg = heClientConfig || {}
+async function fetchBrowserToken(cfg, sessionId) {
   const tokenUrl = String(cfg.tokenUrl || '').trim()
-  const maskedUrl = String(cfg.maskedUrl || '').trim()
-  const failMessage =
-    cfg.failMessage || 'Please use Safaricom Mobile Data'
-  const sessionId = getOrCreateSessionId(opts.sessionId)
-
-  if (!tokenUrl || !maskedUrl) {
-    return {
-      phone: '',
-      error: 'Safaricom HE requires tokenUrl + maskedUrl',
-      sessionId,
-      heClientLogs: {},
-    }
-  }
-
   const tokenMethod = String(cfg.tokenMethod || 'POST').toUpperCase()
   const tokenHeaders = {
     'X-Session-ID': sessionId,
     'Content-Type': 'application/json',
   }
-  const tokenBody = cfg.tokenBody && typeof cfg.tokenBody === 'object' ? cfg.tokenBody : {}
+  const tokenBody =
+    cfg.tokenBody && typeof cfg.tokenBody === 'object' ? cfg.tokenBody : {}
 
   let token = null
   let tokenResponseBody = null
@@ -119,32 +101,77 @@ export async function resolveSafaricomMaskedInBrowser(heClientConfig, opts = {})
     tokenError = err?.message || String(err)
   }
 
-  const heClientLogs = {
-    token: {
-      requestUrl: tokenUrl,
-      method: tokenMethod,
-      headers: tokenHeaders,
-      body: tokenBody,
-      requestBody: {
+  return {
+    token,
+    heClientLogs: {
+      token: {
+        requestUrl: tokenUrl,
         method: tokenMethod,
         headers: tokenHeaders,
         body: tokenBody,
-        source: 'browser',
+        requestBody: {
+          method: tokenMethod,
+          headers: tokenHeaders,
+          body: tokenBody,
+          source: 'browser',
+        },
+        responseStatus: tokenStatus,
+        responseBody: tokenResponseBody,
+        success: Boolean(token),
+        errorMessage: tokenError,
       },
-      responseStatus: tokenStatus,
-      responseBody: tokenResponseBody,
-      success: Boolean(token),
-      errorMessage: tokenError,
     },
+    error: token ? null : tokenError || 'HE token missing from tokenUrl response',
   }
+}
 
-  if (!token) {
+/**
+ * @param {object} heClientConfig — from detect-msisdn needsClientHe response
+ * @param {{ sessionId?: string }} [opts]
+ */
+export async function resolveSafaricomMaskedInBrowser(heClientConfig, opts = {}) {
+  const cfg = heClientConfig || {}
+  const maskedUrl = String(cfg.maskedUrl || '').trim()
+  const failMessage = cfg.failMessage || 'Please use Safaricom Mobile Data'
+  const sessionId = getOrCreateSessionId(opts.sessionId)
+  const serverToken = String(cfg.accessToken || '').trim()
+  const skipBrowserToken = Boolean(cfg.skipBrowserToken || serverToken)
+
+  if (!maskedUrl) {
     return {
       phone: '',
-      error: tokenError || 'HE token missing from tokenUrl response',
+      error: 'Safaricom HE requires maskedUrl',
       sessionId,
-      heClientLogs,
+      heClientLogs: {},
     }
+  }
+
+  let token = serverToken
+  const heClientLogs = {}
+
+  // Prefer server-issued token (hybrid). Only hit evisaf from browser as fallback.
+  if (!token) {
+    if (!String(cfg.tokenUrl || '').trim()) {
+      return {
+        phone: '',
+        error: 'Safaricom HE requires tokenUrl or accessToken',
+        sessionId,
+        heClientLogs: {},
+      }
+    }
+    const browserToken = await fetchBrowserToken(cfg, sessionId)
+    Object.assign(heClientLogs, browserToken.heClientLogs)
+    token = browserToken.token
+    if (!token) {
+      return {
+        phone: '',
+        error: browserToken.error,
+        sessionId,
+        heClientLogs,
+      }
+    }
+  } else if (!skipBrowserToken) {
+    // keep token from server
   }
 
   const maskedHeaders = {
@@ -182,14 +209,12 @@ export async function resolveSafaricomMaskedInBrowser(heClientConfig, opts = {})
   heClientLogs.msisdn = {
     requestUrl: maskedUrl,
     method: 'GET',
-    headers: {
-      ...maskedHeaders,
-      // Keep full bearer in Session Detail (same as server HE logging).
-    },
+    headers: maskedHeaders,
     requestBody: {
       method: 'GET',
       headers: maskedHeaders,
       source: 'browser',
+      tokenSource: serverToken ? 'server' : 'browser',
     },
     responseStatus: msisdnStatus,
     responseBody: msisdnBody,

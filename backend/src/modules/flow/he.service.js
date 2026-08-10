@@ -10,9 +10,11 @@ import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
  *   - header            : trust X-MSISDN / query (default)
  *   - none              : never resolve
  *   - custom_http       : GET/POST resolveMsisdnUrl (or heConfig.url)
- *   - safaricom_masked  : browser HE (safwap parity) — POST token → GET masked MSISDN
- *                         Detect returns needsClientHe; SPA calls Safaricom; POSTs back.
- *                         Optional heSource=server keeps legacy Node proxy (usually 403).
+ *   - safaricom_masked  : hybrid HE — server token + browser masked MSISDN
+ *                         (evisaf CORS-safe; Safaricom needs handset IP).
+ *                         Detect returns needsClientHe + accessToken; SPA
+ *                         calls fetchMaskedMsisdn; POSTs MSISDN back.
+ *                         Optional heSource=server keeps full Node proxy.
  *
  * heConfigJson (Safaricom Kenya):
  *   {
@@ -270,45 +272,17 @@ export const createHeService = () => {
   };
 
   /**
-   * Safaricom Kenya WAP HE.
-   * - Default: hand off to browser (needsClientHe) — same as safwap SPA.
-   * - heSource=browser: accept client MSISDN + optional log payloads.
-   * - heSource=server: legacy server proxy (usually 403 off-net; kept for debug).
+   * Fetch HE token from Node (evisaf allows server; browser often CORS-blocks wap→evisaf).
+   * Returns { token, sessionId } or { error }.
    */
-  const resolveSafaricomMasked = async (heConfig, input = {}) => {
+  const fetchSafaricomToken = async (heConfig, input = {}) => {
     const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl;
-    const maskedUrl = heConfig.maskedUrl || heConfig.maskedMsisdnUrl;
-    if (!tokenUrl || !maskedUrl) {
-      return {
-        phone: '',
-        error: 'Safaricom HE requires tokenUrl + maskedUrl in heConfigJson',
-      };
-    }
-
-    const heSource = String(input.heSource || '')
-      .toLowerCase()
-      .trim();
-
-    // Client finished browser HE — accept MSISDN + optional api_call_logs payloads.
-    if (heSource === 'browser') {
-      return resolveSafaricomFromBrowser(heConfig, input);
-    }
-
-    // Default: hand off to browser (safwap parity). Server IP → Safaricom 403.
-    // Opt-in legacy: heSource=server still proxies from Node (debug / off-net only).
-    if (heSource !== 'server') {
-      return {
-        phone: '',
-        error: null,
-        needsClientHe: true,
-        clientConfig: buildSafaricomClientConfig(heConfig),
-        sessionId: makeSessionId(input.sessionId || heConfig.sessionId),
-      };
+    if (!tokenUrl) {
+      return { token: null, error: 'Safaricom HE requires tokenUrl' };
     }
 
     const sessionId = makeSessionId(input.sessionId || heConfig.sessionId);
     const tokenMethod = String(heConfig.tokenMethod || 'POST').toUpperCase();
-    // Partner contract: POST {} with only X-Session-ID (same as getBasicToken sample).
     const tokenHeaders = mergeHeaders(
       {
         'X-Session-ID': sessionId,
@@ -336,12 +310,13 @@ export const createHeService = () => {
           method: tokenMethod,
           headers: safeHeadersForLog(tokenHeaders),
           body: tokenBody,
+          source: 'server',
         },
         response: err.response,
         success: false,
         errorMessage: err.message,
       });
-      throw err;
+      return { token: null, sessionId, error: err.message };
     }
 
     const token =
@@ -359,6 +334,7 @@ export const createHeService = () => {
         method: tokenMethod,
         headers: safeHeadersForLog(tokenHeaders),
         body: tokenBody,
+        source: 'server',
       },
       response: tokenRes,
       success: Boolean(token),
@@ -366,8 +342,86 @@ export const createHeService = () => {
     });
 
     if (!token) {
-      return { phone: '', error: 'HE token missing from tokenUrl response' };
+      return {
+        token: null,
+        sessionId,
+        error: 'HE token missing from tokenUrl response',
+      };
     }
+    return { token, sessionId, error: null };
+  };
+
+  /**
+   * Safaricom Kenya WAP HE.
+   * Hybrid (default):
+   *   1) Server fetches token (works from datacenter; avoids browser CORS on evisaf)
+   *   2) Browser calls fetchMaskedMsisdn (needs Safaricom mobile-data path)
+   * heSource=browser: accept client MSISDN + logs (token already logged server-side).
+   * heSource=server: full proxy in Node (MSISDN usually 403 off-net).
+   */
+  const resolveSafaricomMasked = async (heConfig, input = {}) => {
+    const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl;
+    const maskedUrl = heConfig.maskedUrl || heConfig.maskedMsisdnUrl;
+    if (!tokenUrl || !maskedUrl) {
+      return {
+        phone: '',
+        error: 'Safaricom HE requires tokenUrl + maskedUrl in heConfigJson',
+      };
+    }
+
+    const heSource = String(input.heSource || '')
+      .toLowerCase()
+      .trim();
+
+    // Client finished browser MSISDN step — accept phone + optional logs.
+    if (heSource === 'browser') {
+      return resolveSafaricomFromBrowser(heConfig, input);
+    }
+
+    // Default hybrid bootstrap: server token → hand accessToken to browser for MSISDN.
+    if (heSource !== 'server') {
+      const sessionId = makeSessionId(input.sessionId || heConfig.sessionId);
+      const tokenResult = await fetchSafaricomToken(heConfig, {
+        ...input,
+        sessionId,
+      });
+      if (!tokenResult.token) {
+        return {
+          phone: '',
+          error:
+            tokenResult.error ||
+            heConfig.failMessage ||
+            'HE token missing from tokenUrl response',
+          sessionId: tokenResult.sessionId || sessionId,
+        };
+      }
+      return {
+        phone: '',
+        error: null,
+        needsClientHe: true,
+        clientConfig: {
+          ...buildSafaricomClientConfig(heConfig),
+          // Browser skips evisaf; only hits identity.safaricom.com.
+          accessToken: tokenResult.token,
+          skipBrowserToken: true,
+        },
+        sessionId: tokenResult.sessionId || sessionId,
+      };
+    }
+
+    const sessionId = makeSessionId(input.sessionId || heConfig.sessionId);
+    const tokenResult = await fetchSafaricomToken(heConfig, {
+      ...input,
+      sessionId,
+    });
+    if (!tokenResult.token) {
+      return {
+        phone: '',
+        error: tokenResult.error || 'HE token missing from tokenUrl response',
+        sessionId: tokenResult.sessionId || sessionId,
+      };
+    }
+    const token = tokenResult.token;
 
     const maskedHeaders = mergeHeaders(
       {
@@ -394,6 +448,7 @@ export const createHeService = () => {
         requestBody: {
           method: 'GET',
           headers: safeHeadersForLog(maskedHeaders),
+          source: 'server',
         },
         response: err.response,
         success: false,
@@ -418,6 +473,7 @@ export const createHeService = () => {
       requestBody: {
         method: 'GET',
         headers: safeHeadersForLog(maskedHeaders),
+        source: 'server',
       },
       response: maskedRes,
       success: Boolean(normalized),
