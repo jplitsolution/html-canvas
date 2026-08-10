@@ -65,7 +65,14 @@ async function main() {
     assert(!r1.phone, 'phone empty when HE MSISDN fails');
     assert(!r1.successRedirectUrl, 'no success redirect without HE phone');
     assert(c1.checksub == null || c1.checksub === 0, 'checksub NOT called without phone');
-    assert((c1.he_token || 0) >= 1, 'HE token called once');
+    // safaricom_masked now bootstraps browser HE (no server he_token).
+    // Other API HE providers may still log he_token / he_resolve from Node.
+    if (r1.needsClientHe) {
+      assert(Boolean(r1.heClientConfig?.tokenUrl), 'browser HE config returned');
+      assert(c1.he_token == null || c1.he_token === 0, 'no server he_token on client bootstrap');
+    } else {
+      assert((c1.he_token || 0) + (c1.he_resolve || 0) >= 1, 'HE partner call attempted');
+    }
     results.push({ test: 1, pass: true, visitId: r1.visitId, counts: c1 });
   } catch (e) {
     results.push({ test: 1, pass: false, error: e.message });

@@ -5,6 +5,8 @@ import { flowController } from './flow.controller.js';
 const router = Router();
 
 router.get('/detect-msisdn', flowController.detectMsisdn);
+// Browser Safaricom HE completion (msisdn + he_token/he_msisdn log payloads).
+router.post('/detect-msisdn', publicRateLimit, flowController.detectMsisdn);
 router.get('/entry', flowController.entry);
 router.get('/page', flowController.page);
 router.post('/transition', publicRateLimit, flowController.transition);

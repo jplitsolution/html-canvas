@@ -75,6 +75,10 @@ export function createDetectMsisdn(deps) {
     const runHe =
       shouldRunHeOnDetect(verificationMode) && configuredHeProvider !== 'none';
 
+    const heSource = String(input.heSource || '')
+      .toLowerCase()
+      .trim();
+
     if (apiConfig && runHe) {
       heMeta = await heService.resolve(apiConfig, {
         phone: hintPhone,
@@ -82,6 +86,9 @@ export function createDetectMsisdn(deps) {
         country: input.country || campaign?.country,
         operator: input.operator || campaign?.operator,
         sessionId: input.sessionId,
+        heSource: heSource || undefined,
+        heClientLogs: input.heClientLogs || null,
+        heClientError: input.heClientError || null,
         ...attrCtx,
       });
     } else if (!runHe) {
@@ -97,8 +104,56 @@ export function createDetectMsisdn(deps) {
     const heProviderResolved = runHe
       ? heMeta.provider || configuredHeProvider
       : 'none';
+
+    // Safaricom masked MSISDN must run in the browser (carrier HE path).
+    // Hand config back to the client — do not cache / fail-redirect yet.
+    if (runHe && heMeta?.needsClientHe) {
+      let rawFail = String(heMeta.failRedirectUrl || '').trim();
+      if (!rawFail && isApiHeProvider(heProviderResolved)) {
+        rawFail = String(campaign?.cgRedirectUrl || '').trim();
+      }
+      const heRedirectVars = {
+        msisdn: '',
+        phone: '',
+        country: input.country || campaign?.country || '',
+        operator: input.operator || campaign?.operator || '',
+      };
+      const failRedirectUrl = rawFail
+        ? applyHeRedirectVars(rawFail, heRedirectVars) || rawFail
+        : '';
+      const successRedirectUrl = heMeta.successRedirectUrl
+        ? applyHeRedirectVars(heMeta.successRedirectUrl, heRedirectVars) ||
+          heMeta.successRedirectUrl
+        : '';
+
+      return {
+        phone: '',
+        hasMsisdn: false,
+        subscribed: false,
+        isActive: false,
+        subscriptionStatus: null,
+        blocked: false,
+        blockReason: null,
+        heProvider: heProviderResolved,
+        heError: null,
+        needsClientHe: true,
+        heClientConfig: heMeta.clientConfig || null,
+        nextPage: null,
+        failRedirectUrl: failRedirectUrl || null,
+        successRedirectUrl: successRedirectUrl || null,
+        cgRedirectUrl: campaign?.cgRedirectUrl || null,
+        country: input.country || campaign?.country,
+        operator: input.operator || campaign?.operator,
+        campaignId: campaign?.id || null,
+        visitId: visitCtx.visitId,
+        clickId: visitCtx.clickId,
+        rcid: visitCtx.rcid,
+      };
+    }
+
     // Token/API HE: only MSISDN from partner APIs counts — not query/header fallback.
     // OTP_ONLY / NONE / heProvider=none: never adopt header/query hint as MSISDN.
+    // Browser Safaricom HE: phone arrives via heSource=browser + msisdn.
     let rawPhone = '';
     if (!runHe) {
       rawPhone = '';

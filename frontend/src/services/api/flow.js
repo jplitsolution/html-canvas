@@ -157,17 +157,21 @@ export async function detectMsisdnApi({
   visitId,
   sessionId,
   vid,
+  heSource,
+  heClientLogs,
+  heClientError,
 } = {}) {
   const params = new URLSearchParams()
   if (country) params.set('country', country)
   if (operator) params.set('operator', operator)
   if (campid) params.set('campid', String(campid))
   if (trackingCampid) params.set('tracking_campid', String(trackingCampid))
-  if (phone) params.set('msisdn', String(phone))
+  if (phone && !heSource) params.set('msisdn', String(phone))
   if (clickId) params.set('click_id', String(clickId))
   if (rcid) params.set('rcid', String(rcid))
   if (visitId) params.set('visitId', String(visitId))
   if (vid) params.set('vid', String(vid))
+  if (heSource && !heClientLogs) params.set('heSource', String(heSource))
 
   // Pull attribution from the live landing URL when callers omit it.
   if (typeof window !== 'undefined') {
@@ -218,11 +222,43 @@ export async function detectMsisdnApi({
     params.set('sessionId', String(sessionId))
   }
 
-  const request = Object.fromEntries(params)
+  const usePost = Boolean(heSource === 'browser' || heClientLogs)
+  const request = {
+    ...Object.fromEntries(params),
+    ...(usePost
+      ? {
+          heSource: heSource || 'browser',
+          phone: phone || undefined,
+          heClientError: heClientError || undefined,
+          heClientLogs: heClientLogs ? '[omitted]' : undefined,
+        }
+      : {}),
+  }
+
   try {
-    const res = await apiClient(`/flow/detect-msisdn?${params.toString()}`, {
-      method: 'GET',
-    })
+    const res = usePost
+      ? await apiClient(`/flow/detect-msisdn?${params.toString()}`, {
+          method: 'POST',
+          body: JSON.stringify({
+            heSource: heSource || 'browser',
+            phone: phone || undefined,
+            msisdn: phone || undefined,
+            visitId: visitId || undefined,
+            sessionId: params.get('sessionId') || sessionId || undefined,
+            country: country || undefined,
+            operator: operator || undefined,
+            campid: campid || undefined,
+            trackingCampid: trackingCampid || undefined,
+            clickId: clickId || undefined,
+            rcid: rcid || undefined,
+            vid: vid || undefined,
+            heClientError: heClientError || undefined,
+            heClientLogs: heClientLogs || undefined,
+          }),
+        })
+      : await apiClient(`/flow/detect-msisdn?${params.toString()}`, {
+          method: 'GET',
+        })
     logFlowApi('detect-msisdn', {
       request,
       response: res,
@@ -231,6 +267,7 @@ export async function detectMsisdnApi({
         hasMsisdn: res?.hasMsisdn,
         heProvider: res?.heProvider || null,
         heError: res?.heError || null,
+        needsClientHe: res?.needsClientHe || false,
         subscribed: res?.subscribed,
         isActive: res?.isActive,
         subscriptionStatus: res?.subscriptionStatus || null,
@@ -245,7 +282,11 @@ export async function detectMsisdnApi({
         rcid: res?.rcid || null,
         headerPhone: res?.debugHeaderPhone || null,
       },
-      outcome: res?.hasMsisdn ? 'msisdn_found' : 'msisdn_missing',
+      outcome: res?.needsClientHe
+        ? 'needs_client_he'
+        : res?.hasMsisdn
+          ? 'msisdn_found'
+          : 'msisdn_missing',
     })
     if (res?.debugHeaders) {
       logFlowApi('detect-msisdn headers', {

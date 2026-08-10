@@ -652,24 +652,47 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                       Leave empty to keep the built-in active/parking/pending mapping.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
-                    onClick={() =>
-                      setChecksubConfig({
-                        statusField: 'body',
-                        rules: [
-                          { value: 'ACTIVE', go: 'page', page: 'THANKYOU', url: '' },
-                          { value: 'INACTIVE', go: 'continue', page: 'THANKYOU', url: '' },
-                        ],
-                        missGo: 'continue',
-                        missPage: 'ERROR',
-                        missUrl: '',
-                      })
-                    }
-                  >
-                    Plain-text preset
-                  </button>
+                  <div className="flex flex-wrap gap-2 shrink-0">
+                    <button
+                      type="button"
+                      className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
+                      onClick={() =>
+                        setChecksubConfig({
+                          statusField: 'currentStatus',
+                          rules: [
+                            { value: 'active', go: 'page', page: 'THANKYOU', url: '' },
+                            { value: 'parking', go: 'page', page: 'LOW_BALANCE', url: '' },
+                            { value: 'grace', go: 'page', page: 'LOW_BALANCE', url: '' },
+                            { value: 'pending', go: 'page', page: 'INPROGRESS', url: '' },
+                            { value: 'new', go: 'continue', page: 'THANKYOU', url: '' },
+                          ],
+                          missGo: 'continue',
+                          missPage: 'ERROR',
+                          missUrl: '',
+                        })
+                      }
+                    >
+                      JSON preset
+                    </button>
+                    <button
+                      type="button"
+                      className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
+                      onClick={() =>
+                        setChecksubConfig({
+                          statusField: 'body',
+                          rules: [
+                            { value: 'ACTIVE', go: 'page', page: 'THANKYOU', url: '' },
+                            { value: 'INACTIVE', go: 'continue', page: 'THANKYOU', url: '' },
+                          ],
+                          missGo: 'continue',
+                          missPage: 'ERROR',
+                          missUrl: '',
+                        })
+                      }
+                    >
+                      Plain-text preset
+                    </button>
+                  </div>
                 </div>
 
                 <Field
