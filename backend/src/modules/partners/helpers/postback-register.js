@@ -11,11 +11,10 @@ import { VisitEventType } from '../../../database/entities/visit-event.entity.js
 import { searchService } from '../../search/search.service.js';
 import { apiCallLogService } from '../../flow/api-call-log.service.js';
 
+/** Returns full MSISDN for UI display (no masking). */
 export const maskPhone = (phone) => {
   if (!phone) return undefined;
-  const trimmed = String(phone).trim();
-  if (trimmed.length <= 4) return '****';
-  return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+  return String(phone).trim();
 };
 
 export const serializeBody = (data) => {
@@ -88,6 +87,7 @@ export const createPostbackRegister = (deps) => {
       campid: row.campid,
       trackingCampid: row.trackingCampid,
       phoneMasked: maskPhone(row.msisdn),
+      phone: row.msisdn || null,
       eventType,
       status: row.status,
       responseStatus: row.httpStatus,

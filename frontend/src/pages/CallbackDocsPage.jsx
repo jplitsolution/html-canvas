@@ -121,11 +121,11 @@ function CallbackDocsPage() {
               After billing succeeds, call our <strong className="text-fg">public</strong> callback
               endpoint. No auth token. GET or POST both work; query string and JSON body are merged.
             </p>
-            <CodeBlock>{`GET  ${callbackUrl}?msisdn=9665XXXXXXXX&status=active
+            <CodeBlock>{`GET  ${callbackUrl}?msisdn=966512345678&status=active
 POST ${callbackUrl}
 Content-Type: application/json
 
-{ "msisdn": "9665XXXXXXXX", "status": "active" }`}</CodeBlock>
+{ "msisdn": "966512345678", "status": "active" }`}</CodeBlock>
 
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-left text-xs">
@@ -260,7 +260,7 @@ Content-Type: application/json
                 <strong className="text-fg">Optional pre-register</strong> (SAFWAP{' '}
                 <code className="font-mono">getredirecturl</code> parity):
                 <CodeBlock>{`POST ${origin}/api/flow/register-postback
-{ "msisdn": "9665XXXXXXXX", "visitId": 123, "rcid": "...", "click_id": "..." }`}</CodeBlock>
+{ "msisdn": "966512345678", "visitId": 123, "rcid": "...", "click_id": "..." }`}</CodeBlock>
               </li>
             </ul>
             <p>

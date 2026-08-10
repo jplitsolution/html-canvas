@@ -28,7 +28,6 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  Shield,
   FileText,
   Eye,
 } from 'lucide-react'
@@ -718,11 +717,8 @@ function CampaignLogsPage() {
                           {row.clickId || <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
-                          {row.phoneMasked ? (
-                            <span className="flex items-center gap-1">
-                              <Shield className="w-3 h-3 text-emerald-500" />
-                              {row.phoneMasked}
-                            </span>
+                          {row.phone || row.phoneMasked ? (
+                            row.phone || row.phoneMasked
                           ) : <span className="text-gray-300">—</span>}
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">

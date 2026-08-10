@@ -206,6 +206,15 @@ function ApiCallCard({ call, defaultOpen }) {
             <p className="text-xs text-gray-600 mt-2">{summary.responseMessage}</p>
           )}
 
+          {call.msisdn && (
+            <div className="mt-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
+                MSISDN
+              </p>
+              <p className="text-[11px] font-mono text-gray-800">{call.msisdn}</p>
+            </div>
+          )}
+
           {call.requestUrl && (
             <div className="mt-3">
               <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1">
@@ -314,7 +323,7 @@ function SessionDetailPage() {
                   <User className="w-3.5 h-3.5" /> Subscriber
                 </span>
                 <p className="font-mono font-semibold text-gray-800 mt-1">
-                  {visit?.phoneMasked || 'Anonymous'}
+                  {visit?.phone || visit?.phoneMasked || 'Anonymous'}
                 </p>
               </div>
               <div>

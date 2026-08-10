@@ -34,6 +34,7 @@ export const createSearchService = () => {
           vidRaw: { type: 'keyword' },
           affRaw: { type: 'keyword' },
           phoneMasked: { type: 'keyword' },
+          phone: { type: 'keyword' },
           country: { type: 'keyword' },
           operator: { type: 'keyword' },
           pageType: { type: 'keyword' },
@@ -58,6 +59,7 @@ export const createSearchService = () => {
         index: indexName,
         properties: {
           rcid: { type: 'keyword' },
+          phone: { type: 'keyword' },
           requestUrl: { type: 'keyword' },
           responseStatus: { type: 'integer' },
           success: { type: 'boolean' },
@@ -93,9 +95,7 @@ export const createSearchService = () => {
 
   const maskPhone = (phone) => {
     if (!phone) return undefined;
-    const trimmed = phone.trim();
-    if (trimmed.length <= 4) return '****';
-    return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+    return String(phone).trim();
   };
 
   const zonedDayBound = (dateStr, timeZone, bound) => {
@@ -194,6 +194,7 @@ export const createSearchService = () => {
         'vidRaw',
         'affRaw',
         'phoneMasked',
+        'phone',
         'ip',
       ];
       must.push({
@@ -426,6 +427,7 @@ export const createSearchService = () => {
       vidRaw: visit.vidRaw,
       affRaw: visit.affRaw,
       phoneMasked: maskPhone(visit.phone),
+      phone: visit.phone || null,
       country: visit.country,
       operator: visit.operator,
       pageType: visit.pageType,
@@ -476,6 +478,7 @@ export const createSearchService = () => {
       vidRaw: event.visit?.vidRaw,
       affRaw: event.visit?.affRaw,
       phoneMasked: maskPhone(event.visit?.phone),
+      phone: event.visit?.phone || null,
       country: event.visit?.country,
       operator: event.visit?.operator,
       pageType: event.visit?.pageType,

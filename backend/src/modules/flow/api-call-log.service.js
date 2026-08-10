@@ -12,9 +12,7 @@ const truncate = (value) => {
 
 const maskPhone = (phone) => {
   if (!phone) return undefined;
-  const trimmed = String(phone).trim();
-  if (trimmed.length <= 4) return '****';
-  return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+  return String(phone).trim();
 };
 
 export const createApiCallLogService = () => {
@@ -49,6 +47,7 @@ export const createApiCallLogService = () => {
       clickId: saved.clickId,
       rcid: saved.rcid,
       phoneMasked: maskPhone(saved.msisdn),
+      phone: saved.msisdn || null,
       eventType: `API_${String(saved.callType || '').toUpperCase()}`,
       status: statusLabel,
       requestUrl: saved.requestUrl,

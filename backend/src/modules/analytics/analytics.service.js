@@ -44,9 +44,7 @@ export const createAnalyticsService = () => {
 
   const maskPhone = (phone) => {
     if (!phone) return undefined;
-    const trimmed = phone.trim();
-    if (trimmed.length <= 4) return '****';
-    return `${trimmed.slice(0, 3)}****${trimmed.slice(-2)}`;
+    return String(phone).trim();
   };
 
   const indexVisitEvent = async (visitId, eventType, status) => {
@@ -66,6 +64,7 @@ export const createAnalyticsService = () => {
         vidRaw: visit.vidRaw,
         affRaw: visit.affRaw,
         phoneMasked: maskPhone(visit.phone),
+        phone: visit.phone || null,
         country: visit.country,
         operator: visit.operator,
         pageType: visit.pageType,
@@ -505,7 +504,7 @@ export const createAnalyticsService = () => {
         success: row.success,
         statusLabel,
         errorMessage: row.errorMessage,
-        msisdn: maskPhone(row.msisdn),
+        msisdn: row.msisdn || null,
         clickId: row.clickId,
         rcid: row.rcid,
         createdAt: row.createdAt,
@@ -572,6 +571,7 @@ export const createAnalyticsService = () => {
         campaignId: visit.campaignId,
         campaignName,
         phoneMasked: maskPhone(visit.phone),
+        phone: visit.phone || null,
         country: visit.country,
         operator: visit.operator,
         pageType: visit.pageType,
