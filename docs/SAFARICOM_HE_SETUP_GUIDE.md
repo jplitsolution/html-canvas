@@ -53,6 +53,7 @@ Session id is stored as `templatecraft_he_session_id` and sent to `/api/flow/det
 |------|--------|
 | URL | `https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn` |
 | Method | `GET` |
+| **Where** | **Browser (handset / Safaricom mobile data)** — not the WAP Manager server |
 
 ```http
 Authorization: Bearer <access_token>
@@ -61,6 +62,8 @@ X-MessageID: 1234
 X-Source-System: he-partner
 ```
 
+> Server-side calls to this URL return **403** (datacenter IP). The manager mirrors
+> safwap: detect returns `needsClientHe` + URLs → SPA calls Safaricom → POSTs MSISDN back.
 ### 2.3 Fail / Wi‑Fi redirect (CG)
 
 ```

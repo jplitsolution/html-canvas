@@ -11,6 +11,7 @@
  */
 
 import { detectMsisdnApi } from '../api/flow'
+import { resolveSafaricomMaskedInBrowser } from './safaricomHe'
 
 const URL_KEYS = ['msisdn', 'phone', 'mobile', 'mob', 'MSISDN']
 const STORAGE_KEYS = ['templatecraft_msisdn', 'msisdn', 'phone', 'mobile']
@@ -56,32 +57,80 @@ export function persistPhone(phone) {
   }
 }
 
+function mapDetectResponse(res) {
+  if (!res) return null
+  return {
+    phone: normalizeMsisdn(res.phone),
+    subscribed: res.subscribed,
+    isActive: Boolean(res.isActive),
+    subscriptionStatus: res.subscriptionStatus || null,
+    blocked: res.blocked,
+    blockReason: res.blockReason || null,
+    nextPage: res.nextPage || null,
+    heProvider: res.heProvider || null,
+    heError: res.heError || null,
+    needsClientHe: Boolean(res.needsClientHe),
+    heClientConfig: res.heClientConfig || null,
+    failRedirectUrl: res.failRedirectUrl || null,
+    successRedirectUrl: res.successRedirectUrl || null,
+    cgRedirectUrl: res.cgRedirectUrl || null,
+    visitId: res.visitId || null,
+    clickId: res.clickId || null,
+    rcid: res.rcid || null,
+    campaignId: res.campaignId || null,
+  }
+}
+
 /**
  * Resolves phone number from operator header enrichment API.
  * Always returns an object (phone may be empty) so fail/success redirects stay available.
+ *
+ * Safaricom masked HE: detect may return needsClientHe → browser token/MSISDN
+ * (safwap parity) → second detect with heSource=browser.
  */
 export async function resolvePhoneFromOperator(context = {}) {
   try {
-    const res = await detectMsisdnApi(context)
+    let res = await detectMsisdnApi(context)
     if (!res) return null
-    return {
-      phone: normalizeMsisdn(res.phone),
-      subscribed: res.subscribed,
-      isActive: Boolean(res.isActive),
-      subscriptionStatus: res.subscriptionStatus || null,
-      blocked: res.blocked,
-      blockReason: res.blockReason || null,
-      nextPage: res.nextPage || null,
-      heProvider: res.heProvider || null,
-      heError: res.heError || null,
-      failRedirectUrl: res.failRedirectUrl || null,
-      successRedirectUrl: res.successRedirectUrl || null,
-      cgRedirectUrl: res.cgRedirectUrl || null,
-      visitId: res.visitId || null,
-      clickId: res.clickId || null,
-      rcid: res.rcid || null,
-      campaignId: res.campaignId || null,
+
+    if (res.needsClientHe && res.heClientConfig) {
+      const browserHe = await resolveSafaricomMaskedInBrowser(res.heClientConfig, {
+        sessionId: context.sessionId,
+      })
+      res = await detectMsisdnApi({
+        ...context,
+        phone: browserHe.phone || undefined,
+        visitId: res.visitId || context.visitId,
+        clickId: res.clickId || context.clickId,
+        rcid: res.rcid || context.rcid,
+        sessionId: browserHe.sessionId || context.sessionId,
+        heSource: 'browser',
+        heClientLogs: browserHe.heClientLogs,
+        heClientError: browserHe.error || undefined,
+      })
+      if (!res) {
+        return {
+          phone: normalizeMsisdn(browserHe.phone),
+          subscribed: false,
+          isActive: false,
+          subscriptionStatus: null,
+          blocked: false,
+          blockReason: null,
+          nextPage: null,
+          heProvider: 'safaricom_masked',
+          heError: browserHe.error || null,
+          failRedirectUrl: null,
+          successRedirectUrl: null,
+          cgRedirectUrl: null,
+          visitId: null,
+          clickId: null,
+          rcid: null,
+          campaignId: null,
+        }
+      }
     }
+
+    return mapDetectResponse(res)
   } catch (err) {
     console.warn('[resolvePhoneFromOperator] detection failed:', err)
   }

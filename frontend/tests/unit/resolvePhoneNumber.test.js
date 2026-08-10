@@ -1,4 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../../src/services/api/flow', () => ({
+  detectMsisdnApi: vi.fn(),
+}))
+
+vi.mock('../../src/services/flow/safaricomHe', () => ({
+  resolveSafaricomMaskedInBrowser: vi.fn(),
+}))
+
 import {
   normalizeMsisdn,
   resolvePhoneNumber,
@@ -6,12 +15,8 @@ import {
   isHeRedirectUrl,
   appendHeAttributionToUrl,
 } from '../../src/services/flow/resolvePhoneNumber'
-
-vi.mock('../../src/services/api/flow', () => ({
-  detectMsisdnApi: vi.fn(),
-}))
-
 import { detectMsisdnApi } from '../../src/services/api/flow'
+import { resolveSafaricomMaskedInBrowser } from '../../src/services/flow/safaricomHe'
 
 describe('MSISDN & Operator Header Resolution', () => {
   beforeEach(() => {
@@ -56,6 +61,52 @@ describe('MSISDN & Operator Header Resolution', () => {
     expect(result.source).toBe('operator')
     expect(result.subscribed).toBe(true)
     expect(detectMsisdnApi).toHaveBeenCalledWith({ country: 'IN', operator: 'AIRTEL' })
+  })
+
+  it('runs browser Safaricom HE when detect returns needsClientHe', async () => {
+    detectMsisdnApi
+      .mockResolvedValueOnce({
+        phone: '',
+        needsClientHe: true,
+        heProvider: 'safaricom_masked',
+        heClientConfig: {
+          tokenUrl: 'https://evisaf.example/hetoken',
+          maskedUrl: 'https://identity.example/masked',
+        },
+        visitId: 99,
+        clickId: 'c1',
+        failRedirectUrl: 'https://cg.example/fail',
+      })
+      .mockResolvedValueOnce({
+        phone: '254712345678',
+        heProvider: 'safaricom_masked',
+        visitId: 99,
+        clickId: 'c1',
+        subscribed: false,
+        isActive: false,
+      })
+
+    resolveSafaricomMaskedInBrowser.mockResolvedValueOnce({
+      phone: '254712345678',
+      error: null,
+      sessionId: 'sid_test',
+      heClientLogs: { token: { success: true }, msisdn: { success: true } },
+    })
+
+    const result = await resolvePhoneNumber(new URLSearchParams(), {
+      country: 'KE',
+      operator: 'SAFARICOM',
+    })
+
+    expect(resolveSafaricomMaskedInBrowser).toHaveBeenCalled()
+    expect(detectMsisdnApi).toHaveBeenCalledTimes(2)
+    expect(detectMsisdnApi.mock.calls[1][0]).toMatchObject({
+      heSource: 'browser',
+      phone: '254712345678',
+      visitId: 99,
+    })
+    expect(result.phone).toBe('254712345678')
+    expect(result.source).toBe('operator')
   })
 
   it('returns fail/CG redirect fields when operator detect finds no MSISDN', async () => {

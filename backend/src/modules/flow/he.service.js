@@ -10,7 +10,9 @@ import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
  *   - header            : trust X-MSISDN / query (default)
  *   - none              : never resolve
  *   - custom_http       : GET/POST resolveMsisdnUrl (or heConfig.url)
- *   - safaricom_masked  : POST token → Bearer GET masked MSISDN (Safaricom Kenya WAP)
+ *   - safaricom_masked  : browser HE (safwap parity) — POST token → GET masked MSISDN
+ *                         Detect returns needsClientHe; SPA calls Safaricom; POSTs back.
+ *                         Optional heSource=server keeps legacy Node proxy (usually 403).
  *
  * heConfigJson (Safaricom Kenya):
  *   {
@@ -149,9 +151,129 @@ export const createHeService = () => {
   };
 
   /**
-   * Safaricom Kenya WAP: POST hetoken → GET fetchMaskedMsisdn with partner headers.
-   * @param {object} heConfig
-   * @param {{ sessionId?: string, visitId?: number, campaignId?: number, clickId?: string, rcid?: string }} [input]
+   * Public browser config for Safaricom HE (parity with safwap SPA).
+   * fetchMaskedMsisdn must run on the handset / mobile-data path — not our server IP.
+   */
+  const buildSafaricomClientConfig = (heConfig = {}) => {
+    const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl || '';
+    const maskedUrl = heConfig.maskedUrl || heConfig.maskedMsisdnUrl || '';
+    return {
+      tokenUrl,
+      maskedUrl,
+      tokenMethod: String(heConfig.tokenMethod || 'POST').toUpperCase(),
+      tokenBody: heConfig.tokenBody || {},
+      xApp: heConfig.xApp || 'he-partner',
+      xMessageId: makeMessageId(heConfig),
+      xSourceSystem: heConfig.xSourceSystem || 'he-partner',
+      failMessage:
+        heConfig.failMessage || 'Please use Safaricom Mobile Data',
+    };
+  };
+
+  const extractMaskedPhone = (body = {}) =>
+    body?.data?.ServiceResponse?.ResponseBody?.Response?.Msisdn ||
+    body?.ServiceResponse?.ResponseBody?.Response?.Msisdn ||
+    body?.msisdn ||
+    body?.MSISDN ||
+    body?.data?.msisdn ||
+    body?.MaskedMsisdn ||
+    body?.maskedMsisdn ||
+    '';
+
+  /** Persist browser HE token/msisdn rounds into api_call_logs (Session Detail). */
+  const recordClientSafaricomLogs = async (input = {}, heClientLogs = {}) => {
+    const tokenLog = heClientLogs?.token;
+    if (tokenLog && typeof tokenLog === 'object') {
+      await logCall({
+        callType: ApiCallType.HE_TOKEN,
+        input,
+        requestUrl: tokenLog.requestUrl || null,
+        requestBody: tokenLog.requestBody ?? {
+          method: tokenLog.method || 'POST',
+          headers: safeHeadersForLog(tokenLog.headers || {}),
+          body: tokenLog.body ?? {},
+          source: 'browser',
+        },
+        response: {
+          status: tokenLog.responseStatus ?? null,
+          data: tokenLog.responseBody ?? null,
+        },
+        success: Boolean(tokenLog.success),
+        errorMessage: tokenLog.errorMessage || null,
+        statusLabel: tokenLog.success ? 'SUCCESS' : 'FAILED',
+      });
+    }
+
+    const msisdnLog = heClientLogs?.msisdn;
+    if (msisdnLog && typeof msisdnLog === 'object') {
+      await logCall({
+        callType: ApiCallType.HE_MSISDN,
+        input,
+        requestUrl: msisdnLog.requestUrl || null,
+        requestBody: msisdnLog.requestBody ?? {
+          method: msisdnLog.method || 'GET',
+          headers: safeHeadersForLog(msisdnLog.headers || {}),
+          source: 'browser',
+        },
+        response: {
+          status: msisdnLog.responseStatus ?? null,
+          data: msisdnLog.responseBody ?? null,
+        },
+        success: Boolean(msisdnLog.success),
+        errorMessage: msisdnLog.errorMessage || null,
+        statusLabel: msisdnLog.success ? 'SUCCESS' : 'FAILED',
+      });
+    }
+  };
+
+  /**
+   * Apply MSISDN resolved in the browser (safwap parity).
+   * Server-side calls to identity.safaricom.com get 403 from datacenter IPs.
+   */
+  const resolveSafaricomFromBrowser = async (heConfig, input = {}) => {
+    const clientConfig = buildSafaricomClientConfig(heConfig);
+    if (!clientConfig.tokenUrl || !clientConfig.maskedUrl) {
+      return {
+        phone: '',
+        error: 'Safaricom HE requires tokenUrl + maskedUrl in heConfigJson',
+      };
+    }
+
+    await recordClientSafaricomLogs(input, input.heClientLogs || {});
+
+    const fromHint = normalizePhone(input.phone || input.hint || '');
+    let fromLog = '';
+    const msisdnBody = input.heClientLogs?.msisdn?.responseBody;
+    if (msisdnBody && typeof msisdnBody === 'object') {
+      fromLog = normalizePhone(extractMaskedPhone(msisdnBody));
+    }
+    const normalized = fromHint || fromLog;
+    const failMessage =
+      input.heClientError ||
+      heConfig.failMessage ||
+      'Please use Safaricom Mobile Data';
+
+    if (!normalized) {
+      return {
+        phone: '',
+        error: failMessage,
+        sessionId: input.sessionId || null,
+        source: 'browser',
+      };
+    }
+    return {
+      phone: normalized,
+      error: null,
+      sessionId: input.sessionId || null,
+      source: 'browser',
+    };
+  };
+
+  /**
+   * Safaricom Kenya WAP HE.
+   * - Default: hand off to browser (needsClientHe) — same as safwap SPA.
+   * - heSource=browser: accept client MSISDN + optional log payloads.
+   * - heSource=server: legacy server proxy (usually 403 off-net; kept for debug).
    */
   const resolveSafaricomMasked = async (heConfig, input = {}) => {
     const tokenUrl = heConfig.tokenUrl || heConfig.heTokenUrl;
@@ -160,6 +282,27 @@ export const createHeService = () => {
       return {
         phone: '',
         error: 'Safaricom HE requires tokenUrl + maskedUrl in heConfigJson',
+      };
+    }
+
+    const heSource = String(input.heSource || '')
+      .toLowerCase()
+      .trim();
+
+    // Client finished browser HE — accept MSISDN + optional api_call_logs payloads.
+    if (heSource === 'browser') {
+      return resolveSafaricomFromBrowser(heConfig, input);
+    }
+
+    // Default: hand off to browser (safwap parity). Server IP → Safaricom 403.
+    // Opt-in legacy: heSource=server still proxies from Node (debug / off-net only).
+    if (heSource !== 'server') {
+      return {
+        phone: '',
+        error: null,
+        needsClientHe: true,
+        clientConfig: buildSafaricomClientConfig(heConfig),
+        sessionId: makeSessionId(input.sessionId || heConfig.sessionId),
       };
     }
 
@@ -260,15 +403,7 @@ export const createHeService = () => {
     }
 
     const body = maskedRes.data || {};
-    const phone =
-      body?.data?.ServiceResponse?.ResponseBody?.Response?.Msisdn ||
-      body?.ServiceResponse?.ResponseBody?.Response?.Msisdn ||
-      body?.msisdn ||
-      body?.MSISDN ||
-      body?.data?.msisdn ||
-      body?.MaskedMsisdn ||
-      body?.maskedMsisdn ||
-      '';
+    const phone = extractMaskedPhone(body);
 
     const failMessage =
       body?.header?.customerMessage ||
@@ -369,8 +504,9 @@ export const createHeService = () => {
 
   /**
    * @param {object} apiConfig
-   * @param {{ phone?: string, country?: string, operator?: string, hint?: string, sessionId?: string, visitId?: number, campaignId?: number, clickId?: string, rcid?: string }} input
+   * @param {{ phone?: string, country?: string, operator?: string, hint?: string, sessionId?: string, visitId?: number, campaignId?: number, clickId?: string, rcid?: string, heSource?: string, heClientLogs?: object, heClientError?: string }} input
    *   input.phone = already extracted from HTTP headers / query
+   *   input.heSource = browser | server | (omit = bootstrap client HE for safaricom)
    */
   const resolve = async (apiConfig, input = {}) => {
     const provider = String(
@@ -401,7 +537,8 @@ export const createHeService = () => {
     // safaricom_masked / custom_http must always hit partner APIs (token → MSISDN)
     // so Session Detail gets he_token / he_msisdn logs — even when HE_DUMMY or a
     // query msisdn is present for local testing.
-    const apiHe = provider === 'safaricom_masked' ||
+    const apiHe =
+      provider === 'safaricom_masked' ||
       provider === 'custom_http' ||
       provider === 'custom';
 
@@ -448,6 +585,9 @@ export const createHeService = () => {
     redirectMeta,
     pickRedirectUrl,
     makeSessionId,
+    buildSafaricomClientConfig,
+    extractMaskedPhone,
+    recordClientSafaricomLogs,
   };
 };
 

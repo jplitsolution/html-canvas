@@ -217,7 +217,7 @@ Configured on `api_configs.he_provider` + `he_config_json`.
 | `header` (default) | Trust carrier header / query / optional `HE_DUMMY_MSISDN` | Request hint |
 | `none` | Never resolve | empty |
 | `custom_http` / `custom` | GET/POST configured resolve URL | **API response only** |
-| `safaricom_masked` | POST token → Bearer GET masked MSISDN | **API response only** |
+| `safaricom_masked` | Browser: POST token → GET masked MSISDN; server accepts result | **Browser API response** (server proxy → 403) |
 
 **API HE** = `{ safaricom_masked, custom_http, custom }`.
 
