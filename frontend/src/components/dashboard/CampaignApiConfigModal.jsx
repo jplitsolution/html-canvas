@@ -9,6 +9,8 @@ import {
   testSendOtp,
   testVerifyOtp,
   checkOtpProviderHealth,
+  PAGE_TYPES,
+  PAGE_TYPE_LABELS,
 } from '../../services/api/campaigns'
 
 const DEFAULT_PARTNER = {
@@ -21,6 +23,77 @@ const DEFAULT_PARTNER = {
   verifyBodyJson: '',
   successKey: 'responseCode',
   successValue: '0',
+}
+
+const DEFAULT_CHECKSUB = {
+  statusField: 'currentStatus',
+  rules: [],
+  missGo: 'continue',
+  missPage: 'ERROR',
+  missUrl: '',
+}
+
+const CHECKSUB_PAGE_OPTIONS = PAGE_TYPES.filter((id) =>
+  ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR', 'HOME', 'OTP', 'CONFIRM'].includes(
+    id,
+  ),
+)
+
+function parseChecksubConfig(raw) {
+  if (!raw) return { ...DEFAULT_CHECKSUB, rules: [] }
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!parsed || typeof parsed !== 'object') {
+      return { ...DEFAULT_CHECKSUB, rules: [] }
+    }
+    const rules = Array.isArray(parsed.rules)
+      ? parsed.rules.map((r) => ({
+          value: r?.value != null ? String(r.value) : '',
+          go: r?.go === 'page' || r?.go === 'external' ? r.go : 'continue',
+          page: r?.page || 'THANKYOU',
+          url: r?.url || '',
+        }))
+      : []
+    return {
+      statusField: parsed.statusField || 'currentStatus',
+      rules,
+      missGo:
+        parsed.missGo === 'page' || parsed.missGo === 'external'
+          ? parsed.missGo
+          : 'continue',
+      missPage: parsed.missPage || 'ERROR',
+      missUrl: parsed.missUrl || '',
+    }
+  } catch {
+    return { ...DEFAULT_CHECKSUB, rules: [] }
+  }
+}
+
+function serializeChecksubConfig(cfg) {
+  if (!cfg) return null
+  const rules = (cfg.rules || [])
+    .map((r) => ({
+      value: String(r.value || '').trim(),
+      go: r.go === 'page' || r.go === 'external' ? r.go : 'continue',
+      page: r.page || 'THANKYOU',
+      url: String(r.url || '').trim(),
+    }))
+    .filter((r) => r.value)
+  const statusField = String(cfg.statusField || 'currentStatus').trim() || 'currentStatus'
+  const missGo =
+    cfg.missGo === 'page' || cfg.missGo === 'external' ? cfg.missGo : 'continue'
+  const isDefault =
+    rules.length === 0 &&
+    statusField === 'currentStatus' &&
+    missGo === 'continue'
+  if (isDefault) return null
+  return JSON.stringify({
+    statusField,
+    rules,
+    missGo,
+    missPage: cfg.missPage || 'ERROR',
+    missUrl: String(cfg.missUrl || '').trim(),
+  })
 }
 
 const HE_MODES = [
@@ -127,6 +200,10 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   })
   const [heFields, setHeFields] = useState(EMPTY_HE_FIELDS)
   const [partnerConfig, setPartnerConfig] = useState(DEFAULT_PARTNER)
+  const [checksubConfig, setChecksubConfig] = useState(() => ({
+    ...DEFAULT_CHECKSUB,
+    rules: [],
+  }))
 
   const [testPhone, setTestPhone] = useState('')
   const [testOtp, setTestOtp] = useState('')
@@ -154,6 +231,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           resolveMsisdnUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
           heProvider: provider,
         })
+        setChecksubConfig(parseChecksubConfig(config.checksubConfigJson))
         setHeFields({
           ...parsedHe,
           resolveUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
@@ -207,6 +285,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         heConfigJson: heConfigJson || null,
         subscribeApi: (form.subscribeApi || '').trim() || null,
         otpConfigJson: JSON.stringify(partnerConfig),
+        checksubConfigJson: serializeChecksubConfig(checksubConfig),
       })
       onClose()
     } catch {
@@ -561,6 +640,233 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   placeholder="https://…/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
                 />
               </Field>
+
+              <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-fg">Checksub status mapping</p>
+                    <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">
+                      When a number is found, map the partner response to continue the funnel,
+                      a campaign page, or an external website. Works with plain-text body
+                      (e.g. <code className="font-mono">INACTIVE</code>) or JSON fields.
+                      Leave empty to keep the built-in active/parking/pending mapping.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="shrink-0 px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
+                    onClick={() =>
+                      setChecksubConfig({
+                        statusField: 'body',
+                        rules: [
+                          { value: 'ACTIVE', go: 'page', page: 'THANKYOU', url: '' },
+                          { value: 'INACTIVE', go: 'continue', page: 'THANKYOU', url: '' },
+                        ],
+                        missGo: 'continue',
+                        missPage: 'ERROR',
+                        missUrl: '',
+                      })
+                    }
+                  >
+                    Plain-text preset
+                  </button>
+                </div>
+
+                <Field
+                  label="Status field"
+                  hint="body = whole response text; otherwise JSON key"
+                >
+                  <Input
+                    value={checksubConfig.statusField}
+                    onChange={(e) =>
+                      setChecksubConfig({
+                        ...checksubConfig,
+                        statusField: e.target.value,
+                      })
+                    }
+                    placeholder="body | currentStatus | status"
+                    list="checksub-status-fields"
+                  />
+                  <datalist id="checksub-status-fields">
+                    <option value="body" />
+                    <option value="currentStatus" />
+                    <option value="subscriptionStatus" />
+                    <option value="status" />
+                  </datalist>
+                </Field>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-fg">Rules (first match wins)</p>
+                    <button
+                      type="button"
+                      className="px-2.5 py-1 text-[11px] font-semibold rounded-lg border border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50"
+                      onClick={() =>
+                        setChecksubConfig({
+                          ...checksubConfig,
+                          rules: [
+                            ...checksubConfig.rules,
+                            {
+                              value: '',
+                              go: 'continue',
+                              page: 'THANKYOU',
+                              url: '',
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      + Add status
+                    </button>
+                  </div>
+
+                  {checksubConfig.rules.length === 0 ? (
+                    <p className="text-[11px] text-fg-muted rounded-lg border border-dashed border-border px-3 py-2">
+                      No rules yet — built-in mapping is used (active → thank you, parking →
+                      low balance, …).
+                    </p>
+                  ) : null}
+
+                  {checksubConfig.rules.map((rule, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-lg border border-border bg-bg-subtle/40 p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold text-indigo-600">
+                          Rule {idx + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="px-2 py-1 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
+                          onClick={() =>
+                            setChecksubConfig({
+                              ...checksubConfig,
+                              rules: checksubConfig.rules.filter((_, i) => i !== idx),
+                            })
+                          }
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <Field label="Equals">
+                          <Input
+                            value={rule.value}
+                            onChange={(e) => {
+                              const rules = [...checksubConfig.rules]
+                              rules[idx] = { ...rules[idx], value: e.target.value }
+                              setChecksubConfig({ ...checksubConfig, rules })
+                            }}
+                            placeholder="ACTIVE / inactive / parking"
+                          />
+                        </Field>
+                        <Field label="Then">
+                          <select
+                            className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                            value={rule.go || 'continue'}
+                            onChange={(e) => {
+                              const rules = [...checksubConfig.rules]
+                              rules[idx] = { ...rules[idx], go: e.target.value }
+                              setChecksubConfig({ ...checksubConfig, rules })
+                            }}
+                          >
+                            <option value="continue">Continue funnel</option>
+                            <option value="page">Campaign page</option>
+                            <option value="external">External website</option>
+                          </select>
+                        </Field>
+                      </div>
+                      {rule.go === 'page' ? (
+                        <Field label="Page">
+                          <select
+                            className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                            value={rule.page || 'THANKYOU'}
+                            onChange={(e) => {
+                              const rules = [...checksubConfig.rules]
+                              rules[idx] = { ...rules[idx], page: e.target.value }
+                              setChecksubConfig({ ...checksubConfig, rules })
+                            }}
+                          >
+                            {CHECKSUB_PAGE_OPTIONS.map((id) => (
+                              <option key={id} value={id}>
+                                {PAGE_TYPE_LABELS[id] || id}
+                              </option>
+                            ))}
+                          </select>
+                        </Field>
+                      ) : null}
+                      {rule.go === 'external' ? (
+                        <Field label="Website URL">
+                          <Input
+                            value={rule.url || ''}
+                            onChange={(e) => {
+                              const rules = [...checksubConfig.rules]
+                              rules[idx] = { ...rules[idx], url: e.target.value }
+                              setChecksubConfig({ ...checksubConfig, rules })
+                            }}
+                            placeholder="https://example.com"
+                          />
+                        </Field>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-lg border border-border bg-bg-subtle/40 p-3 space-y-2">
+                  <Field label="If nothing matches">
+                    <select
+                      className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                      value={checksubConfig.missGo || 'continue'}
+                      onChange={(e) =>
+                        setChecksubConfig({
+                          ...checksubConfig,
+                          missGo: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="continue">Continue funnel</option>
+                      <option value="page">Campaign page</option>
+                      <option value="external">External website</option>
+                    </select>
+                  </Field>
+                  {checksubConfig.missGo === 'page' ? (
+                    <Field label="Page">
+                      <select
+                        className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                        value={checksubConfig.missPage || 'ERROR'}
+                        onChange={(e) =>
+                          setChecksubConfig({
+                            ...checksubConfig,
+                            missPage: e.target.value,
+                          })
+                        }
+                      >
+                        {CHECKSUB_PAGE_OPTIONS.map((id) => (
+                          <option key={id} value={id}>
+                            {PAGE_TYPE_LABELS[id] || id}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  ) : null}
+                  {checksubConfig.missGo === 'external' ? (
+                    <Field label="Website URL">
+                      <Input
+                        value={checksubConfig.missUrl || ''}
+                        onChange={(e) =>
+                          setChecksubConfig({
+                            ...checksubConfig,
+                            missUrl: e.target.value,
+                          })
+                        }
+                        placeholder="https://example.com"
+                      />
+                    </Field>
+                  ) : null}
+                </div>
+              </div>
+
               <Field
                 label="Subscribe URL (Confirm click)"
                 hint="optional — leave empty if billing is OTP verify only"

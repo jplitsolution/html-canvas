@@ -33,8 +33,35 @@ export const initDatabase = async () => {
   await ensureUniqueMsisdnOnPostbacks(dataSource);
   await ensureSuccessRedirectModeColumn(dataSource);
   await ensurePostbackRegisterAtColumn(dataSource);
+  await ensureChecksubConfigJsonColumn(dataSource);
   return dataSource;
 };
+
+/** Idempotent: campaign checksub status → continue/page/external rules. */
+async function ensureChecksubConfigJsonColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "api_configs"
+        ADD COLUMN IF NOT EXISTS "checksub_config_json" text
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'api_configs' AND COLUMN_NAME = 'checksub_config_json'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`api_configs\` ADD COLUMN \`checksub_config_json\` text NULL`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureChecksubConfigJsonColumn:', err.message);
+  }
+}
 
 /** Idempotent: thankyou | immediate after success / portal URL. */
 async function ensureSuccessRedirectModeColumn(ds) {

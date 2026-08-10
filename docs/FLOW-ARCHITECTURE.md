@@ -267,13 +267,15 @@ API HE ignores this hint for the final phone decision.
 ```
 0. Resolve campaign (country + operator + tracking_campid / legacy campid)
 1. resolveOrCreateLandingVisit  → visitId, clickId, rcid   [BEFORE any partner HTTP]
-2. heService.resolve            → phone, error, success/fail redirect URLs from heConfig
-3. If phone + APIs configured   → checksub ∥ blocklist
-4. Persist phone on visit
-5. Build redirect URLs (HE: as-is / placeholders only)
-6. Decision matrix → nextPage / outbound URLs / registerPending (new only)
-7. Log ApiCallType.HE_REDIRECT
-8. Return payload to frontend
+2. HE gate: run only when verificationMode is HEADER_INJECTION or BOTH
+   (skip for OTP_ONLY / NONE, or heProvider=none) — visit still minted
+3. heService.resolve            → phone, error, success/fail redirect URLs from heConfig
+4. If phone + APIs configured   → checksub ∥ blocklist
+5. Persist phone on visit
+6. Build redirect URLs (HE: as-is / placeholders only)
+7. Decision matrix → nextPage / outbound URLs / registerPending (new only)
+8. Log ApiCallType.HE_REDIRECT  (only when HE gate ran)
+9. Return payload to frontend
 ```
 
 ### 6.1 Decision matrix
@@ -326,10 +328,10 @@ Normalized modes (`flow-engine.service.js`):
 
 | Mode | Alias | Behaviour |
 |------|-------|-----------|
-| `HEADER_INJECTION` | `MSISDN_ONLY` | HOME → CONFIRM if header resolved; else ERROR |
-| `OTP_ONLY` | — | HOME → OTP → CONFIRM |
-| `BOTH` | — | HOME → CONFIRM if resolved; else OTP |
-| `NONE` | `NULL` | HOME only; **null-flow CG** if `cgRedirectUrl` set |
+| `HEADER_INJECTION` | `MSISDN_ONLY` | Landing HE; HOME → CONFIRM if header resolved; else ERROR |
+| `OTP_ONLY` | — | No landing HE / no `he_redirect` log; HOME → OTP → CONFIRM |
+| `BOTH` | — | Landing HE first; HOME → CONFIRM if resolved; else OTP |
+| `NONE` | `NULL` | No landing HE; HOME only; **null-flow CG** if `cgRedirectUrl` set |
 
 ### 7.1 Null-flow (`NONE` + CG URL)
 

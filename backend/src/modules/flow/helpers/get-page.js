@@ -120,6 +120,7 @@ export function createGetPage(deps) {
 
           if (sub?.shouldSkipSubscribe) {
             resolvedPageType =
+              (sub.go === 'page' && sub.page ? sub.page : null) ||
               pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
               CampaignPageType.THANKYOU;
           } else {
@@ -234,6 +235,7 @@ export function createGetPage(deps) {
 
           if (!keepHome) {
             resolvedPageType =
+              (sub.go === 'page' && sub.page ? sub.page : null) ||
               pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
               CampaignPageType.THANKYOU;
           }

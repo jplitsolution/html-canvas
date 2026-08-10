@@ -132,6 +132,46 @@ export function createHandleHomeSubscribe(deps) {
     nextPage = skipResult.nextPage;
     const skipSub = skipResult.sub;
 
+    if (
+      skipResult.externalRedirect &&
+      /^https?:\/\//i.test(skipResult.externalRedirect)
+    ) {
+      await analyticsService.updateVisit(
+        input.visitId,
+        VisitStatus.SUBSCRIBED,
+        CampaignPageType.THANKYOU,
+        resolvedPhone || undefined,
+      );
+      await analyticsService.logEvent(
+        input.visitId,
+        VisitEventType.SUBSCRIBE_SUCCESS,
+        {
+          info: `Checksub external redirect — status=${skipSub?.status || ''}`,
+          currentStatus: skipSub?.currentStatus,
+          isActive: skipSub?.isActive,
+        },
+      );
+      return {
+        ...(await buildPageResponse(
+          campaign,
+          CampaignPageType.HOME,
+          {
+            phone: resolvedPhone,
+            country: campaign.country,
+            operator: campaign.operator,
+            service_id: serviceId,
+            plan: '',
+          },
+          input.visitId,
+          undefined,
+          undefined,
+          undefined,
+          { subscriptionStatus: skipSub?.status || null },
+        )),
+        externalRedirect: skipResult.externalRedirect,
+      };
+    }
+
     const skippedStatusPage = [
       CampaignPageType.THANKYOU,
       CampaignPageType.INPROGRESS,
