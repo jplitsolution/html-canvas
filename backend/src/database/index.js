@@ -29,6 +29,10 @@ export const initDatabase = async () => {
 
   await dataSource.initialize();
   await ensureUserStatusColumn(dataSource);
+  // Postbacks / HE base schema must exist before campid / unique-msisdn patches.
+  await ensurePostbacksAndHeSchema(dataSource);
+  await ensureRcidAndApiCallLogsSchema(dataSource);
+  await ensureSuccessRedirectUrlColumn(dataSource);
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
   await ensureSuccessRedirectModeColumn(dataSource);
@@ -36,6 +40,145 @@ export const initDatabase = async () => {
   await ensureChecksubConfigJsonColumn(dataSource);
   return dataSource;
 };
+
+/**
+ * Idempotent: conversion_postbacks + vendor/affiliate postback_url +
+ * campaign cg_redirect_url + api_configs HE fields (migration 182).
+ * Prod deploy without running TypeORM migrations hits 42P01 / 42703 otherwise.
+ */
+async function ensurePostbacksAndHeSchema(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  if (!isPostgres) return;
+  try {
+    await ds.query(`
+      ALTER TABLE "vendors"
+      ADD COLUMN IF NOT EXISTS "postback_url" text
+    `);
+    await ds.query(`
+      ALTER TABLE "affiliates"
+      ADD COLUMN IF NOT EXISTS "postback_url" text
+    `);
+    await ds.query(`
+      ALTER TABLE "campaigns"
+      ADD COLUMN IF NOT EXISTS "cg_redirect_url" varchar(1024)
+    `);
+    await ds.query(`
+      ALTER TABLE "api_configs"
+      ADD COLUMN IF NOT EXISTS "he_provider" varchar(32) DEFAULT 'header'
+    `);
+    await ds.query(`
+      ALTER TABLE "api_configs"
+      ADD COLUMN IF NOT EXISTS "he_config_json" text
+    `);
+    await ds.query(`
+      CREATE TABLE IF NOT EXISTS "conversion_postbacks" (
+        "id" SERIAL PRIMARY KEY,
+        "visit_id" int,
+        "campaign_id" int,
+        "vendor_id" int,
+        "affiliate_id" int,
+        "msisdn" varchar(64) NOT NULL,
+        "campid" varchar(128),
+        "tracking_campid" varchar(128),
+        "click_id" varchar(255),
+        "rcid" varchar(255),
+        "offer_code" varchar(128),
+        "postback_url" text,
+        "status" varchar(32) NOT NULL DEFAULT 'pending',
+        "http_status" int,
+        "response_body" text,
+        "error_message" text,
+        "sent_at" TIMESTAMP,
+        "created_at" TIMESTAMP NOT NULL DEFAULT now(),
+        "updated_at" TIMESTAMP NOT NULL DEFAULT now()
+      )
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_postbacks_visit"
+      ON "conversion_postbacks" ("visit_id")
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_postbacks_campid"
+      ON "conversion_postbacks" ("campid")
+    `);
+  } catch (err) {
+    console.warn('ensurePostbacksAndHeSchema:', err.message);
+  }
+}
+
+/** Idempotent: visits.rcid + postbacks.rcid + api_call_logs (migration 183). */
+async function ensureRcidAndApiCallLogsSchema(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  if (!isPostgres) return;
+  try {
+    await ds.query(`
+      ALTER TABLE "visits"
+      ADD COLUMN IF NOT EXISTS "rcid" varchar
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_VISIT_RCID" ON "visits" ("rcid")
+    `);
+    await ds.query(`
+      ALTER TABLE "conversion_postbacks"
+      ADD COLUMN IF NOT EXISTS "rcid" varchar(255)
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_postbacks_rcid"
+      ON "conversion_postbacks" ("rcid")
+    `);
+    await ds.query(`
+      CREATE TABLE IF NOT EXISTS "api_call_logs" (
+        "id" SERIAL PRIMARY KEY,
+        "visit_id" int,
+        "campaign_id" int,
+        "msisdn" varchar(64),
+        "rcid" varchar(255),
+        "click_id" varchar(255),
+        "call_type" varchar(32) NOT NULL,
+        "request_url" text,
+        "request_body" text,
+        "response_status" int,
+        "response_body" text,
+        "success" boolean,
+        "error_message" text,
+        "created_at" TIMESTAMP NOT NULL DEFAULT now()
+      )
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_api_call_logs_msisdn"
+      ON "api_call_logs" ("msisdn")
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_api_call_logs_rcid"
+      ON "api_call_logs" ("rcid")
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_api_call_logs_click_id"
+      ON "api_call_logs" ("click_id")
+    `);
+    await ds.query(`
+      CREATE INDEX IF NOT EXISTS "IDX_api_call_logs_visit_id"
+      ON "api_call_logs" ("visit_id")
+    `);
+  } catch (err) {
+    console.warn('ensureRcidAndApiCallLogsSchema:', err.message);
+  }
+}
+
+/** Idempotent: campaigns.success_redirect_url (migration 184). */
+async function ensureSuccessRedirectUrlColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "campaigns"
+        ADD COLUMN IF NOT EXISTS "success_redirect_url" varchar(1024)
+      `);
+    }
+  } catch (err) {
+    console.warn('ensureSuccessRedirectUrlColumn:', err.message);
+  }
+}
 
 /** Idempotent: campaign checksub status → continue/page/external rules. */
 async function ensureChecksubConfigJsonColumn(ds) {
