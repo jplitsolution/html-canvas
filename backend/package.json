@@ -14,6 +14,7 @@
     "db:setup": "node scripts/setup-db.mjs",
     "db:reset": "node scripts/reset-db.mjs",
     "db:cleanup": "node scripts/apply-schema-cleanup.mjs",
+    "db:postbacks-he": "node scripts/apply-postbacks-he-schema.mjs",
     "db:seed": "node seed_clean.js",
     "test:api": "node scripts/test-apis.mjs"
   },
