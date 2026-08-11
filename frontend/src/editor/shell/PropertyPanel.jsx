@@ -380,6 +380,175 @@ function AddHotspotButton({ selected, editor }) {
 const inputClass =
   'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200';
 
+/** Fonts loaded in canvas (Google) + common system faces. */
+const FONT_OPTIONS = [
+  { value: 'Inter, sans-serif', label: 'Inter' },
+  { value: 'Outfit, sans-serif', label: 'Outfit' },
+  { value: '"Plus Jakarta Sans", sans-serif', label: 'Plus Jakarta Sans' },
+  { value: 'Georgia, serif', label: 'Georgia' },
+  { value: 'Arial, Helvetica, sans-serif', label: 'Arial' },
+  { value: '"Times New Roman", Times, serif', label: 'Times' },
+  { value: 'system-ui, sans-serif', label: 'System' },
+];
+
+const TEXT_SIZE_LABELS = ['Small', 'Normal', 'Medium', 'Large', 'XL', '2XL', '3XL', '4XL', 'Huge'];
+
+function fontFamilyKey(value) {
+  if (!value || typeof value !== 'string') return '';
+  return value.replace(/['"]/g, '').split(',')[0].trim().toLowerCase();
+}
+
+function matchFontOptionValue(cssValue) {
+  const key = fontFamilyKey(cssValue);
+  if (!key) return '';
+  const found = FONT_OPTIONS.find((o) => fontFamilyKey(o.value) === key);
+  return found ? found.value : '';
+}
+
+function FontFamilyField({ selected, update }) {
+  const current = getStyleProp(selected, 'font-family') || '';
+  const matched = matchFontOptionValue(current);
+  const selectValue = matched || (current ? '__custom__' : '');
+
+  return (
+    <Field label="Font">
+      <select
+        className={inputClass}
+        value={selectValue}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v || v === '__custom__') return;
+          setStyleProp(selected, 'font-family', v);
+          update();
+        }}
+      >
+        <option value="">Default</option>
+        {FONT_OPTIONS.map((f) => (
+          <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>
+            {f.label}
+          </option>
+        ))}
+        {current && !matched && (
+          <option value="__custom__">{current.replace(/['"]/g, '').split(',')[0].trim()}</option>
+        )}
+      </select>
+    </Field>
+  );
+}
+
+function TextSizeField({ selected, update }) {
+  const idx = parseTextSizeIndex(getStyleProp(selected, 'font-size'));
+  return (
+    <StepArrows
+      label="Text size"
+      valueLabel={TEXT_SIZE_LABELS[idx] || 'Normal'}
+      decreaseTitle="Smaller text"
+      increaseTitle="Larger text"
+      onDecrease={() => {
+        const next = Math.max(0, idx - 1);
+        setStyleProp(selected, 'font-size', textSizeIndexToCss(next));
+        update();
+      }}
+      onIncrease={() => {
+        const next = Math.min(TEXT_SIZE_STEPS.length - 1, idx + 1);
+        setStyleProp(selected, 'font-size', textSizeIndexToCss(next));
+        update();
+      }}
+    />
+  );
+}
+
+function FontWeightField({ selected, update }) {
+  return (
+    <Field label="Font weight">
+      <select
+        className={inputClass}
+        value={getStyleProp(selected, 'font-weight') || '400'}
+        onChange={(e) => {
+          setStyleProp(selected, 'font-weight', e.target.value);
+          update();
+        }}
+      >
+        <option value="400">Regular</option>
+        <option value="500">Medium</option>
+        <option value="600">Semibold</option>
+        <option value="700">Bold</option>
+      </select>
+    </Field>
+  );
+}
+
+function TextColorField({ selected, update, label = 'Text color', fallback = '#334155' }) {
+  return (
+    <Field label={label}>
+      <div className="flex gap-2">
+        <input
+          type="color"
+          className="flex-1 h-9 rounded-lg border border-border cursor-pointer"
+          value={toHex(getStyleProp(selected, 'color') || fallback)}
+          onChange={(e) => {
+            setStyleProp(selected, 'color', e.target.value);
+            update();
+          }}
+        />
+        <button
+          type="button"
+          onClick={() => {
+            setStyleProp(selected, 'color', '');
+            update();
+          }}
+          className="px-3 h-9 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent hover:text-accent transition-colors"
+          title="Reset to default"
+        >
+          Clear
+        </button>
+      </div>
+    </Field>
+  );
+}
+
+function TextAlignField({ selected, update }) {
+  return (
+    <Field label="Alignment">
+      <select
+        className={inputClass}
+        value={getStyleProp(selected, 'text-align') || 'left'}
+        onChange={(e) => {
+          setStyleProp(selected, 'text-align', e.target.value);
+          update();
+        }}
+      >
+        <option value="left">Left</option>
+        <option value="center">Center</option>
+        <option value="right">Right</option>
+      </select>
+    </Field>
+  );
+}
+
+/** Everyday typography — always visible in the simple panel (not only Advanced CSS). */
+function TypographyControls({
+  selected,
+  update,
+  showSize = true,
+  showWeight = true,
+  showColor = true,
+  showAlign = false,
+  colorFallback = '#334155',
+}) {
+  return (
+    <>
+      <FontFamilyField selected={selected} update={update} />
+      {showSize && <TextSizeField selected={selected} update={update} />}
+      {showWeight && <FontWeightField selected={selected} update={update} />}
+      {showColor && (
+        <TextColorField selected={selected} update={update} fallback={colorFallback} />
+      )}
+      {showAlign && <TextAlignField selected={selected} update={update} />}
+    </>
+  );
+}
+
 /** All funnel page types — every campaign can edit HOME … ERROR. */
 function getCampaignPageOptions() {
   return PAGE_TYPES.map((id) => ({
@@ -889,62 +1058,7 @@ export function PropertyPanel() {
               />
               <p className="text-xs text-fg-muted pt-0.5">Tip: double-click text on the page to edit it directly.</p>
             </Field>
-            <StepArrows
-              label="Text size"
-              valueLabel={['Small', 'Normal', 'Medium', 'Large', 'XL', '2XL', '3XL', '4XL', 'Huge'][parseTextSizeIndex(getStyleProp(selected, 'font-size'))] || 'Normal'}
-              decreaseTitle="Smaller text"
-              increaseTitle="Larger text"
-              onDecrease={() => {
-                const idx = Math.max(0, parseTextSizeIndex(getStyleProp(selected, 'font-size')) - 1);
-                setStyleProp(selected, 'font-size', textSizeIndexToCss(idx));
-                update();
-              }}
-              onIncrease={() => {
-                const idx = Math.min(TEXT_SIZE_STEPS.length - 1, parseTextSizeIndex(getStyleProp(selected, 'font-size')) + 1);
-                setStyleProp(selected, 'font-size', textSizeIndexToCss(idx));
-                update();
-              }}
-            />
-            <Field label="Font weight">
-              <select
-                className={inputClass}
-                value={getStyleProp(selected, 'font-weight') || '400'}
-                onChange={(e) => {
-                  setStyleProp(selected, 'font-weight', e.target.value);
-                  update();
-                }}
-              >
-                <option value="400">Regular</option>
-                <option value="500">Medium</option>
-                <option value="600">Semibold</option>
-                <option value="700">Bold</option>
-              </select>
-            </Field>
-            <Field label="Text color">
-              <input
-                type="color"
-                className="w-full h-9 rounded-lg border border-border cursor-pointer"
-                value={toHex(getStyleProp(selected, 'color') || '#334155')}
-                onChange={(e) => {
-                  setStyleProp(selected, 'color', e.target.value);
-                  update();
-                }}
-              />
-            </Field>
-            <Field label="Alignment">
-              <select
-                className={inputClass}
-                value={getStyleProp(selected, 'text-align') || 'left'}
-                onChange={(e) => {
-                  setStyleProp(selected, 'text-align', e.target.value);
-                  update();
-                }}
-              >
-                <option value="left">Left</option>
-                <option value="center">Center</option>
-                <option value="right">Right</option>
-              </select>
-            </Field>
+            <TypographyControls selected={selected} update={update} showAlign />
             <PositionControls selected={selected} update={update} />
           </>
         )}
@@ -969,6 +1083,12 @@ export function PropertyPanel() {
             {!isLockedSystemAction(selected.getAttributes() || {}) && (
               <ClickActionEditor selected={selected} editor={editor} update={update} />
             )}
+            <TypographyControls
+              selected={selected}
+              update={update}
+              showAlign
+              colorFallback="#ffffff"
+            />
             <Field label="Button color">
               <div className="flex gap-2">
                 <input
@@ -1341,30 +1461,9 @@ export function PropertyPanel() {
 
             <AddHotspotButton selected={selected} editor={editor} />
 
-            <Field label="Text Color">
-              <div className="flex gap-2">
-                <input
-                  type="color"
-                  className="flex-1 h-9 rounded-lg border border-border cursor-pointer"
-                  value={toHex(getStyleProp(selected, 'color') || '#000000')}
-                  onChange={(e) => {
-                    setStyleProp(selected, 'color', e.target.value);
-                    update();
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setStyleProp(selected, 'color', '');
-                    update();
-                  }}
-                  className="px-3 h-9 text-xs font-medium rounded-lg border border-border bg-bg-subtle hover:border-accent hover:text-accent transition-colors"
-                  title="Reset to default"
-                >
-                  Clear
-                </button>
-              </div>
-            </Field>
+            <FontFamilyField selected={selected} update={update} />
+            <TextColorField selected={selected} update={update} fallback="#000000" />
+            <TextAlignField selected={selected} update={update} />
 
             <Field label="Background Color">
               <div className="flex gap-2">
@@ -1390,6 +1489,22 @@ export function PropertyPanel() {
                 </button>
               </div>
             </Field>
+            <StepArrows
+              label="Corner roundness"
+              valueLabel={cornerLabel(parseCornerIndex(getStyleProp(selected, 'border-radius')))}
+              decreaseTitle="Less rounded"
+              increaseTitle="More rounded"
+              onDecrease={() => {
+                const idx = Math.max(0, parseCornerIndex(getStyleProp(selected, 'border-radius')) - 1);
+                setStyleProp(selected, 'border-radius', cornerIndexToCss(idx));
+                update();
+              }}
+              onIncrease={() => {
+                const idx = Math.min(CORNER_STEPS.length - 1, parseCornerIndex(getStyleProp(selected, 'border-radius')) + 1);
+                setStyleProp(selected, 'border-radius', cornerIndexToCss(idx));
+                update();
+              }}
+            />
             <div className="flex gap-2">
               <Field label="Width">
                 <input
@@ -1512,7 +1627,7 @@ export function PropertyPanel() {
             Advanced styling options
           </label>
           <p className="text-[11px] text-fg-subtle mt-1.5 leading-relaxed">
-            Extra controls for spacing, layout, and fine-tuning. Most users can skip this.
+            Font, size, color, and spacing are above. Use Advanced for layout, borders, and fine-tuning.
           </p>
         </div>
 
@@ -1538,7 +1653,22 @@ export function PropertyPanel() {
 }
 
 function toHex(color) {
-  if (color.startsWith('#')) return color.length === 7 ? color : '#000000';
+  if (!color || typeof color !== 'string') return '#334155';
+  if (color.startsWith('#')) {
+    if (color.length === 7) return color;
+    if (color.length === 4) {
+      const r = color[1];
+      const g = color[2];
+      const b = color[3];
+      return `#${r}${r}${g}${g}${b}${b}`;
+    }
+    return '#334155';
+  }
+  const m = color.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) {
+    const hex = (n) => Number(n).toString(16).padStart(2, '0');
+    return `#${hex(m[1])}${hex(m[2])}${hex(m[3])}`;
+  }
   return '#334155';
 }
 

@@ -33,6 +33,8 @@ export function shouldConfigureAsText(component) {
 }
 
 function stripHtml(html) {
+  // Do not .trim() — PropertyPanel controlled inputs re-read this on every
+  // keystroke; trimming would swallow trailing spaces as the user types.
   return html
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n')
@@ -40,8 +42,7 @@ function stripHtml(html) {
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
+    .replace(/&gt;/g, '>');
 }
 
 function setModelContent(component, value) {
@@ -95,12 +96,17 @@ export function configureAsTextComponent(component) {
 
 export function getTextContent(component) {
   const raw = component.get('content');
-  if (typeof raw === 'string' && raw.trim()) {
+  if (typeof raw === 'string' && raw.length > 0) {
+    // Trust model whenever it has characters (including trailing spaces).
     return stripHtml(raw);
   }
   const el = component.getEl?.();
-  if (el) return (el.textContent || '').trim();
-  return '';
+  if (el) {
+    const dom = el.textContent || '';
+    if (dom.length > 0) return dom;
+  }
+  // Explicit empty after user cleared, or unset
+  return typeof raw === 'string' ? stripHtml(raw) : '';
 }
 
 export function setTextContent(component, value, _editor) {
@@ -158,12 +164,11 @@ export function getLinkText(component) {
   }
 
   const el = component.getEl?.();
-  const domText = el ? String(el.textContent || '') : '';
-  if (domText.trim()) return domText;
+  if (el) return String(el.textContent || '');
 
   const raw = component.get('content');
-  if (typeof raw === 'string' && raw.trim()) return stripHtml(raw);
-  return domText;
+  if (typeof raw === 'string') return stripHtml(raw);
+  return '';
 }
 
 /**

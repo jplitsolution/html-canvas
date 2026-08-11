@@ -6,15 +6,54 @@ function isTypingInFormField(target) {
   return !!target.closest('input, textarea, select, [contenteditable="true"]')
 }
 
-/** Check if editor is in editing mode safely */
-function isKeyboardBlocked(editor, target) {
-  const isEditing = typeof editor.isEditing === 'function' ? editor.isEditing() : false;
-  
-  const isInputFocused = typeof editor.Canvas?.isInputFocused === 'function' 
-    ? editor.Canvas.isInputFocused() 
-    : false;
-  
-  return isEditing || isInputFocused || isTypingInFormField(target);
+/** True when focus is in a host UI field (PropertyPanel, etc.) or canvas RTE. */
+function isTypingAnywhere(editor, target) {
+  if (isTypingInFormField(target)) return true
+  if (isTypingInFormField(document.activeElement)) return true
+  try {
+    if (typeof editor?.Canvas?.isInputFocused === 'function' && editor.Canvas.isInputFocused()) {
+      return true
+    }
+  } catch (_) {
+    /* noop */
+  }
+  try {
+    if (typeof editor?.isEditing === 'function' && editor.isEditing()) return true
+  } catch (_) {
+    /* noop */
+  }
+  return false
+}
+
+/**
+ * GrapesJS Keymaps / canvas Space-to-pan only check Canvas.isInputFocused(),
+ * which misses React inputs outside the iframe (PropertyPanel textarea).
+ * Extend that check so Space / Delete / shortcuts never steal host form typing.
+ */
+function patchCanvasInputFocus(editor) {
+  const canvas = editor?.Canvas
+  if (!canvas || typeof canvas.isInputFocused !== 'function') return () => {}
+  if (canvas._tcInputFocusPatched) return () => {}
+
+  const original = canvas.isInputFocused.bind(canvas)
+  canvas.isInputFocused = () => {
+    try {
+      if (original()) return true
+    } catch (_) {
+      /* noop */
+    }
+    return isTypingInFormField(document.activeElement)
+  }
+  canvas._tcInputFocusPatched = true
+
+  return () => {
+    try {
+      canvas.isInputFocused = original
+      delete canvas._tcInputFocusPatched
+    } catch (_) {
+      /* noop */
+    }
+  }
 }
 
 export function setupEditorExperience(
@@ -22,6 +61,7 @@ export function setupEditorExperience(
   handlers
 ) {
   const cm = editor.Commands
+  const unpatchFocus = patchCanvasInputFocus(editor)
 
   cm.add('tc-duplicate', {
     run: () => {
@@ -76,11 +116,28 @@ export function setupEditorExperience(
   })
 
   editor.on('load', () => {
-    // Rely on GrapesJS default keymaps
+    // Rely on GrapesJS default keymaps (guarded via patched isInputFocused)
   })
 
   const onKeyDown = (e) => {
-    if (isKeyboardBlocked(editor, e.target)) return
+    // Capture phase: stop editor/global shortcuts from eating keys while typing
+    // in PropertyPanel / any host form field.
+    if (isTypingAnywhere(editor, e.target)) {
+      // Allow native typing; block Grapes / other window listeners from acting.
+      if (
+        e.key === ' ' ||
+        e.key === 'Spacebar' ||
+        e.key === 'Backspace' ||
+        e.key === 'Delete' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown' ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight'
+      ) {
+        e.stopPropagation()
+      }
+      return
+    }
 
     const mod = e.metaKey || e.ctrlKey
     if (mod && e.key === 's') {
@@ -97,9 +154,11 @@ export function setupEditorExperience(
     }
   }
 
-  window.addEventListener('keydown', onKeyDown)
+  // Capture so we run before GrapesJS / other bubble listeners.
+  window.addEventListener('keydown', onKeyDown, true)
 
   return () => {
-    window.removeEventListener('keydown', onKeyDown)
+    window.removeEventListener('keydown', onKeyDown, true)
+    unpatchFocus()
   }
 }
