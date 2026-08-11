@@ -24,6 +24,8 @@ const FLOW_ACTIONS = new Set(['SUBSCRIBE', 'CONFIRM', 'CHAIN'])
 const FLOW_OTP = new Set(['send', 'verify'])
 
 export const MIN_BTN_HEIGHT = 44
+/** Horizontal shrink floor — must stay well below typical CTA widths. */
+export const MIN_BTN_WIDTH = 48
 
 function parsePx(value) {
   if (value == null || value === '') return null
@@ -139,25 +141,39 @@ function stripAbsoluteStyleAttribute(component) {
 }
 
 /** Prefer an explicit resized width; default full-bleed CTA stays 100%. */
-function resolveFlowButtonWidth(style = {}) {
+function resolveFlowButtonWidth(style = {}, el = null) {
   const raw = String(style.width || '').trim()
-  if (!raw || raw === 'auto' || raw === '100%') return '100%'
+  if (!raw || raw === 'auto' || /^100(\.0+)?%$/.test(raw)) return '100%'
+
+  // Grapes may leave a % width after drag; commit to px so further shrink/grow is stable.
+  const px = parsePx(raw)
+  if (px != null && String(raw).includes('%') && el && el.offsetWidth > 0) {
+    return `${Math.max(MIN_BTN_WIDTH, Math.round(el.offsetWidth))}px`
+  }
+  if (px != null && String(raw).endsWith('px')) {
+    return `${Math.max(MIN_BTN_WIDTH, Math.round(px))}px`
+  }
   return raw
 }
 
 function syncFlowButtonDom(el, minHeightPx, width = '100%') {
   if (!el?.style) return
   stripAbsoluteFromEl(el)
+  const custom = width !== '100%'
   el.style.position = 'relative'
   el.style.width = width
   el.style.maxWidth = '100%'
-  el.style.minWidth = width === '100%' ? '0' : width
+  // Floor only — never lock min-width to current width (that blocks shrink).
+  el.style.minWidth = custom ? `${MIN_BTN_WIDTH}px` : '0'
   el.style.height = ''
   el.style.minHeight = `${minHeightPx}px`
   el.style.boxSizing = 'border-box'
-  el.style.display = 'flex'
+  // inline-flex + align-self so parent flex stretch cannot force full row width
+  el.style.display = 'inline-flex'
   el.style.alignItems = 'center'
   el.style.justifyContent = 'center'
+  el.style.alignSelf = custom ? 'center' : 'stretch'
+  el.style.flexShrink = '0'
   el.style.overflow = 'visible'
   el.style.visibility = 'visible'
   if (el.style.opacity === '0') el.style.opacity = '1'
@@ -183,8 +199,13 @@ export function keepFlowButtonInFlow(component) {
   const prev = component.getStyle?.() || {}
   let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
   if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
-  const width = resolveFlowButtonWidth(prev)
-  const minWidth = width === '100%' ? '0' : width
+
+  const el = typeof component.getEl === 'function' ? component.getEl() : null
+  const width = resolveFlowButtonWidth(prev, el)
+  const customWidth = width !== '100%'
+  // Reasonable shrink floor — never equal current width (that made handles refuse to shrink).
+  const minWidth = customWidth ? `${MIN_BTN_WIDTH}px` : '0'
+  const alignSelf = customWidth ? 'center' : 'stretch'
 
   const pos = String(prev.position || '').toLowerCase()
   const hasAbsGeo =
@@ -195,7 +216,6 @@ export function keepFlowButtonInFlow(component) {
     prev.right != null ||
     prev.bottom != null
 
-  const el = typeof component.getEl === 'function' ? component.getEl() : null
   const elPos = String(el?.style?.position || '').toLowerCase()
   const elHasAbs =
     elPos === 'absolute' ||
@@ -208,7 +228,9 @@ export function keepFlowButtonInFlow(component) {
     (pos === 'relative' || pos === 'static' || pos === '') &&
     String(prev.width || '') === width &&
     String(prev['min-height'] || '') === `${minH}px` &&
-    String(prev['min-width'] || '') === minWidth
+    String(prev['min-width'] || '') === minWidth &&
+    String(prev.display || '') === 'inline-flex' &&
+    String(prev['align-self'] || '') === alignSelf
 
   if (alreadyInFlow) return
 
@@ -218,9 +240,11 @@ export function keepFlowButtonInFlow(component) {
     'max-width': '100%',
     'min-width': minWidth,
     'min-height': `${minH}px`,
-    display: 'flex',
+    display: 'inline-flex',
     'align-items': 'center',
     'justify-content': 'center',
+    'align-self': alignSelf,
+    'flex-shrink': '0',
     'box-sizing': 'border-box',
     overflow: 'visible',
     visibility: 'visible',
@@ -274,8 +298,13 @@ export const FLOW_BUTTON_RESIZABLE = {
   bl: 1,
   bc: 1,
   br: 1,
-  minDim: MIN_BTN_HEIGHT,
+  // minDim applies to both axes; keep near height floor (width has its own MIN_BTN_WIDTH in heal).
+  minDim: MIN_BTN_WIDTH,
   ratioDefault: 0,
+  // Force px — inheriting unit from width:100% made Grapes write % and fight shrink.
+  unitWidth: 'px',
+  unitHeight: 'px',
+  currentUnit: 0,
   keyWidth: 'width',
   keyHeight: 'min-height',
 }
@@ -465,9 +494,10 @@ export function healLiveFlowButtons(root) {
       el.style.width = '100%'
       el.style.maxWidth = '100%'
       el.style.minWidth = '0'
-      el.style.display = el.style.display || 'flex'
+      el.style.display = el.style.display || 'inline-flex'
       el.style.alignItems = el.style.alignItems || 'center'
       el.style.justifyContent = el.style.justifyContent || 'center'
+      el.style.alignSelf = 'stretch'
       el.style.boxSizing = 'border-box'
       if (!el.style.minHeight) el.style.minHeight = `${MIN_BTN_HEIGHT}px`
       healed += 1
@@ -486,6 +516,7 @@ export const TEXT_SIZE_ALIGN_CANVAS_CSS = `
   button[data-otp-action]:not([data-tc-absolute="1"]) {
     box-sizing: border-box !important;
     max-width: 100% !important;
+    /* Floor only — do not !important a large min-width (blocks shrink). */
     min-width: 0 !important;
     min-height: ${MIN_BTN_HEIGHT}px;
   }

@@ -143,16 +143,19 @@ img, video, iframe, embed, object {
     max-width: 100% !important;
   }
 
-  /* CTA buttons: flex-center + no overflow (skip absolute image overlays) */
+  /* CTA buttons: flex-center + no overflow (skip absolute image overlays).
+     Do NOT use width:100%!important — that overrides author/editor px widths
+     and makes horizontal shrink impossible in the canvas (inline loses to !important).
+     Templates already set .flow-btn { width:100% }; custom inline width must win. */
   a[data-tc-type="button"]:not([data-tc-absolute="1"]),
   a[style*="padding:14px"]:not([data-tc-absolute="1"]),
   a[style*="padding: 14px"]:not([data-tc-absolute="1"]),
   button.flow-btn:not([data-tc-absolute="1"]),
   .flow-btn:not([data-tc-absolute="1"]) {
-    display: flex !important;
+    display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 100% !important;
+    max-width: 100% !important;
     text-align: center !important;
     box-sizing: border-box !important;
     white-space: normal !important;

@@ -21,6 +21,7 @@ import {
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns';
 import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
+import { MIN_BTN_WIDTH } from '../utils/textSizeAlign';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
 const PROPS_WIDTH_KEY = 'tc-editor-props-width';
@@ -1157,14 +1158,21 @@ export function PropertyPanel() {
                   onChange={(e) => {
                     const val = e.target.value.trim();
                     const next = { ...selected.getStyle() };
-                    if (val) {
-                      next.width = val;
-                      next['max-width'] = '100%';
-                      next['min-width'] = val === '100%' || val === 'auto' ? '0' : val;
-                    } else {
+                    const full = !val || val === '100%' || val === 'auto';
+                    if (full) {
                       next.width = '100%';
                       next['min-width'] = '0';
                       next['max-width'] = '100%';
+                      next.display = 'inline-flex';
+                      next['align-self'] = 'stretch';
+                    } else {
+                      next.width = val;
+                      next['max-width'] = '100%';
+                      // Floor only — matching width would block further canvas shrink.
+                      next['min-width'] = `${MIN_BTN_WIDTH}px`;
+                      next.display = 'inline-flex';
+                      next['align-self'] = 'center';
+                      next['flex-shrink'] = '0';
                     }
                     selected.setStyle(next);
                     update();

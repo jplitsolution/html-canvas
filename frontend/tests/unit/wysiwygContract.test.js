@@ -90,4 +90,14 @@ describe('WYSIWYG contract — CSS + wiring invariants (CI)', () => {
     expect(FLOW_RUNTIME_CSS).toContain('tc-nav-hamburger')
     expect(FLOW_RUNTIME_CSS).toContain('flow-btn')
   })
+
+  it('does not force flow-btn width:100%!important (blocks editor horizontal shrink)', () => {
+    // Negative lookbehind avoids matching max-width:100%!important in the CTA rule.
+    expect(RESPONSIVE_STYLE_RULES).not.toMatch(
+      /\.flow-btn[^{]*\{[^}]*(?<!max-)width\s*:\s*100%\s*!important/is,
+    )
+    expect(RESPONSIVE_STYLE_RULES).not.toMatch(
+      /button\.flow-btn[^{]*\{[^}]*(?<!max-)width\s*:\s*100%\s*!important/is,
+    )
+  })
 })

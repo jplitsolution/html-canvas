@@ -50,7 +50,7 @@ function stripAbsoluteInline(el) {
   el.style.maxWidth = '100%'
   el.style.minWidth = '0'
   el.style.boxSizing = 'border-box'
-  el.style.display = 'flex'
+  el.style.display = 'inline-flex'
   el.style.alignItems = 'center'
   el.style.justifyContent = 'center'
   if (!el.style.minHeight) el.style.minHeight = '44px'
