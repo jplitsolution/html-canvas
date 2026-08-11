@@ -181,10 +181,10 @@ export async function applyCampaignDefaults(id) {
 }
 
 export function getCampaignPreviewUrl(campaign, options = {}) {
+  // No step= in Test URL — subscription boot picks entry page from campaign setup.
   const params = new URLSearchParams({
     country: campaign.country,
     operator: campaign.operator,
-    step: 'HOME',
   })
 
   if (campaign.trackingId) {
