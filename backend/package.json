@@ -17,7 +17,10 @@
     "db:postbacks-he": "node scripts/apply-postbacks-he-schema.mjs",
     "db:sync-schema": "node scripts/sync-schema-from-entities.mjs",
     "db:seed": "node seed_clean.js",
-    "test:api": "node scripts/test-apis.mjs"
+    "test:api": "node scripts/test-apis.mjs",
+    "test:e2e:detect": "node scripts/e2e-detect-flow.mjs",
+    "test:e2e:start-config": "node scripts/e2e-start-config-flow.mjs",
+    "test:e2e:he-subscribe": "node scripts/e2e-he-subscribe-flow.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
