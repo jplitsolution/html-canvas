@@ -73,7 +73,7 @@ export function EditorShell({
         height: customHeight ? `${customHeight}px` : 'auto',
         minHeight: customHeight ? `${customHeight}px` : '400px'
       }
-    : { width: '100%', maxWidth: '100%', minHeight: '400px' };
+    : { width: '100%', maxWidth: '100%', minHeight: '720px' };
 
   const scrollWrapperClass = isConstrained
     ? 'flex-1 min-h-0 overflow-auto p-6 md:p-8 bg-dot-grid flex justify-center items-start'
