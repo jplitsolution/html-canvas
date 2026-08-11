@@ -281,7 +281,8 @@ export function getFlowElementInfo(attrs) {
     return {
       isSystem: true,
       label: 'Confirm button (system)',
-      description: 'Completes billing. You can change the label — do not delete this button.',
+      description:
+        'On click: completes billing via Flow Builder. Reconfigure below to switch to status checks, a page, or another action.',
     }
   }
 

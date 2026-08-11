@@ -26,6 +26,9 @@ const FLOW_CTA_SELECTOR = [
   'button[data-tc-type="button"]',
 ].join(',')
 
+/** Template layout cards — must stay in flex flow for page centering across sizes. */
+const FLOW_LAYOUT_CARD_SELECTOR = ['.home-card', '.otp-card', '.confirm-card'].join(',')
+
 function isMarkedOverlay(el) {
   if (!el) return true
   if (el.getAttribute('data-tc-type') === 'hotspot') return true
@@ -57,10 +60,29 @@ function stripAbsoluteInline(el) {
   return true
 }
 
+/** Put template cards back in normal flow so .home-page flex can center them. */
+function stripAbsoluteLayoutCard(el) {
+  if (!el?.style) return false
+  const pos = String(el.style.position || '').toLowerCase()
+  const hasGeo = !!(el.style.top || el.style.left || el.style.right || el.style.bottom)
+  if (pos !== 'absolute' && pos !== 'fixed' && !hasGeo) return false
+
+  el.style.position = 'relative'
+  el.style.top = ''
+  el.style.left = ''
+  el.style.right = ''
+  el.style.bottom = ''
+  el.style.zIndex = ''
+  el.style.height = ''
+  el.style.marginLeft = 'auto'
+  el.style.marginRight = 'auto'
+  return true
+}
+
 /**
  * Belt-and-suspenders: after Grapes getHtml(), strip accidental absolute
- * geometry from in-card CTAs so DB HTML cannot diverge from canvas intent.
- * Real image overlays (data-tc-absolute / hotspot) are untouched.
+ * geometry from in-card CTAs and template cards so DB HTML cannot diverge from
+ * canvas intent. Real image overlays (data-tc-absolute / hotspot) are untouched.
  *
  * @param {string} html
  * @returns {string}
@@ -79,6 +101,10 @@ export function sanitizeSavedPageHtml(html) {
     doc.body.querySelectorAll(FLOW_CTA_SELECTOR).forEach((el) => {
       if (isMarkedOverlay(el)) return
       if (stripAbsoluteInline(el)) changed = true
+    })
+    doc.body.querySelectorAll(FLOW_LAYOUT_CARD_SELECTOR).forEach((el) => {
+      if (isMarkedOverlay(el)) return
+      if (stripAbsoluteLayoutCard(el)) changed = true
     })
     if (!changed) return html
     return doc.body.innerHTML

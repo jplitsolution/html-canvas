@@ -200,7 +200,9 @@ export const FLOW_HOST_CSS = `
     min-height: 100vh;
   }
   /* Do NOT force width/max-width:!important here — customWidth inline on #wrapper
-     must win so Save→Preview keeps the canvas frame size (1200×800 etc.). */
+     must win so Save→Preview keeps the canvas frame size (1200×800 etc.).
+     Preview sets max-width:min(100%, customWidth) so phone/tablet never left-pin
+     an overflowing fixed canvas (margin:auto cannot center when width > viewport). */
   .flow-page-inner {
     display: block;
     width: 100%;
@@ -208,6 +210,7 @@ export const FLOW_HOST_CSS = `
     margin: 0 auto;
     opacity: 1;
     min-height: 100vh;
+    box-sizing: border-box;
   }
   .flow-page-inner > * {
     max-width: 100%;
@@ -217,6 +220,22 @@ export const FLOW_HOST_CSS = `
     width: 100%;
     position: relative;
     box-sizing: border-box;
+  }
+  /* Grapes absolute-drag leaves left/top on template cards, which removes them from
+     .home-page / .otp-container flex centering → card stuck to one side on large
+     screens (and asymmetric inside customWidth frames). Real freeform overlays must
+     use data-tc-absolute="1". Do NOT force display:flex on .page-wrapper. */
+  .home-card:not([data-tc-absolute="1"]),
+  .otp-card:not([data-tc-absolute="1"]),
+  .confirm-card:not([data-tc-absolute="1"]) {
+    position: relative !important;
+    left: auto !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: auto !important;
+    height: auto !important;
+    margin-left: auto;
+    margin-right: auto;
   }
   .flow-pack-option.flow-pack-selected {
     border-color: #7c4dff !important;

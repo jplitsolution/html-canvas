@@ -17,8 +17,10 @@ function mountPageInShadow(shadow, pageData) {
 
   let inlineStyles = ''
   if (customWidth) {
-    // Use !important so FLOW_HOST_CSS width:100% cannot blow custom canvas size
-    inlineStyles += `width: ${customWidth}px !important; max-width: ${customWidth}px !important; `
+    // Keep authored canvas width, but cap to the viewport so phone/tablet do not
+    // left-align an overflowing fixed box (margin:auto cannot center when wider
+    // than the host). min() beats FLOW_HOST_CSS max-width:100% via !important.
+    inlineStyles += `width: ${customWidth}px !important; max-width: min(100%, ${customWidth}px) !important; `
   }
   if (customHeight) {
     inlineStyles += `height: ${customHeight}px !important; min-height: ${customHeight}px !important; overflow: hidden; position: relative; `

@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { transitionFlow } from '../../services/api/flow'
 import { trackEvent } from '../../utils/analytics'
-import { VALID_PAGES } from './constants'
 import { findActionTarget, isCampaignPageHref, normalizePack } from './flowHelpers'
 import { runPriorityChain } from './runPriorityChain'
 import { setupOtpBindings } from './setupOtpBindings'
@@ -128,7 +127,8 @@ function useShadowInteractions({
         String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
 
       // Token/Custom HE: HOME CTA without MSISDN → warning (then CG if configured).
-      if (onHome && warnIfHeUnresolved()) {
+      // Skip for reconfigured CTAs that only navigate (no flow action).
+      if (action && onHome && warnIfHeUnresolved()) {
         event.preventDefault()
         return
       }
@@ -174,14 +174,15 @@ function useShadowInteractions({
         }
       }
 
-      // External / page links without a flow action should navigate normally.
-      if (!node.getAttribute('data-action') && node.matches?.('a[href]')) {
+      // Reconfigured Subscribe/Confirm (or freeform CTA): page / URL / anchor via href
+      if (!node.getAttribute('data-action') && !node.hasAttribute('data-actions')) {
         const href = (node.getAttribute('href') || '').trim()
-        const targetPage = href.toUpperCase()
 
-        if (VALID_PAGES.includes(targetPage)) {
+        if (isCampaignPageHref(href)) {
           event.preventDefault()
+          const targetPage = href.toUpperCase()
           if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
+          if (onHome && warnIfHeUnresolved()) return
           transitionLockRef.current = true
           setTransitioning(true)
           setError('')
@@ -194,8 +195,37 @@ function useShadowInteractions({
           return
         }
 
-        if (href && href !== '#' && !href.startsWith('#')) return
+        if (href.startsWith('#') && href !== '#') {
+          event.preventDefault()
+          const targetId = decodeURIComponent(href.slice(1))
+          const targetEl = shadow.getElementById(targetId)
+          if (targetEl) {
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
+          return
+        }
+
+        // External URL on <button> (anchors navigate natively)
+        if (/^(https?:|mailto:|tel:)/i.test(href)) {
+          event.preventDefault()
+          const target = node.getAttribute('target') || '_self'
+          if (target === '_blank') {
+            window.open(href, '_blank', 'noopener,noreferrer')
+          } else {
+            window.location.assign(href)
+          }
+          return
+        }
+
+        // <a> with external href — let the browser handle it
+        if (node.matches?.('a[href]') && href && href !== '#' && !href.startsWith('#')) {
+          return
+        }
+
+        // No actionable href and no flow action
+        if (!action) return
       }
+
       event.preventDefault()
 
       const currentPage = pageDataRef.current

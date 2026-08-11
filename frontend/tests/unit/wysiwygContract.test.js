@@ -41,6 +41,27 @@ describe('WYSIWYG contract — sanitizeSavedPageHtml', () => {
     const out = sanitizeSavedPageHtml(html)
     expect(out).toMatch(/position:\s*absolute/i)
   })
+
+  it('strips accidental absolute geometry from .home-card (keeps flex centering)', () => {
+    const html = `
+      <div class="home-page">
+        <div class="home-card" style="left:0px;top:28px;position:absolute;width:420px;height:280px">
+          <p>ORANGE</p>
+        </div>
+      </div>`
+    const out = sanitizeSavedPageHtml(html)
+    expect(out).not.toMatch(/home-card[^>]*position:\s*absolute/i)
+    expect(out).toMatch(/home-card[^>]*position:\s*relative/i)
+    expect(out).not.toMatch(/left:\s*0px/i)
+  })
+
+  it('preserves home-card marked data-tc-absolute', () => {
+    const html = `<div class="home-card" data-tc-absolute="1"
+      style="position:absolute;left:10px;top:20px;width:200px">Card</div>`
+    const out = sanitizeSavedPageHtml(html)
+    expect(out).toMatch(/position:\s*absolute/i)
+    expect(out).toMatch(/left:\s*10px/i)
+  })
 })
 
 describe('WYSIWYG contract — healLiveFlowButtons', () => {
@@ -99,5 +120,16 @@ describe('WYSIWYG contract — CSS + wiring invariants (CI)', () => {
     expect(RESPONSIVE_STYLE_RULES).not.toMatch(
       /button\.flow-btn[^{]*\{[^}]*(?<!max-)width\s*:\s*100%\s*!important/is,
     )
+  })
+
+  it('keeps template cards in-flow (not absolute) unless data-tc-absolute', () => {
+    expect(FLOW_HOST_CSS).toMatch(/\.home-card:not\(\[data-tc-absolute="1"\]\)/)
+    expect(FLOW_HOST_CSS).toMatch(/position:\s*relative\s*!important/)
+    expect(FLOW_HOST_CSS).toMatch(/left:\s*auto\s*!important/)
+  })
+
+  it('live mount caps customWidth with min(100%, …) for small viewports', () => {
+    const src = read('src/pages/subscription/shadowDom.js')
+    expect(src).toMatch(/max-width:\s*min\(100%,\s*\$\{customWidth\}px\)/)
   })
 })

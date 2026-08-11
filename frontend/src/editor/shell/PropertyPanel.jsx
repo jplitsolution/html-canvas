@@ -598,10 +598,8 @@ function CampaignPageSelect({
   )
 }
 
-/** True for OTP/Confirm/pack system controls — action dropdown must stay locked. */
+/** True for OTP/pack system controls — Subscribe & Confirm can reconfigure "When clicked". */
 function isLockedSystemAction(attrs = {}) {
-  const action = attrs['data-action']
-  if (action === 'CONFIRM') return true
   if (attrs['data-otp-action'] || attrs['data-otp-field'] || attrs['data-otp-slot']) return true
   if (attrs['data-pack'] || attrs['data-flow-pack-picker'] !== undefined) return true
   return false
@@ -615,7 +613,8 @@ function getClickActionType(attrs = {}) {
     return 'external'
   }
   if (href.startsWith('#') && href !== '#') return 'anchor'
-  if (attrs['data-action'] === 'SUBSCRIBE') return 'flow'
+  // Signup / Confirm system CTAs — before bare "#" which would look like "scroll"
+  if (attrs['data-action'] === 'SUBSCRIBE' || attrs['data-action'] === 'CONFIRM') return 'flow'
   if (href.startsWith('#')) return 'anchor'
   return 'page'
 }
@@ -727,7 +726,12 @@ function ClickActionEditor({
       setChainOpenSignal((n) => n + 1)
     } else if (next === 'flow') {
       selected.removeAttributes('data-actions')
-      selected.addAttributes({ 'data-action': 'SUBSCRIBE', href: '#' })
+      // Keep Confirm billing on CONFIRM pages; HOME / others use Subscribe API
+      const prev = String(attrs['data-action'] || '').toUpperCase()
+      const page = String(funnelPageType || '').toUpperCase()
+      const flowAction =
+        prev === 'CONFIRM' || page === 'CONFIRM' ? 'CONFIRM' : 'SUBSCRIBE'
+      selected.addAttributes({ 'data-action': flowAction, href: '#' })
       selected.removeAttributes('target')
     } else if (next === 'anchor') {
       selected.removeAttributes('data-action')
@@ -754,7 +758,12 @@ function ClickActionEditor({
           value={type}
           onChange={(e) => setClickType(e.target.value)}
         >
-          <option value="flow">Hit Subscribe API (signup flow)</option>
+          <option value="flow">
+            {String(funnelPageType || '').toUpperCase() === 'CONFIRM' ||
+            attrs['data-action'] === 'CONFIRM'
+              ? 'Hit Confirm API (billing)'
+              : 'Hit Subscribe API (signup flow)'}
+          </option>
           <option value="anchor">Scroll to a section</option>
           <option value="page">Go to another page</option>
           <option value="external">Open a website</option>
@@ -773,10 +782,21 @@ function ClickActionEditor({
 
       {type === 'flow' && (
         <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
-          Hits this campaign&apos;s Subscribe / signup APIs on the server, then opens the next
-          page from verification mode (HE → Confirm, or OTP path). Prefer this on HE HOME instead
-          of a custom URL. For a fixed jump, use &quot;Go to another page&quot; or
-          &quot;Open a website&quot; instead.
+          {attrs['data-action'] === 'CONFIRM' ||
+          String(funnelPageType || '').toUpperCase() === 'CONFIRM' ? (
+            <>
+              Hits this campaign&apos;s Confirm / billing API, then opens Thank you or the
+              outcome page from Flow Builder. To jump somewhere fixed instead, pick
+              &quot;Go to another page&quot; or &quot;Open a website&quot;.
+            </>
+          ) : (
+            <>
+              Hits this campaign&apos;s Subscribe / signup APIs on the server, then opens the next
+              page from verification mode (HE → Confirm, or OTP path). Prefer this on HE HOME instead
+              of a custom URL. For a fixed jump, use &quot;Go to another page&quot; or
+              &quot;Open a website&quot; instead.
+            </>
+          )}
         </p>
       )}
 

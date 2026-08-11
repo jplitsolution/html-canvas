@@ -47,13 +47,34 @@ export function getComponentKind(component) {
   const type = component.get('type') || ''
   const attrs = component.getAttributes?.() || {}
   const tcType = attrs['data-tc-type']
+  const action = String(attrs['data-action'] || '').toUpperCase()
 
-  if (tcType) return tcType
+  // Explicit canvas types first (hotspot / button / image / section)
+  if (tcType === 'hotspot') return 'hotspot'
+  if (tcType === 'button') return 'button'
+  if (tcType === 'image') return 'image'
+  if (tcType === 'section') return 'section'
+  if (tcType && tcType !== 'text') return tcType
+
   if (type === 'image' || tag === 'img') return 'image'
-  if (type === 'link' || tag === 'a') return 'button'
+
+  // Flow CTAs often get Grapes type "text" for label editing — still treat as buttons
+  // so the "When clicked" action dropdown stays available.
+  if (
+    tag === 'button' ||
+    type === 'link' ||
+    tag === 'a' ||
+    action === 'SUBSCRIBE' ||
+    action === 'CONFIRM' ||
+    action === 'CHAIN' ||
+    attrs['data-actions'] ||
+    attrs['data-otp-action']
+  ) {
+    return 'button'
+  }
+
   if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span'].includes(tag) || type === 'text') return 'text'
   if (['section', 'header', 'footer', 'nav', 'main'].includes(tag)) return 'section'
-  if (tag === 'button') return 'button'
   if (tag === 'form') return 'form'
 
   return 'generic'
