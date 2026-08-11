@@ -20,7 +20,7 @@ const TEXT_TAGS = new Set([
   'li',
 ])
 
-const FLOW_ACTIONS = new Set(['SUBSCRIBE', 'CONFIRM', 'CHAIN'])
+const FLOW_ACTIONS = new Set(['SUBSCRIBE', 'SUBSCRIBE_ROUTE', 'CONFIRM', 'CHAIN'])
 const FLOW_OTP = new Set(['send', 'verify'])
 
 export const MIN_BTN_HEIGHT = 44
@@ -512,6 +512,7 @@ export const TEXT_SIZE_ALIGN_CANVAS_CSS = `
   button.flow-btn:not([data-tc-absolute="1"]),
   .flow-btn:not([data-tc-absolute="1"]),
   button[data-action="SUBSCRIBE"]:not([data-tc-absolute="1"]),
+  button[data-action="SUBSCRIBE_ROUTE"]:not([data-tc-absolute="1"]),
   button[data-action="CONFIRM"]:not([data-tc-absolute="1"]),
   button[data-otp-action]:not([data-tc-absolute="1"]) {
     box-sizing: border-box !important;

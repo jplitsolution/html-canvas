@@ -4,6 +4,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { createHandleHomeSubscribe } from './transition-home.js';
 import { createHandleConfirm } from './transition-confirm.js';
 import { createHandleOtpContinue } from './transition-otp.js';
+import { createHandleSubscribeRoute } from './transition-subscribe-route.js';
 
 export function createFlowTransition(deps) {
   const {
@@ -15,6 +16,7 @@ export function createFlowTransition(deps) {
   const handleHomeSubscribe = createHandleHomeSubscribe(deps);
   const handleConfirm = createHandleConfirm(deps);
   const handleOtpContinue = createHandleOtpContinue(deps);
+  const handleSubscribeRoute = createHandleSubscribeRoute(deps);
 
   const transition = async (input) => {
     let campaign = null;
@@ -50,6 +52,11 @@ export function createFlowTransition(deps) {
 
     const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
+
+    // Single-page subscribe + client-side outcome routing (any funnel page).
+    if (input.action === 'SUBSCRIBE_ROUTE') {
+      return handleSubscribeRoute(input, campaign, apiConfig, phone, serviceId);
+    }
 
     if (
       input.fromPage === CampaignPageType.HOME &&

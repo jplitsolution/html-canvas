@@ -157,6 +157,7 @@ export const flowController = {
       rcid: rcid || undefined,
       vid: body.vid,
       affId: body.affId || body.aff_id,
+      subscribeRoutes: body.subscribeRoutes || undefined,
     });
     res.json(data);
   }),

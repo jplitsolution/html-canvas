@@ -274,7 +274,15 @@ export function getFlowElementInfo(attrs) {
       isSystem: true,
       label: 'Signup flow button (system)',
       description:
-        'On click: continues the signup path from Flow Builder. Reconfigure below to switch to status checks, a page, or another action.',
+        'On click: continues the signup path from Flow Builder. Reconfigure below to switch to Subscribe API + pages, status checks, or another action.',
+    }
+  }
+  if (action === 'SUBSCRIBE_ROUTE') {
+    return {
+      isSystem: true,
+      label: 'Subscribe API + response rules (system)',
+      description:
+        'On click: hits checksub + Subscribe API, then matches response field = value rules (like Try checks) to open a page or link.',
     }
   }
   if (action === 'CONFIRM') {

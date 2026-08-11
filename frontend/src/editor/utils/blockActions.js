@@ -65,6 +65,7 @@ export function getComponentKind(component) {
     type === 'link' ||
     tag === 'a' ||
     action === 'SUBSCRIBE' ||
+    action === 'SUBSCRIBE_ROUTE' ||
     action === 'CONFIRM' ||
     action === 'CHAIN' ||
     attrs['data-actions'] ||

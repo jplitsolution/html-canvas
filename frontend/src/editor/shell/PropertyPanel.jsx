@@ -21,7 +21,9 @@ import {
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns';
 import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
+import { SubscribeRouteTrigger } from './SubscribeRouteModal';
 import { MIN_BTN_WIDTH } from '../utils/textSizeAlign';
+import { DEFAULT_SUBSCRIBE_ROUTES } from '../utils/subscribeRoutes';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
 const PROPS_WIDTH_KEY = 'tc-editor-props-width';
@@ -607,6 +609,7 @@ function isLockedSystemAction(attrs = {}) {
 
 function getClickActionType(attrs = {}) {
   if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain'
+  if (attrs['data-action'] === 'SUBSCRIBE_ROUTE') return 'subscribeRoute'
   const href = attrs.href || ''
   // Prefer real navigation targets over a leftover SUBSCRIBE (save heal used to re-add it)
   if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('tel:')) {
@@ -683,6 +686,7 @@ function ClickActionEditor({
   update,
 }) {
   const [chainOpenSignal, setChainOpenSignal] = useState(0)
+  const [subscribeOpenSignal, setSubscribeOpenSignal] = useState(0)
   const { campaignId, countryCode, operatorCode, funnelPageType } = useEditor()
   const attrs = selected.getAttributes() || {}
   const href = attrs.href || ''
@@ -702,6 +706,7 @@ function ClickActionEditor({
 
   const setClickType = (next) => {
     if (next === 'chain') {
+      selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({
         'data-action': 'CHAIN',
         'data-actions': JSON.stringify([
@@ -724,8 +729,18 @@ function ClickActionEditor({
         href: '#',
       })
       setChainOpenSignal((n) => n + 1)
+    } else if (next === 'subscribeRoute') {
+      selected.removeAttributes('data-actions')
+      selected.addAttributes({
+        'data-action': 'SUBSCRIBE_ROUTE',
+        'data-subscribe-routes': JSON.stringify(DEFAULT_SUBSCRIBE_ROUTES),
+        href: '#',
+      })
+      selected.removeAttributes('target')
+      setSubscribeOpenSignal((n) => n + 1)
     } else if (next === 'flow') {
       selected.removeAttributes('data-actions')
+      selected.removeAttributes('data-subscribe-routes')
       // Keep Confirm billing on CONFIRM pages; HOME / others use Subscribe API
       const prev = String(attrs['data-action'] || '').toUpperCase()
       const page = String(funnelPageType || '').toUpperCase()
@@ -736,15 +751,18 @@ function ClickActionEditor({
     } else if (next === 'anchor') {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
+      selected.removeAttributes('data-subscribe-routes')
       const anchors = listSectionAnchorsOnPage(editor, selected)
       selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' })
     } else if (next === 'page') {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
+      selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({ href: 'OTP' })
     } else {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
+      selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({ href: 'https://' })
     }
     update()
@@ -761,9 +779,10 @@ function ClickActionEditor({
           <option value="flow">
             {String(funnelPageType || '').toUpperCase() === 'CONFIRM' ||
             attrs['data-action'] === 'CONFIRM'
-              ? 'Hit Confirm API (billing)'
-              : 'Hit Subscribe API (signup flow)'}
+              ? 'Continue signup flow (Confirm API)'
+              : 'Continue signup flow (OTP / Confirm path)'}
           </option>
+          <option value="subscribeRoute">Hit Subscribe API + choose pages</option>
           <option value="anchor">Scroll to a section</option>
           <option value="page">Go to another page</option>
           <option value="external">Open a website</option>
@@ -780,21 +799,28 @@ function ClickActionEditor({
         />
       )}
 
+      {type === 'subscribeRoute' && (
+        <SubscribeRouteTrigger
+          selected={selected}
+          update={update}
+          openSignal={subscribeOpenSignal}
+        />
+      )}
+
       {type === 'flow' && (
         <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
           {attrs['data-action'] === 'CONFIRM' ||
           String(funnelPageType || '').toUpperCase() === 'CONFIRM' ? (
             <>
               Hits this campaign&apos;s Confirm / billing API, then opens Thank you or the
-              outcome page from Flow Builder. To jump somewhere fixed instead, pick
-              &quot;Go to another page&quot; or &quot;Open a website&quot;.
+              outcome page from Flow Builder. For single-page subscribe with custom
+              destinations, use &quot;Hit Subscribe API + choose pages&quot;.
             </>
           ) : (
             <>
-              Hits this campaign&apos;s Subscribe / signup APIs on the server, then opens the next
-              page from verification mode (HE → Confirm, or OTP path). Prefer this on HE HOME instead
-              of a custom URL. For a fixed jump, use &quot;Go to another page&quot; or
-              &quot;Open a website&quot; instead.
+              Follows Subscription flow (OTP / Confirm path from campaign settings) — does
+              not pick Thank you vs OTP on this button. For that, use &quot;Hit Subscribe API +
+              choose pages&quot;.
             </>
           )}
         </p>

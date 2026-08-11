@@ -132,6 +132,7 @@ export async function transitionFlow(body) {
       pageType: res?.pageType,
       visitId: res?.visitId,
       nextPage: res?.nextPage,
+      routeOutcome: res?.routeOutcome,
       subscriptionStatus: res?.subscriptionStatus,
       blocked: res?.blocked,
       successRedirect: res?.successRedirect,
@@ -140,6 +141,7 @@ export async function transitionFlow(body) {
     detected: {
       phone: payload.phone || null,
       pageType: res?.pageType || null,
+      routeOutcome: res?.routeOutcome || null,
       subscriptionStatus: res?.subscriptionStatus || null,
     },
   })

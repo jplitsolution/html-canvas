@@ -1,6 +1,11 @@
 import { useEffect } from 'react'
 import { transitionFlow } from '../../services/api/flow'
 import { trackEvent } from '../../utils/analytics'
+import {
+  parseSubscribeRoutes,
+  resolveSubscribeDestination,
+} from '../../editor/utils/subscribeRoutes'
+import { VALID_PAGES } from './constants'
 import { findActionTarget, isCampaignPageHref, normalizePack } from './flowHelpers'
 import { runPriorityChain } from './runPriorityChain'
 import { setupOtpBindings } from './setupOtpBindings'
@@ -15,6 +20,7 @@ import {
  * Shadow DOM click routing (Layer C + bridge to Layer B).
  *
  * - data-action=SUBSCRIBE|CONFIRM → POST /transition (backend flow-engine / mode)
+ * - data-action=SUBSCRIBE_ROUTE → partner subscribe + button destinations
  * - href=HOME|OTP|CONFIRM|… → loadPage(direct) — bypasses flow graph
  * - href=https://… → normal navigation
  * - data-actions (CHAIN) → runPriorityChain — canvas-owned status routing
@@ -127,8 +133,14 @@ function useShadowInteractions({
         String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
 
       // Token/Custom HE: HOME CTA without MSISDN → warning (then CG if configured).
+      // Skip for SUBSCRIBE_ROUTE — missing phone is a first-class outcome (usually → OTP).
       // Skip for reconfigured CTAs that only navigate (no flow action).
-      if (action && onHome && warnIfHeUnresolved()) {
+      if (
+        action &&
+        action !== 'SUBSCRIBE_ROUTE' &&
+        onHome &&
+        warnIfHeUnresolved()
+      ) {
         event.preventDefault()
         return
       }
@@ -230,6 +242,75 @@ function useShadowInteractions({
 
       const currentPage = pageDataRef.current
       const fromPage = currentPage?.pageType
+
+      // Single-page subscribe: hit campaign Subscribe API, then button destinations
+      if (action === 'SUBSCRIBE_ROUTE') {
+        transitionLockRef.current = true
+        setTransitioning(true)
+        setError('')
+        const planId =
+          getSelectedPackFromShadow(shadow) || selectedPackRef.current || 'daily'
+        const routes = parseSubscribeRoutes({
+          'data-subscribe-routes': node.getAttribute('data-subscribe-routes'),
+        })
+        try {
+          const next = await transitionFlow({
+            visitId: visitIdRef.current,
+            country,
+            operator,
+            campid: campid || campidRef.current || undefined,
+            trackingCampid: trackingCampid || trackingCampidRef.current || undefined,
+            fromPage: fromPage || 'HOME',
+            action: 'SUBSCRIBE_ROUTE',
+            phone: phoneRef.current,
+            planId,
+            clickId: clickIdRef.current || undefined,
+            rcid: rcidRef.current || undefined,
+            vid: vidRef.current || undefined,
+            affId: affIdRef.current || undefined,
+            subscribeRoutes: routes,
+          })
+
+          if (next.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
+            window.location.assign(next.externalRedirect)
+            return
+          }
+
+          const dest = resolveSubscribeDestination(routes, next)
+
+          if (dest?.go === 'external') {
+            const url = String(dest.url || '').trim()
+            if (url && /^https?:\/\//i.test(url)) {
+              window.location.assign(url)
+              return
+            }
+          }
+
+          const targetPage = String(dest?.page || next.pageType || 'THANKYOU')
+            .trim()
+            .toUpperCase()
+          if (VALID_PAGES.includes(targetPage)) {
+            if (
+              next.routeOutcome === 'SUCCESS' ||
+              next.routeOutcome === 'RULE_MATCH' ||
+              next.routeOutcome === 'ALREADY_SUBSCRIBED'
+            ) {
+              trackEvent('confirm_completed')
+            }
+            await loadPage(targetPage, { direct: true })
+            return
+          }
+
+          cachePage(next)
+        } catch (err) {
+          setError(err.message || 'Subscribe failed')
+        } finally {
+          setTransitioning(false)
+          transitionLockRef.current = false
+        }
+        return
+      }
+
       if (fromPage === 'OTP') {
         return
       }
