@@ -68,6 +68,20 @@ describe('wasIntentionallyAbsolute / keepFlowButtonInFlow (canvas drag)', () => 
     expect(next.width).toBe('100%')
   })
 
+  it('preserves an explicit resized width instead of forcing 100%', () => {
+    const cmp = mockComponent({
+      attrs: { 'data-action': 'SUBSCRIBE', class: 'flow-btn' },
+      style: { position: 'relative', width: '220px', 'min-height': '52px' },
+    })
+    keepFlowButtonInFlow(cmp)
+    expect(cmp.setStyle).toHaveBeenCalled()
+    const next = cmp.setStyle.mock.calls[0][0]
+    expect(next.width).toBe('220px')
+    expect(next['min-width']).toBe('220px')
+    expect(next['min-height']).toBe('52px')
+    expect(next['max-width']).toBe('100%')
+  })
+
   it('respects data-tc-absolute overlay flag and does not snap back', () => {
     const cmp = mockComponent({
       attrs: { 'data-action': 'SUBSCRIBE', 'data-tc-absolute': '1' },

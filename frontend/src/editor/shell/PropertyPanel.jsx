@@ -1148,6 +1148,62 @@ export function PropertyPanel() {
                 <option value="lg">Large</option>
               </select>
             </Field>
+            <div className="flex gap-2">
+              <Field label="Width">
+                <input
+                  className={inputClass}
+                  placeholder="e.g. 100% or 220px"
+                  value={getStyleProp(selected, 'width') || ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    const next = { ...selected.getStyle() };
+                    if (val) {
+                      next.width = val;
+                      next['max-width'] = '100%';
+                      next['min-width'] = val === '100%' || val === 'auto' ? '0' : val;
+                    } else {
+                      next.width = '100%';
+                      next['min-width'] = '0';
+                      next['max-width'] = '100%';
+                    }
+                    selected.setStyle(next);
+                    update();
+                    try {
+                      editor?.Canvas?.refresh?.();
+                    } catch (_) {
+                      /* noop */
+                    }
+                  }}
+                />
+              </Field>
+              <Field label="Min height">
+                <input
+                  className={inputClass}
+                  placeholder="e.g. 44px"
+                  value={getStyleProp(selected, 'min-height') || getStyleProp(selected, 'height') || ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim();
+                    const next = { ...selected.getStyle() };
+                    if (val) {
+                      next['min-height'] = val;
+                      delete next.height;
+                    } else {
+                      delete next['min-height'];
+                    }
+                    selected.setStyle(next);
+                    update();
+                    try {
+                      editor?.Canvas?.refresh?.();
+                    } catch (_) {
+                      /* noop */
+                    }
+                  }}
+                />
+              </Field>
+            </div>
+            <p className="text-[11px] text-fg-subtle -mt-2 leading-relaxed">
+              Drag corner or left/right handles on the canvas to resize width and height.
+            </p>
             <PositionControls selected={selected} update={update} />
           </>
         )}

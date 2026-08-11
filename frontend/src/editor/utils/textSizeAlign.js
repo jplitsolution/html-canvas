@@ -138,13 +138,20 @@ function stripAbsoluteStyleAttribute(component) {
   }
 }
 
-function syncFlowButtonDom(el, minHeightPx) {
+/** Prefer an explicit resized width; default full-bleed CTA stays 100%. */
+function resolveFlowButtonWidth(style = {}) {
+  const raw = String(style.width || '').trim()
+  if (!raw || raw === 'auto' || raw === '100%') return '100%'
+  return raw
+}
+
+function syncFlowButtonDom(el, minHeightPx, width = '100%') {
   if (!el?.style) return
   stripAbsoluteFromEl(el)
   el.style.position = 'relative'
-  el.style.width = '100%'
+  el.style.width = width
   el.style.maxWidth = '100%'
-  el.style.minWidth = '0'
+  el.style.minWidth = width === '100%' ? '0' : width
   el.style.height = ''
   el.style.minHeight = `${minHeightPx}px`
   el.style.boxSizing = 'border-box'
@@ -176,6 +183,8 @@ export function keepFlowButtonInFlow(component) {
   const prev = component.getStyle?.() || {}
   let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
   if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
+  const width = resolveFlowButtonWidth(prev)
+  const minWidth = width === '100%' ? '0' : width
 
   const pos = String(prev.position || '').toLowerCase()
   const hasAbsGeo =
@@ -197,16 +206,17 @@ export function keepFlowButtonInFlow(component) {
     !hasAbsGeo &&
     !elHasAbs &&
     (pos === 'relative' || pos === 'static' || pos === '') &&
-    String(prev.width || '') === '100%' &&
-    String(prev['min-height'] || '') === `${minH}px`
+    String(prev.width || '') === width &&
+    String(prev['min-height'] || '') === `${minH}px` &&
+    String(prev['min-width'] || '') === minWidth
 
   if (alreadyInFlow) return
 
   const style = {
     position: 'relative',
-    width: '100%',
+    width,
     'max-width': '100%',
-    'min-width': '0',
+    'min-width': minWidth,
     'min-height': `${minH}px`,
     display: 'flex',
     'align-items': 'center',
@@ -247,25 +257,26 @@ export function keepFlowButtonInFlow(component) {
     /* noop */
   }
 
-  syncFlowButtonDom(el, minH)
+  syncFlowButtonDom(el, minH, width)
 }
 
 export function enforceFlowButtonSize(component) {
   keepFlowButtonInFlow(component)
 }
 
-/** Height-only for in-flow CTAs. Overlays use full resizer separately. */
+/** In-flow CTAs: width + min-height via corners and edges. Overlays use full resizer. */
 export const FLOW_BUTTON_RESIZABLE = {
-  tl: 0,
-  tc: 0,
-  tr: 0,
-  cl: 0,
-  cr: 0,
-  bl: 0,
+  tl: 1,
+  tc: 1,
+  tr: 1,
+  cl: 1,
+  cr: 1,
+  bl: 1,
   bc: 1,
-  br: 0,
+  br: 1,
   minDim: MIN_BTN_HEIGHT,
   ratioDefault: 0,
+  keyWidth: 'width',
   keyHeight: 'min-height',
 }
 
