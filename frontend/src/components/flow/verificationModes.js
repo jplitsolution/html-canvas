@@ -7,6 +7,8 @@
  * remains available as Advanced path editing.
  */
 
+import { defaultStartConfig } from './startConfig'
+
 export const VERIFICATION_MODES = [
   {
     id: 'HEADER_INJECTION',
@@ -132,6 +134,7 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
       return {
         version: 1,
         entryPage: 'API_EXPOSE',
+        startConfig: defaultStartConfig('OTP_ONLY'),
         nodes: [],
         edges: [],
       }
@@ -155,6 +158,7 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
         return {
           version: 1,
           entryPage: 'OTP',
+          startConfig: defaultStartConfig('OTP_ONLY'),
           nodes: [
             { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
             ...thankYouOnly,
@@ -179,6 +183,7 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
       return {
         version: 1,
         entryPage: 'HOME',
+        startConfig: defaultStartConfig('OTP_ONLY'),
         nodes: [
           { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
           { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
@@ -213,6 +218,7 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
       return {
         version: 1,
         entryPage: 'OTP',
+        startConfig: defaultStartConfig('OTP_ONLY'),
         nodes: [
           { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
           { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
@@ -234,6 +240,7 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
   return {
     version: 1,
     entryPage: base.entryPage || 'HOME',
+    startConfig: defaultStartConfig(normalized),
     nodes: base.nodes.map((n) => ({ ...n })),
     edges: base.edges.map((e) => ({ ...e })),
   }

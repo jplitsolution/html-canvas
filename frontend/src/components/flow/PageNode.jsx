@@ -54,7 +54,7 @@ function PageNode({ data, selected }) {
       </div>
 
       <div className="text-[10px] text-zinc-400 mt-1.5 leading-tight">
-        Blue = start · Green = end
+        Edit opens the HTML canvas
       </div>
 
       <Handle

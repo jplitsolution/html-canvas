@@ -10,6 +10,12 @@
  * edges unless you intentionally remapped conditions.
  */
 import { CampaignPageType } from '../../database/entities/campaign-page.entity.js';
+import {
+  defaultStartConfig,
+  normalizeStartConfig,
+  stripMetaFlowNodes,
+  isMetaPageType,
+} from './helpers/start-config.js';
 
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',
@@ -42,12 +48,16 @@ export const createFlowEngineService = () => {
       ) {
         return null;
       }
-      return parsed;
+      // Drop accidental START/END page nodes; keep startConfig for detect.
+      return stripMetaFlowNodes(parsed);
     } catch (err) {
       console.warn(`Invalid flowConfig JSON: ${err.message}`);
       return null;
     }
   };
+
+  const getStartConfig = (config, mode = 'BOTH') =>
+    normalizeStartConfig(config?.startConfig, normalizeMode(mode) || mode);
 
   const normalizeMode = (mode) => {
     if (!mode) return null;
@@ -80,6 +90,7 @@ export const createFlowEngineService = () => {
       return {
         version: 1,
         entryPage: CampaignPageType.HOME,
+        startConfig: defaultStartConfig('NONE'),
         nodes: [node(CampaignPageType.HOME, 40, 160)],
         edges: [],
       };
@@ -153,7 +164,13 @@ export const createFlowEngineService = () => {
     );
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
 
-    return { version: 1, entryPage: CampaignPageType.HOME, nodes, edges };
+    return {
+      version: 1,
+      entryPage: CampaignPageType.HOME,
+      startConfig: defaultStartConfig(mode),
+      nodes,
+      edges,
+    };
   };
 
   const getEntryPage = (config) => {
@@ -200,6 +217,7 @@ export const createFlowEngineService = () => {
 
   const nextPage = (config, fromPageType, condition) => {
     if (!config) return null;
+    if (isMetaPageType(fromPageType)) return null;
     const sourceNode = config.nodes.find((n) => n.pageType === fromPageType);
     if (!sourceNode) return null;
 
@@ -213,23 +231,28 @@ export const createFlowEngineService = () => {
     return targetNode ? targetNode.pageType : null;
   };
 
-  const stripUnreachableNodes = (config, _mode) => {
+  const stripUnreachableNodes = (config, mode) => {
     if (isApiExposeFlow(config)) {
       return {
         version: config.version || 1,
         entryPage: 'API_EXPOSE',
+        startConfig: normalizeStartConfig(
+          config.startConfig,
+          normalizeMode(mode) || 'OTP_ONLY',
+        ),
         nodes: Array.isArray(config.nodes) ? config.nodes : [],
         edges: Array.isArray(config.edges) ? config.edges : [],
       };
     }
-    const entryPage = getEntryPage(config);
-    const entryNode = config.nodes.find((n) => n.pageType === entryPage);
-    if (!entryNode) return config;
+    const cleaned = stripMetaFlowNodes(config);
+    const entryPage = getEntryPage(cleaned);
+    const entryNode = cleaned.nodes.find((n) => n.pageType === entryPage);
+    if (!entryNode) return cleaned;
 
-    const reachable = reachableNodeIds(config, entryNode.id);
+    const reachable = reachableNodeIds(cleaned, entryNode.id);
 
     const keptNodeIds = new Set();
-    const filteredNodes = config.nodes.filter((n) => {
+    const filteredNodes = cleaned.nodes.filter((n) => {
       if (reachable.has(n.id)) {
         keptNodeIds.add(n.id);
         return true;
@@ -237,11 +260,19 @@ export const createFlowEngineService = () => {
       return false;
     });
 
-    const filteredEdges = config.edges.filter(
+    const filteredEdges = cleaned.edges.filter(
       (e) => keptNodeIds.has(e.source) && keptNodeIds.has(e.target),
     );
 
-    return { ...config, nodes: filteredNodes, edges: filteredEdges };
+    return {
+      ...cleaned,
+      startConfig: normalizeStartConfig(
+        cleaned.startConfig,
+        normalizeMode(mode) || 'BOTH',
+      ),
+      nodes: filteredNodes,
+      edges: filteredEdges,
+    };
   };
 
   const validate = (config, mode) => {
@@ -255,10 +286,11 @@ export const createFlowEngineService = () => {
       return { ok: true, errors: [] };
     }
 
+    const cleaned = stripMetaFlowNodes(config);
     const errors = [];
-    const pageTypes = new Set(config.nodes.map((n) => n.pageType));
-    const entryPage = getEntryPage(config);
-    const entryNode = config.nodes.find((n) => n.pageType === entryPage);
+    const pageTypes = new Set(cleaned.nodes.map((n) => n.pageType));
+    const entryPage = getEntryPage(cleaned);
+    const entryNode = cleaned.nodes.find((n) => n.pageType === entryPage);
 
     if (!entryNode) {
       errors.push(
@@ -278,8 +310,8 @@ export const createFlowEngineService = () => {
     }
 
     if (entryNode) {
-      const reachable = reachableNodeIds(config, entryNode.id);
-      const unreachable = config.nodes.filter((n) => !reachable.has(n.id));
+      const reachable = reachableNodeIds(cleaned, entryNode.id);
+      const unreachable = cleaned.nodes.filter((n) => !reachable.has(n.id));
       if (unreachable.length > 0) {
         errors.push(
           `Unreachable from start page (${entryPage}): ${unreachable
@@ -300,6 +332,7 @@ export const createFlowEngineService = () => {
     isApiExposeFlow,
     getDefaultFlowConfig,
     getEntryPage,
+    getStartConfig,
     reachableNodeIds,
     conditionMatches,
     nextPage,

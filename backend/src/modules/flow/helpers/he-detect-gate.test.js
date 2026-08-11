@@ -16,4 +16,23 @@ describe('shouldRunHeOnDetect', () => {
     assert.equal(shouldRunHeOnDetect('NONE'), false);
     assert.equal(shouldRunHeOnDetect('NULL'), false);
   });
+
+  it('respects startConfig.runHe=false on HE modes', () => {
+    assert.equal(
+      shouldRunHeOnDetect('HEADER_INJECTION', { runHe: false }),
+      false,
+    );
+    assert.equal(shouldRunHeOnDetect('BOTH', { runHe: false }), false);
+  });
+
+  it('keeps HE on when startConfig.runHe=true', () => {
+    assert.equal(
+      shouldRunHeOnDetect('HEADER_INJECTION', { runHe: true }),
+      true,
+    );
+  });
+
+  it('never enables HE for OTP_ONLY even if startConfig.runHe=true', () => {
+    assert.equal(shouldRunHeOnDetect('OTP_ONLY', { runHe: true }), false);
+  });
 });

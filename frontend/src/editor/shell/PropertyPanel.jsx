@@ -23,6 +23,15 @@ import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
+const PROPS_WIDTH_KEY = 'tc-editor-props-width';
+const PROPS_WIDTH_DEFAULT = 288;
+const PROPS_WIDTH_MIN = 240;
+const PROPS_WIDTH_MAX = 560;
+const PROPS_WIDTH_ADVANCED_MIN = 360;
+
+function clampPropsWidth(w) {
+  return Math.min(PROPS_WIDTH_MAX, Math.max(PROPS_WIDTH_MIN, Math.round(w)));
+}
 
 function usePropsCollapsed() {
   const [collapsed, setCollapsed] = useState(() => {
@@ -46,6 +55,55 @@ function usePropsCollapsed() {
   }, []);
 
   return { collapsed, toggleCollapsed };
+}
+
+function usePropsWidth(advancedMode) {
+  const [width, setWidth] = useState(() => {
+    try {
+      const raw = parseInt(localStorage.getItem(PROPS_WIDTH_KEY) || '', 10);
+      if (Number.isFinite(raw)) return clampPropsWidth(raw);
+    } catch {
+      /* ignore */
+    }
+    return PROPS_WIDTH_DEFAULT;
+  });
+
+  const effectiveWidth =
+    advancedMode && width < PROPS_WIDTH_ADVANCED_MIN
+      ? PROPS_WIDTH_ADVANCED_MIN
+      : width;
+
+  const startResize = useCallback((e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startW = effectiveWidth;
+
+    const onMove = (ev) => {
+      // Dragging the left edge: mouse left → wider panel
+      const next = clampPropsWidth(startW + (startX - ev.clientX));
+      setWidth(next);
+    };
+    const onUp = () => {
+      document.body.classList.remove('tc-is-dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setWidth((w) => {
+        try {
+          localStorage.setItem(PROPS_WIDTH_KEY, String(w));
+        } catch {
+          /* ignore */
+        }
+        return w;
+      });
+    };
+
+    document.body.classList.add('tc-is-dragging');
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [effectiveWidth]);
+
+  return { width: effectiveWidth, startResize };
 }
 
 function formatHtml(html) {
@@ -526,7 +584,7 @@ function ClickActionEditor({
           value={type}
           onChange={(e) => setClickType(e.target.value)}
         >
-          <option value="flow">Continue signup flow</option>
+          <option value="flow">Hit Subscribe API (signup flow)</option>
           <option value="anchor">Scroll to a section</option>
           <option value="page">Go to another page</option>
           <option value="external">Open a website</option>
@@ -545,9 +603,9 @@ function ClickActionEditor({
 
       {type === 'flow' && (
         <p className="text-[11px] text-fg-muted leading-relaxed -mt-1">
-          Calls the server signup path (SUBSCRIBE). Next page comes from verification
-          mode (HE / OTP / both / none) — usually set in Flow Builder — not from a
-          fixed page link. For a fixed jump, use &quot;Go to another page&quot; or
+          Hits this campaign&apos;s Subscribe / signup APIs on the server, then opens the next
+          page from verification mode (HE → Confirm, or OTP path). Prefer this on HE HOME instead
+          of a custom URL. For a fixed jump, use &quot;Go to another page&quot; or
           &quot;Open a website&quot; instead.
         </p>
       )}
@@ -645,10 +703,26 @@ export function PropertyPanel() {
   const traitHostRef = useRef(null);
   const [anchorError, setAnchorError] = useState(null);
   const { collapsed, toggleCollapsed } = usePropsCollapsed();
+  const { width: propsWidth, startResize } = usePropsWidth(advancedMode);
 
   const selected = editor?.getSelected();
   const kind = editor && selected ? getComponentKind(selected) : 'none';
   const flowInfo = selected ? getFlowElementInfo((selected.getAttributes?.() || {})) : null;
+
+  const panelStyle = { width: propsWidth };
+
+  const resizeHandle = (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize properties panel"
+      title="Drag to resize"
+      onMouseDown={startResize}
+      className="absolute left-0 top-0 bottom-0 w-1.5 -ml-0.5 cursor-ew-resize z-20 group hover:bg-accent/30 active:bg-accent/50"
+    >
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-8 rounded-full bg-border group-hover:bg-accent opacity-70" />
+    </div>
+  );
 
   useLayoutEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -711,7 +785,11 @@ export function PropertyPanel() {
 
   if (!editor) {
     return (
-      <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated p-4">
+      <aside
+        className="tc-properties shrink-0 border-l border-border bg-bg-elevated p-4 relative"
+        style={panelStyle}
+      >
+        {resizeHandle}
         <p className="text-sm text-fg-muted">Loading...</p>
       </aside>
     );
@@ -723,7 +801,11 @@ export function PropertyPanel() {
 
   if (!selected || kind === 'none') {
     return (
-      <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated flex flex-col">
+      <aside
+        className="tc-properties shrink-0 border-l border-border bg-bg-elevated flex flex-col relative"
+        style={panelStyle}
+      >
+        {resizeHandle}
         <div className="p-3 border-b border-border flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-fg">Edit selection</h2>
           <button
@@ -745,7 +827,11 @@ export function PropertyPanel() {
   }
 
   return (
-    <aside className="tc-properties w-64 shrink-0 border-l border-border bg-bg-elevated flex flex-col overflow-hidden">
+    <aside
+      className="tc-properties shrink-0 border-l border-border bg-bg-elevated flex flex-col overflow-hidden relative"
+      style={panelStyle}
+    >
+      {resizeHandle}
       <div className="p-3 border-b border-border flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="text-sm font-semibold text-fg truncate">{KIND_LABELS[kind] || 'Element'}</h2>
@@ -1397,6 +1483,9 @@ export function PropertyPanel() {
 
         {advancedMode && (
           <div className="space-y-4 pt-2">
+            <p className="text-[11px] text-fg-muted leading-snug">
+              Drag the left edge of this panel wider if CSS controls feel cramped.
+            </p>
             <div>
               <h3 className="text-xs font-semibold text-fg mb-2">Component settings</h3>
               <div ref={traitHostRef} className="tc-advanced-traits-host" />

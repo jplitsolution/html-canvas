@@ -79,14 +79,23 @@ export function createDetectMsisdn(deps) {
 
     const verificationMode =
       flowEngineService.normalizeMode(campaign?.verificationMode) || 'BOTH';
+    const flowConfigForStart = campaign
+      ? flowEngineService.parseFlowConfig(campaign.flowConfig)
+      : null;
+    const startConfig = flowEngineService.getStartConfig(
+      flowConfigForStart,
+      verificationMode,
+    );
     const configuredHeProvider = String(
       apiConfig?.heProvider || 'header',
     )
       .toLowerCase()
       .trim();
-    // OTP_ONLY / NONE never run HE. Also skip when heProvider is explicitly `none`.
+    // OTP_ONLY / NONE never run HE. Also skip when heProvider is explicitly `none`
+    // or START node disabled runHe.
     const runHe =
-      shouldRunHeOnDetect(verificationMode) && configuredHeProvider !== 'none';
+      shouldRunHeOnDetect(verificationMode, startConfig) &&
+      configuredHeProvider !== 'none';
 
     const heSource = String(input.heSource || '')
       .toLowerCase()
@@ -183,10 +192,12 @@ export function createDetectMsisdn(deps) {
     let blockReason = null;
     /** @type {{ go?: string|null, page?: string|null, url?: string|null } | null} */
     let subRes = null;
-    const hasChecksub = Boolean(apiConfig?.subscriptionApi);
-    const hasBlocklist = Boolean(apiConfig?.blocklistApi);
+    const hasChecksub =
+      Boolean(apiConfig?.subscriptionApi) && startConfig.runChecksub !== false;
+    const hasBlocklist =
+      Boolean(apiConfig?.blocklistApi) && startConfig.runBlocklist !== false;
 
-    // Phone mila → checksub + blocklist (only when configured).
+    // Phone mila → checksub + blocklist (only when configured + START allows).
     if (rawPhone && apiConfig && (hasChecksub || hasBlocklist)) {
       const partnerCtx = {
         phone: rawPhone,
