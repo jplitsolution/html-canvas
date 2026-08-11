@@ -291,6 +291,75 @@ export function configureFlowButtonResizable(component) {
   component.set('resizable', FLOW_BUTTON_RESIZABLE)
 }
 
+const BLOCK_CONTAINER_TAGS = new Set([
+  'section',
+  'header',
+  'footer',
+  'nav',
+  'main',
+  'div',
+  'article',
+  'aside',
+  'form',
+])
+
+/** In-flow blocks/sections: grow length via min-height so content is not clipped. */
+export const FLOW_BLOCK_RESIZABLE = {
+  tl: 1,
+  tc: 1,
+  tr: 1,
+  cl: 1,
+  cr: 1,
+  bl: 1,
+  bc: 1,
+  br: 1,
+  minDim: 40,
+  ratioDefault: 0,
+  keyHeight: 'min-height',
+}
+
+/** Absolute overlays keep height (not min-height) so freeform boxes resize as expected. */
+export const ABSOLUTE_BLOCK_RESIZABLE = {
+  tl: 1,
+  tc: 1,
+  tr: 1,
+  cl: 1,
+  cr: 1,
+  bl: 1,
+  bc: 1,
+  br: 1,
+  minDim: 40,
+  ratioDefault: 0,
+}
+
+/** Sections / generic containers users expect to stretch — not text, CTAs, images, hotspots. */
+export function isResizableBlockContainer(component) {
+  if (!component) return false
+  if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) return false
+
+  const tag = (component.get('tagName') || '').toLowerCase()
+  const type = component.get('type') || ''
+  const attrs = component.getAttributes?.() || {}
+  const tcType = attrs['data-tc-type']
+
+  if (type === 'wrapper' || tag === 'body' || tag === 'html') return false
+  if (tcType === 'hotspot' || tcType === 'button' || tcType === 'image') return false
+  if (type === 'image' || tag === 'img') return false
+  if (TEXT_TAGS.has(tag) || type === 'text') return false
+
+  if (tcType === 'section' || tcType === 'image-banner') return true
+  return BLOCK_CONTAINER_TAGS.has(tag)
+}
+
+export function configureBlockResizable(component) {
+  if (!isResizableBlockContainer(component)) return
+  const style = component.getStyle?.() || {}
+  const isAbs =
+    String(style.position || '').toLowerCase() === 'absolute' ||
+    component.getAttributes?.()?.['data-tc-absolute'] === '1'
+  component.set('resizable', isAbs ? ABSOLUTE_BLOCK_RESIZABLE : FLOW_BLOCK_RESIZABLE)
+}
+
 export function applyTextSizeAlignment(component, opts = {}) {
   if (!component || typeof component.addStyle !== 'function') return
   if (!isTextSizedComponent(component)) return

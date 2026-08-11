@@ -27,7 +27,7 @@ import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
-import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
+import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
 import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot } from './utils/overlayStacking'
 
 export default function TemplateEditor({
@@ -488,15 +488,16 @@ export default function TemplateEditor({
           configureFlowButtonResizable(component)
         } else if (isButton && isOverlay) {
           configureFlowButtonResizable(component)
-        }
-
-        // Buttons / images / hotspots resize; text stays selectable without giant handles
-        if (
+        } else if (
           isButton ||
           isImageComponent(component) ||
           component.getAttributes()?.['data-tc-type'] === 'hotspot'
         ) {
+          // Freeform buttons / images / hotspots — full resizer
           component.set('resizable', true)
+        } else {
+          // Sections / blocks / divs — corner+edge handles (min-height in flow)
+          configureBlockResizable(component)
         }
       }, 50)
     })
@@ -562,10 +563,23 @@ export default function TemplateEditor({
     // If an absolute button is selected over an image, keep it above
     ed.on('component:selected', (component) => {
       if (!mounted || !component) return
-      if (!isButtonLikeComponent(component) && !isFlowLayoutButton(component)) return
-      const style = component.getStyle?.() || {}
-      if (String(style.position || '').toLowerCase() !== 'absolute') return
-      promoteOverlayIfNeeded(component)
+      if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) {
+        const style = component.getStyle?.() || {}
+        if (String(style.position || '').toLowerCase() === 'absolute') {
+          promoteOverlayIfNeeded(component)
+        }
+        configureFlowButtonResizable(component)
+        return
+      }
+      // Existing sections/blocks may never have been marked resizable on load
+      const before = component.get('resizable')
+      configureBlockResizable(component)
+      if (!before && component.get('resizable')) {
+        // Grapes builds tools before our handler; refresh so handles appear on first click
+        setTimeout(() => {
+          try { ed.Canvas?.refresh?.() } catch (_) { /* noop */ }
+        }, 0)
+      }
     })
     ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
     ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
@@ -653,6 +667,8 @@ export default function TemplateEditor({
           }
           if (isFlowLayoutButton(cmp)) {
             configureFlowButtonResizable(cmp)
+          } else if (!isAbsolute) {
+            configureBlockResizable(cmp)
           }
           cmp.components().forEach(walk)
         }

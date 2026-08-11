@@ -117,7 +117,15 @@ body.tc-is-dragging .tc-blocks-mount .gjs-block {
 
 .tc-builder .gjs-resizer-h {
   display: block !important;
-  border-color: #6366f1 !important;
+  width: 10px !important;
+  height: 10px !important;
+  margin-top: -5px !important;
+  margin-left: -5px !important;
+  border: 2px solid #6366f1 !important;
+  border-radius: 2px;
+  background-color: #fff !important;
+  box-sizing: border-box;
+  z-index: 60;
 }
 
 /* Layer manager in sidebar */
