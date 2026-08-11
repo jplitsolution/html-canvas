@@ -34,8 +34,13 @@ function getEventIcon(eventType) {
   if (t.includes('FAILED') || t.includes('LIMIT') || t.includes('BRUTE') || t.includes('BLOCKED')) {
     return <XCircle className="w-4 h-4 text-rose-500" />
   }
-  if (t.includes('OTP_VERIFY')) return <KeyRound className="w-4 h-4 text-violet-500" />
-  if (t.includes('OTP_SEND') || t.includes('OTP_VIEW') || t.includes('OTP_SHOWN')) {
+  if (t.includes('OTP_VERIFY') || t.includes('OTP_EXPOSE_VERIFY')) return <KeyRound className="w-4 h-4 text-violet-500" />
+  if (
+    t.includes('OTP_SEND') ||
+    t.includes('OTP_EXPOSE_SEND') ||
+    t.includes('OTP_VIEW') ||
+    t.includes('OTP_SHOWN')
+  ) {
     return <Phone className="w-4 h-4 text-amber-500" />
   }
   if (t.includes('CLICK')) return <MousePointerClick className="w-4 h-4 text-indigo-500" />
@@ -98,6 +103,14 @@ function eventDescription(eventType) {
       return 'Billing / operator callback received on our endpoint.'
     case 'API_VENDOR_POSTBACK':
       return 'Outbound vendor / affiliate CPA postback we fired.'
+    case 'API_OTP_SEND':
+      return 'Outbound partner OTP send API call.'
+    case 'API_OTP_VERIFY':
+      return 'Outbound partner OTP verify API call.'
+    case 'API_OTP_EXPOSE_SEND_IN':
+      return 'Inbound OTP expose send request (mediator).'
+    case 'API_OTP_EXPOSE_VERIFY_IN':
+      return 'Inbound OTP expose verify request (mediator).'
     case 'CALLBACK_RECEIVED':
       return 'Billing callback hit our server — next we fire the vendor postback.'
     case 'POSTBACK_PENDING':
@@ -505,6 +518,39 @@ function SessionDetailPage() {
                                 : ''}
                             </p>
                           )}
+                          {item.kind === 'api' && apiCall?.requestBody != null && (
+                            <JsonBlock
+                              label="Request"
+                              value={apiCall.requestBody}
+                            />
+                          )}
+                          {item.kind === 'api' && apiCall?.responseBody != null && (
+                            <JsonBlock
+                              label="Response"
+                              value={apiCall.responseBody}
+                            />
+                          )}
+                          {item.kind === 'api' && apiCall?.errorMessage && (
+                            <p className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+                              {apiCall.errorMessage}
+                            </p>
+                          )}
+                          {item.kind === 'event' &&
+                            (item.metadata?.inboundUrl ||
+                              item.metadata?.partnerUrl) && (
+                              <div className="mt-1 space-y-1">
+                                {item.metadata.inboundUrl && (
+                                  <p className="text-[11px] font-mono text-sky-700 break-all">
+                                    in: {item.metadata.inboundUrl}
+                                  </p>
+                                )}
+                                {item.metadata.partnerUrl && (
+                                  <p className="text-[11px] font-mono text-indigo-700 break-all">
+                                    partner: {item.metadata.partnerUrl}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                         </div>
                       </div>
                     )

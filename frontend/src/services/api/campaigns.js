@@ -20,6 +20,7 @@ export const PAGE_TYPE_LABELS = {
   LOW_BALANCE: 'Low balance',
   BLOCKED: 'Blocked',
   ERROR: 'Error',
+  API_EXPOSE: 'API expose',
 }
 
 export const REQUIRED_PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU']

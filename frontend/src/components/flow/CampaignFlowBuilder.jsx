@@ -1,0 +1,894 @@
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  MiniMap,
+  ConnectionMode,
+  addEdge,
+  useNodesState,
+  useEdgesState,
+} from '@xyflow/react'
+import '@xyflow/react/dist/style.css'
+import { Link2, Plus, Save, Trash2, Pencil, Copy, Check } from 'lucide-react'
+import Button from '../ui/Button'
+import PageNode from './PageNode'
+import {
+  conditionLabel,
+  getDefaultCondition,
+  getValidConditions,
+} from './flowConditions'
+import {
+  VERIFICATION_MODES,
+  buildDefaultFlow,
+  normalizeModeId,
+  isApiExposeEntry,
+  resolveAfterOtpTarget,
+} from './verificationModes'
+import useStore from '../../store/useStore'
+import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
+import { campaignEditPath } from '../../utils/routes'
+import FlowCampaignSettings from './FlowCampaignSettings'
+
+const nodeTypes = { pageNode: PageNode }
+
+const PAGE_TYPES = [
+  'HOME',
+  'OTP',
+  'CONFIRM',
+  'THANKYOU',
+  'INPROGRESS',
+  'LOW_BALANCE',
+  'BLOCKED',
+  'ERROR',
+]
+
+function toRfNodes(flowConfig) {
+  return (flowConfig?.nodes || []).map((n) => ({
+    id: n.id,
+    type: 'pageNode',
+    position: n.position || { x: 0, y: 0 },
+    data: { label: PAGE_TYPE_LABELS[n.pageType] || n.pageType, pageType: n.pageType },
+  }))
+}
+
+function toRfEdges(flowConfig) {
+  return (flowConfig?.edges || []).map((e) => ({
+    id: e.id,
+    source: e.source,
+    target: e.target,
+    label: e.condition || 'DEFAULT',
+    animated: true,
+    data: { condition: e.condition || 'DEFAULT' },
+  }))
+}
+
+/**
+ * Drag-drop flowConfig editor — used on Campaign Detail (embedded)
+ * and optionally as a standalone page shell.
+ */
+function CampaignFlowBuilder({
+  campaignId,
+  countryCode,
+  operatorCode,
+  embedded = false,
+}) {
+  const navigate = useNavigate()
+  const addToast = useStore((s) => s.addToast)
+  const loadCampaignFlow = useStore((s) => s.loadCampaignFlow)
+  const saveCampaignFlow = useStore((s) => s.saveCampaignFlow)
+
+  const [nodes, setNodes, onNodesChange] = useNodesState([])
+  const [edges, setEdges, onEdgesChange] = useEdgesState([])
+  const [mode, setMode] = useState('BOTH')
+  const [entryPage, setEntryPage] = useState('HOME')
+  const [afterOtp, setAfterOtp] = useState('CONFIRM')
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState([])
+  const [newConnSource, setNewConnSource] = useState('')
+  const [newConnTarget, setNewConnTarget] = useState('')
+  const [newConnCondition, setNewConnCondition] = useState('DEFAULT')
+  const [selectedNodeId, setSelectedNodeId] = useState(null)
+  const [copiedApi, setCopiedApi] = useState('')
+
+  const applyFlowTemplate = useCallback(
+    (nextMode, nextEntry, nextAfterOtp) => {
+      const def = buildDefaultFlow(nextMode, {
+        entryPage: nextMode === 'OTP_ONLY' ? nextEntry : 'HOME',
+        afterOtp:
+          nextMode === 'OTP_ONLY' && !isApiExposeEntry(nextEntry)
+            ? nextAfterOtp
+            : 'CONFIRM',
+      })
+      setNodes(toRfNodes(def))
+      setEdges(toRfEdges(def))
+      setEntryPage(def.entryPage || 'HOME')
+      setAfterOtp(
+        nextMode === 'OTP_ONLY' && !isApiExposeEntry(def.entryPage)
+          ? resolveAfterOtpTarget(def)
+          : 'CONFIRM',
+      )
+      setErrors([])
+    },
+    [setNodes, setEdges],
+  )
+
+  const handleResetFlow = useCallback(() => {
+    applyFlowTemplate(mode, entryPage, afterOtp)
+    addToast('Flow graph reset to default template', 'success')
+  }, [mode, entryPage, afterOtp, applyFlowTemplate, addToast])
+
+  const handleModeChange = useCallback(
+    (newMode) => {
+      setMode(newMode)
+      applyFlowTemplate(newMode, 'HOME', 'CONFIRM')
+    },
+    [applyFlowTemplate],
+  )
+
+  const handleEntryPageChange = useCallback(
+    (nextEntry) => {
+      const next = String(nextEntry || 'HOME').toUpperCase()
+      setEntryPage(next)
+      if (mode === 'OTP_ONLY') {
+        applyFlowTemplate('OTP_ONLY', next, afterOtp)
+      }
+    },
+    [mode, afterOtp, applyFlowTemplate],
+  )
+
+  const handleAfterOtpChange = useCallback(
+    (nextAfter) => {
+      const next = String(nextAfter || 'CONFIRM').toUpperCase()
+      setAfterOtp(next)
+      if (mode === 'OTP_ONLY' && !isApiExposeEntry(entryPage)) {
+        applyFlowTemplate('OTP_ONLY', entryPage, next)
+      }
+    },
+    [mode, entryPage, applyFlowTemplate],
+  )
+
+  useEffect(() => {
+    if (!campaignId) return
+    let cancelled = false
+    setLoading(true)
+    loadCampaignFlow(campaignId)
+      .then((res) => {
+        if (cancelled) return
+        setMode(normalizeModeId(res.verificationMode))
+        setEntryPage(res.flowConfig?.entryPage || 'HOME')
+        setAfterOtp(resolveAfterOtpTarget(res.flowConfig))
+        setNodes(toRfNodes(res.flowConfig))
+        setEdges(toRfEdges(res.flowConfig))
+      })
+      .catch(() => {})
+      .finally(() => !cancelled && setLoading(false))
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId, setNodes, setEdges, loadCampaignFlow])
+
+  const existingPageTypes = useMemo(
+    () => new Set(nodes.map((n) => n.data.pageType)),
+    [nodes],
+  )
+
+  const onConnect = useCallback(
+    (connection) => {
+      const sourceNode = nodes.find((n) => n.id === connection.source)
+      const sourcePageType = sourceNode?.data?.pageType || connection.source
+      const condition = getDefaultCondition(sourcePageType, mode)
+
+      setEdges((eds) => {
+        const duplicate = eds.some(
+          (e) =>
+            e.source === connection.source &&
+            e.target === connection.target &&
+            (e.data?.condition || 'DEFAULT') === condition,
+        )
+        if (duplicate) {
+          addToast('This connection already exists', 'error')
+          return eds
+        }
+        return addEdge(
+          {
+            ...connection,
+            id: `${connection.source}-${condition}-${connection.target}-${Date.now()}`,
+            label: condition,
+            animated: true,
+            data: { condition },
+          },
+          eds,
+        )
+      })
+    },
+    [setEdges, nodes, mode, addToast],
+  )
+
+  const addNode = useCallback(
+    (pageType) => {
+      if (existingPageTypes.has(pageType)) return
+      const offset = nodes.length * 30
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: pageType,
+          type: 'pageNode',
+          position: { x: 120 + offset, y: 120 + offset },
+          data: { label: PAGE_TYPE_LABELS[pageType] || pageType, pageType },
+        },
+      ])
+    },
+    [existingPageTypes, nodes.length, setNodes],
+  )
+
+  const removeNode = useCallback(
+    (nodeId) => {
+      const removed = nodes.find((n) => n.id === nodeId)
+      setNodes((nds) => nds.filter((n) => n.id !== nodeId))
+      setEdges((eds) => eds.filter((e) => e.source !== nodeId && e.target !== nodeId))
+      setSelectedNodeId((prev) => (prev === nodeId ? null : prev))
+      if (removed?.data?.pageType === entryPage) {
+        const remaining = nodes.filter((n) => n.id !== nodeId)
+        setEntryPage(remaining[0]?.data?.pageType || 'HOME')
+      }
+      addToast('Page removed from flow', 'success')
+    },
+    [setNodes, setEdges, addToast, nodes, entryPage],
+  )
+
+  const editNode = useCallback(
+    (pageType) => {
+      navigate(campaignEditPath(countryCode, operatorCode, campaignId, pageType))
+    },
+    [campaignId, navigate, countryCode, operatorCode],
+  )
+
+  const displayNodes = useMemo(
+    () =>
+      nodes.map((n) => ({
+        ...n,
+        selected: n.id === selectedNodeId,
+        data: {
+          ...n.data,
+          isEntry: n.data.pageType === entryPage,
+          onEdit: () => editNode(n.data.pageType),
+          onDelete: () => removeNode(n.id),
+        },
+      })),
+    [nodes, selectedNodeId, entryPage, editNode, removeNode],
+  )
+
+  const selectedNode = useMemo(
+    () => nodes.find((n) => n.id === selectedNodeId) || null,
+    [nodes, selectedNodeId],
+  )
+
+  const setEdgeCondition = useCallback(
+    (edgeId, condition) => {
+      setEdges((eds) =>
+        eds.map((e) =>
+          e.id === edgeId ? { ...e, label: condition, data: { ...e.data, condition } } : e,
+        ),
+      )
+    },
+    [setEdges],
+  )
+
+  const removeEdge = useCallback(
+    (edgeId) => setEdges((eds) => eds.filter((e) => e.id !== edgeId)),
+    [setEdges],
+  )
+
+  const newConnSourcePageType = useMemo(() => {
+    const node = nodes.find((n) => n.id === newConnSource)
+    return node?.data?.pageType || ''
+  }, [nodes, newConnSource])
+
+  const newConnConditionOptions = useMemo(
+    () => getValidConditions(newConnSourcePageType, mode),
+    [newConnSourcePageType, mode],
+  )
+
+  useEffect(() => {
+    if (!newConnSourcePageType) return
+    const defaultCondition = getDefaultCondition(newConnSourcePageType, mode)
+    setNewConnCondition(defaultCondition)
+  }, [newConnSourcePageType, mode])
+
+  const addConnection = useCallback(() => {
+    if (!newConnSource || !newConnTarget) {
+      addToast('Select both From and To pages', 'error')
+      return
+    }
+    if (newConnSource === newConnTarget) {
+      addToast('From and To must be different pages', 'error')
+      return
+    }
+
+    const condition = newConnCondition || getDefaultCondition(newConnSourcePageType, mode)
+    const duplicate = edges.some(
+      (e) =>
+        e.source === newConnSource &&
+        e.target === newConnTarget &&
+        (e.data?.condition || 'DEFAULT') === condition,
+    )
+    if (duplicate) {
+      addToast('This connection already exists', 'error')
+      return
+    }
+
+    setEdges((eds) => [
+      ...eds,
+      {
+        id: `${newConnSource}-${condition}-${newConnTarget}-${Date.now()}`,
+        source: newConnSource,
+        target: newConnTarget,
+        label: condition,
+        animated: true,
+        data: { condition },
+      },
+    ])
+    addToast('Connection added', 'success')
+  }, [
+    newConnSource,
+    newConnTarget,
+    newConnCondition,
+    newConnSourcePageType,
+    mode,
+    edges,
+    setEdges,
+    addToast,
+  ])
+
+  const onNodesDelete = useCallback(
+    (deleted) => {
+      const ids = new Set(deleted.map((n) => n.id))
+      setEdges((eds) => eds.filter((e) => !ids.has(e.source) && !ids.has(e.target)))
+      setSelectedNodeId(null)
+      addToast('Page removed from flow', 'success')
+    },
+    [setEdges, addToast],
+  )
+
+  const getEdgeConditionOptions = useCallback(
+    (sourceId, currentCondition) => {
+      const sourceNode = nodes.find((n) => n.id === sourceId)
+      const valid = getValidConditions(sourceNode?.data?.pageType || sourceId, mode)
+      if (currentCondition && !valid.includes(currentCondition)) {
+        return [currentCondition, ...valid]
+      }
+      return valid
+    },
+    [nodes, mode],
+  )
+
+  const handleSave = useCallback(async () => {
+    const clientErrors = []
+    const pageTypes = new Set(nodes.map((n) => n.data.pageType))
+    const isApiExpose = mode === 'OTP_ONLY' && entryPage === 'API_EXPOSE'
+
+    if (!isApiExpose) {
+      if (!pageTypes.has(entryPage)) {
+        clientErrors.push(
+          `Start page "${PAGE_TYPE_LABELS[entryPage] || entryPage}" must be in the flow.`,
+        )
+      }
+      if ((mode === 'OTP_ONLY' || mode === 'BOTH') && !pageTypes.has('OTP')) {
+        clientErrors.push(`Verification mode "${mode}" requires an OTP page node.`)
+      }
+
+      const entryNode = nodes.find((n) => n.data.pageType === entryPage)
+      if (entryNode) {
+        const reachable = new Set([entryNode.id])
+        let changed = true
+        while (changed) {
+          changed = false
+          for (const e of edges) {
+            if (reachable.has(e.source) && !reachable.has(e.target)) {
+              reachable.add(e.target)
+              changed = true
+            }
+          }
+        }
+        const orphans = nodes.filter((n) => !reachable.has(n.id))
+        if (orphans.length > 0) {
+          const labels = orphans.map((n) => n.data.label).join(', ')
+          clientErrors.push(
+            `Note: "${labels}" not reachable from start page (${PAGE_TYPE_LABELS[entryPage] || entryPage}) and will be removed on save.`,
+          )
+        }
+      }
+    }
+
+    const hardErrors = clientErrors.filter((e) => !e.startsWith('Note:'))
+    if (hardErrors.length > 0) {
+      setErrors(hardErrors)
+      return
+    }
+
+    const flowConfig = isApiExpose
+      ? { version: 1, entryPage: 'API_EXPOSE', nodes: [], edges: [] }
+      : {
+          version: 1,
+          entryPage: entryPage || 'HOME',
+          nodes: nodes.map((n) => ({
+            id: n.id,
+            pageType: n.data.pageType,
+            position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },
+          })),
+          edges: edges.map((e) => ({
+            id: e.id,
+            source: e.source,
+            target: e.target,
+            condition: e.data?.condition || 'DEFAULT',
+          })),
+        }
+    setSaving(true)
+    setErrors(clientErrors)
+    try {
+      await saveCampaignFlow(campaignId, { verificationMode: mode, flowConfig })
+      setErrors([])
+    } catch (err) {
+      const msg = err.message || 'Failed to save flow'
+      setErrors([msg])
+    } finally {
+      setSaving(false)
+    }
+  }, [campaignId, mode, entryPage, nodes, edges, saveCampaignFlow])
+
+  const nodeLabel = (nodeId) => {
+    const node = nodes.find((n) => n.id === nodeId)
+    return node ? node.data.label : nodeId
+  }
+
+  const canvasHeight = embedded ? '56vh' : '72vh'
+  const showApiExpose = mode === 'OTP_ONLY' && isApiExposeEntry(entryPage)
+  const origin =
+    typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'
+  const sendUrl = `${origin}/api/otp/${campaignId}/send?msisdn=`
+  const verifyUrl = `${origin}/api/otp/${campaignId}/verify?msisdn=&otp=`
+
+  const copyApiUrl = async (key, url) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopiedApi(key)
+      setTimeout(() => setCopiedApi(''), 1500)
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className={`font-semibold text-fg ${embedded ? 'text-sm' : 'page-header-title'}`}>
+            Flow builder
+          </h2>
+          <p className={`text-fg-muted mt-0.5 ${embedded ? 'text-xs' : 'page-header-description'}`}>
+            Verification mode, page graph, redirects, and CPA timing — all in one place. Use Edit
+            on a page to open the HTML canvas.
+          </p>
+        </div>
+        <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || loading}>
+          <Save className="w-4 h-4" />
+          {saving ? 'Saving...' : 'Save flow'}
+        </Button>
+      </div>
+
+      {/* Verification mode + OTP landing options */}
+      <div className="surface-card p-4 space-y-4">
+        <div>
+          <p className="text-xs font-medium text-fg mb-2">Verification mode</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+            {VERIFICATION_MODES.map((m) => {
+              const selected = mode === m.id
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => handleModeChange(m.id)}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    selected
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">{m.label}</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">{m.hint}</p>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {mode === 'OTP_ONLY' && (
+          <>
+            <div>
+              <p className="text-xs font-medium text-fg mb-2">Landing page</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {[
+                  {
+                    id: 'HOME',
+                    title: 'HOME first',
+                    hint: 'Show intro / Subscribe CTA, then OTP.',
+                  },
+                  {
+                    id: 'OTP',
+                    title: 'OTP first',
+                    hint: 'Skip HOME — open PIN page on landing.',
+                  },
+                  {
+                    id: 'API_EXPOSE',
+                    title: 'API expose',
+                    hint: 'No WAP pages — expose public OTP send/verify URLs.',
+                  },
+                ].map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => handleEntryPageChange(opt.id)}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      entryPage === opt.id
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">{opt.title}</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">{opt.hint}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {!showApiExpose && (
+              <div>
+                <p className="text-xs font-medium text-fg mb-2">After OTP verified</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleAfterOtpChange('CONFIRM')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      afterOtp === 'CONFIRM'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">Confirm page</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      Pack / subscribe CTA after PIN (classic funnel).
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAfterOtpChange('THANKYOU')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      afterOtp === 'THANKYOU'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">Skip Confirm</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      PIN verify = subscribe → Thank you / portal (no Confirm).
+                    </p>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showApiExpose && (
+              <div className="rounded-lg border border-border bg-bg-muted/40 px-3.5 py-3 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-fg">Exposed OTP APIs</p>
+                  <p className="text-[11px] text-fg-muted mt-0.5">
+                    No auth. Forwarded to Partner OTP URLs in API settings. Configure send/verify
+                    in Campaign API → Partner OTP.
+                  </p>
+                </div>
+                {[
+                  { key: 'send', label: 'GET/POST — send OTP', url: sendUrl },
+                  { key: 'verify', label: 'GET/POST — verify OTP', url: verifyUrl },
+                ].map((row) => (
+                  <div key={row.key} className="space-y-1">
+                    <p className="text-[11px] font-medium text-fg">{row.label}</p>
+                    <div className="flex items-start gap-2">
+                      <code className="flex-1 text-[11px] font-mono text-fg break-all rounded-md border border-border bg-bg-elevated px-2.5 py-2">
+                        {row.url}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => copyApiUrl(row.key, row.url)}
+                        className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2 py-1.5 text-[11px] text-fg-muted hover:text-fg"
+                      >
+                        {copiedApi === row.key ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                        {copiedApi === row.key ? 'Copied' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {mode !== 'OTP_ONLY' && (
+          <p className="text-[11px] text-fg-muted">
+            Start page is locked to <strong>HOME</strong> for this mode. Change connections on the
+            canvas or use Reset layout after switching modes.
+          </p>
+        )}
+
+        <button
+          type="button"
+          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-border hover:border-fg-muted rounded-md text-xs font-medium text-fg-muted hover:text-fg transition-colors cursor-pointer"
+          onClick={handleResetFlow}
+        >
+          Reset layout to default for this mode
+        </button>
+      </div>
+
+      {errors.length > 0 && (
+        <div className="space-y-2">
+          {errors.map((e, i) =>
+            e.startsWith('Note:') ? (
+              <div
+                key={i}
+                className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800"
+              >
+                ⚠️ {e.replace(/^Note:\s*/, '')}
+              </div>
+            ) : (
+              <div
+                key={i}
+                className="rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger"
+              >
+                {e}
+              </div>
+            ),
+          )}
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 items-start">
+        <div
+          className="lg:col-span-3 surface-card overflow-hidden"
+          style={{ height: canvasHeight }}
+        >
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-sm text-fg-muted">
+              Loading flow...
+            </div>
+          ) : showApiExpose ? (
+            <div className="flex items-center justify-center h-full text-sm text-fg-muted px-6 text-center">
+              API expose mode — no WAP page graph. Use the exposed OTP URLs above and Partner OTP
+              in API settings.
+            </div>
+          ) : (
+            <ReactFlow
+              nodes={displayNodes}
+              edges={edges}
+              nodeTypes={nodeTypes}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+              onPaneClick={() => setSelectedNodeId(null)}
+              onNodesDelete={onNodesDelete}
+              connectOnClick
+              connectionMode={ConnectionMode.Loose}
+              deleteKeyCode={['Backspace', 'Delete']}
+              defaultEdgeOptions={{
+                animated: true,
+                labelStyle: { fontSize: 10, fontWeight: 600 },
+                labelBgStyle: { fill: '#fff', fillOpacity: 0.9 },
+              }}
+              fitView
+            >
+              <Background />
+              <Controls />
+              <MiniMap pannable zoomable />
+            </ReactFlow>
+          )}
+        </div>
+
+        <div
+          className="flex flex-col gap-3 lg:sticky lg:top-4 overflow-y-auto"
+          style={{ maxHeight: canvasHeight }}
+        >
+          {selectedNode && (
+            <div className="surface-card p-3 shrink-0 border border-accent/30 bg-accent-muted/20">
+              <p className="text-[11px] font-medium text-fg-muted mb-2">Selected page</p>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-fg">{selectedNode.data.label}</span>
+                <span className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => editNode(selectedNode.data.pageType)}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeNode(selectedNode.id)}
+                    title="Remove from flow"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-danger" />
+                  </Button>
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="surface-card p-4 flex flex-col shrink-0">
+            <h3 className="text-sm font-semibold text-fg mb-1">Connections</h3>
+            <p className="text-xs text-fg-muted mb-3">
+              Set flow paths here. Drag nodes only to reposition.
+            </p>
+
+            <div className="rounded-lg border border-accent/40 bg-accent-muted/30 p-3 mb-3 space-y-2">
+              <p className="text-xs font-medium text-fg">Add connection</p>
+              <label className="block">
+                <span className="text-[11px] text-fg-muted">From</span>
+                <select
+                  className="mt-0.5 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-bg-base"
+                  value={newConnSource}
+                  onChange={(ev) => setNewConnSource(ev.target.value)}
+                >
+                  <option value="">Select page...</option>
+                  {nodes.map((n) => (
+                    <option key={n.id} value={n.id}>
+                      {n.data.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] text-fg-muted">To</span>
+                <select
+                  className="mt-0.5 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-bg-base"
+                  value={newConnTarget}
+                  onChange={(ev) => setNewConnTarget(ev.target.value)}
+                >
+                  <option value="">Select page...</option>
+                  {nodes
+                    .filter((n) => n.id !== newConnSource)
+                    .map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.data.label}
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[11px] text-fg-muted">When</span>
+                <select
+                  className="mt-0.5 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-bg-base"
+                  value={newConnCondition}
+                  onChange={(ev) => setNewConnCondition(ev.target.value)}
+                  disabled={!newConnSource}
+                >
+                  {newConnConditionOptions.map((c) => (
+                    <option key={c} value={c}>
+                      {conditionLabel(c)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={addConnection}
+                disabled={!newConnSource || !newConnTarget}
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                Add connection
+              </Button>
+            </div>
+
+            <div className="max-h-40 overflow-y-auto space-y-2 pr-0.5">
+              {edges.map((e) => (
+                <div key={e.id} className="rounded-lg border border-border p-2">
+                  <div className="flex items-center justify-between text-xs text-fg-muted mb-1.5">
+                    <span>
+                      {nodeLabel(e.source)} → {nodeLabel(e.target)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeEdge(e.id)}
+                      className="text-danger hover:opacity-70 cursor-pointer"
+                      title="Delete connection"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <select
+                    className="w-full text-xs border border-border rounded-md px-2 py-1 bg-bg-base"
+                    value={e.data?.condition || 'DEFAULT'}
+                    onChange={(ev) => setEdgeCondition(e.id, ev.target.value)}
+                  >
+                    {getEdgeConditionOptions(e.source, e.data?.condition).map((c) => (
+                      <option key={c} value={c}>
+                        {conditionLabel(c)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+              {edges.length === 0 && (
+                <p className="text-xs text-fg-muted">
+                  No connections yet. Use the form above or blue dot → green dot on canvas.
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="surface-card p-3 shrink-0">
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <h3 className="text-sm font-semibold text-fg">Pages</h3>
+              <span className="text-[11px] text-fg-muted">{nodes.length} in flow</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto">
+              {nodes.map((n) => (
+                <button
+                  key={n.id}
+                  type="button"
+                  onClick={() => setSelectedNodeId(n.id)}
+                  className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs border transition-colors cursor-pointer ${
+                    selectedNodeId === n.id
+                      ? 'border-accent bg-accent-muted text-fg font-medium'
+                      : 'border-border bg-bg-subtle text-fg-muted hover:border-fg-muted'
+                  }`}
+                >
+                  {n.data.label}
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      editNode(n.data.pageType)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.stopPropagation()
+                        editNode(n.data.pageType)
+                      }
+                    }}
+                    className="p-0.5 rounded hover:bg-bg-muted"
+                    title="Edit"
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </span>
+                </button>
+              ))}
+              {nodes.length === 0 && <p className="text-xs text-fg-muted">No pages yet.</p>}
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-border">
+              {PAGE_TYPES.filter((pt) => !existingPageTypes.has(pt)).map((pt) => (
+                <Button key={pt} variant="outline" size="sm" onClick={() => addNode(pt)}>
+                  <Plus className="w-3 h-3" />
+                  {PAGE_TYPE_LABELS[pt] || pt}
+                </Button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <FlowCampaignSettings campaignId={campaignId} />
+    </div>
+  )
+}
+
+export default memo(CampaignFlowBuilder)

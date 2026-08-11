@@ -1,7 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import { Pencil } from 'lucide-react'
 import Modal from '../../components/common/Modal'
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import { normalizeApiRules } from '../../services/flow/priorityApiMatch'
+import { useEditor } from '../context/EditorContext'
+import { campaignEditPath } from '../../utils/routes'
 
 const inputClass =
   'w-full px-3 py-2 text-xs font-semibold rounded-xl border border-gray-200 bg-gray-50/20 text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200'
@@ -22,21 +25,44 @@ function getCampaignPageOptions() {
   }))
 }
 
+function usePageEditHref(pageType) {
+  const { campaignId, countryCode, operatorCode, funnelPageType } = useEditor()
+  if (!campaignId || !pageType) return null
+  if (String(pageType).toUpperCase() === String(funnelPageType || '').toUpperCase()) {
+    return null
+  }
+  return campaignEditPath(countryCode, operatorCode, campaignId, pageType)
+}
+
 function PageSelect({ value, onChange, label = 'Page' }) {
   const options = getCampaignPageOptions()
   const matched = options.find((o) => o.id.toLowerCase() === String(value || '').toLowerCase())
   const selected = matched?.id || options[0]?.id || 'OTP'
+  const editHref = usePageEditHref(selected)
 
   return (
-    <Field label={label}>
-      <select className={inputClass} value={selected} onChange={(e) => onChange(e.target.value)}>
-        {options.map((page) => (
-          <option key={page.id} value={page.id}>
-            {page.label}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <div className="space-y-1.5">
+      <Field label={label}>
+        <select className={inputClass} value={selected} onChange={(e) => onChange(e.target.value)}>
+          {options.map((page) => (
+            <option key={page.id} value={page.id}>
+              {page.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {editHref && (
+        <a
+          href={editHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+        >
+          <Pencil className="w-3 h-3" />
+          Edit {PAGE_TYPE_LABELS[selected] || selected} page
+        </a>
+      )}
+    </div>
   )
 }
 

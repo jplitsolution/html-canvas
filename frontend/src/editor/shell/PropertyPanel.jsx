@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Pencil } from 'lucide-react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
 import { getFlowElementInfo } from '../utils/funnelGuide';
@@ -19,7 +19,7 @@ import {
   TEXT_SIZE_STEPS,
 } from '../utils/spacingUtils';
 import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns';
-import useStore from '../../store/useStore';
+import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
@@ -334,25 +334,39 @@ function CampaignPageSelect({
   href,
   onChange,
   label = 'Page name',
+  editHref,
 }) {
   const options = getCampaignPageOptions()
   const matched = options.find((o) => o.id.toLowerCase() === (href || '').toLowerCase())
   const value = matched?.id || options[0]?.id || 'OTP'
 
   return (
-    <Field label={label}>
-      <select
-        className={inputClass}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        {options.map((page) => (
-          <option key={page.id} value={page.id}>
-            {page.label}
-          </option>
-        ))}
-      </select>
-    </Field>
+    <div className="space-y-1.5">
+      <Field label={label}>
+        <select
+          className={inputClass}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {options.map((page) => (
+            <option key={page.id} value={page.id}>
+              {page.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {editHref && (
+        <a
+          href={editHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+        >
+          <Pencil className="w-3 h-3" />
+          Edit {PAGE_TYPE_LABELS[value] || value} page
+        </a>
+      )}
+    </div>
   )
 }
 
@@ -442,9 +456,22 @@ function ClickActionEditor({
   update,
 }) {
   const [chainOpenSignal, setChainOpenSignal] = useState(0)
+  const { campaignId, countryCode, operatorCode, funnelPageType } = useEditor()
   const attrs = selected.getAttributes() || {}
   const href = attrs.href || ''
   const type = getClickActionType(attrs)
+
+  const pageEditHref = (() => {
+    if (type !== 'page' || !campaignId) return null
+    const options = getCampaignPageOptions()
+    const matched = options.find((o) => o.id.toLowerCase() === (href || '').toLowerCase())
+    const pageId = matched?.id || options[0]?.id || 'OTP'
+    // Don't offer edit for the page currently open in the canvas
+    if (String(pageId).toUpperCase() === String(funnelPageType || '').toUpperCase()) {
+      return null
+    }
+    return campaignEditPath(countryCode, operatorCode, campaignId, pageId)
+  })()
 
   const setClickType = (next) => {
     if (next === 'chain') {
@@ -540,6 +567,7 @@ function ClickActionEditor({
         <CampaignPageSelect
           href={href}
           editor={editor}
+          editHref={pageEditHref}
           onChange={(pageId) => {
             selected.addAttributes({ href: pageId })
             update()

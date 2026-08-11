@@ -17,8 +17,8 @@ export const VERIFICATION_MODES = [
   {
     id: 'OTP_ONLY',
     label: 'OTP only',
-    hint: 'No landing HE. OTP path only — land on HOME first, or skip HOME and open OTP directly.',
-    pathHint: 'HOME → OTP → Confirm (or OTP → Thank you)',
+    hint: 'No landing HE. Land on HOME, OTP page, or expose public send/verify APIs (mediator).',
+    pathHint: 'HOME → OTP → Confirm (or OTP → Thank you), or API expose',
   },
   {
     id: 'BOTH',
@@ -107,19 +107,36 @@ export const DEFAULT_FLOWS = {
   },
 }
 
+/** True when OTP_ONLY campaign is API-mediator only (no WAP pages). */
+export function isApiExposeEntry(entryPage) {
+  return String(entryPage || '').toUpperCase() === 'API_EXPOSE'
+}
+
 /**
  * Build default flow for a mode.
  * OTP_ONLY supports:
- *   entryPage 'HOME' | 'OTP'
+ *   entryPage 'HOME' | 'OTP' | 'API_EXPOSE'
  *   afterOtp 'CONFIRM' (pack/subscribe page) | 'THANKYOU' (pin-verify = subscribe)
+ *   (afterOtp ignored when entryPage is API_EXPOSE)
  */
 export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
   const normalized = normalizeModeId(mode)
   const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
-  const otpEntry = String(entryPage || '').toUpperCase() === 'OTP'
+  const entry = String(entryPage || '').toUpperCase()
+  const otpEntry = entry === 'OTP'
+  const apiExpose = entry === 'API_EXPOSE'
   const skipConfirm = String(afterOtp || '').toUpperCase() === 'THANKYOU'
 
   if (normalized === 'OTP_ONLY') {
+    if (apiExpose) {
+      return {
+        version: 1,
+        entryPage: 'API_EXPOSE',
+        nodes: [],
+        edges: [],
+      }
+    }
+
     const outcomes = OUTCOME_NODES.map((n) => ({ ...n }))
     if (skipConfirm) {
       // Only pages reachable from OTP — avoid validate() unreachable errors.
@@ -235,9 +252,10 @@ const CONDITION_LABELS = {
 }
 
 function resolveEntryPage(config) {
+  const wanted = String(config?.entryPage || '').toUpperCase()
+  if (wanted === 'API_EXPOSE') return 'API_EXPOSE'
   const nodes = config?.nodes || []
   if (!nodes.length) return 'HOME'
-  const wanted = String(config?.entryPage || '').toUpperCase()
   if (wanted && nodes.some((n) => n.pageType === wanted)) return wanted
   if (nodes.some((n) => n.pageType === 'HOME')) return 'HOME'
   return nodes[0].pageType
@@ -265,6 +283,22 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
   const modeMeta =
     VERIFICATION_MODES.find((m) => m.id === mode) ||
     VERIFICATION_MODES.find((m) => m.id === 'BOTH')
+
+  if (mode === 'OTP_ONLY' && isApiExposeEntry(flowConfig?.entryPage)) {
+    return {
+      mode,
+      modeLabel: modeMeta.label,
+      modeHint: modeMeta.hint,
+      entryPage: 'API_EXPOSE',
+      steps: [
+        { id: 'expose_send', label: 'OTP send API' },
+        { id: 'expose_verify', label: 'OTP verify API' },
+      ],
+      edges: [],
+      note: 'API mediator only — no WAP pages. External clients call the exposed send/verify URLs.',
+    }
+  }
+
   const config = flowConfig?.nodes?.length
     ? flowConfig
     : DEFAULT_FLOWS[mode] || DEFAULT_FLOWS.BOTH
@@ -353,6 +387,8 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     note:
       entryPage === 'OTP'
         ? 'Landing opens OTP directly (HOME skipped). Use Advanced flow to remap edges.'
-        : 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
+        : entryPage === 'API_EXPOSE'
+          ? 'API mediator only — no WAP pages.'
+          : 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
   }
 }

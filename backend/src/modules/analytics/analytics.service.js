@@ -480,7 +480,12 @@ export const createAnalyticsService = () => {
         statusLabel = checksubStatusLabel(responseBody, row.success);
       } else if (row.callType === 'priority') {
         statusLabel = checksubStatusLabel(responseBody, row.success);
-      } else if (row.callType === 'otp_send' || row.callType === 'otp_verify') {
+      } else if (
+        row.callType === 'otp_send' ||
+        row.callType === 'otp_verify' ||
+        row.callType === 'otp_expose_send_in' ||
+        row.callType === 'otp_expose_verify_in'
+      ) {
         const nestedOtp = responseBody?.data ?? responseBody ?? {};
         statusLabel =
           row.success === false
@@ -521,6 +526,8 @@ export const createAnalyticsService = () => {
               }
             : row.callType === 'otp_send' ||
                 row.callType === 'otp_verify' ||
+                row.callType === 'otp_expose_send_in' ||
+                row.callType === 'otp_expose_verify_in' ||
                 row.callType === 'subscribe'
               ? {
                   response: nested.response ?? null,
@@ -529,6 +536,7 @@ export const createAnalyticsService = () => {
                   responseMessage:
                     nested.responseMessage ||
                     nested.errorMessage ||
+                    nested.message ||
                     responseBody?.responseMessage ||
                     null,
                   skipped: nested.skipped ?? null,
@@ -556,6 +564,10 @@ export const createAnalyticsService = () => {
           summary: c.summary,
           responseStatus: c.responseStatus,
           requestUrl: c.requestUrl,
+          requestBody: c.requestBody,
+          responseBody: c.responseBody,
+          errorMessage: c.errorMessage,
+          msisdn: c.msisdn,
         },
         createdAt: c.createdAt,
         kind: 'api',

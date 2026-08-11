@@ -27,6 +27,18 @@ export function createDetectMsisdn(deps) {
   const detectMsisdn = async (input) => {
     const hintPhone = heService.normalizePhone(input.phone || '');
     const campaign = await resolveCampaign(input).catch(() => null);
+
+    if (campaign) {
+      const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
+      if (flowEngineService.isApiExposeFlow(flowConfig)) {
+        const err = new Error(
+          'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/send and /verify — no WAP subscription pages.',
+        );
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
     let apiConfig = null;
     let serviceId = campaign?.serviceId || '';
     let heMeta = {

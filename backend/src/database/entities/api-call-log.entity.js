@@ -10,6 +10,8 @@ export const ApiCallType = {
   PRIORITY: 'priority',
   OTP_SEND: 'otp_send',
   OTP_VERIFY: 'otp_verify',
+  OTP_EXPOSE_SEND_IN: 'otp_expose_send_in',
+  OTP_EXPOSE_VERIFY_IN: 'otp_expose_verify_in',
   HE_TOKEN: 'he_token',
   HE_MSISDN: 'he_msisdn',
   HE_RESOLVE: 'he_resolve',

@@ -58,6 +58,10 @@ export const createFlowEngineService = () => {
     return VERIFICATION_MODES.includes(upper) ? upper : null;
   };
 
+  /** OTP_ONLY campaign that exposes public send/verify APIs (no WAP funnel). */
+  const isApiExposeFlow = (config) =>
+    String(config?.entryPage || '').toUpperCase() === 'API_EXPOSE';
+
   const getDefaultFlowConfig = (mode = 'BOTH') => {
     const node = (pageType, x, y) => ({
       id: pageType,
@@ -153,6 +157,9 @@ export const createFlowEngineService = () => {
   };
 
   const getEntryPage = (config) => {
+    if (isApiExposeFlow(config)) {
+      return 'API_EXPOSE';
+    }
     if (!config || !config.nodes || config.nodes.length === 0) {
       return CampaignPageType.HOME;
     }
@@ -207,6 +214,14 @@ export const createFlowEngineService = () => {
   };
 
   const stripUnreachableNodes = (config, _mode) => {
+    if (isApiExposeFlow(config)) {
+      return {
+        version: config.version || 1,
+        entryPage: 'API_EXPOSE',
+        nodes: Array.isArray(config.nodes) ? config.nodes : [],
+        edges: Array.isArray(config.edges) ? config.edges : [],
+      };
+    }
     const entryPage = getEntryPage(config);
     const entryNode = config.nodes.find((n) => n.pageType === entryPage);
     if (!entryNode) return config;
@@ -230,6 +245,16 @@ export const createFlowEngineService = () => {
   };
 
   const validate = (config, mode) => {
+    if (isApiExposeFlow(config)) {
+      if (mode && mode !== 'OTP_ONLY') {
+        return {
+          ok: false,
+          errors: ['API expose entry requires verification mode OTP_ONLY.'],
+        };
+      }
+      return { ok: true, errors: [] };
+    }
+
     const errors = [];
     const pageTypes = new Set(config.nodes.map((n) => n.pageType));
     const entryPage = getEntryPage(config);
@@ -272,6 +297,7 @@ export const createFlowEngineService = () => {
   return {
     parseFlowConfig,
     normalizeMode,
+    isApiExposeFlow,
     getDefaultFlowConfig,
     getEntryPage,
     reachableNodeIds,

@@ -51,7 +51,10 @@ export const createApiCallLogService = () => {
       eventType: `API_${String(saved.callType || '').toUpperCase()}`,
       status: statusLabel,
       requestUrl: saved.requestUrl,
+      requestBody: saved.requestBody,
+      responseBody: saved.responseBody,
       responseStatus: saved.responseStatus,
+      errorMessage: saved.errorMessage,
       success: saved.success,
       timestamp: new Date().toISOString(),
     });

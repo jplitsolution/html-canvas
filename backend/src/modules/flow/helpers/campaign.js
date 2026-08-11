@@ -234,6 +234,13 @@ export function createFlowCampaignFns(deps) {
       throw err;
     }
     const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
+    if (flowEngineService.isApiExposeFlow(flowConfig)) {
+      const err = new Error(
+        'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/send and /verify — no WAP subscription pages.',
+      );
+      err.statusCode = 400;
+      throw err;
+    }
     return {
       campaignId: campaign.id,
       entryPage: flowEngineService.getEntryPage(flowConfig),

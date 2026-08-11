@@ -115,6 +115,9 @@ export default function CampaignBuilder() {
           breadcrumbHref={detailHref}
           initialData={initialData}
           funnelPageType={pageType}
+          campaignId={id}
+          countryCode={countryCode}
+          operatorCode={operatorCode}
           onSave={handleEditorSave}
           onPreview={handlePreview}
           saveHandler={saveHandler}

@@ -23,6 +23,25 @@ const clientIpFromReq = (req) => {
   return Array.isArray(clientIp) ? clientIp[0] : clientIp;
 };
 
+/** Prefer query (partner-style msisdn/otp), fall back to JSON body. */
+const pickExposeField = (req, ...keys) => {
+  const q = req.query || {};
+  const b = req.body || {};
+  for (const key of keys) {
+    const fromQuery = q[key];
+    if (fromQuery != null && String(fromQuery).trim() !== '') {
+      return String(fromQuery).trim();
+    }
+  }
+  for (const key of keys) {
+    const fromBody = b[key];
+    if (fromBody != null && String(fromBody).trim() !== '') {
+      return String(fromBody).trim();
+    }
+  }
+  return '';
+};
+
 export const otpController = {
   send: asyncHandler(async (req, res) => {
     const body = req.body || {};
@@ -49,6 +68,43 @@ export const otpController = {
         campaignId: body.campaignId,
       },
       clientIpFromReq(req),
+    );
+    res.json(data);
+  }),
+
+  exposeSend: asyncHandler(async (req, res) => {
+    const campaignId = req.params.campaignId;
+    const phone = pickExposeField(req, 'msisdn', 'phone');
+    const pack = pickExposeField(req, 'pack') || 'daily';
+    const data = await otpService.exposeSendOtp(
+      {
+        campaignId,
+        phone,
+        pack,
+      },
+      clientIpFromReq(req),
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
+    );
+    res.json(data);
+  }),
+
+  exposeVerify: asyncHandler(async (req, res) => {
+    const campaignId = req.params.campaignId;
+    const phone = pickExposeField(req, 'msisdn', 'phone');
+    const otp = pickExposeField(req, 'otp', 'otpCode', 'pin');
+    const data = await otpService.exposeVerifyOtp(
+      {
+        campaignId,
+        phone,
+        otpCode: otp,
+        otp,
+      },
+      clientIpFromReq(req),
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
     );
     res.json(data);
   }),

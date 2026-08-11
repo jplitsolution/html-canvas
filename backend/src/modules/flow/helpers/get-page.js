@@ -45,6 +45,15 @@ export function createGetPage(deps) {
       throw err;
     }
 
+    const flowConfigEarly = flowEngineService.parseFlowConfig(campaign.flowConfig);
+    if (flowEngineService.isApiExposeFlow(flowConfigEarly)) {
+      const err = new Error(
+        'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/send and /verify — no WAP subscription pages.',
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
     await assertTrackingAssignmentAvailable(
       campaign,
       input.vid,

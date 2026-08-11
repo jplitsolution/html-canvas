@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Workflow, ArrowRight, GitBranch } from 'lucide-react'
+import { Workflow, ArrowRight, GitBranch, Copy, Check } from 'lucide-react'
 import Button from '../ui/Button'
 import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import {
@@ -9,8 +9,48 @@ import {
   buildDefaultFlow,
   buildFlowPathSummary,
   resolveAfterOtpTarget,
+  isApiExposeEntry,
 } from './verificationModes'
 import { campaignFlowPath, resolveMarketCodes } from '../../utils/routes'
+
+function resolveSavedEntry(flowConfig) {
+  const entry = String(flowConfig?.entryPage || 'HOME').toUpperCase()
+  if (entry === 'API_EXPOSE') return 'API_EXPOSE'
+  if (entry === 'OTP') return 'OTP'
+  return 'HOME'
+}
+
+function CopyableUrl({ label, url }) {
+  const [copied, setCopied] = useState(false)
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // ignore
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] font-medium text-fg">{label}</p>
+      <div className="flex items-start gap-2">
+        <code className="flex-1 text-[11px] font-mono text-fg break-all rounded-md border border-border bg-bg-elevated px-2.5 py-2">
+          {url}
+        </code>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2 py-1.5 text-[11px] text-fg-muted hover:text-fg"
+          title="Copy URL"
+        >
+          {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+    </div>
+  )
+}
 
 /**
  * Mode picker + read-only signup path on Campaign Detail.
@@ -18,10 +58,7 @@ import { campaignFlowPath, resolveMarketCodes } from '../../utils/routes'
  */
 function CampaignFlowSummary({ campaign, onSaveMode }) {
   const currentMode = normalizeModeId(campaign?.verificationMode)
-  const savedEntry =
-    String(campaign?.flowConfig?.entryPage || 'HOME').toUpperCase() === 'OTP'
-      ? 'OTP'
-      : 'HOME'
+  const savedEntry = resolveSavedEntry(campaign?.flowConfig)
   const savedAfterOtp = resolveAfterOtpTarget(campaign?.flowConfig)
   const [draftMode, setDraftMode] = useState(currentMode)
   const [draftEntry, setDraftEntry] = useState(savedEntry)
@@ -44,7 +81,10 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     }
     return buildDefaultFlow(draftMode, {
       entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
-      afterOtp: draftMode === 'OTP_ONLY' ? draftAfterOtp : 'CONFIRM',
+      afterOtp:
+        draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
+          ? draftAfterOtp
+          : 'CONFIRM',
     })
   }, [
     draftMode,
@@ -67,7 +107,8 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
   const dirty =
     draftMode !== currentMode ||
     (draftMode === 'OTP_ONLY' &&
-      (draftEntry !== savedEntry || draftAfterOtp !== savedAfterOtp))
+      (draftEntry !== savedEntry ||
+        (!isApiExposeEntry(draftEntry) && draftAfterOtp !== savedAfterOtp)))
 
   const handleModeChange = (nextMode) => {
     setDraftMode(nextMode)
@@ -83,7 +124,10 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     try {
       const flowConfig = buildDefaultFlow(draftMode, {
         entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
-        afterOtp: draftMode === 'OTP_ONLY' ? draftAfterOtp : 'CONFIRM',
+        afterOtp:
+          draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
+            ? draftAfterOtp
+            : 'CONFIRM',
       })
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
@@ -94,6 +138,16 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
   const labelFor = (pageType) => PAGE_TYPE_LABELS[pageType] || pageType
   const { countryCode, operatorCode } = resolveMarketCodes({}, campaign)
   const advancedPath = campaignFlowPath(countryCode, operatorCode, campaign?.id)
+  const showApiExposeDocs = draftMode === 'OTP_ONLY' && isApiExposeEntry(draftEntry)
+  const origin =
+    typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'
+  const campaignId = campaign?.id
+  const sendUrl = campaignId
+    ? `${origin}/api/otp/${campaignId}/send?msisdn=`
+    : `${origin}/api/otp/{campaignId}/send?msisdn=`
+  const verifyUrl = campaignId
+    ? `${origin}/api/otp/${campaignId}/verify?msisdn=&otp=`
+    : `${origin}/api/otp/{campaignId}/verify?msisdn=&otp=`
 
   return (
     <div className="surface-card overflow-hidden">
@@ -111,7 +165,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                   (page / URL / Priority) can override this for individual buttons.
                 </p>
               </div>
-              {campaign?.id && (
+              {campaign?.id && !showApiExposeDocs && (
                 <Link
                   to={advancedPath}
                   className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline shrink-0 pt-0.5"
@@ -154,7 +208,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
           <>
             <div>
               <p className="text-xs font-medium text-fg mb-2">Landing page</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button
                   type="button"
                   onClick={() => setDraftEntry('HOME')}
@@ -183,42 +237,85 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                     Skip HOME — open PIN page on landing.
                   </p>
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setDraftEntry('API_EXPOSE')}
+                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    draftEntry === 'API_EXPOSE'
+                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-fg">API expose</p>
+                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                    No WAP pages — expose public OTP send/verify URLs.
+                  </p>
+                </button>
               </div>
             </div>
 
-            <div>
-              <p className="text-xs font-medium text-fg mb-2">After OTP verified</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setDraftAfterOtp('CONFIRM')}
-                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                    draftAfterOtp === 'CONFIRM'
-                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
-                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-fg">Confirm page</p>
-                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Pack / subscribe CTA after PIN (classic funnel).
-                  </p>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDraftAfterOtp('THANKYOU')}
-                  className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                    draftAfterOtp === 'THANKYOU'
-                      ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
-                      : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-fg">Skip Confirm</p>
-                  <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    PIN verify = subscribe → Thank you / portal (no Confirm).
-                  </p>
-                </button>
+            {!isApiExposeEntry(draftEntry) && (
+              <div>
+                <p className="text-xs font-medium text-fg mb-2">After OTP verified</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDraftAfterOtp('CONFIRM')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      draftAfterOtp === 'CONFIRM'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">Confirm page</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      Pack / subscribe CTA after PIN (classic funnel).
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDraftAfterOtp('THANKYOU')}
+                    className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                      draftAfterOtp === 'THANKYOU'
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-fg">Skip Confirm</p>
+                    <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                      PIN verify = subscribe → Thank you / portal (no Confirm).
+                    </p>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
+
+            {showApiExposeDocs && (
+              <div className="rounded-lg border border-border bg-bg-muted/40 px-3.5 py-3 space-y-3">
+                <div>
+                  <p className="text-xs font-semibold text-fg">Exposed OTP APIs</p>
+                  <p className="text-[11px] text-fg-muted mt-0.5">
+                    No auth. We log the inbound request, forward to the Partner OTP URLs in API
+                    settings, and log the partner response. Configure send/verify URLs in Campaign
+                    API → Partner OTP.
+                  </p>
+                </div>
+                <CopyableUrl label="GET/POST — send OTP (query)" url={sendUrl} />
+                <CopyableUrl label="GET/POST — verify OTP (query)" url={verifyUrl} />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[11px] font-medium text-fg mb-1">Send params</p>
+                    <pre className="text-[11px] font-mono text-fg-muted rounded-md border border-border bg-bg-elevated px-2.5 py-2 overflow-x-auto">{`?msisdn=2547…
+(or body: { "msisdn": "…", "pack": "daily" })`}</pre>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-fg mb-1">Verify params</p>
+                    <pre className="text-[11px] font-mono text-fg-muted rounded-md border border-border bg-bg-elevated px-2.5 py-2 overflow-x-auto">{`?msisdn=2547…&otp=1234
+(or body: { "msisdn": "…", "otp": "1234" })`}</pre>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -227,7 +324,9 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
             <p className="text-[11px] text-warning">
               Saving resets the signup path to the default for this mode
               {draftMode === 'OTP_ONLY'
-                ? ` (${draftEntry} landing → ${draftAfterOtp === 'THANKYOU' ? 'Thank you' : 'Confirm'})`
+                ? isApiExposeEntry(draftEntry)
+                  ? ' (API expose — mediator only)'
+                  : ` (${draftEntry} landing → ${draftAfterOtp === 'THANKYOU' ? 'Thank you' : 'Confirm'})`
                 : ''}
               .
             </p>

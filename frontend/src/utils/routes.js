@@ -2,9 +2,9 @@
  * Canonical admin URLs:
  *   /markets
  *   /markets/:countryCode/:operatorCode
- *   /markets/:countryCode/:operatorCode/campaigns/:id
+ *   /markets/:countryCode/:operatorCode/campaigns/:id  (+ #flow for Flow Builder)
  *   /markets/:countryCode/:operatorCode/campaigns/:id/edit/:pageType
- *   /markets/.../campaigns/:id/flow  → Advanced Flow Builder
+ *   /markets/.../campaigns/:id/flow  → redirects to campaign detail #flow
  */
 
 export function marketPath(countryCode, operatorCode) {
