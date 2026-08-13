@@ -357,7 +357,7 @@ function FlowCampaignSettings({ campaignId }) {
                 >
                   <p className="text-sm font-semibold text-fg">On OTP verify</p>
                   <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Pin = subscribe / Skip Confirm — queue right after OTP continue.
+                    Pin = subscribe / Skip HOME — queue right after OTP continue.
                   </p>
                 </button>
                 <button

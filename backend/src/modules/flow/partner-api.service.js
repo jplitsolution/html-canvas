@@ -8,6 +8,7 @@ import {
 import {
   fillSubscribeTemplate,
   mapSubServiceId,
+  sanitizeSubscribeParam,
 } from './helpers/pack-url.js';
 
 export const createPartnerApiService = () => {
@@ -25,17 +26,19 @@ export const createPartnerApiService = () => {
 
   const buildVars = (input) => {
     const phone = input.phone ?? '';
+    const planId = input.planId ?? '';
     // Never expose click_id / campid / rcid to third-party partner URLs —
     // those stay on our visit / api_call_logs only.
     return {
       phone,
       msisdn: phone,
-      serviceId: input.serviceId ?? '',
+      serviceId: sanitizeSubscribeParam(input.serviceId),
       country: input.country ?? '',
       operator: input.operator ?? '',
-      planId: input.planId ?? '',
-      pack: input.planId ?? 'daily',
-      subServiceId: mapSubServiceId(input.planId),
+      planId,
+      pack: planId || 'daily',
+      subServiceId:
+        sanitizeSubscribeParam(input.subServiceId) || mapSubServiceId(planId),
     };
   };
 

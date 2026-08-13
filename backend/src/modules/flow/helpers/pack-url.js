@@ -25,6 +25,15 @@ export const mapSubServiceId = (pack) => {
   return 'HDaily';
 };
 
+/** Button-level pack params — never a full URL. */
+export const sanitizeSubscribeParam = (raw, max = 80) => {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^(javascript|data|https?):/i.test(s)) return '';
+  if (/\{\{|\}\}/.test(s)) return '';
+  return s.slice(0, max);
+};
+
 /** Substitute {{msisdn}} / {{pack}} / {{planId}} / {{subServiceId}} etc. */
 export const fillSubscribeTemplate = (template, vars = {}) => {
   let result = String(template || '');

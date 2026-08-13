@@ -71,14 +71,31 @@ function normalizePack(value) {
   return VALID_PACKS.includes(pack) ? pack : 'daily'
 }
 
-/** Subscribe URL override + postback flag from a pack / subscribe button. */
+/** Pack params + postback flag from a pack / subscribe button. */
 function packSubscribeExtras(node) {
-  const subscribeUrl = String(node?.getAttribute?.('data-subscribe-url') || '').trim()
+  const serviceId = String(node?.getAttribute?.('data-service-id') || '').trim()
+  const subServiceId = String(node?.getAttribute?.('data-sub-service-id') || '').trim()
   const postbackAttr = node?.getAttribute?.('data-postback')
+  const idOk = (v) => v && !/^https?:/i.test(v) && !/\{\{|\}\}/.test(v)
   return {
-    ...(subscribeUrl ? { subscribeUrl } : {}),
+    ...(idOk(serviceId) ? { serviceId } : {}),
+    ...(idOk(subServiceId) ? { subServiceId } : {}),
     queuePostback: postbackAttr === '0' || postbackAttr === 'false' ? false : true,
   }
+}
+
+function isPackSubscribeAction(action) {
+  const a = String(action || '').toUpperCase()
+  return a === 'SUBSCRIBE_ROUTE' || a === 'CONFIRM' || a === 'SUBSCRIBE'
+}
+
+/** True when data-pack is only a picker (not subscribe and not a URL/page jump). */
+function shouldSelectPackOnly(el) {
+  if (!el?.hasAttribute?.('data-pack')) return false
+  if (isPackSubscribeAction(el.getAttribute('data-action'))) return false
+  const href = (el.getAttribute('href') || '').trim()
+  if (hrefIsNavigationTarget(href)) return false
+  return true
 }
 
 function findActionTarget(event) {
@@ -90,12 +107,11 @@ function findActionTarget(event) {
         ? node
         : node.closest('[data-pack]')
       const packAction = String(packEl.getAttribute('data-action') || '').toUpperCase()
-      if (
-        packAction === 'SUBSCRIBE_ROUTE' ||
-        packAction === 'CONFIRM' ||
-        packAction === 'SUBSCRIBE'
-      ) {
+      if (isPackSubscribeAction(packAction)) {
         return { node: packEl, action: packAction }
+      }
+      if (hrefIsNavigationTarget(packEl.getAttribute('href'))) {
+        return { node: packEl, action: null }
       }
       continue
     }
@@ -131,5 +147,7 @@ export {
   hrefIsNavigationTarget,
   normalizePack,
   packSubscribeExtras,
+  isPackSubscribeAction,
+  shouldSelectPackOnly,
   findActionTarget,
 }

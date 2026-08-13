@@ -65,7 +65,7 @@ export function createFlowRouting(deps) {
     if (mode === 'HEADER_INJECTION') {
       return {
         nextPage: resolved
-          ? fromGraph('HEADER_RESOLVED', CampaignPageType.CONFIRM)
+          ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
           : fromGraph('HEADER_UNRESOLVED', CampaignPageType.ERROR),
         resolvedPhone,
       };
@@ -73,7 +73,7 @@ export function createFlowRouting(deps) {
   
     return {
       nextPage: resolved
-        ? fromGraph('HEADER_RESOLVED', CampaignPageType.CONFIRM)
+        ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
         : fromGraph('HEADER_UNRESOLVED', CampaignPageType.OTP),
       resolvedPhone,
     };

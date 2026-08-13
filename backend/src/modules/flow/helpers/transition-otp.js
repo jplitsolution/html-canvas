@@ -76,9 +76,9 @@ export function createHandleOtpContinue(deps) {
         flowConfig,
         CampaignPageType.OTP,
         'OTP_VERIFIED',
-      ) || CampaignPageType.CONFIRM;
+      ) || CampaignPageType.HOME;
 
-    if (isPacksOnHome(campaign)) {
+    if (isPacksOnHome(campaign) && nextPage === CampaignPageType.CONFIRM) {
       nextPage = CampaignPageType.HOME;
     }
 

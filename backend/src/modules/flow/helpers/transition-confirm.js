@@ -58,6 +58,8 @@ export function createHandleConfirm(deps) {
         clickId: confirmAttr.clickId,
         rcid: confirmAttr.rcid,
         pack: selectedPack,
+        serviceId: input.serviceId || serviceId,
+        subServiceId: input.subServiceId || undefined,
       },
     );
     if (shouldRegisterPostbackAt?.(campaign, 'confirm', {
@@ -174,6 +176,8 @@ export function createHandleConfirm(deps) {
       ...partnerCtx,
       planId: selectedPack,
       subscriptionUrl,
+      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
       subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
     });
 

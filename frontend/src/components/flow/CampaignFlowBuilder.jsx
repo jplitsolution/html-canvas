@@ -25,7 +25,7 @@ import {
   buildDefaultFlow,
   normalizeModeId,
   isApiExposeEntry,
-  resolveAfterOtpTarget,
+  resolveAfterIdentityTarget,
 } from './verificationModes'
 import {
   START_NODE_ID,
@@ -107,7 +107,7 @@ function CampaignFlowBuilder({
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [mode, setMode] = useState('BOTH')
   const [entryPage, setEntryPage] = useState('HOME')
-  const [afterOtp, setAfterOtp] = useState('CONFIRM')
+  const [afterIdentity, setAfterIdentity] = useState('HOME')
   const [startConfig, setStartConfig] = useState(() => defaultStartConfig('BOTH'))
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -119,38 +119,31 @@ function CampaignFlowBuilder({
   const [copiedApi, setCopiedApi] = useState('')
 
   const applyFlowTemplate = useCallback(
-    (nextMode, nextEntry, nextAfterOtp) => {
+    (nextMode, nextEntry, nextAfter) => {
       const def = buildDefaultFlow(nextMode, {
         entryPage: nextMode === 'OTP_ONLY' ? nextEntry : 'HOME',
-        afterOtp:
-          nextMode === 'OTP_ONLY' && !isApiExposeEntry(nextEntry)
-            ? nextAfterOtp
-            : 'CONFIRM',
+        afterIdentity: isApiExposeEntry(nextEntry) ? 'HOME' : nextAfter,
       })
       const nextStart = defaultStartConfig(nextMode)
       setStartConfig(nextStart)
       setNodes(toRfNodes(def, nextStart, nextMode))
       setEdges(toRfEdges(def, nextStart, nextMode))
       setEntryPage(def.entryPage || 'HOME')
-      setAfterOtp(
-        nextMode === 'OTP_ONLY' && !isApiExposeEntry(def.entryPage)
-          ? resolveAfterOtpTarget(def)
-          : 'CONFIRM',
-      )
+      setAfterIdentity(resolveAfterIdentityTarget(def))
       setErrors([])
     },
     [setNodes, setEdges],
   )
 
   const handleResetFlow = useCallback(() => {
-    applyFlowTemplate(mode, entryPage, afterOtp)
+    applyFlowTemplate(mode, entryPage, afterIdentity)
     addToast('Flow graph reset to default template', 'success')
-  }, [mode, entryPage, afterOtp, applyFlowTemplate, addToast])
+  }, [mode, entryPage, afterIdentity, applyFlowTemplate, addToast])
 
   const handleModeChange = useCallback(
     (newMode) => {
       setMode(newMode)
-      applyFlowTemplate(newMode, 'HOME', 'CONFIRM')
+      applyFlowTemplate(newMode, newMode === 'OTP_ONLY' ? 'OTP' : 'HOME', 'HOME')
     },
     [applyFlowTemplate],
   )
@@ -160,18 +153,18 @@ function CampaignFlowBuilder({
       const next = String(nextEntry || 'HOME').toUpperCase()
       setEntryPage(next)
       if (mode === 'OTP_ONLY') {
-        applyFlowTemplate('OTP_ONLY', next, afterOtp)
+        applyFlowTemplate('OTP_ONLY', next, afterIdentity)
       }
     },
-    [mode, afterOtp, applyFlowTemplate],
+    [mode, afterIdentity, applyFlowTemplate],
   )
 
-  const handleAfterOtpChange = useCallback(
+  const handleAfterIdentityChange = useCallback(
     (nextAfter) => {
-      const next = String(nextAfter || 'CONFIRM').toUpperCase()
-      setAfterOtp(next)
-      if (mode === 'OTP_ONLY' && !isApiExposeEntry(entryPage)) {
-        applyFlowTemplate('OTP_ONLY', entryPage, next)
+      const next = String(nextAfter || 'HOME').toUpperCase()
+      setAfterIdentity(next)
+      if (!isApiExposeEntry(entryPage)) {
+        applyFlowTemplate(mode, entryPage, next)
       }
     },
     [mode, entryPage, applyFlowTemplate],
@@ -188,7 +181,7 @@ function CampaignFlowBuilder({
         const nextStart = normalizeStartConfig(res.flowConfig?.startConfig, nextMode)
         setMode(nextMode)
         setEntryPage(res.flowConfig?.entryPage || 'HOME')
-        setAfterOtp(resolveAfterOtpTarget(res.flowConfig))
+        setAfterIdentity(resolveAfterIdentityTarget(res.flowConfig))
         setStartConfig(nextStart)
         setNodes(toRfNodes(res.flowConfig, nextStart, nextMode))
         setEdges(toRfEdges(res.flowConfig, nextStart, nextMode))
@@ -607,12 +600,12 @@ function CampaignFlowBuilder({
                   {
                     id: 'HOME',
                     title: 'HOME first',
-                    hint: 'Show intro / Subscribe CTA, then OTP.',
+                    hint: 'Show intro, then OTP, then HOME packs.',
                   },
                   {
                     id: 'OTP',
                     title: 'OTP first',
-                    hint: 'Skip HOME — open PIN page on landing.',
+                    hint: 'Skip HOME on landing — PIN first, then HOME packs.',
                   },
                   {
                     id: 'API_EXPOSE',
@@ -643,30 +636,30 @@ function CampaignFlowBuilder({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => handleAfterOtpChange('CONFIRM')}
+                    onClick={() => handleAfterIdentityChange('HOME')}
                     className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                      afterOtp === 'CONFIRM'
+                      afterIdentity === 'HOME' || afterIdentity === 'CONFIRM'
                         ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                         : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
                     }`}
                   >
-                    <p className="text-sm font-semibold text-fg">Confirm page</p>
+                    <p className="text-sm font-semibold text-fg">HOME page</p>
                     <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                      Pack / subscribe CTA after PIN (classic funnel).
+                      Pack / subscribe CTAs on HOME after PIN.
                     </p>
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleAfterOtpChange('THANKYOU')}
+                    onClick={() => handleAfterIdentityChange('THANKYOU')}
                     className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                      afterOtp === 'THANKYOU'
+                      afterIdentity === 'THANKYOU'
                         ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                         : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
                     }`}
                   >
-                    <p className="text-sm font-semibold text-fg">Skip Confirm</p>
+                    <p className="text-sm font-semibold text-fg">Skip HOME</p>
                     <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                      PIN verify = subscribe → Thank you / portal (no Confirm).
+                      PIN verify → Thank you / portal (no pack page).
                     </p>
                   </button>
                 </div>
@@ -712,7 +705,56 @@ function CampaignFlowBuilder({
           </>
         )}
 
-        {mode !== 'OTP_ONLY' && (
+        {(mode === 'HEADER_INJECTION' || mode === 'BOTH') && (
+          <div>
+            <p className="text-xs font-medium text-fg mb-2">
+              {mode === 'BOTH' ? 'After number resolved (HE or OTP)' : 'After HE resolved'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleAfterIdentityChange('HOME')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  afterIdentity === 'HOME' || afterIdentity === 'CONFIRM'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">HOME page</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Show HOME with pack / subscribe CTAs.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAfterIdentityChange('THANKYOU')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  afterIdentity === 'THANKYOU'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">Skip HOME</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Number resolved → Thank you / portal (no pack page).
+                </p>
+              </button>
+            </div>
+            {mode === 'HEADER_INJECTION' && (
+              <p className="text-[11px] text-fg-muted mt-2 leading-snug">
+                If HE finds no number → Error page (and fail/CG URL if set). OTP is not used in
+                this mode.
+              </p>
+            )}
+            {mode === 'BOTH' && (
+              <p className="text-[11px] text-fg-muted mt-2 leading-snug">
+                HE miss still opens OTP first, then this same HOME / Skip HOME choice.
+              </p>
+            )}
+          </div>
+        )}
+
+        {mode === 'NONE' && (
           <p className="text-[11px] text-fg-muted">
             Start page is locked to <strong>HOME</strong> for this mode. Change connections on the
             canvas or use Reset layout after switching modes.

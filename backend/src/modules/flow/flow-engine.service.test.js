@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { flowEngineService } from './flow-engine.service.js';
 
 describe('getDefaultFlowConfig packs_on_home', () => {
-  it('OTP_ONLY: OTP_VERIFIED → HOME, CONFIRM stays reachable', () => {
+  it('OTP_ONLY: OTP_VERIFIED → HOME, no Confirm node', () => {
     const cfg = flowEngineService.getDefaultFlowConfig('OTP_ONLY', {
       funnelLayout: 'packs_on_home',
     });
@@ -11,12 +11,16 @@ describe('getDefaultFlowConfig packs_on_home', () => {
       flowEngineService.nextPage(cfg, 'OTP', 'OTP_VERIFIED'),
       'HOME',
     );
-    assert.equal(flowEngineService.nextPage(cfg, 'HOME', 'DEFAULT'), 'OTP');
+    assert.equal(cfg.entryPage, 'OTP');
+    assert.equal(
+      (cfg.nodes || []).some((n) => n.pageType === 'CONFIRM'),
+      false,
+    );
     const { ok, errors } = flowEngineService.validate(cfg, 'OTP_ONLY');
     assert.equal(ok, true, errors.join(' '));
   });
 
-  it('BOTH: OTP_VERIFIED → HOME; HE hit still reaches CONFIRM', () => {
+  it('BOTH: OTP_VERIFIED → HOME; HE hit stays on HOME', () => {
     const cfg = flowEngineService.getDefaultFlowConfig('BOTH', {
       funnelLayout: 'packs_on_home',
     });
@@ -25,8 +29,12 @@ describe('getDefaultFlowConfig packs_on_home', () => {
       'HOME',
     );
     assert.equal(
-      flowEngineService.nextPage(cfg, 'HOME', 'HEADER_RESOLVED'),
-      'CONFIRM',
+      flowEngineService.nextPage(cfg, 'HOME', 'HEADER_UNRESOLVED'),
+      'OTP',
+    );
+    assert.equal(
+      (cfg.nodes || []).some((n) => n.pageType === 'CONFIRM'),
+      false,
     );
   });
 

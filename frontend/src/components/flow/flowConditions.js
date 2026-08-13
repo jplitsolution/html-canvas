@@ -4,6 +4,8 @@ export const ALL_CONDITIONS = [
   'HEADER_UNRESOLVED',
   'OTP_VERIFIED',
   'SUBSCRIBED',
+  'PENDING',
+  'LOW_BALANCE',
   'BLOCKED',
   'ERROR',
 ]
@@ -29,16 +31,24 @@ export function getValidConditions(sourcePageType, verificationMode) {
   switch (sourcePageType) {
     case 'HOME':
       if (verificationMode === 'NONE') {
-        return ['DEFAULT']
+        return ['DEFAULT', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       }
       if (
         verificationMode === 'HEADER_INJECTION' ||
         verificationMode === 'MSISDN_ONLY' ||
         verificationMode === 'BOTH'
       ) {
-        return ['HEADER_RESOLVED', 'HEADER_UNRESOLVED']
+        return [
+          'HEADER_RESOLVED',
+          'HEADER_UNRESOLVED',
+          'SUBSCRIBED',
+          'PENDING',
+          'LOW_BALANCE',
+          'BLOCKED',
+          'ERROR',
+        ]
       }
-      return ['DEFAULT']
+      return ['DEFAULT', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
     case 'OTP':
       return ['OTP_VERIFIED', 'DEFAULT']
     case 'CONFIRM':

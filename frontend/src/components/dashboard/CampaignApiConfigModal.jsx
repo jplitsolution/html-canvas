@@ -891,8 +891,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               </div>
 
               <Field
-                label="Subscribe URL (Confirm click)"
-                hint="optional — leave empty if billing is OTP verify only"
+                label="Subscribe URL (Confirm / pack click)"
+                hint="Template for every pack button. Use {{msisdn}}, {{pack}}, {{planId}}, {{serviceId}}, {{subServiceId}}. Buttons only override pack / service / sub-service — not the full URL."
               >
                 <Input
                   value={form.subscribeApi}

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, useCallback } from 'react';
+import { useLayoutEffect, useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Pencil } from 'lucide-react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
@@ -18,12 +18,18 @@ import {
   CORNER_STEPS,
   TEXT_SIZE_STEPS,
 } from '../utils/spacingUtils';
-import { PAGE_TYPES, PAGE_TYPE_LABELS } from '../../services/api/campaigns';
+import { PAGE_TYPES, PAGE_TYPE_LABELS, getCampaignApiConfig } from '../../services/api/campaigns';
 import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
 import { SubscribeRouteTrigger } from './SubscribeRouteModal';
 import { MIN_BTN_WIDTH } from '../utils/textSizeAlign';
 import { DEFAULT_SUBSCRIBE_ROUTES } from '../utils/subscribeRoutes';
+import {
+  defaultSubServiceId,
+  previewSubscribeUrl,
+  sanitizeSubscribeParam,
+  templateHasSubscribeSlots,
+} from '../utils/subscribeUrlPreview';
 import useStore from '../../store/useStore';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
@@ -693,6 +699,34 @@ function ClickActionEditor({
   const attrs = selected.getAttributes() || {}
   const href = attrs.href || ''
   const type = getClickActionType(attrs)
+  const [subscribeApiTemplate, setSubscribeApiTemplate] = useState('')
+
+  useEffect(() => {
+    if (!campaignId) return undefined
+    let cancelled = false
+    getCampaignApiConfig(campaignId)
+      .then((cfg) => {
+        if (!cancelled) setSubscribeApiTemplate(String(cfg?.subscribeApi || ''))
+      })
+      .catch(() => {
+        if (!cancelled) setSubscribeApiTemplate('')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [campaignId])
+
+  const packId = String(attrs['data-pack'] || '').toLowerCase()
+  const serviceIdAttr = String(attrs['data-service-id'] || '')
+  const subServiceIdAttr = String(attrs['data-sub-service-id'] || '')
+  const finalSubscribeUrl = useMemo(() => {
+    if (!packId) return ''
+    return previewSubscribeUrl(subscribeApiTemplate, {
+      pack: packId,
+      serviceId: sanitizeSubscribeParam(serviceIdAttr) || campaign?.serviceId || '',
+      subServiceId: sanitizeSubscribeParam(subServiceIdAttr),
+    })
+  }, [packId, serviceIdAttr, subServiceIdAttr, subscribeApiTemplate, campaign?.serviceId])
 
   const pageEditHref = (() => {
     if (type !== 'page' || !campaignId) return null
@@ -872,26 +906,73 @@ function ClickActionEditor({
 
       {(type === 'flow' || type === 'subscribeRoute') && attrs['data-pack'] && (
         <>
-          <Field label="Subscribe URL override (optional)">
+          <Field label="Service ID (optional)">
             <input
               className={inputClass}
-              placeholder="https://operator.example/sub?msisdn={{msisdn}}&pack={{pack}}"
-              value={attrs['data-subscribe-url'] || ''}
+              placeholder={campaign?.serviceId || 'e.g. 100'}
+              value={sanitizeSubscribeParam(attrs['data-service-id'] || '')}
               onChange={(e) => {
-                const url = e.target.value.trim()
-                if (!url) selected.removeAttributes('data-subscribe-url')
-                else selected.addAttributes({ 'data-subscribe-url': url })
+                const v = sanitizeSubscribeParam(e.target.value)
+                if (!v) selected.removeAttributes('data-service-id')
+                else selected.addAttributes({ 'data-service-id': v })
+                selected.removeAttributes('data-subscribe-url')
                 update()
               }}
             />
             <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-              Leave empty to use the campaign Subscribe API. Placeholders like{' '}
-              <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
-              <code className="font-mono">{'{{pack}}'}</code>,{' '}
-              <code className="font-mono">{'{{planId}}'}</code> are filled. Attribution
-              IDs are not appended.
+              Operator value only (e.g. 100). Do not type{' '}
+              <code className="font-mono">{'{{serviceId}}'}</code>. Leave empty to use
+              the campaign service ID.
             </p>
           </Field>
+          <Field label="Sub-service ID (optional)">
+            <input
+              className={inputClass}
+              placeholder={packId ? defaultSubServiceId(packId) : 'e.g. HMonthly'}
+              value={sanitizeSubscribeParam(attrs['data-sub-service-id'] || '')}
+              onChange={(e) => {
+                const v = sanitizeSubscribeParam(e.target.value)
+                if (!v) selected.removeAttributes('data-sub-service-id')
+                else selected.addAttributes({ 'data-sub-service-id': v })
+                selected.removeAttributes('data-subscribe-url')
+                update()
+              }}
+            />
+            <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+              Operator value only (e.g.{' '}
+              {packId ? defaultSubServiceId(packId) : 'HDaily / HWeekly / HMonthly'}). Do
+              not type <code className="font-mono">{'{{subServiceId}}'}</code>. Leave
+              empty to use the pack default.
+            </p>
+          </Field>
+          <div className="rounded-md border border-border bg-bg-subtle px-2.5 py-2 space-y-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-fg-muted">
+              Final subscribe URL
+            </p>
+            {subscribeApiTemplate ? (
+              <>
+                <p className="text-[11px] font-mono text-fg break-all leading-snug">
+                  {finalSubscribeUrl}
+                </p>
+                {!templateHasSubscribeSlots(subscribeApiTemplate) && (
+                  <p className="text-[11px] text-fg-muted leading-snug">
+                    Pack / service / sub-service will not change this URL until you add{' '}
+                    <code className="font-mono">{'{{pack}}'}</code>,{' '}
+                    <code className="font-mono">{'{{serviceId}}'}</code>, or{' '}
+                    <code className="font-mono">{'{{subServiceId}}'}</code> in Campaign
+                    API → Subscribe URL. <code className="font-mono">{'{{msisdn}}'}</code>{' '}
+                    is filled when the user clicks.
+                  </p>
+                )}
+              </>
+            ) : (
+              <p className="text-[11px] text-amber-800 leading-snug">
+                Set the campaign Subscribe URL in API config first. This preview is built
+                from that template + pack / service ID / sub-service ID. MSISDN is filled
+                at runtime.
+              </p>
+            )}
+          </div>
           <label className="flex items-start gap-2 text-xs text-fg">
             <input
               type="checkbox"

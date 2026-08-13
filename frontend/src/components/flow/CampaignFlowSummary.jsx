@@ -8,7 +8,7 @@ import {
   normalizeModeId,
   buildDefaultFlow,
   buildFlowPathSummary,
-  resolveAfterOtpTarget,
+  resolveAfterIdentityTarget,
   isApiExposeEntry,
 } from './verificationModes'
 import { campaignFlowPath, resolveMarketCodes } from '../../utils/routes'
@@ -59,43 +59,38 @@ function CopyableUrl({ label, url }) {
 function CampaignFlowSummary({ campaign, onSaveMode }) {
   const currentMode = normalizeModeId(campaign?.verificationMode)
   const savedEntry = resolveSavedEntry(campaign?.flowConfig)
-  const savedAfterOtp = resolveAfterOtpTarget(campaign?.flowConfig)
+  const savedAfterIdentity = resolveAfterIdentityTarget(campaign?.flowConfig)
   const [draftMode, setDraftMode] = useState(currentMode)
   const [draftEntry, setDraftEntry] = useState(savedEntry)
-  const [draftAfterOtp, setDraftAfterOtp] = useState(savedAfterOtp)
+  const [draftAfterIdentity, setDraftAfterIdentity] = useState(savedAfterIdentity)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     setDraftMode(currentMode)
     setDraftEntry(savedEntry)
-    setDraftAfterOtp(savedAfterOtp)
-  }, [campaign?.id, currentMode, savedEntry, savedAfterOtp])
+    setDraftAfterIdentity(savedAfterIdentity)
+  }, [campaign?.id, currentMode, savedEntry, savedAfterIdentity])
 
   const previewConfig = useMemo(() => {
     if (
       draftMode === currentMode &&
       draftEntry === savedEntry &&
-      draftAfterOtp === savedAfterOtp
+      draftAfterIdentity === savedAfterIdentity
     ) {
       return campaign?.flowConfig || null
     }
     return buildDefaultFlow(draftMode, {
       entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
-      afterOtp:
-        draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
-          ? draftAfterOtp
-          : 'CONFIRM',
-      funnelLayout: campaign?.funnelLayout,
+      afterIdentity: isApiExposeEntry(draftEntry) ? 'HOME' : draftAfterIdentity,
     })
   }, [
     draftMode,
     currentMode,
     draftEntry,
     savedEntry,
-    draftAfterOtp,
-    savedAfterOtp,
+    draftAfterIdentity,
+    savedAfterIdentity,
     campaign?.flowConfig,
-    campaign?.funnelLayout,
   ])
 
   const summary = useMemo(
@@ -108,16 +103,15 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
 
   const dirty =
     draftMode !== currentMode ||
-    (draftMode === 'OTP_ONLY' &&
-      (draftEntry !== savedEntry ||
-        (!isApiExposeEntry(draftEntry) && draftAfterOtp !== savedAfterOtp)))
+    (draftMode === 'OTP_ONLY' && draftEntry !== savedEntry) ||
+    (!isApiExposeEntry(draftEntry) &&
+      draftMode !== 'NONE' &&
+      draftAfterIdentity !== savedAfterIdentity)
 
   const handleModeChange = (nextMode) => {
     setDraftMode(nextMode)
-    if (nextMode !== 'OTP_ONLY') {
-      setDraftEntry('HOME')
-      setDraftAfterOtp('CONFIRM')
-    }
+    setDraftEntry(nextMode === 'OTP_ONLY' ? 'OTP' : 'HOME')
+    setDraftAfterIdentity('HOME')
   }
 
   const handleSave = async () => {
@@ -126,11 +120,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     try {
       const flowConfig = buildDefaultFlow(draftMode, {
         entryPage: draftMode === 'OTP_ONLY' ? draftEntry : 'HOME',
-        afterOtp:
-          draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
-            ? draftAfterOtp
-            : 'CONFIRM',
-        funnelLayout: campaign?.funnelLayout,
+        afterIdentity: isApiExposeEntry(draftEntry) ? 'HOME' : draftAfterIdentity,
       })
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
@@ -223,7 +213,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                 >
                   <p className="text-sm font-semibold text-fg">HOME first</p>
                   <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Show intro / Subscribe CTA, then OTP.
+                    Show intro, then OTP, then HOME packs.
                   </p>
                 </button>
                 <button
@@ -237,7 +227,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                 >
                   <p className="text-sm font-semibold text-fg">OTP first</p>
                   <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Skip HOME — open PIN page on landing.
+                    Skip HOME on landing — PIN first, then HOME packs.
                   </p>
                 </button>
                 <button
@@ -263,30 +253,30 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => setDraftAfterOtp('CONFIRM')}
+                    onClick={() => setDraftAfterIdentity('HOME')}
                     className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                      draftAfterOtp === 'CONFIRM'
+                      draftAfterIdentity === 'HOME' || draftAfterIdentity === 'CONFIRM'
                         ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                         : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
                     }`}
                   >
-                    <p className="text-sm font-semibold text-fg">Confirm page</p>
+                    <p className="text-sm font-semibold text-fg">HOME page</p>
                     <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                      Pack / subscribe CTA after PIN (classic funnel).
+                      Pack / subscribe CTAs on HOME after PIN.
                     </p>
                   </button>
                   <button
                     type="button"
-                    onClick={() => setDraftAfterOtp('THANKYOU')}
+                    onClick={() => setDraftAfterIdentity('THANKYOU')}
                     className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
-                      draftAfterOtp === 'THANKYOU'
+                      draftAfterIdentity === 'THANKYOU'
                         ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                         : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
                     }`}
                   >
-                    <p className="text-sm font-semibold text-fg">Skip Confirm</p>
+                    <p className="text-sm font-semibold text-fg">Skip HOME</p>
                     <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                      PIN verify = subscribe → Thank you / portal (no Confirm).
+                      PIN verify → Thank you / portal (no pack page).
                     </p>
                   </button>
                 </div>
@@ -322,6 +312,52 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
           </>
         )}
 
+        {(draftMode === 'HEADER_INJECTION' || draftMode === 'BOTH') && (
+          <div>
+            <p className="text-xs font-medium text-fg mb-2">
+              {draftMode === 'BOTH'
+                ? 'After number resolved (HE or OTP)'
+                : 'After HE resolved'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setDraftAfterIdentity('HOME')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  draftAfterIdentity === 'HOME' || draftAfterIdentity === 'CONFIRM'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">HOME page</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Show HOME with pack / subscribe CTAs.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setDraftAfterIdentity('THANKYOU')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  draftAfterIdentity === 'THANKYOU'
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">Skip HOME</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Number resolved → Thank you / portal (no pack page).
+                </p>
+              </button>
+            </div>
+            {draftMode === 'HEADER_INJECTION' && (
+              <p className="text-[11px] text-fg-muted mt-2 leading-snug">
+                If HE finds no number → Error page (and fail/CG URL if set). OTP is not used
+                in this mode.
+              </p>
+            )}
+          </div>
+        )}
+
         {dirty && (
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] text-warning">
@@ -329,8 +365,10 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
               {draftMode === 'OTP_ONLY'
                 ? isApiExposeEntry(draftEntry)
                   ? ' (API expose — mediator only)'
-                  : ` (${draftEntry} landing → ${draftAfterOtp === 'THANKYOU' ? 'Thank you' : 'Confirm'})`
-                : ''}
+                  : ` (${draftEntry} landing → ${draftAfterIdentity === 'THANKYOU' ? 'Thank you' : 'HOME'})`
+                : draftMode === 'NONE'
+                  ? ''
+                  : ` (${draftAfterIdentity === 'THANKYOU' ? 'skip HOME' : 'HOME packs'})`}
               .
             </p>
             <Button

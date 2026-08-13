@@ -409,7 +409,11 @@ export const createCampaignsService = () => {
       const parsed = flowEngineService.parseFlowConfig(campaign.flowConfig);
       if (parsed) {
         campaign.flowConfig = JSON.stringify(
-          flowEngineService.applyFunnelLayoutToFlowConfig(parsed, nextLayout),
+          flowEngineService.applyFunnelLayoutToFlowConfig(
+            parsed,
+            nextLayout,
+            campaign.verificationMode,
+          ),
         );
       }
     }

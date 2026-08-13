@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage } from '../../services/api/flow'
 import { persistPhone, pickHeFailRedirectUrl } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
@@ -48,6 +48,10 @@ function useFlowPages({
   loadPageRef,
   transitionLockRef,
 }) {
+  // cachePage writes ?step= after paint; keep this so the URL-sync effect
+  // does not reload the previous step (Save & preview always has step=HOME).
+  const appStepRef = useRef(null)
+
   const cachePage = useCallback((data) => {
     if (!data?.pageType) return
     if (heOnlyModeRef.current && isHeSuppressedFunnelPage(data.pageType)) {
@@ -73,6 +77,7 @@ function useFlowPages({
     pageCacheRef.current.set(data.pageType, data)
     if (data.visitId) visitIdRef.current = data.visitId
     pageDataRef.current = data
+    appStepRef.current = String(data.pageType || '').toUpperCase()
     setPageData(data)
 
     // Backend dual IDs: our clickId + affiliate rcid (stable for the visit).
@@ -388,10 +393,16 @@ function useFlowPages({
   useEffect(() => {
     if (booting || !pageData) return
     if (!urlStep) return
-    if (String(pageData.pageType || '').toUpperCase() === urlStep) return
+    const pageType = String(pageData.pageType || '').toUpperCase()
+    if (pageType === urlStep) {
+      if (appStepRef.current === urlStep) appStepRef.current = null
+      return
+    }
     if (heOnlyModeRef.current && isHeSuppressedFunnelPage(urlStep)) return
     // Ignore while a transition is in flight — cachePage will align URL + page together.
     if (transitionLockRef.current) return
+    // Stale ?step= from editor preview (HOME) must not overwrite a CTA result.
+    if (appStepRef.current && appStepRef.current !== urlStep) return
     setBooting(true)
     loadPage(urlStep)
   }, [urlStep, booting, pageData, loadPage])

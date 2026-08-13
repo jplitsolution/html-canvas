@@ -376,7 +376,7 @@ Actions:
 | OTP | UI: send/verify OTP → transition `CONTINUE` |
 | CONFIRM | `CONFIRM` (+ required `planId`: daily/weekly/monthly). Pack picker is optional — packs also work on HOME or any page. |
 
-Pack / CONFIRM path: `registerPending` (unless `data-postback="0"`) → blocklist → checksub skip-if-existing → subscribe (`subscribeApi` or per-button `data-subscribe-url`) → THANKYOU / ERROR / status page.
+Pack / CONFIRM path: `registerPending` (unless `data-postback="0"`) → blocklist → checksub skip-if-existing → subscribe (campaign `subscribeApi` filled with pack / `serviceId` / `subServiceId`) → THANKYOU / ERROR / status page.
 
 ---
 

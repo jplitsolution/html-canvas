@@ -104,6 +104,8 @@ export function createHandleSubscribeRoute(deps) {
       {
         info: 'SUBSCRIBE_ROUTE (single-page subscribe + rules)',
         pack: normalizePack(input.planId || 'daily'),
+        serviceId: input.serviceId || undefined,
+        subServiceId: input.subServiceId || undefined,
       },
     );
 
@@ -345,6 +347,8 @@ export function createHandleSubscribeRoute(deps) {
       ...partnerCtx,
       planId: selectedPack,
       subscriptionUrl,
+      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
       subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
     });
 

@@ -19,7 +19,7 @@ This is the executable plan for the client funnel:
 | D1 | Partner checks (checksub + blocklist) run **after we have an MSISDN** and **before HOME**. Splash still waits on detect when HE is in the mode. | Client: no HOME until identity + checks. |
 | D2 | No-MSISDN behaviour is **mode-specific** — not “always OTP”. HE-only → ERROR + configured fail redirect (never OTP). OTP-only → OTP first, then checks. BOTH → HE hit → checks; HE miss → OTP then checks. After OTP verify (when OTP is in the path) → **HOME** as the first content page, not auto-CONFIRM. | Client clarification 13 Aug. |
 | D3 | HOME is a **free canvas**, not a dedicated confirm screen. Author may put intro-only, a continue CTA, pack subscribe buttons, a link to CONFIRM, or a mix. Pack/subscribe CTAs work on **any** page (HOME, CONFIRM, or other). Where a pack button exists, that click is subscribe (not “select then Confirm”). | Client: HOME pe kuch bhi ho sakta hai. |
-| D4 | Pack identity = `data-pack=daily\|weekly\|monthly`. Subscribe URL = campaign `subscribeApi` with `{{planId}}` / `{{pack}}` / `{{subServiceId}}`, plus optional per-button `data-subscribe-url` override. | “Same URL, chhota sa change.” |
+| D4 | Pack identity = `data-pack=daily\|weekly\|monthly`. Subscribe URL is always campaign `subscribeApi` filled with `{{planId}}` / `{{pack}}` / `{{serviceId}}` / `{{subServiceId}}`. Buttons may set pack + optional service / sub-service IDs — never a full URL. | “Same URL, chhota sa change.” |
 | D5 | Postback **register** = first conversion subscribe click (any pack CTA). Unique **event**, not unique **button**. Daily/Weekly/Monthly all register. MSISDN unique row already upserts. | Unique-checkbox-on-one-button would drop Weekly/Monthly conversions. |
 | D6 | Postback **fire** is unchanged: operator hits `/api/flow/callback`. Editor never chooses fire timing. | Operator billing is the source of truth. |
 | D7 | Default: do **not** register pending on HE-detect `new`, and do **not** register on OTP verify, for `packs_on_home` campaigns. | Otherwise pending is created before the user picked a pack. |
@@ -169,13 +169,15 @@ Do **not** start Phase 2 until the tracer in Phase 1 is green.
 
 ### Phase 2 — Multi-pack URLs + editor
 
-**Goal:** Weekly/Monthly work; URL is campaign template or per-button override.
+**Goal:** Weekly/Monthly work; URL is always the campaign Subscribe URL template.
 
 1. PropertyPanel fields on pack-subscribe buttons:
    - Pack (`daily|weekly|monthly`) → `data-pack`
-   - Optional Subscribe URL override → `data-subscribe-url`
+   - Optional Service ID → `data-service-id` (else campaign `serviceId`)
+   - Optional Sub-service ID → `data-sub-service-id` (else `HDaily` / `HWeekly` / `HMonthly`)
+   - Read-only **Final subscribe URL** preview from the campaign template
    - Optional “Queue vendor postback” checkbox → `data-postback="1"` (default on)
-2. `partner-api.service.js` `subscribe()`: if button override URL present, resolve placeholders against that URL; else campaign `subscribeApi`.
+2. `partner-api.service.js` `subscribe()`: fill campaign `subscribeApi` with pack / serviceId / subServiceId. Do not take a full URL from the button.
 3. HOME starter template **example**: three pack buttons (optional pattern, not required). Set `funnel_layout=packs_on_home` when applying this template.
 4. Funnel guide: HOME is free canvas; pack buttons work on HOME or CONFIRM (or any page). CONFIRM stays optional.
 5. Soft editor warning: if two *kinds* of conversion triggers exist (e.g. OTP postback + pack postback), not if three pack buttons are all checked.
@@ -268,7 +270,8 @@ Do **not** start Phase 2 until the tracer in Phase 1 is green.
   type="button"
   data-action="SUBSCRIBE_ROUTE"
   data-pack="weekly"
-  data-subscribe-url="https://op.example/sub?msisdn={{msisdn}}&pkg=W"
+  data-service-id="SVC1"
+  data-sub-service-id="HWeekly"
   data-postback="1"
 >
   Weekly
@@ -279,10 +282,11 @@ Do **not** start Phase 2 until the tracer in Phase 1 is green.
 |------|----------|---------|
 | `data-pack` | yes | `daily` / `weekly` / `monthly` → `planId` |
 | `data-action` | yes | `SUBSCRIBE_ROUTE` (preferred) or `CONFIRM` |
-| `data-subscribe-url` | no | Overrides campaign `subscribeApi` |
+| `data-service-id` | no | Fills `{{serviceId}}`; else campaign service ID |
+| `data-sub-service-id` | no | Fills `{{subServiceId}}`; else `HDaily` / `HWeekly` / `HMonthly` |
 | `data-postback` | no | `"0"` skips pending; default treat as `"1"` for pack-subscribe |
 
-If `data-subscribe-url` is empty, `subscribeApi` template runs with `{{planId}}`, `{{pack}}`, `{{subServiceId}}`.
+Full URL is built from campaign `subscribeApi` + these params. Editor shows a **Final subscribe URL** preview (`{{msisdn}}` until runtime). Session Detail logs pack / serviceId / subServiceId and the filled request URL.
 
 ---
 

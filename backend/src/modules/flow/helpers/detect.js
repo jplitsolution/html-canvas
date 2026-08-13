@@ -307,6 +307,14 @@ export function createDetectMsisdn(deps) {
       } else if (isNewStatus) {
         outboundSuccessRedirectUrl = successRedirectUrl || null;
         outboundFailRedirectUrl = null;
+        if (!outboundSuccessRedirectUrl && isPacksOnHome(campaign)) {
+          const afterHe = flowEngineService.nextPage(
+            flowConfigForStart,
+            'HOME',
+            'HEADER_RESOLVED',
+          );
+          nextPage = afterHe === 'THANKYOU' ? 'THANKYOU' : 'HOME';
+        }
       } else if (mappedStatusPage) {
         outboundSuccessRedirectUrl = null;
         nextPage = mappedStatusPage;

@@ -150,6 +150,8 @@ export const flowController = {
       phone: body.phone,
       planId: body.planId,
       subscribeUrl: body.subscribeUrl,
+      serviceId: body.serviceId,
+      subServiceId: body.subServiceId,
       queuePostback:
         body.queuePostback === undefined ? undefined : body.queuePostback,
       country: body.country,

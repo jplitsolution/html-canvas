@@ -73,17 +73,17 @@ export const createFlowEngineService = () => {
     String(config?.entryPage || '').toUpperCase() === 'API_EXPOSE';
 
   /**
-   * packs_on_home: OTP_VERIFIED → HOME (identity already ran). Keep CONFIRM
-   * reachable so the optional confirm page is not stripped as unreachable.
+   * packs_on_home: identity → HOME (packs). Drop Confirm from the default graph.
+   * Classic: keep Confirm; remap OTP_VERIFIED HOME → CONFIRM if needed.
    */
-  const applyFunnelLayoutToFlowConfig = (config, funnelLayout) => {
+  const applyFunnelLayoutToFlowConfig = (config, funnelLayout, mode) => {
     if (!config || !Array.isArray(config.edges)) return config;
     const packs =
       String(funnelLayout || '')
         .trim()
         .toLowerCase() === 'packs_on_home';
 
-    const remap = (targetFrom, targetTo) =>
+    const remapOtp = (targetFrom, targetTo) =>
       config.edges.map((e) => {
         if (String(e.condition || '').toUpperCase() !== 'OTP_VERIFIED') {
           return e;
@@ -97,14 +97,14 @@ export const createFlowEngineService = () => {
       });
 
     if (!packs) {
-      return { ...config, edges: remap('HOME', CampaignPageType.CONFIRM) };
+      return { ...config, edges: remapOtp('HOME', CampaignPageType.CONFIRM) };
     }
 
     const hasHome = (config.nodes || []).some(
       (n) => n.pageType === CampaignPageType.HOME || n.id === 'HOME',
     );
-    const nodes = hasHome
-      ? config.nodes
+    let nodes = hasHome
+      ? [...(config.nodes || [])]
       : [
           {
             id: CampaignPageType.HOME,
@@ -114,22 +114,52 @@ export const createFlowEngineService = () => {
           ...(config.nodes || []),
         ];
 
-    const edges = remap('CONFIRM', CampaignPageType.HOME);
-    const hasConfirm = (config.nodes || []).some(
-      (n) => n.pageType === CampaignPageType.CONFIRM || n.id === 'CONFIRM',
+    let edges = remapOtp('CONFIRM', CampaignPageType.HOME).map((e) => {
+      const cond = String(e.condition || '').toUpperCase();
+      const target = String(e.target || '').toUpperCase();
+      if (cond === 'HEADER_RESOLVED' && target === 'CONFIRM') {
+        return {
+          ...e,
+          target: CampaignPageType.HOME,
+          id: `${e.source}-HEADER_RESOLVED-HOME`,
+        };
+      }
+      if (String(e.source || '').toUpperCase() === 'CONFIRM') {
+        return {
+          ...e,
+          source: CampaignPageType.HOME,
+          id: `HOME-${e.condition}-${e.target}`,
+        };
+      }
+      return e;
+    });
+
+    edges = edges.filter((e) => {
+      const src = String(e.source || '').toUpperCase();
+      const tgt = String(e.target || '').toUpperCase();
+      if (src === 'CONFIRM' || tgt === 'CONFIRM') return false;
+      if (src === tgt) return false;
+      return true;
+    });
+
+    nodes = nodes.filter(
+      (n) => n.pageType !== CampaignPageType.CONFIRM && n.id !== 'CONFIRM',
     );
-    const confirmReachable = edges.some(
-      (e) => String(e.target || '').toUpperCase() === 'CONFIRM',
-    );
-    if (hasConfirm && !confirmReachable) {
-      edges.push({
-        id: 'HOME-DEFAULT-CONFIRM',
-        source: CampaignPageType.HOME,
-        target: CampaignPageType.CONFIRM,
-        condition: 'DEFAULT',
-      });
-    }
-    return { ...config, nodes, edges };
+
+    const seen = new Set();
+    edges = edges.filter((e) => {
+      const key = `${e.source}|${e.condition}|${e.target}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const entryPage =
+      String(mode || '').toUpperCase() === 'OTP_ONLY'
+        ? CampaignPageType.OTP
+        : config.entryPage || CampaignPageType.HOME;
+
+    return { ...config, nodes, edges, entryPage };
   };
 
   const getDefaultFlowConfig = (mode = 'BOTH', options = {}) => {
@@ -233,6 +263,7 @@ export const createFlowEngineService = () => {
         edges,
       },
       options.funnelLayout,
+      mode,
     );
   };
 

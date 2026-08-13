@@ -6,7 +6,7 @@ import {
   resolveSubscribeDestination,
 } from '../../editor/utils/subscribeRoutes'
 import { VALID_PAGES } from './constants'
-import { findActionTarget, isCampaignPageHref, normalizePack, packSubscribeExtras } from './flowHelpers'
+import { findActionTarget, hrefIsNavigationTarget, isCampaignPageHref, normalizePack, packSubscribeExtras, shouldSelectPackOnly } from './flowHelpers'
 import { runPriorityChain } from './runPriorityChain'
 import { setupOtpBindings } from './setupOtpBindings'
 import {
@@ -75,15 +75,9 @@ function useShadowInteractions({
         (node) => node instanceof HTMLElement && node.hasAttribute('data-pack'),
       )
       if (!packBtn || transitionLockRef.current) return
-      const packAction = String(packBtn.getAttribute('data-action') || '').toUpperCase()
       // Pack + subscribe action → let handleClick fire subscribe, not just select.
-      if (
-        packAction === 'SUBSCRIBE_ROUTE' ||
-        packAction === 'CONFIRM' ||
-        packAction === 'SUBSCRIBE'
-      ) {
-        return
-      }
+      // Pack + Open a website / page jump → let handleClick (or the browser) navigate.
+      if (!shouldSelectPackOnly(packBtn)) return
       event.preventDefault()
       event.stopPropagation()
       const nextPack = normalizePack(packBtn.getAttribute('data-pack'))
@@ -136,11 +130,21 @@ function useShadowInteractions({
 
     const handleClick = async (event) => {
       const hit = findActionTarget(event)
-      if (!hit || !visitIdRef.current || transitionLockRef.current) return
+      if (!hit) return
 
       const { action, node } = hit
       const onHome =
         String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
+
+      // Stop href="#" from reloading the current page (editor preview uses ?step=HOME).
+      event.preventDefault()
+      if (transitionLockRef.current) return
+      const hrefEarly = (node.getAttribute('href') || '').trim()
+      const navOnly = !action && hrefIsNavigationTarget(hrefEarly)
+      if (!visitIdRef.current && !navOnly) {
+        setError('Please wait a moment and try again.')
+        return
+      }
 
       // Token/Custom HE: HOME CTA without MSISDN → warning (then CG if configured).
       // Skip for SUBSCRIBE_ROUTE — missing phone is a first-class outcome (usually → OTP).
@@ -151,13 +155,11 @@ function useShadowInteractions({
         onHome &&
         warnIfHeUnresolved()
       ) {
-        event.preventDefault()
         return
       }
 
       // Handle Sequential Action Chain (Priority Flow)
       if (action === 'CHAIN' || node.hasAttribute('data-actions')) {
-        event.preventDefault()
         let actions = []
         try {
           actions = JSON.parse(node.getAttribute('data-actions') || '[]')
@@ -201,7 +203,6 @@ function useShadowInteractions({
         const href = (node.getAttribute('href') || '').trim()
 
         if (isCampaignPageHref(href)) {
-          event.preventDefault()
           const targetPage = href.toUpperCase()
           if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
           if (onHome && warnIfHeUnresolved()) return
@@ -218,7 +219,6 @@ function useShadowInteractions({
         }
 
         if (href.startsWith('#') && href !== '#') {
-          event.preventDefault()
           const targetId = decodeURIComponent(href.slice(1))
           const targetEl = shadow.getElementById(targetId)
           if (targetEl) {
@@ -229,7 +229,6 @@ function useShadowInteractions({
 
         // External URL on <button> (anchors navigate natively)
         if (/^(https?:|mailto:|tel:)/i.test(href)) {
-          event.preventDefault()
           const target = node.getAttribute('target') || '_self'
           if (target === '_blank') {
             window.open(href, '_blank', 'noopener,noreferrer')
@@ -241,14 +240,13 @@ function useShadowInteractions({
 
         // <a> with external href — let the browser handle it
         if (node.matches?.('a[href]') && href && href !== '#' && !href.startsWith('#')) {
+          window.location.assign(href)
           return
         }
 
         // No actionable href and no flow action
         if (!action) return
       }
-
-      event.preventDefault()
 
       const currentPage = pageDataRef.current
       const fromPage = currentPage?.pageType

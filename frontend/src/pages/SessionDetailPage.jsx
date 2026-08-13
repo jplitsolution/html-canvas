@@ -69,6 +69,11 @@ function eventPack(metadata) {
   return String(raw || '').trim().toLowerCase()
 }
 
+function eventChip(metadata, key) {
+  if (!metadata || typeof metadata !== 'object') return ''
+  return String(metadata[key] || '').trim()
+}
+
 function eventDescription(eventType) {
   switch (eventType) {
     case 'VISIT':
@@ -462,6 +467,8 @@ function SessionDetailPage() {
                         : visit?.visitStatus
                     const desc = eventDescription(item.eventType)
                     const pack = eventPack(item.metadata)
+                    const serviceId = eventChip(item.metadata, 'serviceId')
+                    const subServiceId = eventChip(item.metadata, 'subServiceId')
                     return (
                       <div key={`${item.id}-${item.eventType}`} className="relative">
                         <div className="absolute -left-8 top-0.5 w-8 h-8 rounded-full border bg-white flex items-center justify-center shadow-sm">
@@ -483,6 +490,16 @@ function SessionDetailPage() {
                               {pack && (
                                 <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-indigo-700 bg-indigo-50 border-indigo-200">
                                   {pack}
+                                </span>
+                              )}
+                              {serviceId && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-slate-700 bg-slate-50 border-slate-200">
+                                  {serviceId}
+                                </span>
+                              )}
+                              {subServiceId && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-violet-700 bg-violet-50 border-violet-200">
+                                  {subServiceId}
                                 </span>
                               )}
                             </div>

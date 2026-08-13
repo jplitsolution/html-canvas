@@ -1,10 +1,8 @@
 /**
  * Shared verification-mode definitions + default flow graphs (Layer B).
  *
- * WHY: Mode is the real admin knob for SUBSCRIBE/CONFIRM routing.
- * Default graphs match flow-engine.getDefaultFlowConfig — changing mode
- * regenerates these. Campaign Detail hosts the mode picker; Flow Builder
- * remains available as Advanced path editing.
+ * WHY: Mode is the real admin knob for identity + landing.
+ * Subscribe CTAs live on HOME; Confirm is optional (add from Pages if needed).
  */
 
 import { defaultStartConfig } from './startConfig'
@@ -13,20 +11,20 @@ export const VERIFICATION_MODES = [
   {
     id: 'HEADER_INJECTION',
     label: 'Header Injection',
-    hint: 'Phone from carrier header / ISP. If missing → Error page.',
-    pathHint: 'HOME → Confirm (HE ok) / Error (no HE) → outcomes',
+    hint: 'Resolve number from carrier header / ISP, then HOME. If missing → Error page.',
+    pathHint: 'HE → HOME (packs) / Error (no HE) → outcomes',
   },
   {
     id: 'OTP_ONLY',
     label: 'OTP only',
-    hint: 'No landing HE. Land on HOME, OTP page, or expose public send/verify APIs (mediator).',
-    pathHint: 'HOME → OTP → Confirm (or OTP → Thank you), or API expose',
+    hint: 'No landing HE. OTP first (or HOME first), then HOME pack CTAs — or expose public send/verify APIs.',
+    pathHint: 'OTP → HOME (or HOME → OTP → HOME), or skip HOME → Thank you',
   },
   {
     id: 'BOTH',
     label: 'Header Injection + OTP',
-    hint: 'Landing HE first. CTA: header OK → Confirm, else → OTP.',
-    pathHint: 'HOME → Confirm (HE) / OTP (no HE) → Confirm → outcomes',
+    hint: 'HE first. Hit → HOME. Miss → OTP → HOME.',
+    pathHint: 'HE → HOME / OTP → HOME → outcomes',
   },
   {
     id: 'NONE',
@@ -50,41 +48,48 @@ const OUTCOME_NODES = [
   { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
 ]
 
-const CONFIRM_EDGES = [
-  { id: 'CONFIRM-SUBSCRIBED-THANKYOU', source: 'CONFIRM', target: 'THANKYOU', condition: 'SUBSCRIBED' },
-  { id: 'CONFIRM-PENDING-INPROGRESS', source: 'CONFIRM', target: 'INPROGRESS', condition: 'PENDING' },
-  { id: 'CONFIRM-LOW_BALANCE-LOW_BALANCE', source: 'CONFIRM', target: 'LOW_BALANCE', condition: 'LOW_BALANCE' },
-  { id: 'CONFIRM-BLOCKED-BLOCKED', source: 'CONFIRM', target: 'BLOCKED', condition: 'BLOCKED' },
-  { id: 'CONFIRM-ERROR-ERROR', source: 'CONFIRM', target: 'ERROR', condition: 'ERROR' },
-]
+function flowEdge(source, target, condition) {
+  return {
+    id: `${source}-${condition}-${target}`,
+    source,
+    target,
+    condition,
+  }
+}
 
-/** Default flowConfig graphs — keep in sync with FlowBuilder / flow-engine defaults. */
+function outcomeEdgesFrom(source) {
+  return [
+    flowEdge(source, 'THANKYOU', 'SUBSCRIBED'),
+    flowEdge(source, 'INPROGRESS', 'PENDING'),
+    flowEdge(source, 'LOW_BALANCE', 'LOW_BALANCE'),
+    flowEdge(source, 'BLOCKED', 'BLOCKED'),
+    flowEdge(source, 'ERROR', 'ERROR'),
+  ]
+}
+
+/** Default flowConfig graphs — HOME is the subscribe canvas (no Confirm). */
 export const DEFAULT_FLOWS = {
   HEADER_INJECTION: {
     entryPage: 'HOME',
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
       ...OUTCOME_NODES,
     ],
     edges: [
-      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
-      { id: 'HOME-HEADER_UNRESOLVED-ERROR', source: 'HOME', target: 'ERROR', condition: 'HEADER_UNRESOLVED' },
-      ...CONFIRM_EDGES,
+      flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'),
+      ...outcomeEdgesFrom('HOME'),
     ],
   },
   OTP_ONLY: {
-    entryPage: 'HOME',
+    entryPage: 'OTP',
     nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       ...OUTCOME_NODES,
     ],
     edges: [
-      { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
-      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      ...CONFIRM_EDGES,
+      flowEdge('OTP', 'HOME', 'OTP_VERIFIED'),
+      ...outcomeEdgesFrom('HOME'),
     ],
   },
   BOTH: {
@@ -92,14 +97,12 @@ export const DEFAULT_FLOWS = {
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
       ...OUTCOME_NODES,
     ],
     edges: [
-      { id: 'HOME-HEADER_RESOLVED-CONFIRM', source: 'HOME', target: 'CONFIRM', condition: 'HEADER_RESOLVED' },
-      { id: 'HOME-HEADER_UNRESOLVED-OTP', source: 'HOME', target: 'OTP', condition: 'HEADER_UNRESOLVED' },
-      { id: 'OTP-OTP_VERIFIED-CONFIRM', source: 'OTP', target: 'CONFIRM', condition: 'OTP_VERIFIED' },
-      ...CONFIRM_EDGES,
+      flowEdge('HOME', 'OTP', 'HEADER_UNRESOLVED'),
+      flowEdge('OTP', 'HOME', 'OTP_VERIFIED'),
+      ...outcomeEdgesFrom('HOME'),
     ],
   },
   NONE: {
@@ -114,177 +117,158 @@ export function isApiExposeEntry(entryPage) {
   return String(entryPage || '').toUpperCase() === 'API_EXPOSE'
 }
 
-function applyFunnelLayoutToDefaultFlow(config, funnelLayout) {
-  if (!config || String(funnelLayout || '').toLowerCase() !== 'packs_on_home') {
-    return config
-  }
-  const edges = (config.edges || []).map((e) => {
-    if (String(e.condition || '').toUpperCase() !== 'OTP_VERIFIED') return e
-    if (String(e.target || '').toUpperCase() !== 'CONFIRM') return e
-    return { ...e, target: 'HOME', id: `${e.source}-OTP_VERIFIED-HOME` }
-  })
-  const hasConfirm = (config.nodes || []).some(
-    (n) => n.pageType === 'CONFIRM' || n.id === 'CONFIRM',
-  )
-  const hasHome = (config.nodes || []).some(
-    (n) => n.pageType === 'HOME' || n.id === 'HOME',
-  )
-  const nodes = hasHome
-    ? config.nodes
-    : [
-        { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-        ...(config.nodes || []),
-      ]
-  const confirmReachable = edges.some(
-    (e) => String(e.target || '').toUpperCase() === 'CONFIRM',
-  )
-  if (hasConfirm && !confirmReachable) {
-    edges.push({
-      id: 'HOME-DEFAULT-CONFIRM',
-      source: 'HOME',
-      target: 'CONFIRM',
-      condition: 'DEFAULT',
-    })
-  }
-  return { ...config, nodes, edges }
+/** HOME = pack canvas after identity. THANKYOU = skip HOME. */
+export function normalizeAfterIdentity(afterIdentity, afterOtp) {
+  const raw = String(afterIdentity || afterOtp || 'HOME').toUpperCase()
+  if (raw === 'THANKYOU') return 'THANKYOU'
+  return 'HOME'
+}
+
+function otpBlockErrorEdges() {
+  return [
+    flowEdge('OTP', 'BLOCKED', 'BLOCKED'),
+    flowEdge('OTP', 'ERROR', 'ERROR'),
+  ]
 }
 
 /**
  * Build default flow for a mode.
- * OTP_ONLY supports:
- *   entryPage 'HOME' | 'OTP' | 'API_EXPOSE'
- *   afterOtp 'CONFIRM' (pack/subscribe page) | 'THANKYOU' (pin-verify = subscribe)
- *   (afterOtp ignored when entryPage is API_EXPOSE)
+ *   entryPage 'HOME' | 'OTP' | 'API_EXPOSE' (OTP_ONLY landing)
+ *   afterIdentity / afterOtp 'HOME' | 'THANKYOU'
  */
-export function buildDefaultFlow(mode, { entryPage, afterOtp, funnelLayout } = {}) {
+export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = {}) {
   const normalized = normalizeModeId(mode)
-  const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
+  const skipHome = normalizeAfterIdentity(afterIdentity, afterOtp) === 'THANKYOU'
   const entry = String(entryPage || '').toUpperCase()
-  const otpEntry = entry === 'OTP'
+  const otpEntry = entry === 'OTP' || (normalized === 'OTP_ONLY' && !entry)
   const apiExpose = entry === 'API_EXPOSE'
-  const skipConfirm = String(afterOtp || '').toUpperCase() === 'THANKYOU'
+
+  if (normalized === 'NONE') {
+    return {
+      version: 1,
+      entryPage: 'HOME',
+      startConfig: defaultStartConfig('NONE'),
+      nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }],
+      edges: [],
+    }
+  }
+
+  if (normalized === 'OTP_ONLY' && apiExpose) {
+    return {
+      version: 1,
+      entryPage: 'API_EXPOSE',
+      startConfig: defaultStartConfig('OTP_ONLY'),
+      nodes: [],
+      edges: [],
+    }
+  }
+
+  const outcomes = OUTCOME_NODES.map((n) => ({ ...n }))
+  const homeNode = { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }
+  const otpNode = { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } }
 
   if (normalized === 'OTP_ONLY') {
-    if (apiExpose) {
+    const afterOtpTarget = skipHome ? 'THANKYOU' : 'HOME'
+    if (skipHome && otpEntry) {
       return {
         version: 1,
-        entryPage: 'API_EXPOSE',
+        entryPage: 'OTP',
         startConfig: defaultStartConfig('OTP_ONLY'),
-        nodes: [],
-        edges: [],
+        nodes: [otpNode, ...outcomes.filter((n) => n.id !== 'INPROGRESS' && n.id !== 'LOW_BALANCE')],
+        edges: [flowEdge('OTP', 'THANKYOU', 'OTP_VERIFIED'), ...otpBlockErrorEdges()],
       }
     }
-
-    const outcomes = OUTCOME_NODES.map((n) => ({ ...n }))
-    if (skipConfirm) {
-      // Only pages reachable from OTP — avoid validate() unreachable errors.
-      const thankYouOnly = [
-        { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
-        { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
-        { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
-      ]
-      const otpToThankYou = {
-        id: 'OTP-OTP_VERIFIED-THANKYOU',
-        source: 'OTP',
-        target: 'THANKYOU',
-        condition: 'OTP_VERIFIED',
-      }
-      if (otpEntry) {
-        return {
-          version: 1,
-          entryPage: 'OTP',
-          startConfig: defaultStartConfig('OTP_ONLY'),
-          nodes: [
-            { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-            ...thankYouOnly,
-          ],
-          edges: [
-            otpToThankYou,
-            {
-              id: 'OTP-BLOCKED-BLOCKED',
-              source: 'OTP',
-              target: 'BLOCKED',
-              condition: 'BLOCKED',
-            },
-            {
-              id: 'OTP-ERROR-ERROR',
-              source: 'OTP',
-              target: 'ERROR',
-              condition: 'ERROR',
-            },
-          ],
-        }
-      }
+    if (skipHome) {
       return {
         version: 1,
         entryPage: 'HOME',
         startConfig: defaultStartConfig('OTP_ONLY'),
         nodes: [
-          { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-          { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-          ...thankYouOnly,
+          homeNode,
+          otpNode,
+          ...outcomes.filter((n) => n.id !== 'INPROGRESS' && n.id !== 'LOW_BALANCE'),
         ],
         edges: [
-          { id: 'HOME-DEFAULT-OTP', source: 'HOME', target: 'OTP', condition: 'DEFAULT' },
-          otpToThankYou,
-          {
-            id: 'OTP-BLOCKED-BLOCKED',
-            source: 'OTP',
-            target: 'BLOCKED',
-            condition: 'BLOCKED',
-          },
-          {
-            id: 'OTP-ERROR-ERROR',
-            source: 'OTP',
-            target: 'ERROR',
-            condition: 'ERROR',
-          },
-          {
-            id: 'HOME-BLOCKED-BLOCKED',
-            source: 'HOME',
-            target: 'BLOCKED',
-            condition: 'BLOCKED',
-          },
+          flowEdge('HOME', 'OTP', 'DEFAULT'),
+          flowEdge('OTP', 'THANKYOU', 'OTP_VERIFIED'),
+          ...otpBlockErrorEdges(),
+          flowEdge('HOME', 'BLOCKED', 'BLOCKED'),
         ],
       }
     }
-
     if (otpEntry) {
-      return applyFunnelLayoutToDefaultFlow(
-        {
-          version: 1,
-          entryPage: 'OTP',
-          startConfig: defaultStartConfig('OTP_ONLY'),
-          nodes: [
-            { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-            { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-            ...outcomes,
-          ],
-          edges: [
-            {
-              id: 'OTP-OTP_VERIFIED-CONFIRM',
-              source: 'OTP',
-              target: 'CONFIRM',
-              condition: 'OTP_VERIFIED',
-            },
-            ...CONFIRM_EDGES.map((e) => ({ ...e })),
-          ],
-        },
-        funnelLayout,
-      )
+      return {
+        version: 1,
+        entryPage: 'OTP',
+        startConfig: defaultStartConfig('OTP_ONLY'),
+        nodes: [otpNode, homeNode, ...outcomes],
+        edges: [
+          flowEdge('OTP', afterOtpTarget, 'OTP_VERIFIED'),
+          ...outcomeEdgesFrom('HOME'),
+          ...otpBlockErrorEdges(),
+        ],
+      }
+    }
+    return {
+      version: 1,
+      entryPage: 'HOME',
+      startConfig: defaultStartConfig('OTP_ONLY'),
+      nodes: [homeNode, otpNode, ...outcomes],
+      edges: [
+        flowEdge('HOME', 'OTP', 'DEFAULT'),
+        flowEdge('OTP', afterOtpTarget, 'OTP_VERIFIED'),
+        ...outcomeEdgesFrom('HOME'),
+        ...otpBlockErrorEdges(),
+        flowEdge('HOME', 'BLOCKED', 'BLOCKED'),
+      ],
     }
   }
 
-  return applyFunnelLayoutToDefaultFlow(
-    {
+  if (normalized === 'HEADER_INJECTION') {
+    const edges = [
+      flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'),
+      ...outcomeEdgesFrom('HOME'),
+    ]
+    if (skipHome) {
+      edges.unshift(flowEdge('HOME', 'THANKYOU', 'HEADER_RESOLVED'))
+    }
+    return {
       version: 1,
-      entryPage: base.entryPage || 'HOME',
-      startConfig: defaultStartConfig(normalized),
-      nodes: base.nodes.map((n) => ({ ...n })),
-      edges: base.edges.map((e) => ({ ...e })),
-    },
-    funnelLayout,
-  )
+      entryPage: 'HOME',
+      startConfig: defaultStartConfig('HEADER_INJECTION'),
+      nodes: [homeNode, ...outcomes],
+      edges,
+    }
+  }
+
+  if (normalized === 'BOTH') {
+    const afterTarget = skipHome ? 'THANKYOU' : 'HOME'
+    const edges = [
+      flowEdge('HOME', 'OTP', 'HEADER_UNRESOLVED'),
+      flowEdge('OTP', afterTarget, 'OTP_VERIFIED'),
+      ...otpBlockErrorEdges(),
+      ...outcomeEdgesFrom('HOME'),
+    ]
+    if (skipHome) {
+      edges.unshift(flowEdge('HOME', 'THANKYOU', 'HEADER_RESOLVED'))
+    }
+    return {
+      version: 1,
+      entryPage: 'HOME',
+      startConfig: defaultStartConfig('BOTH'),
+      nodes: [homeNode, otpNode, ...outcomes],
+      edges,
+    }
+  }
+
+  const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
+  return {
+    version: 1,
+    entryPage: base.entryPage || 'HOME',
+    startConfig: defaultStartConfig(normalized),
+    nodes: base.nodes.map((n) => ({ ...n })),
+    edges: base.edges.map((e) => ({ ...e })),
+  }
 }
 
 const CONDITION_LABELS = {
@@ -309,17 +293,37 @@ function resolveEntryPage(config) {
   return nodes[0].pageType
 }
 
-/** Infer after-OTP target from saved edges (CONFIRM vs THANKYOU). */
-export function resolveAfterOtpTarget(flowConfig) {
+/** Infer post-identity target: HOME (packs) | THANKYOU (skip HOME) | CONFIRM (legacy). */
+export function resolveAfterIdentityTarget(flowConfig) {
   const edges = flowConfig?.edges || []
   const otpVerified = edges.find(
     (e) =>
       (e.source === 'OTP' || e.source === 'otp') &&
       String(e.condition || '').toUpperCase() === 'OTP_VERIFIED',
   )
-  if (!otpVerified) return 'CONFIRM'
-  const target = String(otpVerified.target || '').toUpperCase()
-  return target === 'THANKYOU' ? 'THANKYOU' : 'CONFIRM'
+  if (otpVerified) {
+    const target = String(otpVerified.target || '').toUpperCase()
+    if (target === 'THANKYOU' || target === 'HOME' || target === 'CONFIRM') return target
+  }
+  const heResolved = edges.find(
+    (e) =>
+      (e.source === 'HOME' || e.source === 'home') &&
+      String(e.condition || '').toUpperCase() === 'HEADER_RESOLVED',
+  )
+  if (heResolved) {
+    const target = String(heResolved.target || '').toUpperCase()
+    if (target === 'THANKYOU' || target === 'HOME' || target === 'CONFIRM') return target
+  }
+  const hasConfirm = (flowConfig?.nodes || []).some(
+    (n) => n.pageType === 'CONFIRM' || n.id === 'CONFIRM',
+  )
+  return hasConfirm ? 'CONFIRM' : 'HOME'
+}
+
+/** @deprecated use resolveAfterIdentityTarget */
+export function resolveAfterOtpTarget(flowConfig) {
+  const target = resolveAfterIdentityTarget(flowConfig)
+  return target === 'THANKYOU' ? 'THANKYOU' : target === 'HOME' ? 'HOME' : target
 }
 
 /**
@@ -409,10 +413,12 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
       const type = targetNode?.pageType || e.target
       if (visited.has(type)) continue
       if (['INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'].includes(type)) continue
-      const otpGoesThankYou = edges.some(
-        (ed) => ed.source === 'OTP' && ed.target === 'THANKYOU',
+      const skipToThankYou = edges.some(
+        (ed) =>
+          ed.target === 'THANKYOU' &&
+          (ed.condition === 'OTP_VERIFIED' || ed.condition === 'HEADER_RESOLVED'),
       )
-      if (type === 'THANKYOU' && !otpGoesThankYou) continue
+      if (type === 'THANKYOU' && !skipToThankYou) continue
       visited.add(type)
       steps.push({ id: type, label: type })
       queue.push(e.target)
@@ -420,7 +426,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
   }
   if (
     !steps.some((s) => s.id === 'outcomes') &&
-    resolveAfterOtpTarget(config) === 'CONFIRM'
+    (config.edges || []).some((e) => String(e.condition || '').toUpperCase() === 'SUBSCRIBED')
   ) {
     steps.push({ id: 'outcomes', label: 'outcomes' })
   }
@@ -434,9 +440,9 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     edges,
     note:
       entryPage === 'OTP'
-        ? 'Landing opens OTP directly (HOME skipped). Use Advanced flow to remap edges.'
+        ? 'Landing opens OTP directly. After PIN, HOME shows pack / subscribe CTAs unless Skip HOME is on.'
         : entryPage === 'API_EXPOSE'
           ? 'API mediator only — no WAP pages.'
-          : 'Subscribe CTA uses this path. Canvas “Go to page / URL / Priority” bypasses it.',
+          : 'Pack / subscribe CTAs live on HOME. Canvas “Go to page / URL / Priority” bypasses this path.',
   }
 }
