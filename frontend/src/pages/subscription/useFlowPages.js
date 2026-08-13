@@ -3,7 +3,7 @@ import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage } from '../../services/
 import { persistPhone, pickHeFailRedirectUrl } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 import { FLOW_FONT, FLOW_PAGE_CACHE_ENABLED, PRELOAD_BY_PAGE } from './constants'
-import { isHeSuppressedFunnelPage } from './flowHelpers'
+import { isHeSuppressedFunnelPage, normalizeDetectNextPage } from './flowHelpers'
 
 /**
  * Page load/cache/prefetch, boot, URL step sync, and redirect side-effects.
@@ -347,8 +347,10 @@ function useFlowPages({
       await waitForHeDetect()
       if (cancelled || heExitPendingRef.current) return
       const meta = heMetaRef.current
+      const detectPage = normalizeDetectNextPage(meta.nextPage)
       if (
         !phoneRef.current &&
+        detectPage !== 'OTP' &&
         pickHeFailRedirectUrl({
           failRedirectUrl: meta.failRedirectUrl,
           cgRedirectUrl: meta.cgRedirectUrl,
@@ -359,13 +361,18 @@ function useFlowPages({
       if (heOnlyModeRef.current) return
 
       try {
+        if (detectPage) {
+          entryPageRef.current = detectPage
+          await loadPage(detectPage)
+          return
+        }
         const { entryPage } = await fetchFlowEntry({ country, operator, campid, trackingCampid })
         if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
         entryPageRef.current = entryPage || 'HOME'
         await loadPage(entryPageRef.current)
       } catch {
         if (!cancelled && !heExitPendingRef.current && !heOnlyModeRef.current) {
-          await loadPage('HOME')
+          await loadPage(detectPage || 'HOME')
         }
       }
     }

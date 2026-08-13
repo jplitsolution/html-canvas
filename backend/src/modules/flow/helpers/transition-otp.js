@@ -4,6 +4,7 @@ import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { postbackService } from '../../partners/postback.service.js';
+import { isPacksOnHome } from './funnel-layout.js';
 
 export function createHandleOtpContinue(deps) {
   const {
@@ -76,6 +77,10 @@ export function createHandleOtpContinue(deps) {
         CampaignPageType.OTP,
         'OTP_VERIFIED',
       ) || CampaignPageType.CONFIRM;
+
+    if (isPacksOnHome(campaign)) {
+      nextPage = CampaignPageType.HOME;
+    }
 
     // OTP verified → number mil gaya → checksub (with visitId so Session Detail shows it).
     const skipAfterOtp = await maybeSkipToThankYouIfSubscribed(

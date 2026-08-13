@@ -39,6 +39,7 @@ export const initDatabase = async () => {
   await ensureSuccessRedirectModeColumn(dataSource);
   await ensurePostbackRegisterAtColumn(dataSource);
   await ensureChecksubConfigJsonColumn(dataSource);
+  await ensureFunnelLayoutColumn(dataSource);
   return dataSource;
 };
 
@@ -251,6 +252,32 @@ async function ensureSuccessRedirectModeColumn(ds) {
     }
   } catch (err) {
     console.warn('ensureSuccessRedirectModeColumn:', err.message);
+  }
+}
+
+/** Idempotent: classic | packs_on_home — identity-before-HOME routing. */
+async function ensureFunnelLayoutColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "campaigns"
+        ADD COLUMN IF NOT EXISTS "funnel_layout" varchar(32) NOT NULL DEFAULT 'classic'
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaigns' AND COLUMN_NAME = 'funnel_layout'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`campaigns\` ADD COLUMN \`funnel_layout\` varchar(32) NOT NULL DEFAULT 'classic'`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureFunnelLayoutColumn:', err.message);
   }
 }
 

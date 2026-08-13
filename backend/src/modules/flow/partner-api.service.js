@@ -5,6 +5,10 @@ import {
   evaluateChecksubRules,
   parseChecksubConfig,
 } from './helpers/checksub-rules.js';
+import {
+  fillSubscribeTemplate,
+  mapSubServiceId,
+} from './helpers/pack-url.js';
 
 export const createPartnerApiService = () => {
   const parseHeaders = (headersJson) => {
@@ -16,20 +20,8 @@ export const createPartnerApiService = () => {
     }
   };
 
-  const resolveTemplate = (template, vars) => {
-    let result = template;
-    for (const [key, val] of Object.entries(vars)) {
-      result = result.split(`{{${key}}}`).join(val ?? '');
-    }
-    return result;
-  };
-
-  const mapSubServiceId = (pack) => {
-    const p = (pack || 'daily').toLowerCase();
-    if (p === 'weekly') return 'HWeekly';
-    if (p === 'monthly') return 'HMonthly';
-    return 'HDaily';
-  };
+  const resolveTemplate = (template, vars) =>
+    fillSubscribeTemplate(template, vars);
 
   const buildVars = (input) => {
     const phone = input.phone ?? '';
@@ -374,8 +366,10 @@ export const createPartnerApiService = () => {
       return false;
     }
 
-    if (!config?.subscribeApi) {
-      // Soft success when no partner subscribe URL — still leave an audit row.
+    const overrideUrl = String(input.subscribeUrl || '').trim();
+    const template = overrideUrl || config?.subscribeApi || '';
+
+    if (!template) {
       await logCall({
         callType: ApiCallType.SUBSCRIBE,
         input,
@@ -396,9 +390,9 @@ export const createPartnerApiService = () => {
     }
 
     try {
-      const headers = parseHeaders(config.headersJson);
+      const headers = parseHeaders(config?.headersJson);
       const { url, response } = await sendRequest(
-        config.subscribeApi,
+        template,
         input,
         headers,
         `subscribe visitId=${input.visitId} planId=${input.planId || 'n/a'}`,
@@ -422,7 +416,6 @@ export const createPartnerApiService = () => {
       } else if (typeof data.success === 'boolean') {
         success = data.success;
       } else if (data.response != null) {
-        // AE-style partners: { "response": "SUCCESS" | "FAIL" }
         success = String(data.response).toUpperCase() === 'SUCCESS';
       } else {
         success = true;
@@ -440,7 +433,7 @@ export const createPartnerApiService = () => {
       await logCall({
         callType: ApiCallType.SUBSCRIBE,
         input,
-        requestUrl: config.subscribeApi,
+        requestUrl: template,
         success: false,
         errorMessage: err.message,
       });

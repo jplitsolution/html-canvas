@@ -72,7 +72,67 @@ export const createFlowEngineService = () => {
   const isApiExposeFlow = (config) =>
     String(config?.entryPage || '').toUpperCase() === 'API_EXPOSE';
 
-  const getDefaultFlowConfig = (mode = 'BOTH') => {
+  /**
+   * packs_on_home: OTP_VERIFIED → HOME (identity already ran). Keep CONFIRM
+   * reachable so the optional confirm page is not stripped as unreachable.
+   */
+  const applyFunnelLayoutToFlowConfig = (config, funnelLayout) => {
+    if (!config || !Array.isArray(config.edges)) return config;
+    const packs =
+      String(funnelLayout || '')
+        .trim()
+        .toLowerCase() === 'packs_on_home';
+
+    const remap = (targetFrom, targetTo) =>
+      config.edges.map((e) => {
+        if (String(e.condition || '').toUpperCase() !== 'OTP_VERIFIED') {
+          return e;
+        }
+        if (String(e.target || '').toUpperCase() !== targetFrom) return e;
+        return {
+          ...e,
+          target: targetTo,
+          id: `${e.source}-OTP_VERIFIED-${targetTo}`,
+        };
+      });
+
+    if (!packs) {
+      return { ...config, edges: remap('HOME', CampaignPageType.CONFIRM) };
+    }
+
+    const hasHome = (config.nodes || []).some(
+      (n) => n.pageType === CampaignPageType.HOME || n.id === 'HOME',
+    );
+    const nodes = hasHome
+      ? config.nodes
+      : [
+          {
+            id: CampaignPageType.HOME,
+            pageType: CampaignPageType.HOME,
+            position: { x: 40, y: 160 },
+          },
+          ...(config.nodes || []),
+        ];
+
+    const edges = remap('CONFIRM', CampaignPageType.HOME);
+    const hasConfirm = (config.nodes || []).some(
+      (n) => n.pageType === CampaignPageType.CONFIRM || n.id === 'CONFIRM',
+    );
+    const confirmReachable = edges.some(
+      (e) => String(e.target || '').toUpperCase() === 'CONFIRM',
+    );
+    if (hasConfirm && !confirmReachable) {
+      edges.push({
+        id: 'HOME-DEFAULT-CONFIRM',
+        source: CampaignPageType.HOME,
+        target: CampaignPageType.CONFIRM,
+        condition: 'DEFAULT',
+      });
+    }
+    return { ...config, nodes, edges };
+  };
+
+  const getDefaultFlowConfig = (mode = 'BOTH', options = {}) => {
     const node = (pageType, x, y) => ({
       id: pageType,
       pageType,
@@ -164,13 +224,16 @@ export const createFlowEngineService = () => {
     );
     edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
 
-    return {
-      version: 1,
-      entryPage: CampaignPageType.HOME,
-      startConfig: defaultStartConfig(mode),
-      nodes,
-      edges,
-    };
+    return applyFunnelLayoutToFlowConfig(
+      {
+        version: 1,
+        entryPage: CampaignPageType.HOME,
+        startConfig: defaultStartConfig(mode),
+        nodes,
+        edges,
+      },
+      options.funnelLayout,
+    );
   };
 
   const getEntryPage = (config) => {
@@ -331,6 +394,7 @@ export const createFlowEngineService = () => {
     normalizeMode,
     isApiExposeFlow,
     getDefaultFlowConfig,
+    applyFunnelLayoutToFlowConfig,
     getEntryPage,
     getStartConfig,
     reachableNodeIds,

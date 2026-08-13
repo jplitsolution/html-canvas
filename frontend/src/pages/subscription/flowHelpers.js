@@ -71,11 +71,34 @@ function normalizePack(value) {
   return VALID_PACKS.includes(pack) ? pack : 'daily'
 }
 
+/** Subscribe URL override + postback flag from a pack / subscribe button. */
+function packSubscribeExtras(node) {
+  const subscribeUrl = String(node?.getAttribute?.('data-subscribe-url') || '').trim()
+  const postbackAttr = node?.getAttribute?.('data-postback')
+  return {
+    ...(subscribeUrl ? { subscribeUrl } : {}),
+    queuePostback: postbackAttr === '0' || postbackAttr === 'false' ? false : true,
+  }
+}
+
 function findActionTarget(event) {
   const path = event.composedPath?.() || []
   for (const node of path) {
     if (!(node instanceof HTMLElement)) continue
-    if (node.closest('[data-pack]')) continue
+    if (node.closest('[data-pack]')) {
+      const packEl = node.hasAttribute('data-pack')
+        ? node
+        : node.closest('[data-pack]')
+      const packAction = String(packEl.getAttribute('data-action') || '').toUpperCase()
+      if (
+        packAction === 'SUBSCRIBE_ROUTE' ||
+        packAction === 'CONFIRM' ||
+        packAction === 'SUBSCRIBE'
+      ) {
+        return { node: packEl, action: packAction }
+      }
+      continue
+    }
     if (!node.matches('[data-action], [data-actions], button, a, [data-tc-type="hotspot"]')) continue
 
     const explicit =
@@ -107,5 +130,6 @@ export {
   isCampaignPageHref,
   hrefIsNavigationTarget,
   normalizePack,
+  packSubscribeExtras,
   findActionTarget,
 }

@@ -114,6 +114,41 @@ export function isApiExposeEntry(entryPage) {
   return String(entryPage || '').toUpperCase() === 'API_EXPOSE'
 }
 
+function applyFunnelLayoutToDefaultFlow(config, funnelLayout) {
+  if (!config || String(funnelLayout || '').toLowerCase() !== 'packs_on_home') {
+    return config
+  }
+  const edges = (config.edges || []).map((e) => {
+    if (String(e.condition || '').toUpperCase() !== 'OTP_VERIFIED') return e
+    if (String(e.target || '').toUpperCase() !== 'CONFIRM') return e
+    return { ...e, target: 'HOME', id: `${e.source}-OTP_VERIFIED-HOME` }
+  })
+  const hasConfirm = (config.nodes || []).some(
+    (n) => n.pageType === 'CONFIRM' || n.id === 'CONFIRM',
+  )
+  const hasHome = (config.nodes || []).some(
+    (n) => n.pageType === 'HOME' || n.id === 'HOME',
+  )
+  const nodes = hasHome
+    ? config.nodes
+    : [
+        { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+        ...(config.nodes || []),
+      ]
+  const confirmReachable = edges.some(
+    (e) => String(e.target || '').toUpperCase() === 'CONFIRM',
+  )
+  if (hasConfirm && !confirmReachable) {
+    edges.push({
+      id: 'HOME-DEFAULT-CONFIRM',
+      source: 'HOME',
+      target: 'CONFIRM',
+      condition: 'DEFAULT',
+    })
+  }
+  return { ...config, nodes, edges }
+}
+
 /**
  * Build default flow for a mode.
  * OTP_ONLY supports:
@@ -121,7 +156,7 @@ export function isApiExposeEntry(entryPage) {
  *   afterOtp 'CONFIRM' (pack/subscribe page) | 'THANKYOU' (pin-verify = subscribe)
  *   (afterOtp ignored when entryPage is API_EXPOSE)
  */
-export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
+export function buildDefaultFlow(mode, { entryPage, afterOtp, funnelLayout } = {}) {
   const normalized = normalizeModeId(mode)
   const base = DEFAULT_FLOWS[normalized] || DEFAULT_FLOWS.BOTH
   const entry = String(entryPage || '').toUpperCase()
@@ -215,35 +250,41 @@ export function buildDefaultFlow(mode, { entryPage, afterOtp } = {}) {
     }
 
     if (otpEntry) {
-      return {
-        version: 1,
-        entryPage: 'OTP',
-        startConfig: defaultStartConfig('OTP_ONLY'),
-        nodes: [
-          { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
-          { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
-          ...outcomes,
-        ],
-        edges: [
-          {
-            id: 'OTP-OTP_VERIFIED-CONFIRM',
-            source: 'OTP',
-            target: 'CONFIRM',
-            condition: 'OTP_VERIFIED',
-          },
-          ...CONFIRM_EDGES.map((e) => ({ ...e })),
-        ],
-      }
+      return applyFunnelLayoutToDefaultFlow(
+        {
+          version: 1,
+          entryPage: 'OTP',
+          startConfig: defaultStartConfig('OTP_ONLY'),
+          nodes: [
+            { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+            { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 600, y: 160 } },
+            ...outcomes,
+          ],
+          edges: [
+            {
+              id: 'OTP-OTP_VERIFIED-CONFIRM',
+              source: 'OTP',
+              target: 'CONFIRM',
+              condition: 'OTP_VERIFIED',
+            },
+            ...CONFIRM_EDGES.map((e) => ({ ...e })),
+          ],
+        },
+        funnelLayout,
+      )
     }
   }
 
-  return {
-    version: 1,
-    entryPage: base.entryPage || 'HOME',
-    startConfig: defaultStartConfig(normalized),
-    nodes: base.nodes.map((n) => ({ ...n })),
-    edges: base.edges.map((e) => ({ ...e })),
-  }
+  return applyFunnelLayoutToDefaultFlow(
+    {
+      version: 1,
+      entryPage: base.entryPage || 'HOME',
+      startConfig: defaultStartConfig(normalized),
+      nodes: base.nodes.map((n) => ({ ...n })),
+      edges: base.edges.map((e) => ({ ...e })),
+    },
+    funnelLayout,
+  )
 }
 
 const CONDITION_LABELS = {

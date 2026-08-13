@@ -8,6 +8,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
+import { normalizeSubscribeUrlOverride } from './pack-url.js';
 
 export function createHandleConfirm(deps) {
   const {
@@ -59,7 +60,9 @@ export function createHandleConfirm(deps) {
         pack: selectedPack,
       },
     );
-    if (shouldRegisterPostbackAt?.(campaign, 'confirm')) {
+    if (shouldRegisterPostbackAt?.(campaign, 'confirm', {
+      queuePostback: input.queuePostback,
+    })) {
       void postbackService.registerPending({
         visitId: input.visitId,
         msisdn: phone,
@@ -171,6 +174,7 @@ export function createHandleConfirm(deps) {
       ...partnerCtx,
       planId: selectedPack,
       subscriptionUrl,
+      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
     });
 
     if (success) {

@@ -85,6 +85,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
         draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
           ? draftAfterOtp
           : 'CONFIRM',
+      funnelLayout: campaign?.funnelLayout,
     })
   }, [
     draftMode,
@@ -94,6 +95,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     draftAfterOtp,
     savedAfterOtp,
     campaign?.flowConfig,
+    campaign?.funnelLayout,
   ])
 
   const summary = useMemo(
@@ -128,6 +130,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
           draftMode === 'OTP_ONLY' && !isApiExposeEntry(draftEntry)
             ? draftAfterOtp
             : 'CONFIRM',
+        funnelLayout: campaign?.funnelLayout,
       })
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
@@ -375,6 +378,12 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
           )}
 
           <p className="text-[11px] text-fg-subtle mt-2.5">{summary.note}</p>
+          {campaign?.funnelLayout === 'packs_on_home' && (
+            <p className="text-[11px] text-fg-muted mt-1.5 leading-snug">
+              Checks before Home: identity runs before the first content page. After OTP
+              (when used) the next page is Home. Pack buttons subscribe from any page.
+            </p>
+          )}
         </div>
       </div>
     </div>

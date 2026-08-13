@@ -34,7 +34,7 @@ export const FUNNEL_PAGE_GUIDES = {
   HOME: {
     title: 'Home page',
     summary:
-      'User lands here first. Design freely — any button or hotspot can start the flow. Verification mode (HE / OTP / both / none) is chosen in Flow Builder, not by a required Subscribe button.',
+      'First content page after identity checks. Design freely — intro, one CTA, pack buttons, or a jump to Confirm are all valid.',
     canChange: [
       'Everything on this page',
       'Buttons, images, hotspots',
@@ -50,12 +50,24 @@ export const FUNNEL_PAGE_GUIDES = {
         thumb: 'button',
         snippet: `<button type="button" data-action="SUBSCRIBE" class="flow-btn">Subscribe Now</button>`,
       },
+      {
+        id: 'pack-ctas',
+        label: 'Pack buttons (Daily / Weekly / Monthly)',
+        why: 'Optional. Each click subscribes to that pack. Works on Home or Confirm. Confirm page is not required.',
+        match: 'data-pack=',
+        thumb: 'pricing',
+        snippet: `<div class="flow-pack-list">
+      <button type="button" data-action="SUBSCRIBE_ROUTE" data-pack="daily" class="flow-btn" style="margin-bottom:8px;">Daily Pack</button>
+      <button type="button" data-action="SUBSCRIBE_ROUTE" data-pack="weekly" class="flow-btn" style="margin-bottom:8px;">Weekly Pack</button>
+      <button type="button" data-action="SUBSCRIBE_ROUTE" data-pack="monthly" class="flow-btn">Monthly Pack</button>
+    </div>`,
+      },
     ],
   },
   OTP: {
     title: 'OTP verification page',
     summary:
-      'Shown when the phone number is not detected. User enters number, gets SMS code, then verifies.',
+      'Shown when OTP is in the path (no HE number, or OTP-only). After verify, Checks before Home campaigns open Home — not Confirm.',
     canChange: ['Titles', 'Colors', 'Layout', 'Button labels (keep the fields & buttons)'],
     required: [
       {
@@ -111,7 +123,7 @@ export const FUNNEL_PAGE_GUIDES = {
   CONFIRM: {
     title: 'Confirm page',
     summary:
-      'Optional confirm / pack step. Design freely — packs and Confirm button are optional if your status checks or OTP already finishes the journey.',
+      'Optional confirm / pack step. Pack subscribe buttons also work on Home or any other page. This page is not required.',
     canChange: [
       'Everything on this page',
       'Pack picker (optional)',
@@ -123,7 +135,7 @@ export const FUNNEL_PAGE_GUIDES = {
       {
         id: 'pack-daily',
         label: 'Pack options',
-        why: 'Only if users should pick daily / weekly / monthly on this page.',
+        why: 'Optional. Select-then-confirm on this page. Pack subscribe buttons also work on Home or any other page.',
         match: 'data-pack=',
         thumb: 'pricing',
         snippet: packPickerSnippet,
@@ -337,8 +349,9 @@ export function getFlowElementInfo(attrs) {
   if (attrs['data-pack']) {
     return {
       isSystem: true,
-      label: `Pack option: ${attrs['data-pack']} (system)`,
-      description: 'User picks subscription pack. Do not remove pack buttons.',
+      label: `Pack option: ${attrs['data-pack']}`,
+      description:
+        'Subscribe pack. Works on Home, Confirm, or any page. Do not remove pack buttons you still need.',
     }
   }
 
@@ -351,4 +364,12 @@ export function getFlowElementInfo(attrs) {
   }
 
   return null
+}
+
+/** Soft warning: OTP postback + pack CTAs are two conversion kinds, not three pack buttons. */
+export function hasMixedConversionTriggers({ html = '', postbackRegisterAt } = {}) {
+  const hasPackCta = /data-pack\s*=/i.test(String(html || ''))
+  const otpPostback =
+    postbackRegisterAt === 'otp' || postbackRegisterAt === 'both'
+  return Boolean(hasPackCta && otpPostback)
 }

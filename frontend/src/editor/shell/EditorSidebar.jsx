@@ -17,7 +17,7 @@ import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
 import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, THANKYOU_STARTER_TEMPLATES, INPROGRESS_STARTER_TEMPLATES, LOW_BALANCE_STARTER_TEMPLATES, BLOCKED_STARTER_TEMPLATES, ERROR_STARTER_TEMPLATES } from '../templates/starterTemplates'
-import { applyStarterHtml } from '../utils/blockActions'
+import { applyStarterTemplate } from '../utils/blockActions'
 import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragAndDrop'
 import { startAssetDrag } from '../plugins/assetDrag'
 import { insertImageComponent } from '../utils/insertImage'
@@ -26,6 +26,7 @@ import { unlockInsertion } from '../utils/insertionLock'
 import { uploadImage } from '../../services/api/upload'
 import { PlacementModal } from '../components/PlacementModal'
 import { FUNNEL_PAGE_GUIDES } from '../utils/funnelGuide'
+import useStore from '../../store/useStore'
 
 const TABS = [
   { id: 'flow', label: 'Required parts', hint: 'Re-add flow buttons & fields the page needs', icon: ShieldCheck },
@@ -63,7 +64,8 @@ function updateBackgroundText(editor, text) {
 const SIDEBAR_COLLAPSED_KEY = 'tc-editor-sidebar-collapsed'
 
 export function EditorSidebar() {
-  const { editor, funnelPageType } = useEditor()
+  const { editor, funnelPageType, campaignId } = useEditor()
+  const updateCampaign = useStore((s) => s.updateCampaign)
   const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType] : undefined
   const hasFlowParts = Boolean(
     flowGuide && ((flowGuide.required?.length || 0) + (flowGuide.optional?.length || 0) > 0)
@@ -369,7 +371,13 @@ export function EditorSidebar() {
                       description={t.description}
                       thumb={t.thumb}
                       previewImage={t.previewImage}
-                      onApply={() => editor && applyStarterHtml(editor, t.html, t.css)}
+                      onApply={() =>
+                        editor &&
+                        applyStarterTemplate(editor, t, {
+                          campaignId,
+                          updateCampaign,
+                        })
+                      }
                     />
                   ));
                 })()}

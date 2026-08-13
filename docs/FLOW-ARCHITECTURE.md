@@ -6,7 +6,7 @@
 > Give this file to an AI (with the code) when changing flow behaviour.
 > If this doc and code disagree, **trust the code** and update this doc.
 
-**Last updated:** Aug 2026  
+**Last updated:** 13 Aug 2026  
 **Related docs:**
 - `docs/SAFARICOM_HE_SETUP_GUIDE.md` — operator-specific setup checklist
 - `docs/HE-DETECT-FLOW-ARCHITECTURE.md` — short pointer (superseded by this file)
@@ -30,7 +30,10 @@ Affiliate / vendor tracking URL
  Outcome:
    • External redirect (HE success / fail / campaign success / null-flow CG)
    • Internal status page (LOW_BALANCE, BLOCKED, INPROGRESS, THANKYOU, …)
-   • Classic funnel (HOME → OTP/CONFIRM → subscribe) for non–API-HE modes
+   • Classic funnel (HOME → OTP/CONFIRM → subscribe)
+   • Checks before Home (`funnel_layout=packs_on_home`): identity + partner
+     checks before the first content page; HOME is a free canvas; pack CTAs
+     subscribe from any page
 ```
 
 ### 0.1 Three “what happens next?” systems (the kichdi)
@@ -40,7 +43,7 @@ These overlap in the UI and in people’s heads. They are **not** the same layer
 | # | System | Where configured | Used at runtime when… | Source of truth for |
 |---|--------|------------------|------------------------|---------------------|
 | **A. Detect routing** | Campaign HE + `api_configs` + checksub | Campaign API / HE modal | Landing: `/detect-msisdn` | Redirect out, status page, or “stay for funnel” |
-| **B. Flow graph (mode)** | `verificationMode` + `flowConfig` (nodes/edges) | **Campaign Detail** mode picker (defaults graph); old `/flow` URL redirects here | Button has `data-action=SUBSCRIBE` (or CONFIRM/OTP continue) → `POST /transition` | Classic signup path: HOME→OTP/CONFIRM by mode + conditions |
+| **B. Flow graph (mode)** | `verificationMode` + `flowConfig` (nodes/edges) + `funnel_layout` | **Campaign Detail** mode picker + Landing layout | Button has `data-action=SUBSCRIBE` (or CONFIRM/OTP continue) → `POST /transition` | Classic: HOME→OTP/CONFIRM. `packs_on_home`: OTP (when used) → HOME; pack CTA → subscribe |
 | **C. Canvas button config** | Per-control “When clicked” | Canvas PropertyPanel | Click on that control | Direct page jump, external URL, scroll, or Priority Chain — **bypasses B** |
 
 **Runtime rule of thumb:**
@@ -83,6 +86,7 @@ an external redirect or an allowed status page is chosen — no funnel flash.
 | HE providers (token / masked / custom HTTP) | `backend/src/modules/flow/he.service.js` |
 | checksub / blocklist / subscribe (partner HTTP) | `backend/src/modules/flow/partner-api.service.js` |
 | Flow graph / verification modes | `backend/src/modules/flow/flow-engine.service.js` |
+| Funnel layout (classic vs packs_on_home) | `backend/src/modules/flow/helpers/funnel-layout.js` |
 | `api_call_logs` | `backend/src/modules/flow/api-call-log.service.js` + `entities/api-call-log.entity.js` |
 | Vendor CPA pending + fire | `backend/src/modules/partners/postback.service.js` |
 | Dual campid split | `backend/src/modules/markets/tracking-id.util.js` |
@@ -284,13 +288,15 @@ API HE ignores this hint for the final phone decision.
 |-----------|------------|--------------|------------------------|
 | Phone + blocklist hit | `BLOCKED` | none | no |
 | Phone + checksub `isActive` | `THANKYOU` if no campaign success URL | `campaign.successRedirectUrl` | no |
-| Phone + checksub status `new` | none | HE `successRedirectUrl` | **upsert pending** (only if HE success redirect used / `he_success`) |
+| Phone + checksub status `new` | none | HE `successRedirectUrl` | **upsert pending** if HE success redirect / `he_success` — **not** when `funnel_layout=packs_on_home` |
 | Phone + `pending` | `INPROGRESS` | none | no |
 | Phone + `grace` / `parking` | `LOW_BALANCE` | none | no |
 | Phone + other known non-new status | usually `INPROGRESS` | none | no |
 | Phone + **no** checksub | none | HE `successRedirectUrl` (legacy) | no |
 | **No** phone + API HE | none | `heConfig.failRedirectUrl` else `campaign.cgRedirectUrl` | no |
-| No phone + header/none | none | no automatic fail from detect | no |
+| No phone + `packs_on_home` + HE-only | `ERROR` | fail URL else CG URL | no |
+| No phone + `packs_on_home` + OTP_ONLY / BOTH | `OTP` | none (never fail-redirect) | no |
+| No phone + header/none (classic) | none | no automatic fail from detect | no |
 
 **Status mapping** (`pageTypeForSubscriptionStatus`):
 
@@ -326,12 +332,30 @@ Configured URL opens otherwise **as-is**.
 
 Normalized modes (`flow-engine.service.js`):
 
-| Mode | Alias | Behaviour |
+| Mode | Alias | Behaviour (classic `funnel_layout`) |
 |------|-------|-----------|
 | `HEADER_INJECTION` | `MSISDN_ONLY` | Landing HE; HOME → CONFIRM if header resolved; else ERROR |
 | `OTP_ONLY` | — | No landing HE / no `he_redirect` log; HOME → OTP → CONFIRM |
 | `BOTH` | — | Landing HE first; HOME → CONFIRM if resolved; else OTP |
 | `NONE` | `NULL` | No landing HE; HOME only; **null-flow CG** if `cgRedirectUrl` set |
+
+### 7.0 Checks before Home (`funnel_layout=packs_on_home`)
+
+Opt-in per campaign (default `classic`). Identity + checksub/blocklist run **before HOME**. HOME is a free canvas — not always a confirm screen. Pack/subscribe buttons (`data-pack` + `CONFIRM` / `SUBSCRIBE_ROUTE`) work on HOME, CONFIRM, or any page.
+
+No-MSISDN on this layout is **mode-specific**:
+
+| Mode | No MSISDN |
+|------|-----------|
+| `HEADER_INJECTION` | ERROR + `failRedirectUrl` else `cgRedirectUrl`. Never OTP, never HOME. |
+| `OTP_ONLY` | OTP first → verify → checks → HOME (or status). |
+| `BOTH` | HE hit → checks → HOME; HE miss → OTP → checks → HOME. |
+
+After OTP verify, next content page is **HOME** (not auto-CONFIRM). CONFIRM page stays optional.
+
+Default: do **not** `registerPending` on HE-detect `new` or OTP verify. Pending queues on pack/subscribe click (`data-postback="0"` skips that button). Advanced campaign setting can also queue on OTP verify (`postbackRegisterAt=otp\|both`).
+
+See `docs/HOME-PACK-POSTBACK-PLAN.md`.
 
 ### 7.1 Null-flow (`NONE` + CG URL)
 
@@ -348,11 +372,11 @@ Actions:
 
 | Page | Actions |
 |------|---------|
-| HOME | `SUBSCRIBE` |
+| HOME | `SUBSCRIBE` (continue graph) or pack CTA (`data-pack` + `CONFIRM` / `SUBSCRIBE_ROUTE`) |
 | OTP | UI: send/verify OTP → transition `CONTINUE` |
-| CONFIRM | `CONFIRM` (+ required `planId`: daily/weekly/monthly) |
+| CONFIRM | `CONFIRM` (+ required `planId`: daily/weekly/monthly). Pack picker is optional — packs also work on HOME or any page. |
 
-CONFIRM path: `registerPending` → blocklist → checksub skip-if-existing → subscribe → THANKYOU / ERROR / status page.
+Pack / CONFIRM path: `registerPending` (unless `data-postback="0"`) → blocklist → checksub skip-if-existing → subscribe (`subscribeApi` or per-button `data-subscribe-url`) → THANKYOU / ERROR / status page.
 
 ---
 
@@ -367,6 +391,7 @@ CONFIRM path: `registerPending` → blocklist → checksub skip-if-existing → 
    - empty phone + `failRedirectUrl` → `window.location.replace` (URL as-is)
    - phone + `successRedirectUrl` → success redirect
    - phone + `nextPage` (allowed) → `loadPage(nextPage)`
+   - `packs_on_home` + no phone: OTP (`OTP_ONLY` / `BOTH`) or ERROR (`HEADER_INJECTION`) — do not flash HOME
    - API HE + nothing → keep overlay (no HOME/OTP)
 
 ### 8.2 HE silent-exit vs funnel (API HE)
@@ -377,9 +402,9 @@ CONFIRM path: `registerPending` → blocklist → checksub skip-if-existing → 
 - Never flash HOME
 
 **Funnel mode** (HE success URL empty, and no fail/CG exit when MSISDN missing):
-- After detect settles → **always show HOME**
+- After detect settles → show detect `nextPage` (HOME, or OTP/ERROR for `packs_on_home`)
 - MSISDN (if found) stays on the visit for later CTA / OTP / Priority
-- HOME Subscribe uses verification mode as usual
+- HOME Subscribe uses verification mode as usual (pack CTAs subscribe immediately)
 
 `hideHomeForHe` = resolving OR exit pending OR (funnel suppressed AND page is empty/HOME/OTP).
 Funnel suppressed only while silent-exit applies — not for every API HE campaign.
@@ -398,8 +423,9 @@ Funnel suppressed only while silent-exit applies — not for every API HE campai
 - **Uniqueness:** one row per normalized MSISDN globally (`UQ_conversion_postbacks_msisdn`).
 - `registerPending(msisdn, …)` upserts latest row → status `pending`, refreshes attribution.
 - Called from:
-  - detect: only `he_success` + checksub `new`
-  - CONFIRM click (before billing)
+  - detect: only `he_success` + checksub `new` — **skipped** when `funnel_layout=packs_on_home`
+  - CONFIRM / pack subscribe click (before billing); any page; skip if `data-postback="0"`
+  - OTP continue when `postbackRegisterAt` is `otp` or `both` (`packs_on_home` default is off)
   - null-flow CG when phone known
   - `/register-postback`
   - callback recovery if no pending row
@@ -444,7 +470,9 @@ Typical healthy API HE visit chain:
 | Field | Role |
 |-------|------|
 | `verificationMode` | HEADER_INJECTION / OTP_ONLY / BOTH / NONE |
+| `funnel_layout` | `classic` (default) or `packs_on_home` (identity before HOME) |
 | `flowConfig` | Optional visual flow graph JSON |
+| `postbackRegisterAt` | `confirm` / `otp` / `both` — when to queue vendor pending |
 | `cgRedirectUrl` | Null-flow CG + API HE fail fallback |
 | `successRedirectUrl` | Already-active users |
 | `serviceId` | Partner checksub service |

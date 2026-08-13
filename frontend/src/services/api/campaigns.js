@@ -95,6 +95,12 @@ function mapCampaign(campaign) {
       ).toLowerCase()
       return v === 'otp' || v === 'both' ? v : 'confirm'
     })(),
+    funnelLayout: (() => {
+      const v = String(
+        campaign.funnelLayout || campaign.funnel_layout || 'classic',
+      ).toLowerCase()
+      return v === 'packs_on_home' ? 'packs_on_home' : 'classic'
+    })(),
     pages,
     requiredComplete,
     flowConfig,

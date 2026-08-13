@@ -63,6 +63,12 @@ function statusClass(status) {
   return 'text-gray-600 bg-gray-50 border-gray-200'
 }
 
+function eventPack(metadata) {
+  if (!metadata || typeof metadata !== 'object') return ''
+  const raw = metadata.pack || metadata.planId
+  return String(raw || '').trim().toLowerCase()
+}
+
 function eventDescription(eventType) {
   switch (eventType) {
     case 'VISIT':
@@ -70,7 +76,9 @@ function eventDescription(eventType) {
     case 'HOME_VIEW':
       return 'Home page displayed to user.'
     case 'SUBSCRIBE_CLICK':
-      return 'User clicked the billing subscription / confirm button.'
+      return 'User clicked a subscribe / billing button.'
+    case 'CONFIRM_CLICK':
+      return 'User confirmed a pack and hit the billing subscribe API.'
     case 'OTP_VIEW':
       return 'OTP page displayed.'
     case 'OTP_SEND':
@@ -453,6 +461,7 @@ function SessionDetailPage() {
                         ? apiCall?.statusLabel || item.metadata?.statusLabel
                         : visit?.visitStatus
                     const desc = eventDescription(item.eventType)
+                    const pack = eventPack(item.metadata)
                     return (
                       <div key={`${item.id}-${item.eventType}`} className="relative">
                         <div className="absolute -left-8 top-0.5 w-8 h-8 rounded-full border bg-white flex items-center justify-center shadow-sm">
@@ -469,6 +478,11 @@ function SessionDetailPage() {
                                   className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusClass(label)}`}
                                 >
                                   {label}
+                                </span>
+                              )}
+                              {pack && (
+                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-indigo-700 bg-indigo-50 border-indigo-200">
+                                  {pack}
                                 </span>
                               )}
                             </div>

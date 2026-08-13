@@ -6,7 +6,7 @@ import {
   resolveSubscribeDestination,
 } from '../../editor/utils/subscribeRoutes'
 import { VALID_PAGES } from './constants'
-import { findActionTarget, isCampaignPageHref, normalizePack } from './flowHelpers'
+import { findActionTarget, isCampaignPageHref, normalizePack, packSubscribeExtras } from './flowHelpers'
 import { runPriorityChain } from './runPriorityChain'
 import { setupOtpBindings } from './setupOtpBindings'
 import {
@@ -63,17 +63,27 @@ function useShadowInteractions({
     if (!shadow) shadow = host.attachShadow({ mode: 'open' })
     mountPageInShadow(shadow, pageData)
 
-    if (pageData.pageType === 'CONFIRM') {
+    if (pageData.pageType === 'CONFIRM' || shadow.querySelector('[data-pack]')) {
       syncPackPicker(shadow, selectedPackRef.current)
-      syncPhoneDisplay(shadow, phoneRef.current)
+      if (pageData.pageType === 'CONFIRM') {
+        syncPhoneDisplay(shadow, phoneRef.current)
+      }
     }
 
     const handlePackClick = (event) => {
-      if (pageDataRef.current?.pageType !== 'CONFIRM') return
       const packBtn = event.composedPath?.().find(
         (node) => node instanceof HTMLElement && node.hasAttribute('data-pack'),
       )
       if (!packBtn || transitionLockRef.current) return
+      const packAction = String(packBtn.getAttribute('data-action') || '').toUpperCase()
+      // Pack + subscribe action → let handleClick fire subscribe, not just select.
+      if (
+        packAction === 'SUBSCRIBE_ROUTE' ||
+        packAction === 'CONFIRM' ||
+        packAction === 'SUBSCRIBE'
+      ) {
+        return
+      }
       event.preventDefault()
       event.stopPropagation()
       const nextPack = normalizePack(packBtn.getAttribute('data-pack'))
@@ -249,7 +259,12 @@ function useShadowInteractions({
         setTransitioning(true)
         setError('')
         const planId =
-          getSelectedPackFromShadow(shadow) || selectedPackRef.current || 'daily'
+          (node.hasAttribute('data-pack')
+            ? normalizePack(node.getAttribute('data-pack'))
+            : '') ||
+          getSelectedPackFromShadow(shadow) ||
+          selectedPackRef.current ||
+          'daily'
         const routes = parseSubscribeRoutes({
           'data-subscribe-routes': node.getAttribute('data-subscribe-routes'),
         })
@@ -269,6 +284,7 @@ function useShadowInteractions({
             vid: vidRef.current || undefined,
             affId: affIdRef.current || undefined,
             subscribeRoutes: routes,
+            ...packSubscribeExtras(node),
           })
 
           if (next.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
@@ -314,10 +330,7 @@ function useShadowInteractions({
       if (fromPage === 'OTP') {
         return
       }
-      if (
-        (fromPage === 'HOME' && action !== 'SUBSCRIBE') ||
-        (fromPage === 'CONFIRM' && action !== 'CONFIRM')
-      ) {
+      if (action !== 'SUBSCRIBE' && action !== 'CONFIRM') {
         return
       }
 
@@ -325,11 +338,12 @@ function useShadowInteractions({
       setTransitioning(true)
       setError('')
 
-      // Avoid optimistic page swaps here.
-      // Backend may decide OTP is required even when CONFIRM is prefetched, which causes
-      // a brief CONFIRM->OTP flash. Better UX: keep current page + show progress until response.
-
-      const planId = fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined
+      const packOnButton = node.hasAttribute('data-pack')
+        ? normalizePack(node.getAttribute('data-pack'))
+        : ''
+      const planId =
+        packOnButton ||
+        (fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined)
 
       try {
         const next = await transitionFlow({
@@ -346,6 +360,7 @@ function useShadowInteractions({
           vid: vidRef.current || undefined,
           affId: affIdRef.current || undefined,
           ...(planId ? { planId } : {}),
+          ...packSubscribeExtras(node),
         })
         cachePage(next)
         if (next.pageType === 'CONFIRM') {

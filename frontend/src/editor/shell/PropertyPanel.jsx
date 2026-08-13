@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef, useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen, Pencil } from 'lucide-react';
 import { useEditor } from '../context/EditorContext';
 import { getComponentKind, getStyleProp, setStyleProp } from '../utils/blockActions';
-import { getFlowElementInfo } from '../utils/funnelGuide';
+import { getFlowElementInfo, hasMixedConversionTriggers } from '../utils/funnelGuide';
 import { getLinkText, getTextContent, setLinkText, setTextContent } from '../utils/textContent';
 import { getSectionAnchorId, setSectionAnchorId, listSectionAnchorsOnPage, ANCHOR_PRESETS } from '../utils/sectionAnchor';
 import { mountAdvancedPanels, ensureComponentStylable } from '../utils/mountAdvancedPanels';
@@ -24,6 +24,7 @@ import { PriorityChainTrigger } from './PriorityChainModal';
 import { SubscribeRouteTrigger } from './SubscribeRouteModal';
 import { MIN_BTN_WIDTH } from '../utils/textSizeAlign';
 import { DEFAULT_SUBSCRIBE_ROUTES } from '../utils/subscribeRoutes';
+import useStore from '../../store/useStore';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
 const PROPS_WIDTH_KEY = 'tc-editor-props-width';
@@ -600,10 +601,10 @@ function CampaignPageSelect({
   )
 }
 
-/** True for OTP/pack system controls — Subscribe & Confirm can reconfigure "When clicked". */
+/** True for OTP system controls — pack buttons can still set When clicked. */
 function isLockedSystemAction(attrs = {}) {
   if (attrs['data-otp-action'] || attrs['data-otp-field'] || attrs['data-otp-slot']) return true
-  if (attrs['data-pack'] || attrs['data-flow-pack-picker'] !== undefined) return true
+  if (attrs['data-flow-pack-picker'] !== undefined) return true
   return false
 }
 
@@ -688,6 +689,7 @@ function ClickActionEditor({
   const [chainOpenSignal, setChainOpenSignal] = useState(0)
   const [subscribeOpenSignal, setSubscribeOpenSignal] = useState(0)
   const { campaignId, countryCode, operatorCode, funnelPageType } = useEditor()
+  const campaign = useStore((s) => s.campaign)
   const attrs = selected.getAttributes() || {}
   const href = attrs.href || ''
   const type = getClickActionType(attrs)
@@ -820,10 +822,99 @@ function ClickActionEditor({
             <>
               Follows Subscription flow (OTP / Confirm path from campaign settings) — does
               not pick Thank you vs OTP on this button. For that, use &quot;Hit Subscribe API +
-              choose pages&quot;.
+              choose pages&quot;. Add a pack below to subscribe immediately from this button.
             </>
           )}
         </p>
+      )}
+
+      {(type === 'flow' || type === 'subscribeRoute') && (
+        <Field label="Pack (optional)">
+          <select
+            className={inputClass}
+            value={String(attrs['data-pack'] || '').toLowerCase()}
+            onChange={(e) => {
+              const pack = e.target.value
+              if (!pack) {
+                selected.removeAttributes('data-pack')
+              } else {
+                selected.addAttributes({ 'data-pack': pack })
+              }
+              update()
+            }}
+          >
+            <option value="">None — continue flow / picker</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+            Daily / Weekly / Monthly makes this button a subscribe click for that pack
+            (works on Home, Confirm, or any page).
+          </p>
+        </Field>
+      )}
+
+      {(type === 'flow' || type === 'subscribeRoute') &&
+        hasMixedConversionTriggers({
+          html:
+            (attrs['data-pack'] && 'data-pack=') ||
+            (typeof editor?.getHtml === 'function' ? editor.getHtml() : ''),
+          postbackRegisterAt: campaign?.postbackRegisterAt,
+        }) && (
+          <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-2 leading-snug">
+            This campaign also queues a vendor postback on OTP verify. Pack buttons
+            and OTP verify are two conversion kinds — both can upsert the same MSISDN
+            row. Turn off OTP postback in Campaign Detail if you only want pack-click
+            pending.
+          </p>
+        )}
+
+      {(type === 'flow' || type === 'subscribeRoute') && attrs['data-pack'] && (
+        <>
+          <Field label="Subscribe URL override (optional)">
+            <input
+              className={inputClass}
+              placeholder="https://operator.example/sub?msisdn={{msisdn}}&pack={{pack}}"
+              value={attrs['data-subscribe-url'] || ''}
+              onChange={(e) => {
+                const url = e.target.value.trim()
+                if (!url) selected.removeAttributes('data-subscribe-url')
+                else selected.addAttributes({ 'data-subscribe-url': url })
+                update()
+              }}
+            />
+            <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+              Leave empty to use the campaign Subscribe API. Placeholders like{' '}
+              <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
+              <code className="font-mono">{'{{pack}}'}</code>,{' '}
+              <code className="font-mono">{'{{planId}}'}</code> are filled. Attribution
+              IDs are not appended.
+            </p>
+          </Field>
+          <label className="flex items-start gap-2 text-xs text-fg">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={attrs['data-postback'] !== '0'}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  selected.removeAttributes('data-postback')
+                } else {
+                  selected.addAttributes({ 'data-postback': '0' })
+                }
+                update()
+              }}
+            />
+            <span>
+              Queue vendor postback on this click
+              <span className="block text-[11px] text-fg-muted mt-0.5 leading-snug">
+                Default on for pack buttons. Fire still happens when the operator hits
+                callback. Uncheck for non-conversion CTAs.
+              </span>
+            </span>
+          </label>
+        </>
       )}
 
       {type === 'anchor' && (

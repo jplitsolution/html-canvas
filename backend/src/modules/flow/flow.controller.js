@@ -149,6 +149,9 @@ export const flowController = {
       action: body.action,
       phone: body.phone,
       planId: body.planId,
+      subscribeUrl: body.subscribeUrl,
+      queuePostback:
+        body.queuePostback === undefined ? undefined : body.queuePostback,
       country: body.country,
       operator: body.operator,
       campid: body.campid,

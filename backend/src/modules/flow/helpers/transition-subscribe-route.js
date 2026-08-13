@@ -15,6 +15,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
+import { normalizeSubscribeUrlOverride } from './pack-url.js';
 
 const DEFAULT_PAGE_FOR_OUTCOME = {
   NO_PHONE: CampaignPageType.OTP,
@@ -100,7 +101,10 @@ export function createHandleSubscribeRoute(deps) {
     await analyticsService.logEvent(
       input.visitId,
       VisitEventType.SUBSCRIBE_CLICK,
-      { info: 'SUBSCRIBE_ROUTE (single-page subscribe + rules)' },
+      {
+        info: 'SUBSCRIBE_ROUTE (single-page subscribe + rules)',
+        pack: normalizePack(input.planId || 'daily'),
+      },
     );
 
     const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
@@ -259,7 +263,9 @@ export function createHandleSubscribeRoute(deps) {
       };
     }
 
-    if (shouldRegisterPostbackAt?.(campaign, 'confirm')) {
+    if (shouldRegisterPostbackAt?.(campaign, 'confirm', {
+      queuePostback: input.queuePostback,
+    })) {
       void postbackService.registerPending({
         visitId: input.visitId,
         msisdn: resolvedPhone,
@@ -339,6 +345,7 @@ export function createHandleSubscribeRoute(deps) {
       ...partnerCtx,
       planId: selectedPack,
       subscriptionUrl,
+      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
     });
 
     if (success) {

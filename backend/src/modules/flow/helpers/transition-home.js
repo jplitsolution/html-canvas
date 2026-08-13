@@ -19,6 +19,7 @@ export function createHandleHomeSubscribe(deps) {
     await analyticsService.logEvent(
       input.visitId,
       VisitEventType.SUBSCRIBE_CLICK,
+      input.planId ? { pack: input.planId } : undefined,
     );
 
     let visitPhone = '';

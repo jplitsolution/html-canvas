@@ -12,6 +12,10 @@ import { apiCallLogService } from '../api-call-log.service.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { shouldRunHeOnDetect } from './he-detect-gate.js';
+import {
+  isPacksOnHome,
+  resolvePacksOnHomeNoPhone,
+} from './funnel-layout.js';
 
 export function createDetectMsisdn(deps) {
   const {
@@ -339,6 +343,36 @@ export function createDetectMsisdn(deps) {
       redirectUrl = outboundFailRedirectUrl;
     }
 
+    // packs_on_home identity matrix (no MSISDN): HE-only → ERROR + fail URL;
+    // OTP-only / BOTH → OTP (do not fail-redirect).
+    if (!rawPhone && isPacksOnHome(campaign)) {
+      const landing = resolvePacksOnHomeNoPhone(verificationMode);
+      if (landing.nextPage) {
+        nextPage = landing.nextPage;
+      }
+      if (landing.useFailRedirect) {
+        if (!outboundFailRedirectUrl) {
+          const cgFail = String(campaign?.cgRedirectUrl || '').trim();
+          outboundFailRedirectUrl = cgFail
+            ? applyHeRedirectVars(cgFail, heRedirectVars) || cgFail
+            : null;
+        }
+        if (outboundFailRedirectUrl) {
+          redirectOutcome = 'fail';
+          redirectUrl = outboundFailRedirectUrl;
+        } else {
+          redirectOutcome = 'error';
+          redirectUrl = null;
+        }
+      } else {
+        outboundFailRedirectUrl = null;
+        redirectOutcome = landing.nextPage
+          ? String(landing.nextPage).toLowerCase()
+          : 'stay';
+        redirectUrl = null;
+      }
+    }
+
     // HE new + success redirect: upsert conversion_postbacks by msisdn.
     // TEMP: HE_DUMMY_MSISDN (fallback or exact match) also queues pending so
     // postback/callback flow can be tested end-to-end (unset env to disable).
@@ -349,6 +383,7 @@ export function createDetectMsisdn(deps) {
     const shouldQueuePostback =
       Boolean(rawPhone) &&
       !blocked &&
+      !isPacksOnHome(campaign) &&
       ((hasChecksub &&
         isNewStatus &&
         redirectOutcome === 'he_success') ||

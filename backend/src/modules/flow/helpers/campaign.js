@@ -8,6 +8,7 @@ import {
   parseTrackingId,
   splitDualCampids,
 } from '../../markets/helpers/tracking-id.util.js';
+import { shouldRegisterPostbackAt as shouldRegisterPostbackAtPure } from './funnel-layout.js';
 
 export function createFlowCampaignFns(deps) {
   const { isFlowCacheEnabled, getFlowCacheTtl, buildCgRedirectUrl } = deps;
@@ -99,13 +100,8 @@ export function createFlowCampaignFns(deps) {
     return 'confirm';
   };
 
-  const shouldRegisterPostbackAt = (campaign, trigger) => {
-    const mode = normalizePostbackRegisterAt(campaign);
-    const t = String(trigger || '').toLowerCase();
-    if (t === 'otp') return mode === 'otp' || mode === 'both';
-    if (t === 'confirm') return mode === 'confirm' || mode === 'both';
-    return false;
-  };
+  const shouldRegisterPostbackAt = (campaign, trigger, extras) =>
+    shouldRegisterPostbackAtPure(campaign, trigger, extras);
 
   const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
     const mode =

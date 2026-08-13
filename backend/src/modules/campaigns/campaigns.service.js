@@ -394,6 +394,25 @@ export const createCampaignsService = () => {
       campaign.postbackRegisterAt =
         mode === 'otp' || mode === 'both' ? mode : 'confirm';
     }
+    if (dto.funnelLayout !== undefined) {
+      const layout = String(dto.funnelLayout || '')
+        .trim()
+        .toLowerCase();
+      const nextLayout =
+        layout === 'packs_on_home' ? 'packs_on_home' : 'classic';
+      campaign.funnelLayout = nextLayout;
+      // Default: pack-click pending only. Classic "otp only" would skip pack CTAs
+      // as the primary register — reset so Advanced can opt back into OTP.
+      if (nextLayout === 'packs_on_home' && campaign.postbackRegisterAt === 'otp') {
+        campaign.postbackRegisterAt = 'confirm';
+      }
+      const parsed = flowEngineService.parseFlowConfig(campaign.flowConfig);
+      if (parsed) {
+        campaign.flowConfig = JSON.stringify(
+          flowEngineService.applyFunnelLayoutToFlowConfig(parsed, nextLayout),
+        );
+      }
+    }
     if (dto.active !== undefined) campaign.active = dto.active;
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });
@@ -435,7 +454,9 @@ export const createCampaignsService = () => {
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
     const flowConfig =
       flowEngineService.parseFlowConfig(campaign.flowConfig) ||
-      flowEngineService.getDefaultFlowConfig(mode);
+      flowEngineService.getDefaultFlowConfig(mode, {
+        funnelLayout: campaign.funnelLayout,
+      });
     return { verificationMode: mode, flowConfig };
   };
 
@@ -459,7 +480,9 @@ export const createCampaignsService = () => {
     } else {
       flowConfig =
         flowEngineService.parseFlowConfig(campaign.flowConfig) ||
-        flowEngineService.getDefaultFlowConfig(mode);
+        flowEngineService.getDefaultFlowConfig(mode, {
+          funnelLayout: campaign.funnelLayout,
+        });
     }
 
     campaign.verificationMode = mode;

@@ -99,7 +99,7 @@ export function createFlowRouting(deps) {
     }
 
     // Number mil gaya → checksub. OTP path always (phone just verified);
-    // HOME path when heading to CONFIRM (skip already-subscribed).
+    // also when heading to CONFIRM. Skip already-subscribed to status page.
     const shouldCheck =
       fromPage === CampaignPageType.OTP ||
       nextPage === CampaignPageType.CONFIRM;
@@ -124,7 +124,7 @@ export function createFlowRouting(deps) {
       return { nextPage, sub, externalRedirect: sub.url };
     }
 
-    if (nextPage !== CampaignPageType.CONFIRM || !sub?.shouldSkipSubscribe) {
+    if (!sub?.shouldSkipSubscribe) {
       return { nextPage, sub };
     }
     const skipPage = resolveSkipPage(flowConfig, fromPage, sub);

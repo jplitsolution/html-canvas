@@ -642,6 +642,20 @@ const homeTemplate1Html = `
 </div>
 `
 
+const homePacksHtml = `
+<div class="home-page">
+  <div class="home-card">
+    <p class="home-badge">{{operator}} &#xB7; {{country}}</p>
+    <h1 class="home-title">Choose your pack</h1>
+    <p class="home-subtitle">Daily, weekly, or monthly &#x2014; billed on your {{operator}} number. Optional pattern; Home can be anything.</p>
+    <button type="button" data-action="CONFIRM" data-pack="daily" class="flow-btn" style="margin-bottom:8px;">Daily Pack</button>
+    <button type="button" data-action="CONFIRM" data-pack="weekly" class="flow-btn" style="margin-bottom:8px;">Weekly Pack</button>
+    <button type="button" data-action="CONFIRM" data-pack="monthly" class="flow-btn">Monthly Pack</button>
+    <p class="home-footnote">By subscribing you agree to the terms. Data charges may apply.</p>
+  </div>
+</div>
+`
+
 const homeTemplate2Css = `
 * { box-sizing: border-box; margin: 0; }
 body { font-family: Inter, system-ui, sans-serif; background-color: transparent; color: #111827; }
@@ -721,15 +735,6 @@ const wellnessHomeHtml = `
 
 export const HOME_STARTER_TEMPLATES = [
   {
-    id: 'home-wellness',
-    name: 'Wellness 360',
-    description: 'Custom Zain Wellness template with image hotspots ready for routing.',
-    thumb: 'image',
-    previewImage: '',
-    css: wellnessHomeCss,
-    html: wellnessHomeHtml,
-  },
-  {
     id: 'home-indigo',
     name: 'Classic Royal Blue',
     description: 'Clean indigo card — logo, texts and Subscribe button all fully editable.',
@@ -737,6 +742,25 @@ export const HOME_STARTER_TEMPLATES = [
     previewImage: '',
     css: homeTemplate1Css,
     html: homeTemplate1Html,
+  },
+  {
+    id: 'home-packs',
+    name: 'Packs on Home',
+    description:
+      'Example Daily / Weekly / Monthly subscribe buttons. Applying this sets Checks before Home. Confirm page is optional.',
+    thumb: 'pricing',
+    previewImage: '',
+    css: homeTemplate1Css,
+    html: homePacksHtml,
+  },
+  {
+    id: 'home-wellness',
+    name: 'Wellness 360',
+    description: 'Custom Zain Wellness template with image hotspots ready for routing.',
+    thumb: 'image',
+    previewImage: '',
+    css: wellnessHomeCss,
+    html: wellnessHomeHtml,
   },
   {
     id: 'home-brutalist',

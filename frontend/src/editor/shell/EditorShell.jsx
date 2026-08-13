@@ -6,7 +6,8 @@ import { FunnelGuideBanner } from './FunnelGuideBanner';
 import { useEditor } from '../context/EditorContext';
 import { LayoutTemplate, Sparkles, PenTool } from 'lucide-react';
 import { STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES } from '../templates/starterTemplates';
-import { applyStarterHtml } from '../utils/blockActions';
+import { applyStarterHtml, applyStarterTemplate } from '../utils/blockActions';
+import useStore from '../../store/useStore';
 
 export function EditorShell({
   projectTitle,
@@ -22,7 +23,8 @@ export function EditorShell({
   onExportCurrent,
   onExportAll,
 }) {
-  const { isEmpty, dragDebug, device, editor, customWidth, customHeight, setCustomWidth, setCustomHeight } = useEditor();
+  const { isEmpty, dragDebug, device, editor, customWidth, customHeight, setCustomWidth, setCustomHeight, campaignId } = useEditor();
+  const updateCampaign = useStore((s) => s.updateCampaign);
 
   const isMobile = device === 'Mobile';
   const isTablet = device === 'Tablet';
@@ -156,7 +158,13 @@ export function EditorShell({
                           <button
                             key={t.id}
                             type="button"
-                            onClick={() => editor && applyStarterHtml(editor, t.html, t.css)}
+                            onClick={() =>
+                              editor &&
+                              applyStarterTemplate(editor, t, {
+                                campaignId,
+                                updateCampaign,
+                              })
+                            }
                             className="flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-border bg-bg-elevated hover:border-accent hover:bg-accent-muted/50 transition-colors shadow-sm text-center"
                           >
                             <div className="flex items-center gap-1.5 font-medium text-fg text-sm">

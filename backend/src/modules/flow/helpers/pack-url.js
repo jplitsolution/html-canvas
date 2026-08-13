@@ -17,6 +17,23 @@ export const normalizePack = (pack) => {
   return 'daily';
 };
 
+/** Partner subscribeApi {{subServiceId}} for daily / weekly / monthly. */
+export const mapSubServiceId = (pack) => {
+  const p = normalizePack(pack);
+  if (p === 'weekly') return 'HWeekly';
+  if (p === 'monthly') return 'HMonthly';
+  return 'HDaily';
+};
+
+/** Substitute {{msisdn}} / {{pack}} / {{planId}} / {{subServiceId}} etc. */
+export const fillSubscribeTemplate = (template, vars = {}) => {
+  let result = String(template || '');
+  for (const [key, val] of Object.entries(vars)) {
+    result = result.split(`{{${key}}}`).join(val ?? '');
+  }
+  return result;
+};
+
 export const formatPlanLabel = (pack) => {
   const normalized = normalizePack(pack);
   if (normalized === 'weekly') return 'Weekly Pack';
@@ -83,4 +100,13 @@ export const buildCgRedirectUrl = (rawUrl, attrs = {}) => {
     }
     return out;
   }
+};
+
+/** Per-button subscribe API override. http(s) only; placeholders allowed. */
+export const normalizeSubscribeUrlOverride = (raw) => {
+  const url = String(raw || '').trim();
+  if (!url) return '';
+  if (/^javascript:/i.test(url) || /^data:/i.test(url)) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return '';
 };

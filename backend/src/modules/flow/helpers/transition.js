@@ -58,18 +58,15 @@ export function createFlowTransition(deps) {
       return handleSubscribeRoute(input, campaign, apiConfig, phone, serviceId);
     }
 
+    if (input.action === 'CONFIRM' || (input.action === 'SUBSCRIBE' && input.planId)) {
+      return handleConfirm(input, campaign, apiConfig, phone, serviceId);
+    }
+
     if (
       input.fromPage === CampaignPageType.HOME &&
       input.action === 'SUBSCRIBE'
     ) {
       return handleHomeSubscribe(input, campaign, apiConfig, phone, serviceId);
-    }
-
-    if (
-      input.fromPage === CampaignPageType.CONFIRM &&
-      input.action === 'CONFIRM'
-    ) {
-      return handleConfirm(input, campaign, apiConfig, phone, serviceId);
     }
 
     if (

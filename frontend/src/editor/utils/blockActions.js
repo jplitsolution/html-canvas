@@ -40,6 +40,27 @@ export function applyStarterHtml(editor, html, css = '') {
   }, 80)
 }
 
+/** Apply a starter layout. Packs-on-Home also opts the campaign into Checks before Home. */
+export async function applyStarterTemplate(
+  editor,
+  template,
+  { campaignId, updateCampaign } = {},
+) {
+  if (!editor || !template) return
+  applyStarterHtml(editor, template.html, template.css)
+  if (
+    template.id === 'home-packs' &&
+    campaignId &&
+    typeof updateCampaign === 'function'
+  ) {
+    try {
+      await updateCampaign(campaignId, { funnelLayout: 'packs_on_home' })
+    } catch {
+      /* toast in campaign slice */
+    }
+  }
+}
+
 export function getComponentKind(component) {
   if (!component) return 'none'
 

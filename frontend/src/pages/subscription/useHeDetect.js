@@ -177,10 +177,13 @@ function useHeDetect({
           isActive: Boolean(isActive),
         }
 
+        const detectedNextPage = normalizeDetectNextPage(nextPage)
+
         // Silent exit only when success URL (phone) or fail/CG URL (no phone).
-        // Empty exit URLs → funnel mode: allow HOME after detect.
+        // OTP nextPage (packs_on_home BOTH / OTP_ONLY) must not use HE fail/CG exit.
         const silentExit =
           isApiHeProvider(heProvider) &&
+          detectedNextPage !== 'OTP' &&
           isHeSilentExitMode({
             phone: resolved,
             successRedirectUrl,
@@ -199,11 +202,30 @@ function useHeDetect({
         // Updating React Router history first races with location.replace and can
         // leave the overlay stuck on "Redirecting…".
         if (!resolved) {
-          const baseFailUrl = pickHeFailRedirectUrl({
-            failRedirectUrl,
-            cgRedirectUrl,
-          })
-          if (runHeFailRedirect(baseFailUrl, heError)) {
+          if (detectedNextPage !== 'OTP') {
+            const baseFailUrl = pickHeFailRedirectUrl({
+              failRedirectUrl,
+              cgRedirectUrl,
+            })
+            if (runHeFailRedirect(baseFailUrl, heError)) {
+              return
+            }
+          }
+          if (detectedNextPage) {
+            heOnlyModeRef.current = false
+            setHeFunnelSuppressed(false)
+            phoneResolvingRef.current = false
+            setPhoneResolving(false)
+            setHeExitPending(false)
+            setSearchParams((prev) => {
+              const nextParams = new URLSearchParams(prev)
+              if (nextParams.get('step') === detectedNextPage) return prev
+              nextParams.set('step', detectedNextPage)
+              return nextParams
+            }, { replace: true })
+            window.setTimeout(() => {
+              loadPageRef.current?.(detectedNextPage, { direct: true })
+            }, 0)
             return
           }
           // No fail exit URL → drop overlay so boot can paint HOME.

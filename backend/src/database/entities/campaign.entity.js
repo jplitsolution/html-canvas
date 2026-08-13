@@ -79,6 +79,16 @@ export const CampaignSchema = new EntitySchema({
       length: 16,
       default: 'confirm',
     },
+    /**
+     * classic = existing HOME CTA → OTP/CONFIRM graph
+     * packs_on_home = identity-before-HOME (mode matrix); OTP → HOME
+     */
+    funnelLayout: {
+      name: 'funnel_layout',
+      type: 'varchar',
+      length: 32,
+      default: 'classic',
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',
