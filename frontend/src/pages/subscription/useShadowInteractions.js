@@ -395,6 +395,7 @@ function useShadowInteractions({
         setTransitioning,
         setError,
         pageCacheRef,
+        transitionLockRef,
       })
     }
 

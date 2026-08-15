@@ -2,7 +2,7 @@ import { sendOtp, verifyOtp } from '../../services/api/otp'
 import { persistPhone } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef, transitionLockRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -205,7 +205,8 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
 
       setSlotText(statusSlot, 'Verified! Continuing...')
       setTransitioning(true)
-      
+      if (transitionLockRef) transitionLockRef.current = true
+
       try {
         const next = await transitionFlow({
           visitId: visitIdRef.current,
@@ -217,6 +218,10 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
           action: 'CONTINUE',
           phone: msisdn,
         })
+        if (next?.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
+          window.location.assign(next.externalRedirect)
+          return
+        }
         cachePage(next)
       } catch (err) {
         setSlotText(errorSlot, err.message || 'Funnel transition failed', true)
@@ -226,7 +231,9 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
           verifyBtn.style.opacity = '1'
           verifyBtn.textContent = 'Verify & Continue'
         }
+      } finally {
         setTransitioning(false)
+        if (transitionLockRef) transitionLockRef.current = false
       }
     } catch (err) {
       trackEvent('otp_failed')

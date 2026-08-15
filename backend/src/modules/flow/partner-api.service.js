@@ -98,9 +98,12 @@ export const createPartnerApiService = () => {
     }
   };
 
-  const sendRequest = async (rawUrl, input, headers, _label) => {
+  const sendRequest = async (rawUrl, input, headers, _label, options = {}) => {
     const url = resolveTemplate(rawUrl, buildVars(input));
-    const useGet = url.includes('?');
+    const method = String(options.method || '').toUpperCase();
+    // Checksub is a status lookup — always GET. Otherwise: query string → GET, else POST.
+    const useGet =
+      method === 'GET' || (method !== 'POST' && url.includes('?'));
     const body = partnerRequestBody(input);
     return {
       url,
@@ -191,6 +194,7 @@ export const createPartnerApiService = () => {
         input,
         headers,
         'checkSubscription',
+        { method: 'GET' },
       );
       const rawData = response.data ?? {};
 

@@ -39,6 +39,7 @@ export const fillSubscribeTemplate = (template, vars = {}) => {
   let result = String(template || '');
   for (const [key, val] of Object.entries(vars)) {
     result = result.split(`{{${key}}}`).join(val ?? '');
+    result = result.split(`{{$${key}}}`).join(val ?? '');
   }
   return result;
 };

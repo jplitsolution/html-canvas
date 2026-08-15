@@ -57,6 +57,17 @@ describe('fillSubscribeTemplate', () => {
     );
     assert.equal(url, 'https://op.example/sub?sid=HWeekly2&svc=SVC9');
   });
+
+  it('also fills {{$msisdn}} placeholders from the campaign UI copy', () => {
+    const url = fillSubscribeTemplate(
+      'https://op.example/checksub?msisdn={{$msisdn}}&svc={{$serviceId}}',
+      { msisdn: '979789689', serviceId: 'WELLNESS' },
+    );
+    assert.equal(
+      url,
+      'https://op.example/checksub?msisdn=979789689&svc=WELLNESS',
+    );
+  });
 });
 
 describe('sanitizeSubscribeParam', () => {

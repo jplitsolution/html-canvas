@@ -65,11 +65,15 @@ function useHeDetect({
     const detectKey = `${country}|${operator}|${campid}|${trackingCampid}`
     if (detectKeyRef.current !== detectKey) {
       detectKeyRef.current = detectKey
-      detectInFlightRef.current = false
-      heDetectSettledRef.current = false
-      heOnlyModeRef.current = false
-      setHeFunnelSuppressed(false)
+      // Attribution fill-in (campid / click_id in the URL after OTP) must not
+      // reset a finished detect — that re-runs HE and yanks the user back to OTP.
+      if (!heDetectSettledRef.current) {
+        detectInFlightRef.current = false
+        heOnlyModeRef.current = false
+        setHeFunnelSuppressed(false)
+      }
     }
+    if (heDetectSettledRef.current) return undefined
     if (detectInFlightRef.current) return undefined
     detectInFlightRef.current = true
 
@@ -138,6 +142,7 @@ function useHeDetect({
 
     resolveWithTimeout
       .then((result) => {
+        if (cancelled) return
         const {
           phone: resolved,
           failRedirectUrl,
@@ -404,7 +409,9 @@ function useHeDetect({
       })
       .finally(() => {
         detectInFlightRef.current = false
-        heDetectSettledRef.current = true
+        if (!cancelled) {
+          heDetectSettledRef.current = true
+        }
         // Keep overlay if we are about to leave (success or fail redirect).
         if (!cancelled && !heExitPendingRef.current && !heOnlyModeRef.current) {
           phoneResolvingRef.current = false
