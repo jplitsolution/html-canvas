@@ -4,7 +4,7 @@ import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { postbackService } from '../../partners/postback.service.js';
-import { isPacksOnHome } from './funnel-layout.js';
+import { isPacksOnHome, continueFunnelPageAfterOtp } from './funnel-layout.js';
 
 export function createHandleOtpContinue(deps) {
   const {
@@ -100,6 +100,15 @@ export function createHandleOtpContinue(deps) {
     );
     nextPage = skipAfterOtp.nextPage;
     const skipSubOtp = skipAfterOtp.sub;
+
+    if (skipSubOtp?.go === 'continue') {
+      nextPage = continueFunnelPageAfterOtp(campaign, nextPage);
+    } else if (
+      nextPage === CampaignPageType.OTP &&
+      skipSubOtp?.go !== 'page'
+    ) {
+      nextPage = continueFunnelPageAfterOtp(campaign, nextPage);
+    }
 
     if (
       skipAfterOtp.externalRedirect &&

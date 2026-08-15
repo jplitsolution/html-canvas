@@ -47,12 +47,14 @@ describe('setupOtpBindings after OTP verify', () => {
       html: '<div>home</div>',
     })
     const cachePage = vi.fn()
+    const loadPage = vi.fn()
     const setTransitioning = vi.fn()
     const transitionLockRef = { current: false }
 
     setupOtpBindings(shadow, {
       transitionFlow,
       cachePage,
+      loadPage,
       country: 'Saudi Arabia',
       operator: 'STC',
       campid: '',
@@ -84,5 +86,40 @@ describe('setupOtpBindings after OTP verify', () => {
         phone: '979789689',
       }),
     )
+    expect(loadPage).not.toHaveBeenCalled()
+  })
+
+  it('loads HOME directly if continue still returns the OTP page', async () => {
+    const shadow = mountOtpDom()
+    verifyOtp.mockResolvedValueOnce({ success: true })
+    const transitionFlow = vi.fn().mockResolvedValueOnce({
+      pageType: 'OTP',
+      html: '<div>otp</div>',
+    })
+    const cachePage = vi.fn()
+    const loadPage = vi.fn().mockResolvedValueOnce(undefined)
+
+    setupOtpBindings(shadow, {
+      transitionFlow,
+      cachePage,
+      loadPage,
+      country: 'Saudi Arabia',
+      operator: 'STC',
+      campid: '',
+      trackingCampid: 'SA-STC-13',
+      visitIdRef: { current: 1868 },
+      phoneRef: { current: '979789689' },
+      packRef: { current: 'daily' },
+      setPhone: vi.fn(),
+      setTransitioning: vi.fn(),
+      setError: vi.fn(),
+      pageCacheRef: { current: new Map() },
+      transitionLockRef: { current: false },
+    })
+
+    shadow.querySelector('[data-action="verify-otp"]').click()
+    await vi.waitFor(() => {
+      expect(loadPage).toHaveBeenCalledWith('HOME', { direct: true })
+    })
   })
 })

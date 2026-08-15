@@ -6,6 +6,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { otpService } from '../../otp/otp.service.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
+import { continueFunnelPageAfterOtp } from './funnel-layout.js';
 
 export function createFlowRouting(deps) {
   const {
@@ -122,6 +123,14 @@ export function createFlowRouting(deps) {
 
     if (sub?.go === 'external' && sub?.url) {
       return { nextPage, sub, externalRedirect: sub.url };
+    }
+
+    if (sub?.go === 'continue') {
+      const continued =
+        fromPage === CampaignPageType.OTP
+          ? continueFunnelPageAfterOtp(campaign, nextPage)
+          : nextPage;
+      return { nextPage: continued, sub };
     }
 
     if (!sub?.shouldSkipSubscribe) {

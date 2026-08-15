@@ -10,6 +10,7 @@ import { VisitEventType } from '../../../database/entities/visit-event.entity.js
 import { variableResolverService } from '../../../common/services/variable-resolver.service.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { redisService } from '../../../common/services/redis.service.js';
+import { isPacksOnHome } from './funnel-layout.js';
 
 export function createGetPage(deps) {
   const {
@@ -153,7 +154,9 @@ export function createGetPage(deps) {
             .catch(() => null);
           if (!sub?.shouldSkipSubscribe) {
             resolvedPageType = hasPhone
-              ? CampaignPageType.CONFIRM
+              ? isPacksOnHome(campaign)
+                ? CampaignPageType.HOME
+                : CampaignPageType.CONFIRM
               : CampaignPageType.OTP;
           }
         }
@@ -176,7 +179,9 @@ export function createGetPage(deps) {
               .catch(() => null);
             if (!sub?.shouldSkipSubscribe) {
               resolvedPageType = hasPhone
-                ? CampaignPageType.CONFIRM
+                ? isPacksOnHome(campaign)
+                  ? CampaignPageType.HOME
+                  : CampaignPageType.CONFIRM
                 : entryPage;
             }
           }

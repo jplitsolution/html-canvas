@@ -384,6 +384,7 @@ function useShadowInteractions({
       otpCleanup = setupOtpBindings(shadow, {
         transitionFlow,
         cachePage,
+        loadPage,
         country,
         operator,
         campid,

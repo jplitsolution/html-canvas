@@ -1,3 +1,5 @@
+import { CampaignPageType } from '../../../database/entities/campaign-page.entity.js';
+
 /**
  * Campaign funnel_layout: classic vs packs_on_home.
  * packs_on_home changes identity-before-HOME routing, not a requirement
@@ -38,6 +40,27 @@ export function resolvePacksOnHomeNoPhone(verificationMode) {
     return { nextPage: 'OTP', useFailRedirect: false };
   }
   return { nextPage: null, useFailRedirect: false };
+}
+
+/**
+ * Checksub "Continue funnel" after OTP: user is not subscribed yet.
+ * Do not follow OTP_VERIFIED → THANKYOU (Skip HOME) — that looks like "already
+ * done" and can leave the OTP page stuck when Thank you is missing/guarded.
+ * Packs live on HOME; classic funnel still uses Confirm.
+ */
+export function continueFunnelPageAfterOtp(campaign, graphNextPage) {
+  if (isPacksOnHome(campaign)) {
+    return CampaignPageType.HOME;
+  }
+  const graph = String(graphNextPage || '').toUpperCase();
+  if (
+    !graph ||
+    graph === CampaignPageType.OTP ||
+    graph === CampaignPageType.THANKYOU
+  ) {
+    return CampaignPageType.CONFIRM;
+  }
+  return graph;
 }
 
 /** Default ON. Explicit 0 / false / off skips pending on that button. */

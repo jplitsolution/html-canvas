@@ -106,4 +106,18 @@ describe('evaluateChecksubRules', () => {
     assert.equal(evaluateChecksubRules('ACTIVE', null), null);
     assert.equal(evaluateChecksubRules('ACTIVE', '{}'), null);
   });
+
+  it('matches boolean true on success field as continue funnel', () => {
+    const cfg = parseChecksubConfig({
+      statusField: 'success',
+      rules: [
+        { value: 'true', go: 'continue' },
+        { value: 'false', go: 'external', url: 'https://www.pw.live/' },
+      ],
+      missGo: 'continue',
+    });
+    const r = evaluateChecksubRules({ success: true, message: 'Hello World' }, cfg);
+    assert.equal(r.go, 'continue');
+    assert.equal(r.shouldSkipSubscribe, false);
+  });
 });

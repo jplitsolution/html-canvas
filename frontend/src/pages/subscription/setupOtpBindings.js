@@ -2,7 +2,7 @@ import { sendOtp, verifyOtp } from '../../services/api/otp'
 import { persistPhone } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef, transitionLockRef }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef, transitionLockRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -223,6 +223,11 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, country, operator
           return
         }
         cachePage(next)
+        const nextType = String(next?.pageType || '').toUpperCase()
+        // Continue funnel must leave OTP. If the graph still returned OTP, load HOME.
+        if (nextType === 'OTP' && loadPage) {
+          await loadPage('HOME', { direct: true })
+        }
       } catch (err) {
         setSlotText(errorSlot, err.message || 'Funnel transition failed', true)
         if (statusSlot) statusSlot.textContent = originalStatusText

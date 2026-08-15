@@ -4,6 +4,7 @@ import {
   isPacksOnHome,
   normalizeFunnelLayout,
   resolvePacksOnHomeNoPhone,
+  continueFunnelPageAfterOtp,
   shouldRegisterPostbackAt,
   wantsButtonPostback,
 } from './funnel-layout.js';
@@ -63,6 +64,28 @@ describe('resolvePacksOnHomeNoPhone', () => {
       nextPage: null,
       useFailRedirect: false,
     });
+  });
+});
+
+describe('continueFunnelPageAfterOtp', () => {
+  it('packs_on_home continue → HOME even if graph says Thank you', () => {
+    assert.equal(
+      continueFunnelPageAfterOtp(
+        { funnelLayout: 'packs_on_home' },
+        'THANKYOU',
+      ),
+      'HOME',
+    );
+    assert.equal(
+      continueFunnelPageAfterOtp({ funnelLayout: 'packs_on_home' }, 'OTP'),
+      'HOME',
+    );
+  });
+
+  it('classic continue → CONFIRM when graph is Thank you / OTP', () => {
+    assert.equal(continueFunnelPageAfterOtp({}, 'THANKYOU'), 'CONFIRM');
+    assert.equal(continueFunnelPageAfterOtp({}, 'OTP'), 'CONFIRM');
+    assert.equal(continueFunnelPageAfterOtp({}, 'CONFIRM'), 'CONFIRM');
   });
 });
 
