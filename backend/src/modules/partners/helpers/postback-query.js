@@ -7,6 +7,7 @@ import {
 } from '../../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { maskPhone, daysAgo } from './postback-register.js';
+import { resolveRangeBounds } from '../../../common/zoned-day.js';
 
 export function createPostbackQuery(deps) {
   const {
@@ -74,6 +75,17 @@ export function createPostbackQuery(deps) {
     };
   };
 
+  const applyCreatedAtRange = (qb, alias, query = {}) => {
+    const { from, to } = resolveRangeBounds({
+      from: query.from,
+      to: query.to,
+      timezone: query.timezone,
+    });
+    if (from) qb.andWhere(`${alias}.createdAt >= :from`, { from });
+    if (to) qb.andWhere(`${alias}.createdAt <= :to`, { to });
+    return { from, to };
+  };
+
   const emptySummary = () => ({
     msisdnResolved: 0,
     postbacksCreated: 0,
@@ -85,29 +97,40 @@ export function createPostbackQuery(deps) {
     since: daysAgo(30).toISOString(),
   });
 
-  const getSummary = async (userId, { days = 30 } = {}) => {
+  const getSummary = async (userId, query = {}) => {
     const { campaignIds, vendorIds, vendors } = await resolveUserScope(userId);
     if (!campaignIds.length && !vendorIds.length) {
       return emptySummary();
     }
 
-    const since = daysAgo(Math.min(Math.max(Number(days) || 30, 1), 365));
+    const days = Math.min(Math.max(Number(query.days) || 30, 1), 365);
+    const hasExplicitRange = Boolean(query.from || query.to);
+    const { from, to } = hasExplicitRange
+      ? resolveRangeBounds({
+          from: query.from,
+          to: query.to,
+          timezone: query.timezone,
+        })
+      : { from: daysAgo(days), to: undefined };
+    const since = from || daysAgo(days);
     const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
 
     let msisdnResolved = 0;
     if (campaignIds.length) {
-      msisdnResolved = await getVisitRepo()
+      const visitQ = getVisitRepo()
         .createQueryBuilder('v')
         .where('v.campaignId IN (:...campaignIds)', { campaignIds })
         .andWhere('v.phone IS NOT NULL')
         .andWhere("v.phone <> ''")
-        .andWhere('v.createdAt >= :since', { since })
-        .getCount();
+        .andWhere('v.createdAt >= :since', { since });
+      if (to) visitQ.andWhere('v.createdAt <= :until', { until: to });
+      msisdnResolved = await visitQ.getCount();
     }
 
     const pbQ = getPostbackRepo()
       .createQueryBuilder('p')
       .where('p.createdAt >= :since', { since });
+    if (to) pbQ.andWhere('p.createdAt <= :until', { until: to });
     if (campaignIds.length && vendorIds.length) {
       pbQ.andWhere(
         '(p.campaignId IN (:...campaignIds) OR p.vendorId IN (:...vendorIds))',
@@ -174,6 +197,7 @@ export function createPostbackQuery(deps) {
       skipped,
       byVendor: Object.values(byVendorAcc).sort((a, b) => b.total - a.total),
       since: since.toISOString(),
+      until: to ? to.toISOString() : null,
     };
   };
 
@@ -219,6 +243,7 @@ export function createPostbackQuery(deps) {
         { like },
       );
     }
+    applyCreatedAtRange(qb, 'p', query);
 
     const total = await qb.clone().getCount();
     const rows = await qb

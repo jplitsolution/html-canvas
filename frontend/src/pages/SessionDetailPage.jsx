@@ -319,11 +319,18 @@ function SessionDetailPage() {
             Session detail
           </p>
           <h1 className="text-xl font-bold text-gray-900 mt-1">
-            Visit #{visitId}
+            {visit?.clickId ? (
+              <span className="font-mono">{visit.clickId}</span>
+            ) : (
+              <>Visit #{visitId}</>
+            )}
             {visit?.campaignName ? (
               <span className="text-gray-400 font-medium"> · {visit.campaignName}</span>
             ) : null}
           </h1>
+          {visit?.clickId ? (
+            <p className="text-xs text-gray-400 mt-1 font-mono">Visit #{visitId}</p>
+          ) : null}
         </div>
 
         {loading ? (
@@ -429,6 +436,24 @@ function SessionDetailPage() {
                 </div>
               )}
             </div>
+
+            {(detail?.pagePath || []).length > 0 ? (
+              <section className="rounded-xl border border-gray-200 bg-white p-4">
+                <h2 className="text-sm font-bold text-gray-900 mb-3">Funnel pages</h2>
+                <div className="flex flex-wrap items-center gap-2">
+                  {detail.pagePath.map((page, idx) => (
+                    <div key={`${page}-${idx}`} className="flex items-center gap-2">
+                      <span className="inline-flex px-2.5 py-1 rounded-lg text-xs font-bold border border-indigo-100 bg-indigo-50 text-indigo-700">
+                        {page}
+                      </span>
+                      {idx < detail.pagePath.length - 1 ? (
+                        <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="space-y-3">
               <h2 className="text-sm font-bold text-gray-900">API calls</h2>

@@ -4,6 +4,10 @@ import { getDataSource, getRepository } from '../../database/index.js';
 import { VisitEvent } from '../../database/entities/visit-event.entity.js';
 import { Visit } from '../../database/entities/visit.entity.js';
 import getConfig from '../../config/configuration.js';
+import {
+  DEFAULT_TIMEZONE,
+  resolveRangeBounds,
+} from '../../common/zoned-day.js';
 
 export const createSearchService = () => {
   const config = getConfig();
@@ -96,64 +100,6 @@ export const createSearchService = () => {
   const maskPhone = (phone) => {
     if (!phone) return undefined;
     return String(phone).trim();
-  };
-
-  const zonedDayBound = (dateStr, timeZone, bound) => {
-    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr.trim());
-    if (!match) {
-      const fallback = new Date(dateStr);
-      if (bound === 'end' && !dateStr.includes('T')) {
-        fallback.setUTCHours(23, 59, 59, 999);
-      }
-      return fallback;
-    }
-    const y = Number(match[1]);
-    const mo = Number(match[2]);
-    const d = Number(match[3]);
-    const hour = bound === 'end' ? 23 : 0;
-    const minute = bound === 'end' ? 59 : 0;
-    const second = bound === 'end' ? 59 : 0;
-
-    const tz = timeZone || 'UTC';
-    let utcMs = Date.UTC(y, mo - 1, d, hour, minute, second, 0);
-
-    for (let i = 0; i < 4; i++) {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: tz,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hourCycle: 'h23',
-      }).formatToParts(new Date(utcMs));
-
-      const num = (type) =>
-        Number(parts.find((p) => p.type === type)?.value || '0');
-      const seen = Date.UTC(
-        num('year'),
-        num('month') - 1,
-        num('day'),
-        num('hour'),
-        num('minute'),
-        num('second'),
-      );
-      const desired = Date.UTC(y, mo - 1, d, hour, minute, second);
-      const diff = desired - seen;
-      utcMs += diff;
-      if (diff === 0) break;
-    }
-
-    return new Date(bound === 'end' ? utcMs + 999 : utcMs);
-  };
-
-  const resolveRangeBounds = (params) => {
-    const tz = params.timezone || 'UTC';
-    return {
-      from: params.from ? zonedDayBound(params.from, tz, 'start') : undefined,
-      to: params.to ? zonedDayBound(params.to, tz, 'end') : undefined,
-    };
   };
 
   const buildQuery = (params) => {
@@ -646,7 +592,7 @@ export const createSearchService = () => {
 
   const aggregations = async (params) => {
     const interval = resolveInterval(params);
-    let timeZone = params.timezone || 'UTC';
+    let timeZone = params.timezone || DEFAULT_TIMEZONE;
     if (timeZone === 'Asia/Calcutta') {
       timeZone = 'Asia/Kolkata';
     }

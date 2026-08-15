@@ -21,7 +21,11 @@ export default function ProfilePage() {
     { value: 'MM/DD/YYYY', label: 'MM/DD/YYYY (07/04/2026)' },
     { value: 'DD MMM YYYY', label: 'DD MMM YYYY (04 Jul 2026)' },
   ]
-  const timezones = Intl.supportedValuesOf ? Intl.supportedValuesOf('timeZone') : [Intl.DateTimeFormat().resolvedOptions().timeZone]
+  const IST = 'Asia/Kolkata'
+  const allTimezones = Intl.supportedValuesOf
+    ? Intl.supportedValuesOf('timeZone')
+    : [IST]
+  const timezones = [IST, ...allTimezones.filter((tz) => tz !== IST && tz !== 'Asia/Calcutta')]
 
 
   const handlePasswordChange = async (e) => {
@@ -103,12 +107,12 @@ export default function ProfilePage() {
                 >
                   {timezones.map((tz) => (
                     <option key={tz} value={tz}>
-                      {tz}
+                      {tz === IST ? 'Asia/Kolkata (IST)' : tz}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-fg-muted mt-2">
-                  Select the timezone to display times in.
+                  Dates across the UI are shown in this timezone. Server time is converted automatically — IST is the default.
                 </p>
               </div>
             </div>

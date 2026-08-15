@@ -20,7 +20,7 @@ const buildParams = (campaignId, query) => {
     page: query.page ? Number(query.page) : undefined,
     size: query.size ? Number(query.size) : undefined,
     interval,
-    timezone: query.timezone || undefined,
+    timezone: query.timezone || 'Asia/Kolkata',
     view: query.view === 'sessions' ? 'sessions' : 'events',
   };
 };

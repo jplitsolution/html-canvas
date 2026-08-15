@@ -33,8 +33,7 @@ export const partnersController = {
   }),
 
   postbacksSummary: asyncHandler(async (req, res) => {
-    const days = req.query?.days;
-    const data = await postbackService.getSummary(req.user.id, { days });
+    const data = await postbackService.getSummary(req.user.id, req.query || {});
     res.json(data);
   }),
 

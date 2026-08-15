@@ -2,7 +2,7 @@ export function createUiSlice(set, get) {
   return {
     previewMode: 'desktop',
     dateFormat: JSON.parse(localStorage.getItem('templatecraft_settings') || '{}').dateFormat || 'YYYY-MM-DD',
-    timezone: JSON.parse(localStorage.getItem('templatecraft_settings') || '{}').timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timezone: JSON.parse(localStorage.getItem('templatecraft_settings') || '{}').timezone || 'Asia/Kolkata',
     loading: false,
     saving: false,
     error: null,

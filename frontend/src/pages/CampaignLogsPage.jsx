@@ -28,13 +28,12 @@ import {
   Clock,
   ChevronLeft,
   ChevronRight,
-  FileText,
   Eye,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { formatDate, formatChartLabel, getDatePartsInTimezone, shiftDateString } from '../utils/date'
+import { formatDate, formatChartLabel, DATE_PRESETS, getDateRangeForPreset, DEFAULT_TIMEZONE } from '../utils/date'
 import useStore from '../store/useStore'
 import {
   getLogsStatus,
@@ -46,21 +45,6 @@ import {
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
-
-const DATE_PRESETS = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: 'Week' },
-  { id: 'month', label: 'Month' },
-  { id: 'custom', label: 'Custom' },
-]
-
-function getDateRangeForPreset(preset, timezone) {
-  const to = getDatePartsInTimezone(timezone)
-  if (preset === 'today') return { from: to, to }
-  if (preset === 'week') return { from: shiftDateString(to, -6), to }
-  if (preset === 'month') return { from: shiftDateString(to, -29), to }
-  return { from: '', to: '' }
-}
 
 function resolveInterval(preset, from, to) {
   if (preset === 'today') return 'hour'
@@ -162,17 +146,6 @@ function getEventBadgeClass(type) {
   return 'bg-gray-50 text-gray-700 border-gray-200/50';
 }
 
-function getPageBadgeClass(page) {
-  const p = String(page).toUpperCase();
-  if (p.includes('THANK') || p.includes('SUCCESS')) return 'bg-emerald-50 text-emerald-600 border-emerald-100';
-  if (p.includes('CONFIRM')) return 'bg-indigo-50 text-indigo-600 border-indigo-100';
-  if (p.includes('OTP')) return 'bg-amber-50 text-amber-600 border-amber-100';
-  if (p.includes('HOME')) return 'bg-teal-50 text-teal-600 border-teal-100';
-  if (p.includes('PLAN')) return 'bg-sky-50 text-sky-600 border-sky-100';
-  if (p.includes('ERROR') || p.includes('BLOCK')) return 'bg-rose-50 text-rose-600 border-rose-100';
-  return 'bg-gray-50 text-gray-500 border-gray-100';
-}
-
 const getStatusBadgeClass = (status) => {
   const s = String(status).toUpperCase();
   if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
@@ -201,7 +174,7 @@ function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
   const campaigns = useStore((s) => s.campaigns)
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
-  const timezone = useStore((s) => s.timezone)
+  const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
   const dateFormat = useStore((s) => s.dateFormat)
   const [searchParams] = useSearchParams()
   const paramCampaignId = searchParams.get('campaignId')
@@ -215,9 +188,8 @@ function CampaignLogsPage() {
   }, [navigate])
 
   const [datePreset, setDatePreset] = useState('today')
-  const [viewMode, setViewMode] = useState('sessions') // sessions | events
   const [filters, setFilters] = useState(() => {
-    const range = getDateRangeForPreset('today', timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+    const range = getDateRangeForPreset('today', timezone)
     return {
       eventType: '',
       clickId: '',
@@ -273,7 +245,7 @@ function CampaignLogsPage() {
     try {
       const interval = resolveInterval(datePreset, filters.from, filters.to)
       const aggParams = { ...filters, interval, timezone }
-      const params = { ...filters, page, size: PAGE_SIZE, timezone, view: viewMode }
+      const params = { ...filters, page, size: PAGE_SIZE, timezone, view: 'sessions' }
       const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
         isAll ? getAllCampaignLogAggregations(aggParams) : getCampaignLogAggregations(selectedId, aggParams),
@@ -286,7 +258,7 @@ function CampaignLogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedId, filters, page, addToast, datePreset, timezone, viewMode])
+  }, [selectedId, filters, page, addToast, datePreset, timezone])
 
   useEffect(() => {
     fetchData()
@@ -335,42 +307,10 @@ function CampaignLogsPage() {
               </span>
             </h1>
             <p className="text-sm text-gray-500 mt-1">
-              {viewMode === 'sessions'
-                ? 'One row per click/session — open Eye for full event timeline.'
-                : 'Raw event stream — every funnel / postback step as its own row.'}
+              One row per click ID. Open a row for funnel pages, events, and API timeline.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
-            <div className="inline-flex rounded-xl border border-gray-200 bg-white p-0.5 shadow-2xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode('sessions')
-                  setPage(1)
-                }}
-                className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  viewMode === 'sessions'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Sessions
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode('events')
-                  setPage(1)
-                }}
-                className={`px-3.5 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  viewMode === 'events'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-gray-50'
-                }`}
-              >
-                Events
-              </button>
-            </div>
             <Button
               variant="outline"
               size="sm"
@@ -425,7 +365,7 @@ function CampaignLogsPage() {
               <p className="mt-2 text-[11px] text-gray-400 font-medium">
                 Showing {formatChartLabel(filters.from)} → {formatChartLabel(filters.to)}
                 {isHourly ? ' · hourly' : ' · daily'}
-                {timezone ? ` · ${timezone}` : ''}
+                {timezone === 'Asia/Kolkata' || timezone === 'Asia/Calcutta' ? ' · IST' : timezone ? ` · ${timezone}` : ''}
               </p>
             )}
           </div>
@@ -511,12 +451,7 @@ function CampaignLogsPage() {
         {/* KPI Summary Widgets */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <StatCard label="Total Event Count" value={totalEvents} icon={Activity} colorClass="from-indigo-500 to-purple-500" />
-          <StatCard
-            label={viewMode === 'sessions' ? 'Sessions in filter' : 'Loaded log rows'}
-            value={logs.total || 0}
-            icon={Database}
-            colorClass="from-blue-500 to-indigo-500"
-          />
+          <StatCard label="Clicks in filter" value={logs.total || 0} icon={Database} colorClass="from-blue-500 to-indigo-500" />
           <StatCard label="Unique Vendors" value={(aggs?.byVendor || []).length} icon={Users} colorClass="from-teal-500 to-emerald-500" />
           <StatCard label="Campaigns in view" value={selectedId === 'all' ? (aggs?.byCampaign || []).length || '—' : 1} icon={UserCheck} colorClass="from-amber-500 to-orange-500" />
         </div>
@@ -603,14 +538,8 @@ function CampaignLogsPage() {
           </SectionCard>
         </div>
 
-        {/* Log Viewer Table */}
-        <SectionCard
-          title={
-            viewMode === 'sessions'
-              ? 'Sessions (one row per click)'
-              : 'Real-Time Event Stream Log'
-          }
-        >
+        {/* Click ID list */}
+        <SectionCard title="Clicks (one row per click ID)">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />
@@ -620,9 +549,7 @@ function CampaignLogsPage() {
             <div className="text-center py-12">
               <Database className="w-10 h-10 text-gray-300 mx-auto mb-3" />
               <p className="text-sm font-semibold text-gray-500">
-                {viewMode === 'sessions'
-                  ? 'No sessions match these filters.'
-                  : 'No telemetry log events match these filters.'}
+                No clicks match these filters.
               </p>
             </div>
           ) : (
@@ -634,59 +561,33 @@ function CampaignLogsPage() {
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Time</span>
                       </th>
-                      {viewMode === 'events' ? (
-                        <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Event Name</th>
-                      ) : (
-                        <>
-                          <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Last Event</th>
-                          <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Events</th>
-                        </>
-                      )}
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID</th>
                       {selectedId === 'all' && (
                         <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campaign</th>
                       )}
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <span className="inline-flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> Funnel Page</span>
-                      </th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Session Status</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Vendor</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campid</th>
-                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">
                         <span className="inline-flex items-center gap-1.5"><Phone className="w-3.5 h-3.5" /> MSISDN</span>
                       </th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Last Event</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50 bg-white">
                     {logs.items.map((row, idx) => (
                       <tr
-                        key={`${row.visitId}-${row.eventType || 's'}-${idx}`}
-                        className="hover:bg-gray-50/80 transition-colors duration-150"
+                        key={`${row.visitId}-${row.clickId || 's'}-${idx}`}
+                        className="hover:bg-indigo-50/40 transition-colors duration-150 cursor-pointer"
+                        onClick={() => openVisitDetail(row.visitId)}
                       >
                         <td className="px-4 py-3 text-xs font-mono text-gray-500 whitespace-nowrap">
                           {row.timestamp ? formatDate(row.timestamp) : '—'}
                         </td>
-                        {viewMode === 'events' ? (
-                          <td className="px-4 py-3 text-xs font-medium">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
-                              {row.eventType || '—'}
-                            </span>
-                          </td>
-                        ) : (
-                          <>
-                            <td className="px-4 py-3 text-xs font-medium">
-                              {row.eventType ? (
-                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
-                                  {row.eventType}
-                                </span>
-                              ) : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
-                              {row.eventCount != null ? row.eventCount : '—'}
-                            </td>
-                          </>
-                        )}
+                        <td className="px-4 py-3 text-xs font-mono text-gray-800 font-semibold whitespace-nowrap">
+                          {row.clickId || <span className="text-gray-300 font-normal">—</span>}
+                        </td>
                         {selectedId === 'all' && (
                           <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
                             {row.campaignId ? (
@@ -696,20 +597,6 @@ function CampaignLogsPage() {
                             ) : <span className="text-gray-300">—</span>}
                           </td>
                         )}
-                        <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
-                          {row.pageType ? (
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${getPageBadgeClass(row.pageType)}`}>
-                              {row.pageType}
-                            </span>
-                          ) : '—'}
-                        </td>
-                        <td className="px-4 py-3 text-xs whitespace-nowrap">
-                          {row.status ? (
-                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
-                              {row.status}
-                            </span>
-                          ) : '—'}
-                        </td>
                         <td className="px-4 py-3 text-xs text-gray-700">
                           {row.vidRaw || row.vendorId ? (
                             <span className="font-semibold text-gray-800">
@@ -720,21 +607,35 @@ function CampaignLogsPage() {
                         <td className="px-4 py-3 text-xs font-mono text-gray-700 whitespace-nowrap max-w-[140px] truncate" title={row.campid || ''}>
                           {row.campid || <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-xs font-mono text-gray-700 font-medium whitespace-nowrap">
-                          {row.clickId || <span className="text-gray-300">—</span>}
-                        </td>
                         <td className="px-4 py-3 text-xs font-mono text-gray-600 whitespace-nowrap">
                           {row.phone || row.phoneMasked ? (
                             row.phone || row.phoneMasked
                           ) : <span className="text-gray-300">—</span>}
                         </td>
+                        <td className="px-4 py-3 text-xs font-medium">
+                          {row.eventType ? (
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold border ${getEventBadgeClass(row.eventType)}`}>
+                              {row.eventType}
+                            </span>
+                          ) : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs whitespace-nowrap">
+                          {row.status ? (
+                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
+                              {row.status}
+                            </span>
+                          ) : '—'}
+                        </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                           <button
                             type="button"
-                            title="View session detail"
-                            aria-label="View session detail"
+                            title="View click detail"
+                            aria-label="View click detail"
                             disabled={!row.visitId}
-                            onClick={() => openVisitDetail(row.visitId)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              openVisitDetail(row.visitId)
+                            }}
                             className="inline-flex items-center justify-center h-8 w-8 rounded-lg border border-gray-200 text-gray-500 hover:text-indigo-600 hover:border-indigo-200 hover:bg-indigo-50 transition-colors disabled:opacity-40 disabled:pointer-events-none"
                           >
                             <Eye className="w-4 h-4" />
@@ -751,7 +652,7 @@ function CampaignLogsPage() {
                 <p className="text-xs font-medium text-gray-500">
                   Page <span className="font-bold text-gray-800">{logs.page}</span> of <span className="font-bold text-gray-800">{totalPages}</span> · Total{' '}
                   <span className="font-bold text-indigo-600">{logs.total}</span>{' '}
-                  {viewMode === 'sessions' ? 'sessions' : 'events'}
+                  clicks
                 </p>
                 <div className="flex gap-2">
                   <Button

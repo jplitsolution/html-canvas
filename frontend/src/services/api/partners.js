@@ -20,9 +20,12 @@ export async function deleteVendor(id) {
   return apiClient(`/partners/vendors/${id}`, { method: 'DELETE' })
 }
 
-export async function getPostbackSummary({ days = 30 } = {}) {
+export async function getPostbackSummary({ days, from, to, timezone } = {}) {
   const params = new URLSearchParams()
   if (days) params.set('days', String(days))
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (timezone) params.set('timezone', timezone)
   const qs = params.toString()
   return apiClient(`/partners/postbacks/summary${qs ? `?${qs}` : ''}`)
 }
@@ -33,6 +36,9 @@ export async function listPostbacks({
   status,
   q,
   vendorId,
+  from,
+  to,
+  timezone,
 } = {}) {
   const params = new URLSearchParams()
   params.set('page', String(page))
@@ -40,6 +46,9 @@ export async function listPostbacks({
   if (status && status !== 'all') params.set('status', status)
   if (q) params.set('q', q)
   if (vendorId) params.set('vendorId', String(vendorId))
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (timezone) params.set('timezone', timezone)
   return apiClient(`/partners/postbacks?${params.toString()}`)
 }
 

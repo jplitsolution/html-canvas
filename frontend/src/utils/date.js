@@ -1,10 +1,19 @@
 import useStore from '../store/useStore'
 
+export const DEFAULT_TIMEZONE = 'Asia/Kolkata'
+
+export const DATE_PRESETS = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'Week' },
+  { id: 'month', label: 'Month' },
+  { id: 'custom', label: 'Custom' },
+]
+
 function getSettings() {
   const state = useStore.getState()
   return {
     format: state.dateFormat || 'YYYY-MM-DD',
-    tz: state.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+    tz: state.timezone || DEFAULT_TIMEZONE,
   }
 }
 
@@ -39,15 +48,29 @@ function buildFormatted(parts, format) {
 }
 
 function partsFromDateInTz(date, tz) {
-  const shiftedDate = new Date(date.toLocaleString('en-US', { timeZone: tz }))
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  })
+  const bag = {}
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type !== 'literal') bag[part.type] = part.value
+  }
+  const monthIdx = Number(bag.month) - 1
   return {
-    YYYY: shiftedDate.getFullYear(),
-    MM: pad(shiftedDate.getMonth() + 1),
-    DD: pad(shiftedDate.getDate()),
-    HH: pad(shiftedDate.getHours()),
-    mm: pad(shiftedDate.getMinutes()),
-    ss: pad(shiftedDate.getSeconds()),
-    MMM: SHORT_MONTHS[shiftedDate.getMonth()],
+    YYYY: Number(bag.year),
+    MM: pad(bag.month),
+    DD: pad(bag.day),
+    HH: pad(bag.hour),
+    mm: pad(bag.minute),
+    ss: pad(bag.second),
+    MMM: SHORT_MONTHS[monthIdx] || bag.month,
   }
 }
 
@@ -64,7 +87,20 @@ function partsFromWallClock(y, mo, d, h = '00', mi = '00', s = '00') {
   }
 }
 
-/** Format a real UTC/ISO timestamp using profile date format + timezone. */
+export function timezoneAbbr(tz = DEFAULT_TIMEZONE) {
+  if (tz === 'Asia/Kolkata' || tz === 'Asia/Calcutta') return 'IST'
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'short',
+    }).formatToParts(new Date())
+    return parts.find((p) => p.type === 'timeZoneName')?.value || ''
+  } catch {
+    return ''
+  }
+}
+
+/** Format a real UTC/ISO timestamp using profile date format + timezone (default IST). */
 export function formatDate(dateString, formatOverride) {
   if (!dateString) return '—'
   const date = new Date(dateString)
@@ -72,7 +108,10 @@ export function formatDate(dateString, formatOverride) {
 
   const { format: storedFormat, tz } = getSettings()
   const format = formatOverride || storedFormat
-  return buildFormatted(partsFromDateInTz(date, tz), format)
+  const formatted = buildFormatted(partsFromDateInTz(date, tz), format)
+  if (String(format).includes('Date only')) return formatted
+  const abbr = timezoneAbbr(tz)
+  return abbr ? `${formatted} ${abbr}` : formatted
 }
 
 /**
@@ -119,7 +158,7 @@ export function formatChartLabel(key, { hourly = false } = {}) {
 /** Today's YYYY-MM-DD (and ranges) in the given IANA timezone. */
 export function getDatePartsInTimezone(timeZone, date = new Date()) {
   const fmt = new Intl.DateTimeFormat('en-CA', {
-    timeZone,
+    timeZone: timeZone || DEFAULT_TIMEZONE,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -133,4 +172,12 @@ export function shiftDateString(dateStr, days) {
   const dt = new Date(Date.UTC(y, m - 1, d))
   dt.setUTCDate(dt.getUTCDate() + days)
   return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`
+}
+
+export function getDateRangeForPreset(preset, timezone) {
+  const to = getDatePartsInTimezone(timezone || DEFAULT_TIMEZONE)
+  if (preset === 'today') return { from: to, to }
+  if (preset === 'week') return { from: shiftDateString(to, -6), to }
+  if (preset === 'month') return { from: shiftDateString(to, -29), to }
+  return { from: '', to: '' }
 }
