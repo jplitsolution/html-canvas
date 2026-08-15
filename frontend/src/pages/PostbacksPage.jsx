@@ -358,7 +358,8 @@ function PostbacksPage() {
                     <th className="px-3 py-3 font-medium">MSISDN</th>
                     <th className="px-3 py-3 font-medium">Status</th>
                     <th className="px-3 py-3 font-medium">Vendor</th>
-                    <th className="px-3 py-3 font-medium">Click / RCID</th>
+                    <th className="px-3 py-3 font-medium">Click ID</th>
+                    <th className="px-3 py-3 font-medium">RCID</th>
                     <th className="px-3 py-3 font-medium">Campid</th>
                     <th className="px-3 py-3 font-medium text-right"> </th>
                   </tr>
@@ -383,13 +384,11 @@ function PostbacksPage() {
                           <div className="text-[11px] text-gray-400 font-mono">{row.vendorCode}</div>
                         ) : null}
                       </td>
-                      <td className="px-3 py-3 font-mono text-[11px] text-gray-600 max-w-[140px] truncate">
+                      <td className="px-3 py-3 font-mono text-[11px] text-gray-800 max-w-[160px] truncate" title={row.clickId || ''}>
                         {row.clickId || '—'}
-                        {row.rcid ? (
-                          <div className="text-gray-400 truncate" title={row.rcid}>
-                            rcid: {row.rcid}
-                          </div>
-                        ) : null}
+                      </td>
+                      <td className="px-3 py-3 font-mono text-[11px] text-gray-800 max-w-[180px] truncate" title={row.rcid || ''}>
+                        {row.rcid || '—'}
                       </td>
                       <td className="px-3 py-3 font-mono text-[11px] text-gray-600">
                         {row.campid || '—'}

@@ -441,7 +441,7 @@ function CampaignLogsPage() {
                   className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2 bg-gray-50/40 text-gray-800 font-medium placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                   value={filters.q}
                   onChange={(e) => updateFilter('q', e.target.value)}
-                  placeholder="Click ID, phone..."
+                  placeholder="Click ID, RCID, phone..."
                 />
               </div>
             </div>
@@ -562,6 +562,7 @@ function CampaignLogsPage() {
                         <span className="inline-flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> Time</span>
                       </th>
                       <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Click ID</th>
+                      <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">RCID</th>
                       {selectedId === 'all' && (
                         <th className="px-4 py-3.5 text-xs font-bold text-gray-500 uppercase tracking-wider">Campaign</th>
                       )}
@@ -587,6 +588,9 @@ function CampaignLogsPage() {
                         </td>
                         <td className="px-4 py-3 text-xs font-mono text-gray-800 font-semibold whitespace-nowrap">
                           {row.clickId || <span className="text-gray-300 font-normal">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono text-gray-700 whitespace-nowrap max-w-[180px] truncate" title={row.rcid || ''}>
+                          {row.rcid || <span className="text-gray-300">—</span>}
                         </td>
                         {selectedId === 'all' && (
                           <td className="px-4 py-3 text-xs text-gray-700 whitespace-nowrap">
