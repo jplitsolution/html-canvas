@@ -190,7 +190,9 @@ function ApiCallCard({ call, defaultOpen }) {
 
       {open && (
         <div className="px-4 pb-4 border-t border-gray-100">
-          {(call.callType === 'checksub' || call.callType === 'priority') && (
+          {(call.callType === 'checksub' ||
+            call.callType === 'priority' ||
+            call.callType === 'subscribe') && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               {call.callType === 'priority' && summary.priority != null && (
                 <div>
@@ -201,6 +203,14 @@ function ApiCallCard({ call, defaultOpen }) {
                   </p>
                 </div>
               )}
+              {call.callType === 'subscribe' && summary.pack ? (
+                <div>
+                  <p className="text-[10px] font-bold uppercase text-gray-400">pack</p>
+                  <p className="text-sm font-semibold text-gray-800 mt-0.5">
+                    {summary.pack}
+                  </p>
+                </div>
+              ) : null}
               <div>
                 <p className="text-[10px] font-bold uppercase text-gray-400">currentStatus</p>
                 <p className="text-sm font-semibold text-gray-800 mt-0.5">

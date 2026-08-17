@@ -7,6 +7,8 @@ import {
   continueFunnelPageAfterOtp,
   shouldRegisterPostbackAt,
   wantsButtonPostback,
+  flowHasConfirmNode,
+  packCanvasPage,
 } from './funnel-layout.js';
 
 describe('normalizeFunnelLayout', () => {
@@ -30,6 +32,42 @@ describe('isPacksOnHome', () => {
 
   it('is true for packs_on_home', () => {
     assert.equal(isPacksOnHome({ funnelLayout: 'packs_on_home' }), true);
+  });
+});
+
+describe('flowHasConfirmNode / packCanvasPage', () => {
+  it('unknown flow keeps classic Confirm', () => {
+    assert.equal(flowHasConfirmNode({}), true);
+    assert.equal(packCanvasPage({}), 'CONFIRM');
+    assert.equal(packCanvasPage({ funnelLayout: 'classic' }), 'CONFIRM');
+  });
+
+  it('packs_on_home is HOME even if Confirm exists', () => {
+    assert.equal(
+      packCanvasPage({
+        funnelLayout: 'packs_on_home',
+        flowConfig: JSON.stringify({
+          nodes: [{ id: 'CONFIRM', pageType: 'CONFIRM' }],
+          edges: [],
+        }),
+      }),
+      'HOME',
+    );
+  });
+
+  it('classic layout with Confirm removed from graph uses HOME', () => {
+    const campaign = {
+      funnelLayout: 'classic',
+      flowConfig: JSON.stringify({
+        nodes: [
+          { id: 'HOME', pageType: 'HOME' },
+          { id: 'THANKYOU', pageType: 'THANKYOU' },
+        ],
+        edges: [],
+      }),
+    };
+    assert.equal(flowHasConfirmNode(campaign), false);
+    assert.equal(packCanvasPage(campaign), 'HOME');
   });
 });
 
@@ -86,6 +124,20 @@ describe('continueFunnelPageAfterOtp', () => {
     assert.equal(continueFunnelPageAfterOtp({}, 'THANKYOU'), 'CONFIRM');
     assert.equal(continueFunnelPageAfterOtp({}, 'OTP'), 'CONFIRM');
     assert.equal(continueFunnelPageAfterOtp({}, 'CONFIRM'), 'CONFIRM');
+  });
+
+  it('classic layout without Confirm node continues to HOME', () => {
+    const campaign = {
+      funnelLayout: 'classic',
+      flowConfig: JSON.stringify({
+        nodes: [
+          { id: 'HOME', pageType: 'HOME' },
+          { id: 'THANKYOU', pageType: 'THANKYOU' },
+        ],
+        edges: [],
+      }),
+    };
+    assert.equal(continueFunnelPageAfterOtp(campaign, 'THANKYOU'), 'HOME');
   });
 });
 

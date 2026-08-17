@@ -496,7 +496,18 @@ export const createAnalyticsService = () => {
                 ? 'SUCCESS'
                 : null;
       } else if (row.callType === 'subscribe' && responseBody?.skipped) {
-        statusLabel = 'SKIPPED_NO_URL';
+        statusLabel =
+          responseBody.statusLabel ||
+          (requestBody?.reason === 'no_phone'
+            ? 'NO_PHONE'
+            : requestBody?.reason === 'test_fail'
+              ? 'TEST_FAIL'
+              : requestBody?.reason
+                ? String(requestBody.reason).toUpperCase()
+                : 'SKIPPED_NO_URL');
+      } else if (row.callType === 'subscribe') {
+        statusLabel =
+          checksubStatusLabel(responseBody, row.success) || statusLabel;
       }
       return {
         id: row.id,
@@ -540,6 +551,12 @@ export const createAnalyticsService = () => {
                     responseBody?.responseMessage ||
                     null,
                   skipped: nested.skipped ?? null,
+                  currentStatus: nested.currentStatus ?? null,
+                  subscriptionStatus: nested.subscriptionStatus ?? null,
+                  pack: requestBody?.pack || requestBody?.planId || null,
+                  serviceId:
+                    requestBody?.serviceId || nested.serviceId || null,
+                  subServiceId: requestBody?.subServiceId || null,
                 }
               : null,
       };

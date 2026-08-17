@@ -145,6 +145,32 @@ export async function transitionFlow(body) {
       subscriptionStatus: res?.subscriptionStatus || null,
     },
   })
+  if (res?.subscribeCall) {
+    const call = res.subscribeCall
+    logFlowApi('subscribe', {
+      request: { url: call.url, action: payload.action, planId: payload.planId },
+      response: {
+        ok: call.ok,
+        status: call.status,
+        skipped: call.skipped || false,
+        reason: call.reason || null,
+        body: call.body,
+      },
+      detected: call.body
+        ? {
+            currentStatus: call.body.currentStatus || call.body.status || null,
+            responseCode: call.body.responseCode ?? null,
+            responseMessage: call.body.responseMessage || null,
+          }
+        : null,
+      outcome: call.skipped
+        ? `SKIPPED_${String(call.reason || 'subscribe').toUpperCase()}`
+        : call.ok
+          ? 'SUCCESS'
+          : 'FAIL',
+      error: call.error,
+    })
+  }
   return res
 }
 

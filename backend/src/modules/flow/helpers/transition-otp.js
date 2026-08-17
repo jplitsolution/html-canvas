@@ -4,7 +4,7 @@ import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { postbackService } from '../../partners/postback.service.js';
-import { isPacksOnHome, continueFunnelPageAfterOtp } from './funnel-layout.js';
+import { packCanvasPage, continueFunnelPageAfterOtp } from './funnel-layout.js';
 
 export function createHandleOtpContinue(deps) {
   const {
@@ -78,7 +78,10 @@ export function createHandleOtpContinue(deps) {
         'OTP_VERIFIED',
       ) || CampaignPageType.HOME;
 
-    if (isPacksOnHome(campaign) && nextPage === CampaignPageType.CONFIRM) {
+    if (
+      nextPage === CampaignPageType.CONFIRM &&
+      packCanvasPage(campaign) === CampaignPageType.HOME
+    ) {
       nextPage = CampaignPageType.HOME;
     }
 

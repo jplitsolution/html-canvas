@@ -45,4 +45,22 @@ describe('getDefaultFlowConfig packs_on_home', () => {
       'CONFIRM',
     );
   });
+
+  it('classic HEADER_INJECTION has no Confirm; HOME is subscribe canvas', () => {
+    const cfg = flowEngineService.getDefaultFlowConfig('HEADER_INJECTION');
+    assert.equal(
+      (cfg.nodes || []).some((n) => n.pageType === 'CONFIRM'),
+      false,
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'HOME', 'HEADER_RESOLVED'),
+      null,
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'HOME', 'SUBSCRIBED'),
+      'THANKYOU',
+    );
+    const { ok, errors } = flowEngineService.validate(cfg, 'HEADER_INJECTION');
+    assert.equal(ok, true, errors.join(' '));
+  });
 });

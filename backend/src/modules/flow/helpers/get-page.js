@@ -10,7 +10,7 @@ import { VisitEventType } from '../../../database/entities/visit-event.entity.js
 import { variableResolverService } from '../../../common/services/variable-resolver.service.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { redisService } from '../../../common/services/redis.service.js';
-import { isPacksOnHome } from './funnel-layout.js';
+import { flowHasConfirmNode, isPacksOnHome } from './funnel-layout.js';
 
 export function createGetPage(deps) {
   const {
@@ -111,6 +111,13 @@ export function createGetPage(deps) {
     // and to /flow/transition.
     if (
       !input.direct &&
+      resolvedPageType === CampaignPageType.CONFIRM &&
+      !flowHasConfirmNode(campaign)
+    ) {
+      resolvedPageType = CampaignPageType.HOME;
+    }
+    if (
+      !input.direct &&
       (resolvedPageType === CampaignPageType.CONFIRM ||
         resolvedPageType === CampaignPageType.THANKYOU)
     ) {
@@ -153,11 +160,13 @@ export function createGetPage(deps) {
             })
             .catch(() => null);
           if (!sub?.shouldSkipSubscribe) {
-            resolvedPageType = hasPhone
-              ? isPacksOnHome(campaign)
-                ? CampaignPageType.HOME
-                : CampaignPageType.CONFIRM
-              : CampaignPageType.OTP;
+            if (!hasPhone) {
+              resolvedPageType = CampaignPageType.OTP;
+            } else if (flowHasConfirmNode(campaign) && !isPacksOnHome(campaign)) {
+              resolvedPageType = CampaignPageType.CONFIRM;
+            } else if (isPacksOnHome(campaign)) {
+              resolvedPageType = CampaignPageType.HOME;
+            }
           }
         }
       } else if (guardMode === 'HEADER_INJECTION') {
@@ -178,11 +187,16 @@ export function createGetPage(deps) {
               })
               .catch(() => null);
             if (!sub?.shouldSkipSubscribe) {
-              resolvedPageType = hasPhone
-                ? isPacksOnHome(campaign)
-                  ? CampaignPageType.HOME
-                  : CampaignPageType.CONFIRM
-                : entryPage;
+              if (!hasPhone) {
+                resolvedPageType = entryPage;
+              } else if (
+                flowHasConfirmNode(campaign) &&
+                !isPacksOnHome(campaign)
+              ) {
+                resolvedPageType = CampaignPageType.CONFIRM;
+              } else if (isPacksOnHome(campaign)) {
+                resolvedPageType = CampaignPageType.HOME;
+              }
             }
           }
         }

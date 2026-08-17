@@ -67,6 +67,41 @@ export const createPartnerApiService = () => {
     }
   };
 
+  const subscribeStatusLabel = (data, success, fallback) => {
+    const nested = data?.data && typeof data.data === 'object' ? data.data : data;
+    const current = String(nested?.currentStatus || '').trim();
+    if (current) return current.toUpperCase();
+    const sub = String(nested?.subscriptionStatus || '').trim();
+    if (sub) return sub.toUpperCase();
+    const code = nested?.responseCode ?? data?.responseCode;
+    if (code === '0' || code === 0) return 'SUCCESS';
+    if (typeof nested?.response === 'string' && nested.response) {
+      return String(nested.response).toUpperCase();
+    }
+    if (fallback) return fallback;
+    return success ? 'SUCCESS' : 'FAILED';
+  };
+
+  const subscribeRequestMeta = (input, extra = {}) => {
+    const vars = buildVars(input);
+    return {
+      source: extra.source || 'subscribe',
+      method: extra.method || null,
+      planId: input.planId || vars.planId || null,
+      pack: vars.pack,
+      serviceId: vars.serviceId || null,
+      subServiceId: vars.subServiceId || null,
+      country: vars.country || null,
+      operator: vars.operator || null,
+      ...(extra.reason ? { skipped: true, reason: extra.reason } : {}),
+    };
+  };
+
+  const resolveSubscribeTemplate = (config, input) => {
+    const overrideUrl = String(input.subscribeUrl || '').trim();
+    return overrideUrl || String(config?.subscribeApi || '').trim();
+  };
+
   const logCall = async ({
     callType,
     input,
@@ -365,35 +400,75 @@ export const createPartnerApiService = () => {
     }
   };
 
-  const subscribe = async (config, input) => {
-    if (
-      input.phone.startsWith('999') ||
-      input.phone.toLowerCase().includes('fail')
-    ) {
-      return false;
-    }
+  /**
+   * Persist a subscribe-URL row even when we did not HTTP (no phone, already
+   * subscribed, missing template). Session Detail still shows the filled URL.
+   */
+  const recordSubscribeSkip = async (config, input, { reason, statusLabel }) => {
+    const template = resolveSubscribeTemplate(config, input);
+    const url = template ? resolveTemplate(template, buildVars(input)) : null;
+    const meta = subscribeRequestMeta(input, { reason, method: null });
+    const failedSkip = reason === 'no_phone' || reason === 'test_fail';
+    await logCall({
+      callType: ApiCallType.SUBSCRIBE,
+      input,
+      requestUrl: url,
+      requestBody: serializeBody(meta),
+      response: {
+        status: null,
+        data: {
+          skipped: true,
+          reason,
+          statusLabel: statusLabel || String(reason || 'SKIPPED').toUpperCase(),
+        },
+      },
+      success: !failedSkip,
+      statusLabel: statusLabel || String(reason || 'SKIPPED').toUpperCase(),
+      errorMessage:
+        reason === 'no_phone'
+          ? 'MSISDN missing — subscribe URL not called'
+          : reason === 'test_fail'
+            ? 'Test MSISDN fail pattern — subscribe URL not called'
+            : null,
+    });
+    return {
+      success: !failedSkip,
+      call: {
+        url,
+        ok: !failedSkip,
+        skipped: true,
+        reason,
+        body: { skipped: true, reason },
+      },
+    };
+  };
 
-    const overrideUrl = String(input.subscribeUrl || '').trim();
-    const template = overrideUrl || config?.subscribeApi || '';
+  const subscribe = async (config, input) => {
+    const phone = String(input.phone || '');
+    const template = resolveSubscribeTemplate(config, input);
+    const resolvedPreview = template
+      ? resolveTemplate(template, buildVars(input))
+      : '';
+
+    if (phone.startsWith('999') || phone.toLowerCase().includes('fail')) {
+      return recordSubscribeSkip(config, input, {
+        reason: 'test_fail',
+        statusLabel: 'TEST_FAIL',
+      });
+    }
 
     if (!template) {
-      await logCall({
-        callType: ApiCallType.SUBSCRIBE,
-        input,
-        requestUrl: null,
-        requestBody: serializeBody({
-          info: 'No subscribeApi configured — soft success (billing via OTP verify / Priority)',
-          planId: input.planId || null,
-        }),
-        response: { status: null, data: { skipped: true, reason: 'no_subscribe_api' } },
-        success: true,
+      return recordSubscribeSkip(config, input, {
+        reason: 'no_subscribe_api',
         statusLabel: 'SKIPPED_NO_URL',
       });
-      return true;
     }
 
-    if (!input.phone) {
-      return false;
+    if (!phone) {
+      return recordSubscribeSkip(config, input, {
+        reason: 'no_phone',
+        statusLabel: 'NO_PHONE',
+      });
     }
 
     try {
@@ -404,16 +479,30 @@ export const createPartnerApiService = () => {
         headers,
         `subscribe visitId=${input.visitId} planId=${input.planId || 'n/a'}`,
       );
+      const useGet = url.includes('?');
+      const requestBody = serializeBody(
+        subscribeRequestMeta(input, { method: useGet ? 'GET' : 'POST' }),
+      );
       if (response.status < 200 || response.status >= 300) {
         await logCall({
           callType: ApiCallType.SUBSCRIBE,
           input,
           requestUrl: url,
+          requestBody,
           response,
           success: false,
           errorMessage: `HTTP ${response.status}`,
+          statusLabel: 'FAILED',
         });
-        return false;
+        return {
+          success: false,
+          call: {
+            url,
+            ok: false,
+            status: response.status,
+            body: response.data ?? null,
+          },
+        };
       }
       const data = response.data ?? {};
       const code = data.responseCode ?? data.response_code;
@@ -431,20 +520,43 @@ export const createPartnerApiService = () => {
         callType: ApiCallType.SUBSCRIBE,
         input,
         requestUrl: url,
+        requestBody,
         response,
         success,
+        statusLabel: subscribeStatusLabel(data, success),
       });
-      return success;
+      return {
+        success,
+        call: {
+          url,
+          ok: success,
+          status: response.status,
+          body: data,
+        },
+      };
     } catch (err) {
       console.warn(`subscribe failed: ${err.message}`);
       await logCall({
         callType: ApiCallType.SUBSCRIBE,
         input,
-        requestUrl: template,
+        requestUrl: resolvedPreview || template,
+        requestBody: serializeBody(
+          subscribeRequestMeta(input, {
+            method: (resolvedPreview || template).includes('?') ? 'GET' : 'POST',
+          }),
+        ),
         success: false,
         errorMessage: err.message,
+        statusLabel: 'FAILED',
       });
-      return false;
+      return {
+        success: false,
+        call: {
+          url: resolvedPreview || template,
+          ok: false,
+          error: err.message,
+        },
+      };
     }
   };
 
@@ -459,6 +571,7 @@ export const createPartnerApiService = () => {
     checkSubscription,
     checkBlocked,
     subscribe,
+    recordSubscribeSkip,
   };
 };
 

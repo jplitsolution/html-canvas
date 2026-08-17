@@ -175,13 +175,14 @@ export function createHandleSubscribeRoute(deps) {
         matchedGo: extra.matchedGo || null,
         matchedPage: extra.matchedPage || null,
         matchedUrl: extra.matchedUrl || null,
+        ...(extra.subscribeCall ? { subscribeCall: extra.subscribeCall } : {}),
         ...(extra.externalRedirect
           ? { externalRedirect: extra.externalRedirect }
           : {}),
       };
     };
 
-    const respondRule = async (rule, matchBody, statusLabel) => {
+    const respondRule = async (rule, matchBody, statusLabel, extra = {}) => {
       const page =
         rule.go === 'page' && rule.page
           ? rule.page
@@ -208,6 +209,7 @@ export function createHandleSubscribeRoute(deps) {
         matchedGo: rule.go,
         matchedPage: rule.go === 'page' ? rule.page : null,
         matchedUrl: rule.go === 'external' ? rule.url : null,
+        ...(extra.subscribeCall ? { subscribeCall: extra.subscribeCall } : {}),
         ...(rule.go === 'external' && rule.url
           ? { externalRedirect: rule.url }
           : {}),
@@ -215,6 +217,21 @@ export function createHandleSubscribeRoute(deps) {
     };
 
     if (!resolvedPhone) {
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        {
+          phone: '',
+          visitId: input.visitId,
+          campaignId: campaign.id,
+          planId: selectedPack,
+          country: campaign.country,
+          operator: campaign.operator,
+          ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+          ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
+          subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
+        },
+        { reason: 'no_phone', statusLabel: 'NO_PHONE' },
+      );
       await analyticsService.updateVisit(
         input.visitId,
         VisitStatus.OTP_SHOWN,
@@ -223,7 +240,9 @@ export function createHandleSubscribeRoute(deps) {
       await analyticsService.logEvent(input.visitId, VisitEventType.OTP_VIEW, {
         info: 'SUBSCRIBE_ROUTE — no MSISDN',
       });
-      return respond('NO_PHONE', CampaignPageType.OTP);
+      return respond('NO_PHONE', CampaignPageType.OTP, {
+        subscribeCall: skipped.call,
+      });
     }
 
     const attr = await loadVisitAttribution(input.visitId, input);
@@ -236,6 +255,14 @@ export function createHandleSubscribeRoute(deps) {
       campaignId: campaign.id,
       clickId: attr.clickId || input.clickId,
       rcid: attr.rcid || input.rcid,
+    };
+    const subscribeInput = {
+      ...partnerCtx,
+      planId: selectedPack,
+      subscriptionUrl,
+      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
+      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
     };
 
     const blockResult = await checkBlocklist(apiConfig, partnerCtx);
@@ -288,6 +315,11 @@ export function createHandleSubscribeRoute(deps) {
     const checkBody = buildMatchBodyFromChecksub(subCheck);
 
     if (subCheck?.go === 'external' && subCheck?.url) {
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        subscribeInput,
+        { reason: 'checksub_external', statusLabel: 'SKIPPED_CHECKSUB' },
+      );
       await analyticsService.updateVisit(
         input.visitId,
         VisitStatus.SUBSCRIBED,
@@ -310,17 +342,36 @@ export function createHandleSubscribeRoute(deps) {
         matchBody: checkBody,
         matchedGo: 'external',
         matchedUrl: subCheck.url,
+        subscribeCall: skipped.call,
       });
     }
 
     const checkRule = matchRules(checkBody, rules);
     if (checkRule) {
-      return respondRule(checkRule, checkBody, 'CHECKSUB_RULE');
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        subscribeInput,
+        {
+          reason: 'checksub_rule',
+          statusLabel: String(checkBody.currentStatus || 'SKIPPED_CHECKSUB').toUpperCase(),
+        },
+      );
+      return respondRule(checkRule, checkBody, 'CHECKSUB_RULE', {
+        subscribeCall: skipped.call,
+      });
     }
 
     // No rule matched checksub — if already subscribed / non-new, still surface as
     // SUCCESS-ish miss (client miss destination) without hitting subscribe again.
     if (subCheck?.shouldSkipSubscribe) {
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        subscribeInput,
+        {
+          reason: 'already_subscribed',
+          statusLabel: String(subCheck.status || 'SKIPPED_CHECKSUB').toUpperCase(),
+        },
+      );
       await analyticsService.updateVisit(
         input.visitId,
         VisitStatus.SUBSCRIBED,
@@ -340,17 +391,13 @@ export function createHandleSubscribeRoute(deps) {
         subscriptionStatus: subCheck.status,
         allowSuccessRedirect: Boolean(subCheck.isActive),
         matchBody: checkBody,
+        subscribeCall: skipped.call,
       });
     }
 
-    const success = await partnerApiService.subscribe(apiConfig, {
-      ...partnerCtx,
-      planId: selectedPack,
-      subscriptionUrl,
-      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
-      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
-      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
-    });
+    const subResult = await partnerApiService.subscribe(apiConfig, subscribeInput);
+    const success = Boolean(subResult?.success);
+    const subscribeCall = subResult?.call || null;
 
     if (success) {
       const subBody = {
@@ -360,7 +407,7 @@ export function createHandleSubscribeRoute(deps) {
       };
       const subRule = matchRules(subBody, rules);
       if (subRule) {
-        return respondRule(subRule, subBody, 'SUCCESS');
+        return respondRule(subRule, subBody, 'SUCCESS', { subscribeCall });
       }
       await analyticsService.updateVisit(
         input.visitId,
@@ -379,6 +426,7 @@ export function createHandleSubscribeRoute(deps) {
       return respond('SUCCESS', CampaignPageType.THANKYOU, {
         status: 'SUCCESS',
         matchBody: subBody,
+        subscribeCall,
       });
     }
 
@@ -389,7 +437,7 @@ export function createHandleSubscribeRoute(deps) {
     };
     const failRule = matchRules(failBody, rules);
     if (failRule) {
-      return respondRule(failRule, failBody, 'FAILED');
+      return respondRule(failRule, failBody, 'FAILED', { subscribeCall });
     }
 
     await analyticsService.updateVisit(
@@ -409,6 +457,7 @@ export function createHandleSubscribeRoute(deps) {
     return respond('FAIL', CampaignPageType.ERROR, {
       status: 'FAILED',
       matchBody: failBody,
+      subscribeCall,
     });
   };
 }

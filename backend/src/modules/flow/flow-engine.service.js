@@ -186,34 +186,57 @@ export const createFlowEngineService = () => {
       };
     }
 
+    const outcomeNode = (pageType, y) => node(pageType, 880, y);
+    const outcomeEdgesFrom = (source) => [
+      edge(source, CampaignPageType.THANKYOU, 'SUBSCRIBED'),
+      edge(source, CampaignPageType.INPROGRESS, 'PENDING'),
+      edge(source, CampaignPageType.LOW_BALANCE, 'LOW_BALANCE'),
+      edge(source, CampaignPageType.BLOCKED, 'BLOCKED'),
+      edge(source, CampaignPageType.ERROR, 'ERROR'),
+    ];
+
+    // HE: HOME is the subscribe canvas. Confirm is optional (add from Pages).
+    if (mode === 'HEADER_INJECTION') {
+      return applyFunnelLayoutToFlowConfig(
+        {
+          version: 1,
+          entryPage: CampaignPageType.HOME,
+          startConfig: defaultStartConfig(mode),
+          nodes: [
+            node(CampaignPageType.HOME, 40, 160),
+            outcomeNode(CampaignPageType.THANKYOU, 40),
+            outcomeNode(CampaignPageType.INPROGRESS, 160),
+            outcomeNode(CampaignPageType.LOW_BALANCE, 280),
+            outcomeNode(CampaignPageType.BLOCKED, 400),
+            outcomeNode(CampaignPageType.ERROR, 520),
+          ],
+          edges: [
+            edge(
+              CampaignPageType.HOME,
+              CampaignPageType.ERROR,
+              'HEADER_UNRESOLVED',
+            ),
+            ...outcomeEdgesFrom(CampaignPageType.HOME),
+          ],
+        },
+        options.funnelLayout,
+        mode,
+      );
+    }
+
     const nodes = [
       node(CampaignPageType.HOME, 40, 160),
       node(CampaignPageType.CONFIRM, 600, 160),
-      node(CampaignPageType.THANKYOU, 880, 40),
-      node(CampaignPageType.INPROGRESS, 880, 160),
-      node(CampaignPageType.LOW_BALANCE, 880, 280),
-      node(CampaignPageType.BLOCKED, 880, 400),
-      node(CampaignPageType.ERROR, 880, 520),
+      outcomeNode(CampaignPageType.THANKYOU, 40),
+      outcomeNode(CampaignPageType.INPROGRESS, 160),
+      outcomeNode(CampaignPageType.LOW_BALANCE, 280),
+      outcomeNode(CampaignPageType.BLOCKED, 400),
+      outcomeNode(CampaignPageType.ERROR, 520),
     ];
 
     const edges = [];
 
-    if (mode === 'HEADER_INJECTION') {
-      edges.push(
-        edge(
-          CampaignPageType.HOME,
-          CampaignPageType.CONFIRM,
-          'HEADER_RESOLVED',
-        ),
-      );
-      edges.push(
-        edge(
-          CampaignPageType.HOME,
-          CampaignPageType.ERROR,
-          'HEADER_UNRESOLVED',
-        ),
-      );
-    } else if (mode === 'OTP_ONLY') {
+    if (mode === 'OTP_ONLY') {
       nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
       edges.push(edge(CampaignPageType.HOME, CampaignPageType.OTP, 'DEFAULT'));
       edges.push(
@@ -236,23 +259,7 @@ export const createFlowEngineService = () => {
       );
     }
 
-    edges.push(
-      edge(CampaignPageType.CONFIRM, CampaignPageType.THANKYOU, 'SUBSCRIBED'),
-    );
-    edges.push(
-      edge(CampaignPageType.CONFIRM, CampaignPageType.INPROGRESS, 'PENDING'),
-    );
-    edges.push(
-      edge(
-        CampaignPageType.CONFIRM,
-        CampaignPageType.LOW_BALANCE,
-        'LOW_BALANCE',
-      ),
-    );
-    edges.push(
-      edge(CampaignPageType.CONFIRM, CampaignPageType.BLOCKED, 'BLOCKED'),
-    );
-    edges.push(edge(CampaignPageType.CONFIRM, CampaignPageType.ERROR, 'ERROR'));
+    edges.push(...outcomeEdgesFrom(CampaignPageType.CONFIRM));
 
     return applyFunnelLayoutToFlowConfig(
       {

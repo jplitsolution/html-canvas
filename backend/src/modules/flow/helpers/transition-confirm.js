@@ -49,6 +49,14 @@ export function createHandleConfirm(deps) {
       clickId: confirmAttr.clickId,
       rcid: confirmAttr.rcid,
     };
+    const subscribeInput = {
+      ...partnerCtx,
+      planId: selectedPack,
+      subscriptionUrl,
+      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
+      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
+      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
+    };
 
     // Immediately log confirm + queue vendor pending (billing callback will fire).
     await analyticsService.logEvent(
@@ -100,6 +108,14 @@ export function createHandleConfirm(deps) {
       partnerCtx,
     );
     if (subAtConfirm?.go === 'external' && subAtConfirm?.url) {
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        subscribeInput,
+        {
+          reason: 'checksub_external',
+          statusLabel: 'SKIPPED_CHECKSUB',
+        },
+      );
       await analyticsService.updateVisit(
         input.visitId,
         VisitStatus.SUBSCRIBED,
@@ -127,10 +143,21 @@ export function createHandleConfirm(deps) {
           { subscriptionStatus: subAtConfirm.status },
         )),
         externalRedirect: subAtConfirm.url,
+        subscribeCall: skipped.call,
       };
     }
 
     if (subAtConfirm?.shouldSkipSubscribe) {
+      const skipped = await partnerApiService.recordSubscribeSkip(
+        apiConfig,
+        subscribeInput,
+        {
+          reason: 'already_subscribed',
+          statusLabel: String(
+            subAtConfirm.status || 'SKIPPED_CHECKSUB',
+          ).toUpperCase(),
+        },
+      );
       const nextPage =
         resolveSkipPage(flowConfig, CampaignPageType.CONFIRM, subAtConfirm) ||
         (subAtConfirm.go === 'page' && subAtConfirm.page
@@ -157,29 +184,27 @@ export function createHandleConfirm(deps) {
           isActive: subAtConfirm.isActive,
         },
       );
-      return buildPageResponse(
-        campaign,
-        nextPage,
-        confirmVariables,
-        input.visitId,
-        'ALREADY_SUBSCRIBED',
-        selectedPack,
-        subscriptionUrl,
-        {
-          allowSuccessRedirect: Boolean(subAtConfirm.isActive),
-          subscriptionStatus: subAtConfirm.status,
-        },
-      );
+      return {
+        ...(await buildPageResponse(
+          campaign,
+          nextPage,
+          confirmVariables,
+          input.visitId,
+          'ALREADY_SUBSCRIBED',
+          selectedPack,
+          subscriptionUrl,
+          {
+            allowSuccessRedirect: Boolean(subAtConfirm.isActive),
+            subscriptionStatus: subAtConfirm.status,
+          },
+        )),
+        subscribeCall: skipped.call,
+      };
     }
 
-    const success = await partnerApiService.subscribe(apiConfig, {
-      ...partnerCtx,
-      planId: selectedPack,
-      subscriptionUrl,
-      ...(input.serviceId ? { serviceId: input.serviceId } : {}),
-      ...(input.subServiceId ? { subServiceId: input.subServiceId } : {}),
-      subscribeUrl: normalizeSubscribeUrlOverride(input.subscribeUrl),
-    });
+    const subResult = await partnerApiService.subscribe(apiConfig, subscribeInput);
+    const success = Boolean(subResult?.success);
+    const subscribeCall = subResult?.call || null;
 
     if (success) {
       const nextPage = flowEngineService.nextPage(
@@ -202,15 +227,18 @@ export function createHandleConfirm(deps) {
           subscriptionUrl,
         },
       );
-      return buildPageResponse(
-        campaign,
-        nextPage,
-        confirmVariables,
-        input.visitId,
-        'SUCCESS',
-        selectedPack,
-        subscriptionUrl,
-      );
+      return {
+        ...(await buildPageResponse(
+          campaign,
+          nextPage,
+          confirmVariables,
+          input.visitId,
+          'SUCCESS',
+          selectedPack,
+          subscriptionUrl,
+        )),
+        subscribeCall,
+      };
     }
 
     const nextPage = flowEngineService.nextPage(
@@ -232,14 +260,17 @@ export function createHandleConfirm(deps) {
         pack: selectedPack,
       },
     );
-    return buildPageResponse(
-      campaign,
-      nextPage,
-      confirmVariables,
-      input.visitId,
-      'FAILED',
-      selectedPack,
-      subscriptionUrl,
-    );
+    return {
+      ...(await buildPageResponse(
+        campaign,
+        nextPage,
+        confirmVariables,
+        input.visitId,
+        'FAILED',
+        selectedPack,
+        subscriptionUrl,
+      )),
+      subscribeCall,
+    };
   };
 }

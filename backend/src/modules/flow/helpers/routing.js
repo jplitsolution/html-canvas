@@ -6,7 +6,10 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { otpService } from '../../otp/otp.service.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
-import { continueFunnelPageAfterOtp } from './funnel-layout.js';
+import {
+  continueFunnelPageAfterOtp,
+  flowHasConfirmNode,
+} from './funnel-layout.js';
 
 export function createFlowRouting(deps) {
   const {
@@ -63,19 +66,28 @@ export function createFlowRouting(deps) {
       }
     }
   
+    const clampConfirm = (page) =>
+      page === CampaignPageType.CONFIRM && !flowHasConfirmNode(campaign)
+        ? CampaignPageType.HOME
+        : page;
+
     if (mode === 'HEADER_INJECTION') {
       return {
-        nextPage: resolved
-          ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
-          : fromGraph('HEADER_UNRESOLVED', CampaignPageType.ERROR),
+        nextPage: clampConfirm(
+          resolved
+            ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
+            : fromGraph('HEADER_UNRESOLVED', CampaignPageType.ERROR),
+        ),
         resolvedPhone,
       };
     }
   
     return {
-      nextPage: resolved
-        ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
-        : fromGraph('HEADER_UNRESOLVED', CampaignPageType.OTP),
+      nextPage: clampConfirm(
+        resolved
+          ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
+          : fromGraph('HEADER_UNRESOLVED', CampaignPageType.OTP),
+      ),
       resolvedPhone,
     };
   };

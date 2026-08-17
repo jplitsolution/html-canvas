@@ -24,6 +24,42 @@ export function isPacksOnHome(campaign) {
   );
 }
 
+function parseCampaignFlowConfig(campaign) {
+  const raw = campaign?.flowConfig;
+  if (!raw) return null;
+  if (typeof raw === 'object' && Array.isArray(raw.nodes)) return raw;
+  if (typeof raw !== 'string') return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && Array.isArray(parsed.nodes) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the saved graph still has a Confirm node (classic HOME → Confirm). */
+export function flowHasConfirmNode(campaign) {
+  const flow = parseCampaignFlowConfig(campaign);
+  if (!flow) return true;
+  return flow.nodes.some(
+    (n) =>
+      String(n?.pageType || n?.id || '').toUpperCase() ===
+      CampaignPageType.CONFIRM,
+  );
+}
+
+/**
+ * Pack / subscribe canvas after identity.
+ * Saved HE graphs often drop Confirm while funnel_layout stays classic —
+ * do not send those users to a Confirm page they removed from the flow.
+ */
+export function packCanvasPage(campaign) {
+  if (isPacksOnHome(campaign) || !flowHasConfirmNode(campaign)) {
+    return CampaignPageType.HOME;
+  }
+  return CampaignPageType.CONFIRM;
+}
+
 /**
  * Detect landing when no MSISDN on packs_on_home.
  * HE-only → ERROR (+ fail redirect if configured).
@@ -49,7 +85,7 @@ export function resolvePacksOnHomeNoPhone(verificationMode) {
  * Packs live on HOME; classic funnel still uses Confirm.
  */
 export function continueFunnelPageAfterOtp(campaign, graphNextPage) {
-  if (isPacksOnHome(campaign)) {
+  if (packCanvasPage(campaign) === CampaignPageType.HOME) {
     return CampaignPageType.HOME;
   }
   const graph = String(graphNextPage || '').toUpperCase();
