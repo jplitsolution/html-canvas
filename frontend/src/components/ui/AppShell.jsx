@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook, Send } from 'lucide-react'
+import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook, Send, LayoutDashboard } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logout } from '../../services/api/auth'
 import Button from './Button'
@@ -8,6 +8,7 @@ import IconButton from './IconButton'
 import BrandLogo, { PartnerBadge } from './BrandLogo'
 
 const baseNavLinks = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/markets', label: 'Markets', icon: FolderKanban },
   { to: '/vendors', label: 'Vendors', icon: Store },
   { to: '/analytics', label: 'Campaign Logs', icon: BarChart3 },
@@ -66,7 +67,7 @@ function AppShell({ children, actions, minimal = false }) {
       <div className="min-h-screen flex flex-col bg-bg-base safe-top">
         <header className="border-b border-border bg-bg-elevated">
           <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
-            <Link to="/markets" className="flex items-center">
+            <Link to="/dashboard" className="flex items-center">
               <BrandLogo size="sm" />
             </Link>
             <PartnerBadge className="hidden sm:inline-flex" />
@@ -82,7 +83,7 @@ function AppShell({ children, actions, minimal = false }) {
       {/* Desktop sidebar — fixed so sign-out stays pinned bottom-left */}
       <aside className="hidden lg:flex lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 flex-col w-[var(--sidebar-width)] border-r border-border bg-bg-elevated">
         <div className="h-14 flex items-center px-5 border-b border-border shrink-0">
-          <Link to="/markets" className="flex items-center">
+          <Link to="/dashboard" className="flex items-center">
             <BrandLogo size="sm" />
           </Link>
         </div>
@@ -133,7 +134,7 @@ function AppShell({ children, actions, minimal = false }) {
         {/* Mobile header */}
         <header className="lg:hidden sticky top-0 z-40 border-b border-border bg-bg-elevated">
           <div className="h-14 px-4 flex items-center justify-between gap-3">
-            <Link to="/markets" className="flex items-center">
+            <Link to="/dashboard" className="flex items-center">
               <BrandLogo size="sm" />
             </Link>
             <div className="flex items-center gap-2">

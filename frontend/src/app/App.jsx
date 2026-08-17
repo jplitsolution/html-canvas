@@ -6,6 +6,7 @@ import ScreenReaderAnnouncer from '../components/common/ScreenReaderAnnouncer'
 import AuthProvider from '../context/AuthContext'
 import RequireAuth from '../components/auth/RequireAuth'
 import LoginPage from '../pages/LoginPage'
+import DashboardPage from '../pages/DashboardPage'
 import MarketsPage from '../pages/MarketsPage'
 import MarketCampaignsPage from '../pages/MarketCampaignsPage'
 import CampaignDetailPage from '../pages/CampaignDetailPage'
@@ -42,6 +43,7 @@ function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
 
+              <Route path="/dashboard" element={<Protected><DashboardPage /></Protected>} />
               <Route path="/markets" element={<Protected><MarketsPage /></Protected>} />
               <Route
                 path="/markets/:countryCode/:operatorCode"
@@ -81,8 +83,8 @@ function App() {
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
               <Route path="/subscription" element={<SubscriptionPage />} />
-              <Route path="/" element={<Navigate to="/markets" replace />} />
-              <Route path="*" element={<Navigate to="/markets" replace />} />
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </main>
           <ToastContainer />

@@ -178,6 +178,11 @@ function CampaignLogsPage() {
   const dateFormat = useStore((s) => s.dateFormat)
   const [searchParams] = useSearchParams()
   const paramCampaignId = searchParams.get('campaignId')
+  const paramPreset = searchParams.get('preset')
+  const paramFrom = searchParams.get('from')
+  const paramTo = searchParams.get('to')
+  const paramEventType = searchParams.get('eventType')
+  const paramVendorId = searchParams.get('vendorId')
 
   const [selectedId, setSelectedId] = useState('')
   const [esEnabled, setEsEnabled] = useState(true)
@@ -187,15 +192,16 @@ function CampaignLogsPage() {
     navigate(`/analytics/visits/${visitId}`)
   }, [navigate])
 
-  const [datePreset, setDatePreset] = useState('today')
+  const [datePreset, setDatePreset] = useState(paramPreset || (paramFrom && paramTo ? 'custom' : 'today'))
   const [filters, setFilters] = useState(() => {
-    const range = getDateRangeForPreset('today', timezone)
+    const range = getDateRangeForPreset(paramPreset || 'today', timezone)
     return {
-      eventType: '',
+      eventType: paramEventType || '',
+      vendorId: paramVendorId || '',
       clickId: '',
       q: '',
-      from: range.from,
-      to: range.to,
+      from: paramFrom || range.from,
+      to: paramTo || range.to,
     }
   })
   const [page, setPage] = useState(1)
