@@ -46,6 +46,45 @@ import {
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
 
+const STANDARD_EVENT_TYPES = [
+  'VISIT',
+  'HOME_VIEW',
+  'PLAN_VIEW',
+  'CONFIRM_VIEW',
+  'OTP_VIEW',
+  'OTP_SEND',
+  'OTP_VERIFY',
+  'OTP_SHOWN',
+  'SUBSCRIBE_CLICK',
+  'CONFIRM_CLICK',
+  'SUBSCRIBE_SUCCESS',
+  'SUBSCRIBE_FAILED',
+  'API_CHECKSUB',
+  'API_PRIORITY',
+  'API_SUBSCRIBE',
+  'API_BLOCKLIST',
+  'API_RESOLVE_MSISDN',
+  'API_HE_TOKEN',
+  'API_HE_MSISDN',
+  'API_HE_RESOLVE',
+  'API_HE_REDIRECT',
+  'API_BILLING_CALLBACK',
+  'API_VENDOR_POSTBACK',
+  'API_OTP_SEND',
+  'API_OTP_VERIFY',
+  'API_OTP_EXPOSE_SEND_IN',
+  'API_OTP_EXPOSE_VERIFY_IN',
+  'CALLBACK_RECEIVED',
+  'POSTBACK_PENDING',
+  'POSTBACK_SENT',
+  'POSTBACK_FAILED',
+  'RATE_LIMIT_HIT',
+  'BRUTE_FORCE_ATTEMPT',
+  'BLOCKED_REQUEST',
+  'BLOCKED',
+]
+
+
 function resolveInterval(preset, from, to) {
   if (preset === 'today') return 'hour'
   if (from && to && from === to) return 'hour'
@@ -274,6 +313,19 @@ function CampaignLogsPage() {
     () => (aggs?.byEventType || []).reduce((sum, b) => sum + b.count, 0),
     [aggs],
   )
+
+  const eventTypeOptions = useMemo(() => {
+    const set = new Set(STANDARD_EVENT_TYPES)
+    if (aggs?.byEventType) {
+      aggs.byEventType.forEach((item) => {
+        if (item.key) set.add(item.key)
+      })
+    }
+    if (filters.eventType && !set.has(filters.eventType)) {
+      set.add(filters.eventType)
+    }
+    return Array.from(set).sort()
+  }, [aggs, filters.eventType])
   const totalPages = Math.max(1, Math.ceil((logs.total || 0) / PAGE_SIZE))
 
   const timeSeriesData = useMemo(() => {
@@ -401,16 +453,20 @@ function CampaignLogsPage() {
             </div>
             <div>
               <label className="block text-xs font-bold text-gray-500 mb-1.5">Event Type</label>
-              <div className="relative">
-                <input
-                  className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2 bg-gray-50/40 text-gray-800 font-medium placeholder:text-gray-400 focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
-                  value={filters.eventType}
-                  onChange={(e) => updateFilter('eventType', e.target.value)}
-                  placeholder="e.g. OTP_VERIFY"
-                />
-                <Layers className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              </div>
+              <select
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
+                value={filters.eventType}
+                onChange={(e) => updateFilter('eventType', e.target.value)}
+              >
+                <option value="">— All Event Types —</option>
+                {eventTypeOptions.map((type) => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
             </div>
+
             {datePreset === 'custom' && (
               <>
                 <div>
