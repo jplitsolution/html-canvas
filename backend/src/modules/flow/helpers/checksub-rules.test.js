@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {
   extractChecksubStatus,
   evaluateChecksubRules,
+  interpretChecksubResponse,
+  mapLegacyChecksubBody,
   parseChecksubConfig,
 } from './checksub-rules.js';
 
@@ -119,5 +121,54 @@ describe('evaluateChecksubRules', () => {
     const r = evaluateChecksubRules({ success: true, message: 'Hello World' }, cfg);
     assert.equal(r.go, 'continue');
     assert.equal(r.shouldSkipSubscribe, false);
+  });
+});
+
+describe('mapLegacyChecksubBody', () => {
+  it('maps currentStatus new as continue funnel', () => {
+    const r = mapLegacyChecksubBody({
+      currentStatus: 'new',
+      reason: 'serviceNotExists',
+    });
+    assert.equal(r.status, 'new');
+    assert.equal(r.shouldSkipSubscribe, false);
+    assert.equal(r.isActive, false);
+  });
+
+  it('maps serviceNotExists with empty status as new', () => {
+    const r = mapLegacyChecksubBody({ reason: 'serviceNotExists' });
+    assert.equal(r.status, 'new');
+    assert.equal(r.shouldSkipSubscribe, false);
+  });
+
+  it('maps active as skip subscribe', () => {
+    const r = mapLegacyChecksubBody({ currentStatus: 'active' });
+    assert.equal(r.isActive, true);
+    assert.equal(r.shouldSkipSubscribe, true);
+  });
+
+  it('parses JSON string bodies', () => {
+    const r = mapLegacyChecksubBody('{"currentStatus":"new"}');
+    assert.equal(r.status, 'new');
+  });
+});
+
+describe('interpretChecksubResponse', () => {
+  it('uses campaign rules when configured', () => {
+    const cfg = parseChecksubConfig({
+      statusField: 'currentStatus',
+      rules: [{ value: 'new', go: 'continue' }],
+      missGo: 'page',
+      missPage: 'THANKYOU',
+    });
+    const r = interpretChecksubResponse({ currentStatus: 'new' }, cfg);
+    assert.equal(r.go, 'continue');
+    assert.equal(r.shouldSkipSubscribe, false);
+  });
+
+  it('falls back to legacy mapping when no rules', () => {
+    const r = interpretChecksubResponse({ currentStatus: 'new' }, null);
+    assert.equal(r.status, 'new');
+    assert.equal(r.go, null);
   });
 });

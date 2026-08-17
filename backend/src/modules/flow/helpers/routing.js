@@ -17,11 +17,13 @@ export function createFlowRouting(deps) {
     resolveSkipPage,
   } = deps;
 
-  const visitHasDetectPartnerChecks = async (visitId) => {
+  const visitHasDetectPartnerChecks = async (visitId, phone) => {
     if (!visitId) return false;
-    const row = await getApiCallLogRepo().findOne({
-      where: { visitId, callType: ApiCallType.CHECKSUB },
-    });
+    const where = { visitId, callType: ApiCallType.CHECKSUB };
+    if (phone) {
+      where.msisdn = String(phone).replace(/\D/g, '');
+    }
+    const row = await getApiCallLogRepo().findOne({ where });
     return Boolean(row);
   };
 
@@ -111,8 +113,8 @@ export function createFlowRouting(deps) {
       return { nextPage, sub: null };
     }
 
-    // Number mil gaya → checksub. OTP path always (phone just verified);
-    // also when heading to CONFIRM. Skip already-subscribed to status page.
+    // Number mil gaya (OTP verify, or heading to CONFIRM) → checksub once.
+    // Same visit+MSISDN after HE already ran checksub is reused (no second HTTP).
     const shouldCheck =
       fromPage === CampaignPageType.OTP ||
       nextPage === CampaignPageType.CONFIRM;

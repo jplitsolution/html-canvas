@@ -1,10 +1,7 @@
 import axios from 'axios';
 import { apiCallLogService } from './api-call-log.service.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
-import {
-  evaluateChecksubRules,
-  parseChecksubConfig,
-} from './helpers/checksub-rules.js';
+import { interpretChecksubResponse } from './helpers/checksub-rules.js';
 import {
   fillSubscribeTemplate,
   mapSubServiceId,
@@ -199,12 +196,25 @@ export const createPartnerApiService = () => {
     }
   };
 
+  const parseCachedChecksubBody = (raw) => {
+    if (raw == null || raw === '') return null;
+    if (typeof raw !== 'string') return raw;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return raw;
+    }
+  };
+
   /**
    * Partner checksub result.
    * - isActive: currentStatus/subscriptionStatus === active (content access)
    * - shouldSkipSubscribe: not a brand-new user — do not send to CONFIRM/CG
    *   (active | parking | grace | pending | …). Only `new` continues funnel.
    * - go/page/url: set when campaign checksubConfigJson rules match (optional)
+   *
+   * One partner HTTP per visit + MSISDN. HE detect or OTP-verify runs it;
+   * subscribe / confirm / page guards reuse that result (no second Session Detail row).
    */
   const checkSubscription = async (config, input) => {
     const empty = {
@@ -222,6 +232,19 @@ export const createPartnerApiService = () => {
       return empty;
     }
 
+    if (input.visitId) {
+      const cached = await apiCallLogService
+        .findLatestSuccessfulChecksub(input.visitId, input.phone)
+        .catch(() => null);
+      const cachedBody = parseCachedChecksubBody(cached?.responseBody);
+      if (cachedBody != null) {
+        return interpretChecksubResponse(
+          cachedBody,
+          config.checksubConfigJson,
+        );
+      }
+    }
+
     try {
       const headers = parseHeaders(config.headersJson);
       const { url, response } = await sendRequest(
@@ -232,107 +255,19 @@ export const createPartnerApiService = () => {
         { method: 'GET' },
       );
       const rawData = response.data ?? {};
-
-      const ruleConfig = parseChecksubConfig(config.checksubConfigJson);
-      if (ruleConfig) {
-        const ruled = evaluateChecksubRules(rawData, ruleConfig);
-        if (ruled) {
-          const statusLabel = (ruled.status || 'UNKNOWN').toUpperCase();
-          await logCall({
-            callType: ApiCallType.CHECKSUB,
-            input,
-            requestUrl: url,
-            response,
-            success: true,
-            statusLabel,
-          });
-          return ruled;
-        }
-      }
-
-      const data =
-        typeof rawData === 'string'
-          ? (() => {
-              try {
-                return JSON.parse(rawData);
-              } catch {
-                return {};
-              }
-            })()
-          : rawData;
-      const nested = data.data ?? data;
-      const currentStatus = String(nested.currentStatus || '')
-        .trim()
-        .toLowerCase();
-      const subscriptionStatus = String(nested.subscriptionStatus || '')
-        .trim()
-        .toLowerCase();
-
-      let isActive =
-        currentStatus === 'active' || subscriptionStatus === 'active';
-      if (
-        !isActive &&
-        !currentStatus &&
-        !subscriptionStatus
-      ) {
-        isActive = Boolean(
-          nested.subscribed ??
-            nested.isSubscribed ??
-            nested.active ??
-            data.subscribed ??
-            data.isSubscribed ??
-            data.active,
-        );
-      }
-
-      const apiStatus = String(nested.status || data.status || '')
-        .trim()
-        .toLowerCase();
-      const reason = String(nested.reason || data.reason || '')
-        .trim()
-        .toLowerCase();
-
-      let status =
-        currentStatus ||
-        subscriptionStatus ||
-        (isActive ? 'active' : 'unknown');
-
-      // Partner returns serviceNotExists / empty status when MSISDN has no sub yet.
-      if (
-        !isActive &&
-        !currentStatus &&
-        !subscriptionStatus &&
-        (reason === 'servicenotexists' || apiStatus === 'new')
-      ) {
-        status = 'new';
-      }
-
-      // Safwap parity: only brand-new MSISDNs enter subscribe/confirm.
-      const shouldSkipSubscribe =
-        isActive ||
-        (Boolean(status) &&
-          status !== 'new' &&
-          status !== 'unknown');
-
-      const statusLabel = (status || 'UNKNOWN').toUpperCase();
+      const result = interpretChecksubResponse(
+        rawData,
+        config.checksubConfigJson,
+      );
       await logCall({
         callType: ApiCallType.CHECKSUB,
         input,
         requestUrl: url,
         response,
         success: true,
-        statusLabel,
+        statusLabel: (result.status || 'UNKNOWN').toUpperCase(),
       });
-      return {
-        currentStatus: currentStatus || null,
-        subscriptionStatus: subscriptionStatus || null,
-        status,
-        isActive,
-        shouldSkipSubscribe,
-        go: null,
-        page: null,
-        url: null,
-      };
+      return result;
     } catch (err) {
       console.warn(`checkSubscription failed: ${err.message}`);
       await logCall({

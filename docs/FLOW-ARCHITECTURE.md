@@ -189,7 +189,7 @@ Renders a campaign page (`page=HOME|OTP|CONFIRM|…`).
 
 **Guards:**
 - Null-flow (`verificationMode=NONE` + `cgRedirectUrl`) may return `externalRedirect`.
-- If detect already logged checksub for the visit, `/page` skips duplicate checksub.
+- If this visit + MSISDN already has a successful checksub (HE or OTP), `/page` and subscribe/confirm reuse it — no second partner HTTP.
 - `direct=1` — editor/page-token bypass for rendering guards only (not a `/transition` security bypass).
 
 ### 4.4 `POST /transition`
@@ -555,7 +555,7 @@ Typical healthy API HE visit chain:
 7. Never flash HOME/OTP under API HE **when** success/fail exit URLs will redirect; empty exit URLs → show HOME after detect (funnel mode).  
 8. `conversion_postbacks` uniqueness is global MSISDN — changing it changes retry/callback matching.  
 9. `direct=1` is for editor page rendering only.  
-10. Detect-time checksub must not be blindly re-run on every `/page` for the same visit.
+10. Checksub is once per visit + MSISDN: HE detect or OTP verify. Subscribe / confirm / `/page` reuse that result — no second partner HTTP.
 
 ---
 

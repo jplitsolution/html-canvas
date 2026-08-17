@@ -141,6 +141,89 @@ const buildOutcome = (statusRaw, go, page, url) => {
 };
 
 /**
+ * Legacy mapping when campaign has no checksubConfigJson rules.
+ * Only `new` continues the funnel; active / parking / grace / … skip subscribe.
+ */
+export function mapLegacyChecksubBody(rawData) {
+  const data =
+    typeof rawData === 'string'
+      ? (() => {
+          try {
+            return JSON.parse(rawData);
+          } catch {
+            return {};
+          }
+        })()
+      : rawData && typeof rawData === 'object'
+        ? rawData
+        : {};
+  const nested = data.data ?? data;
+  const currentStatus = String(nested.currentStatus || '')
+    .trim()
+    .toLowerCase();
+  const subscriptionStatus = String(nested.subscriptionStatus || '')
+    .trim()
+    .toLowerCase();
+
+  let isActive =
+    currentStatus === 'active' || subscriptionStatus === 'active';
+  if (!isActive && !currentStatus && !subscriptionStatus) {
+    isActive = Boolean(
+      nested.subscribed ??
+        nested.isSubscribed ??
+        nested.active ??
+        data.subscribed ??
+        data.isSubscribed ??
+        data.active,
+    );
+  }
+
+  const apiStatus = String(nested.status || data.status || '')
+    .trim()
+    .toLowerCase();
+  const reason = String(nested.reason || data.reason || '')
+    .trim()
+    .toLowerCase();
+
+  let status =
+    currentStatus ||
+    subscriptionStatus ||
+    (isActive ? 'active' : 'unknown');
+
+  if (
+    !isActive &&
+    !currentStatus &&
+    !subscriptionStatus &&
+    (reason === 'servicenotexists' || apiStatus === 'new')
+  ) {
+    status = 'new';
+  }
+
+  const shouldSkipSubscribe =
+    isActive ||
+    (Boolean(status) && status !== 'new' && status !== 'unknown');
+
+  return {
+    currentStatus: currentStatus || null,
+    subscriptionStatus: subscriptionStatus || null,
+    status,
+    isActive,
+    shouldSkipSubscribe,
+    go: null,
+    page: null,
+    url: null,
+  };
+}
+
+/**
+ * Campaign rules if configured, otherwise legacy new/active mapping.
+ */
+export function interpretChecksubResponse(rawData, checksubConfigJson) {
+  const ruled = evaluateChecksubRules(rawData, checksubConfigJson);
+  return ruled || mapLegacyChecksubBody(rawData);
+}
+
+/**
  * Evaluate campaign checksub rules against partner response.
  * @returns {null|object} null when no config (use legacy path)
  */

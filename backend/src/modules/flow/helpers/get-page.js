@@ -124,15 +124,19 @@ export function createGetPage(deps) {
       const isVerified = await hasVerifiedOtp(visitId, phone);
       const hasPhone = Boolean(phone);
 
+      const guardPartnerCtx = {
+        phone,
+        serviceId,
+        country: campaign.country,
+        operator: campaign.operator,
+        visitId,
+        campaignId: campaign.id,
+      };
+
       if (guardMode === 'OTP_ONLY') {
         if (!isVerified) {
           const sub = await partnerApiService
-            .checkSubscription(apiConfig, {
-              phone,
-              serviceId,
-              country: campaign.country,
-              operator: campaign.operator,
-            })
+            .checkSubscription(apiConfig, guardPartnerCtx)
             .catch(() => null);
 
           if (sub?.shouldSkipSubscribe) {
@@ -152,12 +156,7 @@ export function createGetPage(deps) {
           !isVerified
         ) {
           const sub = await partnerApiService
-            .checkSubscription(apiConfig, {
-              phone,
-              serviceId,
-              country: campaign.country,
-              operator: campaign.operator,
-            })
+            .checkSubscription(apiConfig, guardPartnerCtx)
             .catch(() => null);
           if (!sub?.shouldSkipSubscribe) {
             if (!hasPhone) {
@@ -179,12 +178,7 @@ export function createGetPage(deps) {
             apiConfig.subscriptionApi.trim() !== ''
           ) {
             const sub = await partnerApiService
-              .checkSubscription(apiConfig, {
-                phone,
-                serviceId,
-                country: campaign.country,
-                operator: campaign.operator,
-              })
+              .checkSubscription(apiConfig, guardPartnerCtx)
               .catch(() => null);
             if (!sub?.shouldSkipSubscribe) {
               if (!hasPhone) {
@@ -224,7 +218,7 @@ export function createGetPage(deps) {
 
       const guardModeForSub =
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
-      const partnerChecksDone = await visitHasDetectPartnerChecks(visitId);
+      const partnerChecksDone = await visitHasDetectPartnerChecks(visitId, phone);
       // detect-msisdn already ran checksub/blocklist — do not duplicate on HOME load.
       if (guardModeForSub !== 'NONE' && phone && !partnerChecksDone) {
         const partnerCtx = {

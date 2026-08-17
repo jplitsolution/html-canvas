@@ -62,7 +62,25 @@ export const createApiCallLogService = () => {
     return saved;
   };
 
-  return { record };
+  /**
+   * One successful checksub per visit + MSISDN (HE or OTP already ran it).
+   */
+  const findLatestSuccessfulChecksub = async (visitId, msisdn) => {
+    const vid = visitId ? parseInt(visitId, 10) : NaN;
+    const digits = msisdn ? String(msisdn).replace(/\D/g, '') : '';
+    if (!Number.isFinite(vid) || !digits) return null;
+    return getRepo().findOne({
+      where: {
+        visitId: vid,
+        callType: 'checksub',
+        msisdn: digits,
+        success: true,
+      },
+      order: { id: 'DESC' },
+    });
+  };
+
+  return { record, findLatestSuccessfulChecksub };
 };
 
 export const apiCallLogService = createApiCallLogService();
