@@ -24,7 +24,7 @@ import {
   getDateRangeForPreset,
   DEFAULT_TIMEZONE,
 } from '../utils/date'
-import { getPostbackSummary, listPostbacks } from '../services/api/partners'
+import { getPostbackSummary, listPostbacks, exportPostbackDayReport } from '../services/api/partners'
 import useStore from '../store/useStore'
 
 const PAGE_SIZE = 25
@@ -82,6 +82,8 @@ function PostbacksPage() {
   const [dateRange, setDateRange] = useState(() =>
     getDateRangeForPreset('month', timezone),
   )
+  const [exporting, setExporting] = useState(false)
+  const addToast = useStore((s) => s.addToast)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -139,6 +141,33 @@ function PostbacksPage() {
     setDateRange((current) => ({ ...current, [key]: value }))
   }
 
+  const logsQuery = (extra = {}) => {
+    const params = new URLSearchParams()
+    params.set('preset', datePreset)
+    if (dateRange.from) params.set('from', dateRange.from)
+    if (dateRange.to) params.set('to', dateRange.to)
+    if (extra.filter) params.set('filter', extra.filter)
+    return `/postbacks/day-logs?${params.toString()}`
+  }
+
+  const exportLogs = async () => {
+    if (!dateRange.from || !dateRange.to) return
+    setExporting(true)
+    try {
+      const result = await exportPostbackDayReport({
+        from: dateRange.from,
+        to: dateRange.to,
+        timezone,
+        format: 'csv',
+      })
+      addToast(`Exported ${result.filename} (also saved on server)`, 'success')
+    } catch (err) {
+      addToast(err?.message || 'Failed to export logs', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
@@ -148,10 +177,18 @@ function PostbacksPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => navigate('/postbacks/day-logs')}
+            onClick={exportLogs}
+            disabled={exporting || !dateRange.from || !dateRange.to}
           >
-            <FileDown className="w-4 h-4" />
-            Today&apos;s logs
+            <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
+            {exporting ? 'Exporting…' : 'Export logs'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(logsQuery())}
+          >
+            View logs
           </Button>
           <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -165,8 +202,8 @@ function PostbacksPage() {
           <h1 className="page-header-title">Postbacks</h1>
           <p className="page-header-description">
             MSISDN resolve → postback queue → billing callback → vendor CPA fire.
-            Use <span className="font-medium text-gray-700">Today&apos;s logs</span> to
-            write a per-number file on the server (queued / callback received / vendor fired).
+            <span className="font-medium text-gray-700"> Export logs</span> downloads
+            the selected date range as CSV (and writes the same file on the server).
           </p>
         </div>
 
@@ -176,13 +213,25 @@ function PostbacksPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           <KpiCard
             label="MSISDN resolved"
             value={summary?.msisdnResolved}
             icon={Phone}
             hint="Visits with phone"
           />
+          <button
+            type="button"
+            className="text-left"
+            onClick={() => navigate(logsQuery({ filter: 'he_fail_cg' }))}
+          >
+            <KpiCard
+              label="No MSISDN → CG"
+              value={summary?.heFailCg}
+              icon={XCircle}
+              hint="Open logs filter"
+            />
+          </button>
           <KpiCard
             label="Postbacks created"
             value={summary?.postbacksCreated}
@@ -297,6 +346,21 @@ function PostbacksPage() {
               </div>
             </div>
           ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={exportLogs}
+              disabled={exporting || !dateRange.from || !dateRange.to}
+            >
+              <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
+              {exporting ? 'Exporting…' : 'Export logs'}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => navigate(logsQuery())}>
+              View detailed logs
+            </Button>
+          </div>
 
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="flex flex-wrap gap-1.5">

@@ -14,6 +14,7 @@ import {
   RefreshCw,
   Search,
   Send,
+  FileDown,
   XCircle,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
@@ -26,7 +27,7 @@ import {
   formatDate,
   getDateRangeForPreset,
 } from '../utils/date'
-import { getPostbackDayReport } from '../services/api/partners'
+import { getPostbackDayReport, exportPostbackDayReport } from '../services/api/partners'
 import useStore from '../store/useStore'
 
 const FILTERS = [
@@ -34,9 +35,15 @@ const FILTERS = [
   { id: 'complete', label: 'Complete (recv + fired)' },
   { id: 'waiting_callback', label: 'Waiting callback' },
   { id: 'fire_failed', label: 'Fire failed' },
+  { id: 'he_fail_cg', label: 'No MSISDN → CG' },
   { id: 'callback_no_row', label: 'Callback, no queue' },
   { id: 'not_queued', label: 'Not queued' },
 ]
+const FILTER_IDS = new Set(FILTERS.map((f) => f.id))
+
+function rowKeyOf(row) {
+  return row.rowKey || row.msisdn || (row.visitId ? `visit:${row.visitId}` : `click:${row.clickId || ''}`)
+}
 
 function ynClass(ok, fail) {
   if (fail) return 'bg-rose-50 text-rose-700 border-rose-200'
@@ -92,20 +99,32 @@ function NumberCard({ row, expanded, onToggle }) {
         )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-gray-900">{row.msisdn}</span>
-            <Flag label="Queued" yes={row.queued} extra={row.status || ''} />
-            <Flag label="Received" yes={row.billingReceived} extra="billing /callback" />
-            <Flag
-              label="Fired"
-              yes={row.vendorFired && !fireFail}
-              fail={fireFail}
-              extra={row.vendorFireStatus}
-            />
+            <span className="font-mono text-sm font-semibold text-gray-900">
+              {row.msisdn || '(no MSISDN)'}
+            </span>
+            {row.outcome === 'he_fail_cg' ? (
+              <Flag label="CG redirect" yes fail extra={row.cgUrl || 'fail URL'} />
+            ) : (
+              <>
+                <Flag label="Queued" yes={row.queued} extra={row.status || ''} />
+                <Flag label="Received" yes={row.billingReceived} extra="billing /callback" />
+                <Flag
+                  label="Fired"
+                  yes={row.vendorFired && !fireFail}
+                  fail={fireFail}
+                  extra={row.vendorFireStatus}
+                />
+              </>
+            )}
           </div>
           <p className="mt-1.5 text-xs text-gray-600">{row.outcomeLabel}</p>
         </div>
         <div className="text-[11px] text-gray-400 whitespace-nowrap">
-          {row.vendorName || '—'}
+          {row.outcome === 'he_fail_cg'
+            ? row.visitId
+              ? `visit #${row.visitId}`
+              : 'HE fail'
+            : row.vendorName || '—'}
         </div>
       </button>
       {expanded ? (
@@ -143,6 +162,18 @@ function NumberCard({ row, expanded, onToggle }) {
                 {row.clickId || '—'} / {row.rcid || '—'}
               </dd>
             </div>
+            {row.cgUrl || row.redirectedToCg ? (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] uppercase tracking-wide text-gray-400">CG / fail URL</dt>
+                <dd className="font-mono text-xs break-all">{row.cgUrl || '—'}</dd>
+              </div>
+            ) : null}
+            {row.heError ? (
+              <div className="sm:col-span-2">
+                <dt className="text-[11px] uppercase tracking-wide text-gray-400">HE error</dt>
+                <dd className="text-xs text-rose-600 whitespace-pre-wrap">{row.heError}</dd>
+              </div>
+            ) : null}
             <div>
               <dt className="text-[11px] uppercase tracking-wide text-gray-400">Visit</dt>
               <dd>
@@ -230,8 +261,13 @@ function PostbackDayLogsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [q, setQ] = useState('')
-  const [filter, setFilter] = useState('all')
+  const [filter, setFilter] = useState(() => {
+    const f = searchParams.get('filter')
+    return FILTER_IDS.has(f) ? f : 'all'
+  })
   const [expanded, setExpanded] = useState(() => new Set())
+  const [exporting, setExporting] = useState(false)
+  const addToast = useStore((s) => s.addToast)
 
   const load = useCallback(async () => {
     if (!dateRange.from || !dateRange.to) return
@@ -285,13 +321,50 @@ function PostbackDayLogsPage() {
     setSearchParams(next)
   }
 
+  const applyFilter = (id) => {
+    setFilter(id)
+    const next = new URLSearchParams(searchParams)
+    if (!id || id === 'all') next.delete('filter')
+    else next.set('filter', id)
+    setSearchParams(next)
+  }
+
+  const exportLogs = async (format) => {
+    if (!dateRange.from || !dateRange.to) return
+    setExporting(true)
+    try {
+      const result = await exportPostbackDayReport({
+        from: dateRange.from,
+        to: dateRange.to,
+        timezone,
+        format,
+      })
+      addToast(`Exported ${result.filename}`, 'success')
+    } catch (err) {
+      addToast(err?.message || 'Failed to export logs', 'error')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   const numbers = useMemo(() => {
     const list = data?.numbers || []
     const needle = q.trim()
     return list.filter((n) => {
       if (filter !== 'all' && n.outcome !== filter) return false
       if (!needle) return true
-      const hay = [n.msisdn, n.clickId, n.rcid, n.campid, n.trackingCampid, n.vendorName]
+      const hay = [
+        n.msisdn,
+        n.clickId,
+        n.rcid,
+        n.campid,
+        n.trackingCampid,
+        n.vendorName,
+        n.visitId,
+        n.cgUrl,
+        n.outcome,
+        n.heError,
+      ]
         .filter(Boolean)
         .join(' ')
         .toLowerCase()
@@ -314,6 +387,24 @@ function PostbackDayLogsPage() {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Rewrite on server
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportLogs('csv')}
+            disabled={exporting || loading}
+          >
+            <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
+            {exporting ? 'Exporting…' : 'Export CSV'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => exportLogs('txt')}
+            disabled={exporting || loading}
+          >
+            <FileText className="w-4 h-4" />
+            Export TXT
+          </Button>
         </div>
       }
     >
@@ -323,6 +414,9 @@ function PostbackDayLogsPage() {
           <p className="page-header-description">
             Each click writes a greppable log file on the API server (not your laptop),
             grouped by MSISDN — queued, billing callback received, vendor CPA fired.
+            Use <span className="font-medium text-gray-700">No MSISDN → CG</span> to
+            see token/resolve failures that still went to the CG page.
+            Export CSV/TXT uses the date range above; files are also written on the server.
           </p>
         </div>
 
@@ -391,6 +485,27 @@ function PostbackDayLogsPage() {
               </div>
             </div>
           ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => exportLogs('csv')}
+              disabled={exporting || loading || !dateRange.from || !dateRange.to}
+            >
+              <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
+              {exporting ? 'Exporting…' : 'Export logs'}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => exportLogs('txt')}
+              disabled={exporting || loading || !dateRange.from || !dateRange.to}
+            >
+              <FileText className="w-4 h-4" />
+              Export TXT
+            </Button>
+          </div>
         </div>
 
         {file ? (
@@ -415,13 +530,21 @@ function PostbackDayLogsPage() {
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3">
           <Kpi label="Numbers" value={summary?.numbers} icon={Phone} />
           <Kpi label="Queued" value={summary?.queued} icon={Clock} />
           <Kpi label="Callback received" value={summary?.billingReceived} icon={CheckCircle2} />
           <Kpi label="Callback missing" value={summary?.billingMissing} />
           <Kpi label="Vendor sent" value={summary?.vendorSent} icon={Send} />
           <Kpi label="Fire failed" value={summary?.vendorFailed} icon={XCircle} />
+          <button type="button" className="text-left" onClick={() => applyFilter('he_fail_cg')}>
+            <Kpi
+              label="No MSISDN → CG"
+              value={summary?.heFailCg}
+              hint="HE resolve failed, sent to CG"
+              icon={XCircle}
+            />
+          </button>
         </div>
 
         <div className="bg-white border border-gray-100 rounded-2xl p-4 flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
@@ -430,7 +553,7 @@ function PostbackDayLogsPage() {
               <button
                 key={f.id}
                 type="button"
-                onClick={() => setFilter(f.id)}
+                onClick={() => applyFilter(f.id)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                   filter === f.id
                     ? 'bg-indigo-600 text-white'
@@ -458,25 +581,36 @@ function PostbackDayLogsPage() {
           ) : !numbers.length ? (
             <EmptyState
               icon={FileText}
-              title="No postback logs for this date"
-              description="When a number is queued, billed, or fired, it will show up here with queued / received / fired."
+              title={
+                filter === 'he_fail_cg'
+                  ? 'No HE fail → CG redirects'
+                  : 'No postback logs for this date'
+              }
+              description={
+                filter === 'he_fail_cg'
+                  ? 'When token/resolve does not return a number and we send the user to the CG page, those visits show up here.'
+                  : 'When a number is queued, billed, fired, or HE-fail redirected to CG, it will show up here.'
+              }
             />
           ) : (
-            numbers.map((row) => (
+            numbers.map((row) => {
+              const key = rowKeyOf(row)
+              return (
               <NumberCard
-                key={row.msisdn}
+                key={key}
                 row={row}
-                expanded={expanded.has(row.msisdn)}
+                expanded={expanded.has(key)}
                 onToggle={() => {
                   setExpanded((prev) => {
                     const next = new Set(prev)
-                    if (next.has(row.msisdn)) next.delete(row.msisdn)
-                    else next.add(row.msisdn)
+                    if (next.has(key)) next.delete(key)
+                    else next.add(key)
                     return next
                   })
                 }}
               />
-            ))
+              )
+            })
           )}
         </div>
 

@@ -13,10 +13,10 @@ describe('dayReportFilename', () => {
     assert.equal(dayReportFilename('2026-08-18'), 'postback-logs-2026-08-18.txt');
   });
 
-  it('uses from-to for a range', () => {
+  it('uses from-to for a csv range', () => {
     assert.equal(
-      dayReportFilename('2026-08-01', '2026-08-18'),
-      'postback-logs-2026-08-01-to-2026-08-18.txt',
+      dayReportFilename('2026-08-01', '2026-08-18', 'csv'),
+      'postback-logs-2026-08-01-to-2026-08-18.csv',
     );
   });
 

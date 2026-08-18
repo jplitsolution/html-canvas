@@ -3,12 +3,20 @@ import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { DEFAULT_TIMEZONE, normalizeTimezone } from '../../../common/zoned-day.js';
 
+export const DAY_REPORT_HE_LOG_TYPES = [
+  ApiCallType.HE_REDIRECT,
+  ApiCallType.HE_TOKEN,
+  ApiCallType.HE_MSISDN,
+  ApiCallType.HE_RESOLVE,
+  ApiCallType.RESOLVE_MSISDN,
+];
+
 export const DAY_REPORT_LOG_TYPES = [
   ApiCallType.BILLING_CALLBACK,
   ApiCallType.VENDOR_POSTBACK,
-  ApiCallType.HE_REDIRECT,
   ApiCallType.CHECKSUB,
   ApiCallType.SUBSCRIBE,
+  ...DAY_REPORT_HE_LOG_TYPES,
 ];
 
 export const DAY_REPORT_EVENT_TYPES = [
@@ -84,9 +92,36 @@ function ts(value) {
   return Number.isNaN(n) ? 0 : n;
 }
 
+export function parseLogJson(value) {
+  if (value == null || value === '') return null;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
+/** Token/API HE did not resolve MSISDN and we sent the user to CG / fail URL. */
+export function isHeFailCgRedirect(log) {
+  if (!log || log.callType !== ApiCallType.HE_REDIRECT) return false;
+  if (log.success === false) return true;
+  const body = parseLogJson(log.requestBody);
+  return String(body?.outcome || '').toLowerCase() === 'fail';
+}
+
+export function storyRowKey({ msisdn, visitId, clickId, postbackId } = {}) {
+  const digits = digitsMsisdn(msisdn);
+  if (digits) return digits;
+  if (visitId) return `visit:${visitId}`;
+  if (clickId) return `click:${clickId}`;
+  if (postbackId) return `pb:${postbackId}`;
+  return 'unknown';
+}
+
 /**
- * One MSISDN → three answers ops people actually ask:
- * queued? billing received? vendor fired?
+ * One MSISDN (or unresolved visit) → answers ops people actually ask:
+ * queued? billing received? vendor fired? HE fail → CG?
  */
 export function buildNumberStory({
   msisdn,
@@ -104,6 +139,11 @@ export function buildNumberStory({
   const pendingEvents = events.filter(
     (e) => e.eventType === VisitEventType.POSTBACK_PENDING,
   );
+  const failCgLog = pickLatest(
+    logs.filter((l) => isHeFailCgRedirect(l)),
+    (item) => ts(item.createdAt),
+  );
+  const failCgBody = parseLogJson(failCgLog?.requestBody);
 
   const status = String(postback?.status || '').toLowerCase();
   const queued = Boolean(postback) || pendingEvents.length > 0;
@@ -147,7 +187,11 @@ export function buildNumberStory({
   let outcomeLabel =
     'NOT QUEUED — no conversion_postbacks row. Vendor CPA was never armed for this number.';
 
-  if (!queued && billingReceived) {
+  if (!queued && failCgLog) {
+    outcome = 'he_fail_cg';
+    outcomeLabel =
+      'NO MSISDN → CG — HE token/resolve did not return a number. User was redirected to the CG / fail URL. No postback queued.';
+  } else if (!queued && billingReceived) {
     outcome = 'callback_no_row';
     outcomeLabel =
       'CALLBACK WITH NO QUEUE — operator hit /callback but there was no pending postback row for this MSISDN, so vendor CPA was not fired.';
@@ -208,19 +252,42 @@ export function buildNumberStory({
     })),
   ].sort((a, b) => ts(a.at) - ts(b.at));
 
+  const visitId = postback?.visitId || logs.find((l) => l.visitId)?.visitId || null;
+  const clickId = postback?.clickId || logs.find((l) => l.clickId)?.clickId || null;
+  const digits = digitsMsisdn(msisdn);
+
   return {
-    msisdn: String(msisdn || ''),
-    visitId: postback?.visitId || logs.find((l) => l.visitId)?.visitId || null,
-    clickId: postback?.clickId || logs.find((l) => l.clickId)?.clickId || null,
+    msisdn: digits || String(msisdn || ''),
+    rowKey: storyRowKey({
+      msisdn: digits,
+      visitId,
+      clickId,
+      postbackId: postback?.id,
+    }),
+    visitId,
+    clickId,
     rcid: postback?.rcid || logs.find((l) => l.rcid)?.rcid || null,
     campid: postback?.campid || null,
     trackingCampid: postback?.trackingCampid || null,
-    campaignId: postback?.campaignId || campaign?.id || null,
+    campaignId:
+      postback?.campaignId ||
+      campaign?.id ||
+      logs.find((l) => l.campaignId)?.campaignId ||
+      null,
     campaignName: campaign?.name || null,
     vendorId: postback?.vendorId || vendor?.id || null,
     vendorName: vendor?.name || null,
     vendorCode: vendor?.code || null,
     postbackId: postback?.id || null,
+    redirectedToCg: Boolean(failCgLog),
+    cgUrl: failCgLog?.requestUrl || '',
+    heError:
+      failCgLog?.errorMessage ||
+      failCgBody?.heError ||
+      failCgBody?.error ||
+      '',
+    heProvider: failCgBody?.heProvider || '',
+    heRedirectedAt: failCgLog?.createdAt || null,
     queued,
     queuedAt: postback?.createdAt || pendingEvents[0]?.createdAt || null,
     status: status || null,
@@ -259,8 +326,13 @@ export function summarizeStories(numbers) {
     complete: 0,
     waitingCallback: 0,
     fireFailed: 0,
+    heFailCg: 0,
   };
   for (const n of numbers) {
+    if (n.outcome === 'he_fail_cg') {
+      summary.heFailCg += 1;
+      continue;
+    }
     if (n.queued) summary.queued += 1;
     else summary.notQueued += 1;
     if (n.billingReceived) summary.billingReceived += 1;
@@ -317,11 +389,13 @@ export function formatDayReportText(report, timezone) {
   lines.push(`  Fire failed              : ${summary.fireFailed}`);
   lines.push(`  Callback with no queue   : ${summary.callbackNoRow}`);
   lines.push(`  Not queued at all        : ${summary.notQueued}`);
+  lines.push(`  No MSISDN → CG redirect  : ${summary.heFailCg || 0}`);
   lines.push('');
   lines.push('HOW TO READ EACH NUMBER');
   lines.push('  1. QUEUED   — did we create a conversion_postbacks row?');
   lines.push('  2. RECEIVED — did billing/operator hit /api/flow/callback?');
   lines.push('  3. FIRED    — did we GET the vendor CPA postback URL?');
+  lines.push('  HE fail → CG — token/resolve returned no number; user sent to CG URL.');
   lines.push('');
 
   const numbers = report.numbers || [];
@@ -334,7 +408,7 @@ export function formatDayReportText(report, timezone) {
 
   for (const n of numbers) {
     lines.push(bar);
-    lines.push(`MSISDN  ${n.msisdn || '(unknown)'}`);
+    lines.push(`MSISDN  ${n.msisdn || (n.outcome === 'he_fail_cg' ? '(no MSISDN)' : '(unknown)')}`);
     lines.push(bar);
     lines.push(
       `  1. QUEUED     ${yn(n.queued)}  ${formatInZone(n.queuedAt, tz) || '—'}  ${
@@ -374,6 +448,12 @@ export function formatDayReportText(report, timezone) {
     lines.push(
       `  Visit: ${n.visitId != null ? `#${n.visitId}` : '—'}  click_id=${n.clickId || '—'}  rcid=${n.rcid || '—'}`,
     );
+    if (n.redirectedToCg || n.cgUrl) {
+      lines.push(
+        `  CG redirect: ${formatInZone(n.heRedirectedAt, tz) || 'YES'}  ${n.cgUrl || '—'}`,
+      );
+    }
+    if (n.heError) lines.push(`  HE error: ${n.heError}`);
     if (n.vendorUrl) lines.push(`  Vendor URL: ${n.vendorUrl}`);
     if (n.vendorError) lines.push(`  Vendor error: ${n.vendorError}`);
     if (n.vendorResponse) lines.push(`  Vendor response: ${clip(n.vendorResponse, 300)}`);
@@ -398,6 +478,75 @@ export function formatDayReportText(report, timezone) {
   }
 
   return `${lines.join('\n')}\n`;
+}
+
+function csvCell(value) {
+  const str = value == null ? '' : String(value);
+  if (/[",\n\r]/.test(str)) return `"${str.replace(/"/g, '""')}"`;
+  return str;
+}
+
+/** Spreadsheet export — one row per MSISDN. */
+export function formatDayReportCsv(report, timezone) {
+  const tz = normalizeTimezone(timezone || report.timezone || DEFAULT_TIMEZONE);
+  const headers = [
+    'msisdn',
+    'queued',
+    'queued_at',
+    'status',
+    'billing_received',
+    'billing_received_at',
+    'vendor_fired',
+    'vendor_fire_status',
+    'vendor_fired_at',
+    'vendor_http',
+    'vendor_name',
+    'vendor_code',
+    'campaign',
+    'click_id',
+    'rcid',
+    'campid',
+    'tracking_campid',
+    'visit_id',
+    'postback_id',
+    'outcome',
+    'verdict',
+    'cg_url',
+    'he_error',
+  ];
+  const rows = [headers.join(',')];
+  for (const n of report.numbers || []) {
+    rows.push(
+      [
+        n.msisdn,
+        n.queued ? 'YES' : 'NO',
+        formatInZone(n.queuedAt, tz),
+        n.status || '',
+        n.billingReceived ? 'YES' : 'NO',
+        formatInZone(n.billingReceivedAt, tz),
+        n.vendorFired ? 'YES' : 'NO',
+        n.vendorFireStatus || '',
+        formatInZone(n.vendorFiredAt, tz),
+        n.vendorHttp ?? '',
+        n.vendorName || '',
+        n.vendorCode || '',
+        n.campaignName || '',
+        n.clickId || '',
+        n.rcid || '',
+        n.campid || '',
+        n.trackingCampid || '',
+        n.visitId ?? '',
+        n.postbackId ?? '',
+        n.outcome || '',
+        n.outcomeLabel || '',
+        n.cgUrl || '',
+        n.heError || '',
+      ]
+        .map(csvCell)
+        .join(','),
+    );
+  }
+  return `\uFEFF${rows.join('\n')}\n`;
 }
 
 export function emptyDayReport({ date, timezone, from, to, rangeClamped }) {

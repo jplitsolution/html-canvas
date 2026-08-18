@@ -14,12 +14,14 @@ import {
 } from '../../../common/zoned-day.js';
 import {
   DAY_REPORT_EVENT_TYPES,
+  DAY_REPORT_HE_LOG_TYPES,
   DAY_REPORT_LOG_TYPES,
   DAY_REPORT_MAX_NUMBERS,
   buildNumberStory,
   digitsMsisdn,
   emptyDayReport,
   formatDayReportText,
+  isHeFailCgRedirect,
   summarizeStories,
   todayYmd,
 } from './postback-day-report.js';
@@ -108,6 +110,7 @@ export function createPostbackQuery(deps) {
     sent: 0,
     failed: 0,
     skipped: 0,
+    heFailCg: 0,
     byVendor: [],
     since: daysAgo(30).toISOString(),
   });
@@ -131,6 +134,7 @@ export function createPostbackQuery(deps) {
     const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
 
     let msisdnResolved = 0;
+    let heFailCg = 0;
     if (campaignIds.length) {
       const visitQ = getVisitRepo()
         .createQueryBuilder('v')
@@ -140,6 +144,17 @@ export function createPostbackQuery(deps) {
         .andWhere('v.createdAt >= :since', { since });
       if (to) visitQ.andWhere('v.createdAt <= :until', { until: to });
       msisdnResolved = await visitQ.getCount();
+
+      const failQ = getApiCallLogRepo()
+        .createQueryBuilder('l')
+        .where('l.campaignId IN (:...campaignIds)', { campaignIds })
+        .andWhere('l.callType = :heRedirect', {
+          heRedirect: ApiCallType.HE_REDIRECT,
+        })
+        .andWhere('l.success = :fail', { fail: false })
+        .andWhere('l.createdAt >= :since', { since });
+      if (to) failQ.andWhere('l.createdAt <= :until', { until: to });
+      heFailCg = await failQ.getCount();
     }
 
     const pbQ = getPostbackRepo()
@@ -205,6 +220,7 @@ export function createPostbackQuery(deps) {
 
     return {
       msisdnResolved,
+      heFailCg,
       postbacksCreated,
       pending,
       sent,
@@ -497,6 +513,14 @@ export function createPostbackQuery(deps) {
     }
 
     const byMsisdn = new Map();
+    const byVisit = new Map();
+    const heLogTypes = new Set(DAY_REPORT_HE_LOG_TYPES);
+    const seedCallTypes = new Set([
+      ApiCallType.BILLING_CALLBACK,
+      ApiCallType.VENDOR_POSTBACK,
+      ApiCallType.HE_REDIRECT,
+    ]);
+
     const ensure = (raw) => {
       const msisdn = digitsMsisdn(raw);
       if (!msisdn) return null;
@@ -506,10 +530,20 @@ export function createPostbackQuery(deps) {
       return byMsisdn.get(msisdn);
     };
 
-    const seedCallTypes = new Set([
-      ApiCallType.BILLING_CALLBACK,
-      ApiCallType.VENDOR_POSTBACK,
-    ]);
+    const ensureVisit = (visitId, fallbackKey) => {
+      const key = visitId ? `visit:${visitId}` : fallbackKey;
+      if (!key) return null;
+      if (!byVisit.has(key)) {
+        byVisit.set(key, {
+          msisdn: '',
+          visitId: visitId || null,
+          postback: null,
+          logs: [],
+          events: [],
+        });
+      }
+      return byVisit.get(key);
+    };
 
     for (const row of postbacks) {
       const bucket = ensure(row.msisdn);
@@ -529,12 +563,49 @@ export function createPostbackQuery(deps) {
       const existing = byMsisdn.get(msisdn);
       if (existing) existing.logs.push(log);
     }
+
+    const visitToMsisdn = new Map();
+    for (const bucket of byMsisdn.values()) {
+      const fromPb = bucket.postback?.visitId;
+      if (fromPb) visitToMsisdn.set(Number(fromPb), bucket);
+      for (const log of bucket.logs) {
+        if (log.visitId) visitToMsisdn.set(Number(log.visitId), bucket);
+      }
+    }
+
+    for (const log of logs) {
+      if (digitsMsisdn(log.msisdn)) continue;
+      if (!isHeFailCgRedirect(log)) continue;
+      const vid = log.visitId ? Number(log.visitId) : null;
+      if (vid && visitToMsisdn.has(vid)) {
+        visitToMsisdn.get(vid).logs.push(log);
+        continue;
+      }
+      const bucket = ensureVisit(vid, log.id ? `log:${log.id}` : null);
+      if (bucket) bucket.logs.push(log);
+    }
+
+    for (const log of logs) {
+      if (digitsMsisdn(log.msisdn)) continue;
+      if (!heLogTypes.has(log.callType) || isHeFailCgRedirect(log)) continue;
+      const vid = log.visitId ? Number(log.visitId) : null;
+      if (!vid) continue;
+      if (visitToMsisdn.has(vid)) {
+        visitToMsisdn.get(vid).logs.push(log);
+        continue;
+      }
+      const bucket = byVisit.get(`visit:${vid}`);
+      if (bucket) bucket.logs.push(log);
+    }
+
     for (const ev of events) {
       const phone = ev.visit?.phone;
       const bucket = ensure(phone);
       if (!bucket) continue;
       bucket.events.push(ev);
     }
+
+    const buckets = [...byMsisdn.values(), ...byVisit.values()];
 
     const missingMsisdns = [...byMsisdn.values()]
       .filter((b) => !b.postback)
@@ -558,7 +629,7 @@ export function createPostbackQuery(deps) {
 
     const missingVids = [
       ...new Set(
-        [...byMsisdn.values()]
+        buckets
           .map((b) => b.postback?.vendorId)
           .filter((id) => id && !vendorMap[id]),
       ),
@@ -572,8 +643,11 @@ export function createPostbackQuery(deps) {
 
     const campaignIdsNeeded = [
       ...new Set(
-        [...byMsisdn.values()]
-          .map((b) => b.postback?.campaignId)
+        buckets
+          .flatMap((b) => [
+            b.postback?.campaignId,
+            ...b.logs.map((l) => l.campaignId),
+          ])
           .filter(Boolean),
       ),
     ];
@@ -586,8 +660,12 @@ export function createPostbackQuery(deps) {
       for (const c of campaigns) campaignMap[c.id] = c;
     }
 
-    let numbers = [...byMsisdn.values()].map((bucket) =>
-      buildNumberStory({
+    let numbers = buckets.map((bucket) => {
+      const campaignId =
+        bucket.postback?.campaignId ||
+        bucket.logs.find((l) => l.campaignId)?.campaignId ||
+        null;
+      return buildNumberStory({
         msisdn: bucket.msisdn,
         postback: bucket.postback,
         logs: bucket.logs,
@@ -595,15 +673,17 @@ export function createPostbackQuery(deps) {
         vendor: bucket.postback?.vendorId
           ? vendorMap[bucket.postback.vendorId]
           : null,
-        campaign: bucket.postback?.campaignId
-          ? campaignMap[bucket.postback.campaignId]
-          : null,
-      }),
-    );
+        campaign: campaignId ? campaignMap[campaignId] : null,
+      });
+    });
 
     numbers.sort((a, b) => {
-      const at = Date.parse(a.queuedAt || a.billingReceivedAt || a.vendorFiredAt || 0);
-      const bt = Date.parse(b.queuedAt || b.billingReceivedAt || b.vendorFiredAt || 0);
+      const at = Date.parse(
+        a.queuedAt || a.heRedirectedAt || a.billingReceivedAt || a.vendorFiredAt || 0,
+      );
+      const bt = Date.parse(
+        b.queuedAt || b.heRedirectedAt || b.billingReceivedAt || b.vendorFiredAt || 0,
+      );
       return (Number.isNaN(bt) ? 0 : bt) - (Number.isNaN(at) ? 0 : at);
     });
 

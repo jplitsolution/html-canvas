@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, getApiBase, getAuthToken } from './client'
 
 export async function listVendors() {
   return apiClient('/partners/vendors')
@@ -70,6 +70,62 @@ export async function getPostbackDayReport({
   return apiClient(`/partners/postbacks/day-report?${params.toString()}`, {
     timeout: 60000,
   })
+}
+
+function downloadBlob(filename, blob) {
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+}
+
+/** Export date-range logs as CSV or TXT (also written on the API host). */
+export async function exportPostbackDayReport({
+  date,
+  from,
+  to,
+  timezone,
+  format = 'csv',
+} = {}) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (timezone) params.set('timezone', timezone)
+  params.set('format', format === 'txt' ? 'txt' : 'csv')
+  const token = getAuthToken()
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  try {
+    const response = await fetch(
+      `${getApiBase()}/partners/postbacks/day-report?${params.toString()}`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: controller.signal,
+      },
+    )
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: response.statusText }))
+      throw new Error(error.message || 'Failed to export logs')
+    }
+    const blob = await response.blob()
+    const filename =
+      response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ||
+      `postback-logs-${from || date || 'export'}.${format === 'txt' ? 'txt' : 'csv'}`
+    downloadBlob(filename, blob)
+    return { filename }
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      throw new Error('Export timed out. Try a shorter date range.')
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 /**

@@ -7,12 +7,13 @@ function ymd(value) {
   return match ? match[1] : '';
 }
 
-export function dayReportFilename(from, to) {
+export function dayReportFilename(from, to, ext = 'txt') {
   const start = ymd(from);
   const end = ymd(to);
-  if (!start && !end) return 'postback-logs-unknown.txt';
-  if (!end || end === start) return `postback-logs-${start || end}.txt`;
-  return `postback-logs-${start}-to-${end}.txt`;
+  const safeExt = ext === 'csv' ? 'csv' : 'txt';
+  if (!start && !end) return `postback-logs-unknown.${safeExt}`;
+  if (!end || end === start) return `postback-logs-${start || end}.${safeExt}`;
+  return `postback-logs-${start}-to-${end}.${safeExt}`;
 }
 
 export function resolvePostbackLogsDir() {
@@ -21,12 +22,12 @@ export function resolvePostbackLogsDir() {
 }
 
 /** Writes the greppable log onto the API host. Overwrites the same range file. */
-export async function writeDayReportFile(text, range, dirOverride) {
+export async function writeDayReportFile(text, range, dirOverride, ext = 'txt') {
   const from = typeof range === 'string' ? range : range?.from;
   const to = typeof range === 'string' ? range : range?.to;
   const dir = dirOverride || resolvePostbackLogsDir();
   await mkdir(dir, { recursive: true });
-  const filename = dayReportFilename(from, to);
+  const filename = dayReportFilename(from, to, ext);
   const absolutePath = join(dir, filename);
   const body = String(text || '');
   await writeFile(absolutePath, body, 'utf8');

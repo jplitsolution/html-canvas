@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildNumberStory,
   digitsMsisdn,
+  formatDayReportCsv,
   formatDayReportText,
   summarizeStories,
 } from './postback-day-report.js';
@@ -134,6 +135,47 @@ describe('buildNumberStory', () => {
     assert.equal(story.billingReceived, false);
     assert.equal(story.outcome, 'not_queued');
   });
+
+  it('HE fail → CG when token/resolve did not return a number', () => {
+    const story = buildNumberStory({
+      msisdn: '',
+      logs: [
+        {
+          id: 1,
+          callType: 'he_token',
+          success: true,
+          visitId: 44,
+          clickId: 'clk-fail',
+          campaignId: 3,
+          createdAt: '2026-08-18T04:10:00.000Z',
+        },
+        {
+          id: 2,
+          callType: 'he_redirect',
+          success: false,
+          visitId: 44,
+          clickId: 'clk-fail',
+          campaignId: 3,
+          requestUrl: 'https://cg.example/pay',
+          requestBody: JSON.stringify({
+            outcome: 'fail',
+            heProvider: 'custom_http',
+            heError: 'MSISDN not found',
+          }),
+          errorMessage: 'MSISDN not found',
+          createdAt: '2026-08-18T04:10:01.000Z',
+        },
+      ],
+    });
+    assert.equal(story.queued, false);
+    assert.equal(story.msisdn, '');
+    assert.equal(story.outcome, 'he_fail_cg');
+    assert.equal(story.redirectedToCg, true);
+    assert.equal(story.cgUrl, 'https://cg.example/pay');
+    assert.match(story.heError, /MSISDN not found/);
+    assert.equal(story.rowKey, 'visit:44');
+    assert.equal(story.visitId, 44);
+  });
 });
 
 describe('formatDayReportText', () => {
@@ -198,5 +240,63 @@ describe('formatDayReportText', () => {
     assert.match(text, /WAITING/);
     assert.match(text, /Vendor fire SENT\s+: 1/);
     assert.match(text, /Waiting for callback\s+: 1/);
+  });
+
+  it('csv has YES/NO columns per number', () => {
+    const complete = buildNumberStory({
+      msisdn: '254711111111',
+      postback: {
+        id: 99,
+        status: 'sent',
+        createdAt: '2026-08-18T04:30:00.000Z',
+        sentAt: '2026-08-18T04:31:00.000Z',
+      },
+      logs: [
+        { callType: 'billing_callback', success: true, createdAt: '2026-08-18T04:30:50.000Z' },
+      ],
+    });
+    const csv = formatDayReportCsv(
+      { numbers: [complete], timezone: 'Asia/Kolkata' },
+      'Asia/Kolkata',
+    );
+    assert.match(csv, /254711111111/);
+    assert.match(csv, /YES/);
+    assert.match(csv, /billing_received/);
+  });
+
+  it('csv includes he_fail_cg rows without msisdn', () => {
+    const fail = buildNumberStory({
+      msisdn: '',
+      logs: [
+        {
+          callType: 'he_redirect',
+          success: false,
+          visitId: 9,
+          requestUrl: 'https://cg.example/pay',
+          createdAt: '2026-08-18T04:10:01.000Z',
+        },
+      ],
+    });
+    const csv = formatDayReportCsv(
+      { numbers: [fail], timezone: 'Asia/Kolkata' },
+      'Asia/Kolkata',
+    );
+    assert.match(csv, /he_fail_cg/);
+    assert.match(csv, /https:\/\/cg\.example\/pay/);
+    const summary = summarizeStories([fail]);
+    assert.equal(summary.heFailCg, 1);
+    assert.equal(summary.notQueued, 0);
+    const text = formatDayReportText(
+      {
+        date: '2026-08-18',
+        timezone: 'Asia/Kolkata',
+        generatedAt: '2026-08-18T07:00:00.000Z',
+        summary,
+        numbers: [fail],
+      },
+      'Asia/Kolkata',
+    );
+    assert.match(text, /\(no MSISDN\)/);
+    assert.match(text, /No MSISDN → CG redirect\s+: 1/);
   });
 });

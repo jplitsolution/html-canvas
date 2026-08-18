@@ -2,6 +2,7 @@ import { asyncHandler } from '../../common/middleware/asyncHandler.js';
 import { partnersService } from './partners.service.js';
 import { postbackService } from './postback.service.js';
 import { writeDayReportFile } from './helpers/postback-day-report-file.js';
+import { formatDayReportCsv } from './helpers/postback-day-report.js';
 
 export const partnersController = {
   listVendors: asyncHandler(async (req, res) => {
@@ -53,18 +54,36 @@ export const partnersController = {
 
   postbacksDayReport: asyncHandler(async (req, res) => {
     const data = await postbackService.getDayReport(req.user.id, req.query || {});
+    const format = String(req.query.format || 'json').toLowerCase();
+    const range = { from: data.from || data.date, to: data.to || data.date };
     let file = null;
+    let csvFile = null;
     let fileError = null;
+    const csv = format === 'csv' ? formatDayReportCsv(data, data.timezone) : '';
     try {
-      file = await writeDayReportFile(data.text, {
-        from: data.from || data.date,
-        to: data.to || data.date,
-      });
+      file = await writeDayReportFile(data.text, range);
+      if (format === 'csv') {
+        csvFile = await writeDayReportFile(csv, range, undefined, 'csv');
+      }
     } catch (err) {
       fileError = err?.message || 'Failed to write log file on server';
     }
+
+    if (format === 'csv') {
+      const name = csvFile?.filename || `postback-logs-${range.from}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      return res.send(csv);
+    }
+    if (format === 'txt' || format === 'text') {
+      const name = file?.filename || `postback-logs-${range.from}.txt`;
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+      return res.send(data.text || '');
+    }
+
     const rest = { ...data };
     delete rest.text;
-    res.json({ ...rest, file, fileError });
+    res.json({ ...rest, file, csvFile, fileError });
   }),
 };
