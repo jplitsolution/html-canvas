@@ -56,6 +56,22 @@ export async function getPostback(id) {
   return apiClient(`/partners/postbacks/${id}`)
 }
 
+export async function getPostbackDayReport({
+  date,
+  from,
+  to,
+  timezone,
+} = {}) {
+  const params = new URLSearchParams()
+  if (date) params.set('date', date)
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (timezone) params.set('timezone', timezone)
+  return apiClient(`/partners/postbacks/day-report?${params.toString()}`, {
+    timeout: 60000,
+  })
+}
+
 /**
  * Build the shareable tracking URL for a campaign + vendor.
  * tracking_campid = ours (BF-OBF-11); campid={} + click_id={} for the network.

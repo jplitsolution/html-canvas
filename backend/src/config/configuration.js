@@ -76,4 +76,10 @@ export default () => ({
     process.env.ARCHIVE_RETENTION_DAYS || '30',
     10,
   ),
+  // Daily postback log files (written on the API host, not the browser).
+  postbackLogs: {
+    dir:
+      process.env.POSTBACK_LOG_DIR ||
+      path.join(process.cwd(), 'logs', 'postbacks'),
+  },
 });

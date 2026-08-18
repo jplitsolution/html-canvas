@@ -7,7 +7,22 @@ import {
 } from '../../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { maskPhone, daysAgo } from './postback-register.js';
-import { resolveRangeBounds } from '../../../common/zoned-day.js';
+import {
+  DEFAULT_TIMEZONE,
+  normalizeTimezone,
+  resolveRangeBounds,
+} from '../../../common/zoned-day.js';
+import {
+  DAY_REPORT_EVENT_TYPES,
+  DAY_REPORT_LOG_TYPES,
+  DAY_REPORT_MAX_NUMBERS,
+  buildNumberStory,
+  digitsMsisdn,
+  emptyDayReport,
+  formatDayReportText,
+  summarizeStories,
+  todayYmd,
+} from './postback-day-report.js';
 
 export function createPostbackQuery(deps) {
   const {
@@ -373,9 +388,249 @@ export function createPostbackQuery(deps) {
     };
   };
 
+  const applyUserScope = (qb, alias, campaignIds, vendorIds) => {
+    if (campaignIds.length && vendorIds.length) {
+      qb.andWhere(
+        `(${alias}.campaignId IN (:...campaignIds) OR ${alias}.vendorId IN (:...vendorIds))`,
+        { campaignIds, vendorIds },
+      );
+    } else if (campaignIds.length) {
+      qb.andWhere(`${alias}.campaignId IN (:...campaignIds)`, { campaignIds });
+    } else {
+      qb.andWhere(`${alias}.vendorId IN (:...vendorIds)`, { vendorIds });
+    }
+  };
+
+  /**
+   * All postback activity for a date range, grouped by MSISDN.
+   * Includes rows created earlier if callback/fire happened today.
+   */
+  const getDayReport = async (userId, query = {}) => {
+    const timezone = normalizeTimezone(query.timezone || DEFAULT_TIMEZONE);
+    let startYmd = String(query.from || query.date || todayYmd(timezone)).slice(0, 10);
+    let endYmd = String(query.to || startYmd).slice(0, 10);
+    if (startYmd > endYmd) {
+      const swap = startYmd;
+      startYmd = endYmd;
+      endYmd = swap;
+    }
+    const MAX_RANGE_DAYS = 93;
+    const startUtc = Date.parse(`${startYmd}T00:00:00Z`);
+    const endUtc = Date.parse(`${endYmd}T00:00:00Z`);
+    let rangeClamped = false;
+    if (Number.isFinite(startUtc) && Number.isFinite(endUtc)) {
+      const span = Math.round((endUtc - startUtc) / 86400000);
+      if (span > MAX_RANGE_DAYS) {
+        const clamped = new Date(startUtc);
+        clamped.setUTCDate(clamped.getUTCDate() + MAX_RANGE_DAYS);
+        endYmd = clamped.toISOString().slice(0, 10);
+        rangeClamped = true;
+      }
+    }
+    const date = startYmd;
+    const endDate = endYmd;
+    const { from, to } = resolveRangeBounds({ from: date, to: endDate, timezone });
+    const meta = { date, timezone, from: date, to: endDate, rangeClamped };
+
+    const { campaignIds, vendorIds, vendors } = await resolveUserScope(userId);
+    if (!campaignIds.length && !vendorIds.length) {
+      return emptyDayReport(meta);
+    }
+
+    const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
+
+    const pbQ = getPostbackRepo()
+      .createQueryBuilder('p')
+      .where(
+        '(p.createdAt BETWEEN :from AND :to OR p.updatedAt BETWEEN :from AND :to OR p.sentAt BETWEEN :from AND :to)',
+        { from, to },
+      );
+    applyUserScope(pbQ, 'p', campaignIds, vendorIds);
+    const postbacks = await pbQ
+      .orderBy('p.id', 'DESC')
+      .take(DAY_REPORT_MAX_NUMBERS)
+      .getMany();
+
+    const seedMsisdns = [
+      ...new Set(postbacks.map((p) => digitsMsisdn(p.msisdn)).filter(Boolean)),
+    ];
+    const seedVisitIds = [
+      ...new Set(postbacks.map((p) => p.visitId).filter(Boolean)),
+    ];
+
+    const logQ = getApiCallLogRepo()
+      .createQueryBuilder('l')
+      .where('l.createdAt BETWEEN :from AND :to', { from, to })
+      .andWhere('l.callType IN (:...logTypes)', { logTypes: DAY_REPORT_LOG_TYPES });
+    if (campaignIds.length && seedMsisdns.length && seedVisitIds.length) {
+      logQ.andWhere(
+        '(l.campaignId IN (:...campaignIds) OR l.msisdn IN (:...seedMsisdns) OR l.visitId IN (:...seedVisitIds))',
+        { campaignIds, seedMsisdns, seedVisitIds },
+      );
+    } else if (campaignIds.length && seedMsisdns.length) {
+      logQ.andWhere(
+        '(l.campaignId IN (:...campaignIds) OR l.msisdn IN (:...seedMsisdns))',
+        { campaignIds, seedMsisdns },
+      );
+    } else if (campaignIds.length) {
+      logQ.andWhere('l.campaignId IN (:...campaignIds)', { campaignIds });
+    } else if (seedMsisdns.length) {
+      logQ.andWhere('l.msisdn IN (:...seedMsisdns)', { seedMsisdns });
+    } else {
+      return emptyDayReport(meta);
+    }
+    const logs = await logQ.orderBy('l.id', 'ASC').take(8000).getMany();
+
+    let events = [];
+    if (campaignIds.length) {
+      events = await getVisitEventRepo()
+        .createQueryBuilder('e')
+        .innerJoinAndSelect('e.visit', 'v')
+        .where('e.createdAt BETWEEN :from AND :to', { from, to })
+        .andWhere('e.eventType IN (:...eventTypes)', {
+          eventTypes: DAY_REPORT_EVENT_TYPES,
+        })
+        .andWhere('v.campaignId IN (:...campaignIds)', { campaignIds })
+        .orderBy('e.id', 'ASC')
+        .take(8000)
+        .getMany();
+    }
+
+    const byMsisdn = new Map();
+    const ensure = (raw) => {
+      const msisdn = digitsMsisdn(raw);
+      if (!msisdn) return null;
+      if (!byMsisdn.has(msisdn)) {
+        byMsisdn.set(msisdn, { msisdn, postback: null, logs: [], events: [] });
+      }
+      return byMsisdn.get(msisdn);
+    };
+
+    const seedCallTypes = new Set([
+      ApiCallType.BILLING_CALLBACK,
+      ApiCallType.VENDOR_POSTBACK,
+    ]);
+
+    for (const row of postbacks) {
+      const bucket = ensure(row.msisdn);
+      if (!bucket) continue;
+      if (!bucket.postback || Number(row.id) > Number(bucket.postback.id)) {
+        bucket.postback = row;
+      }
+    }
+    for (const log of logs) {
+      const msisdn = digitsMsisdn(log.msisdn);
+      if (!msisdn) continue;
+      if (seedCallTypes.has(log.callType)) {
+        const bucket = ensure(msisdn);
+        if (bucket) bucket.logs.push(log);
+        continue;
+      }
+      const existing = byMsisdn.get(msisdn);
+      if (existing) existing.logs.push(log);
+    }
+    for (const ev of events) {
+      const phone = ev.visit?.phone;
+      const bucket = ensure(phone);
+      if (!bucket) continue;
+      bucket.events.push(ev);
+    }
+
+    const missingMsisdns = [...byMsisdn.values()]
+      .filter((b) => !b.postback)
+      .map((b) => b.msisdn);
+    if (missingMsisdns.length) {
+      const extra = await getPostbackRepo().find({
+        where: { msisdn: In(missingMsisdns.slice(0, 2000)) },
+      });
+      for (const row of extra) {
+        const bucket = ensure(row.msisdn);
+        if (!bucket) continue;
+        const inScope =
+          (row.campaignId && campaignIds.includes(Number(row.campaignId))) ||
+          (row.vendorId && vendorIds.includes(Number(row.vendorId)));
+        if (!inScope) continue;
+        if (!bucket.postback || Number(row.id) > Number(bucket.postback.id)) {
+          bucket.postback = row;
+        }
+      }
+    }
+
+    const missingVids = [
+      ...new Set(
+        [...byMsisdn.values()]
+          .map((b) => b.postback?.vendorId)
+          .filter((id) => id && !vendorMap[id]),
+      ),
+    ];
+    if (missingVids.length) {
+      const extraVendors = await getVendorRepo().find({
+        where: { id: In(missingVids) },
+      });
+      for (const v of extraVendors) vendorMap[v.id] = v;
+    }
+
+    const campaignIdsNeeded = [
+      ...new Set(
+        [...byMsisdn.values()]
+          .map((b) => b.postback?.campaignId)
+          .filter(Boolean),
+      ),
+    ];
+    const campaignMap = {};
+    if (campaignIdsNeeded.length) {
+      const campaigns = await getCampaignRepo().find({
+        where: { id: In(campaignIdsNeeded) },
+        select: ['id', 'name'],
+      });
+      for (const c of campaigns) campaignMap[c.id] = c;
+    }
+
+    let numbers = [...byMsisdn.values()].map((bucket) =>
+      buildNumberStory({
+        msisdn: bucket.msisdn,
+        postback: bucket.postback,
+        logs: bucket.logs,
+        events: bucket.events,
+        vendor: bucket.postback?.vendorId
+          ? vendorMap[bucket.postback.vendorId]
+          : null,
+        campaign: bucket.postback?.campaignId
+          ? campaignMap[bucket.postback.campaignId]
+          : null,
+      }),
+    );
+
+    numbers.sort((a, b) => {
+      const at = Date.parse(a.queuedAt || a.billingReceivedAt || a.vendorFiredAt || 0);
+      const bt = Date.parse(b.queuedAt || b.billingReceivedAt || b.vendorFiredAt || 0);
+      return (Number.isNaN(bt) ? 0 : bt) - (Number.isNaN(at) ? 0 : at);
+    });
+
+    const truncated = numbers.length > DAY_REPORT_MAX_NUMBERS;
+    if (truncated) numbers = numbers.slice(0, DAY_REPORT_MAX_NUMBERS);
+
+    const summary = summarizeStories(numbers);
+    const generatedAt = new Date().toISOString();
+    const payload = {
+      date,
+      timezone,
+      from: date,
+      to: endDate,
+      generatedAt,
+      truncated,
+      rangeClamped: Boolean(rangeClamped),
+      summary,
+      numbers,
+    };
+    payload.text = formatDayReportText(payload, timezone);
+    return payload;
+  };
+
   return {
     getSummary,
     listPostbacks,
     getPostbackById,
+    getDayReport,
   };
 }

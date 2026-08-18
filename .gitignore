@@ -9,6 +9,7 @@ backend/node_modules
 backend/dist
 backend/*.tsbuildinfo
 backend/uploads
+backend/logs
 
 # deploy secrets
 deploy.env

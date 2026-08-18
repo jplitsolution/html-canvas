@@ -12,6 +12,7 @@ import {
   Store,
   Calendar,
   Filter,
+  FileDown,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -143,10 +144,20 @@ function PostbacksPage() {
   return (
     <AppShell
       actions={
-        <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate('/postbacks/day-logs')}
+          >
+            <FileDown className="w-4 h-4" />
+            Today&apos;s logs
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => load()} disabled={loading}>
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        </>
       }
     >
       <div className="page-container space-y-6">
@@ -154,6 +165,8 @@ function PostbacksPage() {
           <h1 className="page-header-title">Postbacks</h1>
           <p className="page-header-description">
             MSISDN resolve → postback queue → billing callback → vendor CPA fire.
+            Use <span className="font-medium text-gray-700">Today&apos;s logs</span> to
+            write a per-number file on the server (queued / callback received / vendor fired).
           </p>
         </div>
 

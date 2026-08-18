@@ -49,14 +49,15 @@ export const createPostbackService = () => {
     firePostback,
   });
 
-  const { getSummary, listPostbacks, getPostbackById } = createPostbackQuery({
-    getPostbackRepo,
-    getVendorRepo,
-    getVisitRepo,
-    getCampaignRepo,
-    getVisitEventRepo,
-    getApiCallLogRepo,
-  });
+  const { getSummary, listPostbacks, getPostbackById, getDayReport } =
+    createPostbackQuery({
+      getPostbackRepo,
+      getVendorRepo,
+      getVisitRepo,
+      getCampaignRepo,
+      getVisitEventRepo,
+      getApiCallLogRepo,
+    });
 
   return {
     fillTemplate,
@@ -67,6 +68,7 @@ export const createPostbackService = () => {
     getSummary,
     listPostbacks,
     getPostbackById,
+    getDayReport,
   };
 };
 

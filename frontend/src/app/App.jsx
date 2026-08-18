@@ -18,6 +18,7 @@ import SessionDetailPage from '../pages/SessionDetailPage'
 import VendorsPage from '../pages/VendorsPage'
 import CallbackDocsPage from '../pages/CallbackDocsPage'
 import PostbacksPage from '../pages/PostbacksPage'
+import PostbackDayLogsPage from '../pages/PostbackDayLogsPage'
 import PostbackDetailPage from '../pages/PostbackDetailPage'
 import ProfilePage from '../pages/ProfilePage'
 import UsersPage from '../pages/UsersPage'
@@ -75,6 +76,10 @@ function App() {
               />
               <Route path="/vendors" element={<Protected><VendorsPage /></Protected>} />
               <Route path="/postbacks" element={<Protected><PostbacksPage /></Protected>} />
+              <Route
+                path="/postbacks/day-logs"
+                element={<Protected><PostbackDayLogsPage /></Protected>}
+              />
               <Route
                 path="/postbacks/:postbackId"
                 element={<Protected><PostbackDetailPage /></Protected>}

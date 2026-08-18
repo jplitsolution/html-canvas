@@ -1,6 +1,7 @@
 import { asyncHandler } from '../../common/middleware/asyncHandler.js';
 import { partnersService } from './partners.service.js';
 import { postbackService } from './postback.service.js';
+import { writeDayReportFile } from './helpers/postback-day-report-file.js';
 
 export const partnersController = {
   listVendors: asyncHandler(async (req, res) => {
@@ -48,5 +49,22 @@ export const partnersController = {
       req.user.id,
     );
     res.json(data);
+  }),
+
+  postbacksDayReport: asyncHandler(async (req, res) => {
+    const data = await postbackService.getDayReport(req.user.id, req.query || {});
+    let file = null;
+    let fileError = null;
+    try {
+      file = await writeDayReportFile(data.text, {
+        from: data.from || data.date,
+        to: data.to || data.date,
+      });
+    } catch (err) {
+      fileError = err?.message || 'Failed to write log file on server';
+    }
+    const rest = { ...data };
+    delete rest.text;
+    res.json({ ...rest, file, fileError });
   }),
 };
