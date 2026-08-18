@@ -182,7 +182,8 @@ function FlowCampaignSettings({ campaignId }) {
             With flow mode <strong>None</strong> and this URL set, users are redirected here on
             landing. HE/OTP is not required. Also used as the HOME fallback when API HE cannot
             resolve MSISDN and no <code>failRedirectUrl</code> is set. Optional placeholders like{' '}
-            <code className="font-mono">{'{{msisdn}}'}</code> are filled when present.
+            <code className="font-mono">{'{{msisdn}}'}</code> /{' '}
+            <code className="font-mono">{'{click_id}'}</code> are filled when present.
           </p>
         </div>
         <div className="px-5 py-4 flex flex-col sm:flex-row gap-2">

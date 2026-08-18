@@ -131,6 +131,22 @@ export function createDetectMsisdn(deps) {
       ? heMeta.provider || configuredHeProvider
       : 'none';
 
+    const dualIds = splitDualCampids(input);
+    const ourClickId = String(visitCtx.clickId || '').trim();
+    const heRedirectVarsFor = (msisdn = '') => ({
+      msisdn: msisdn || '',
+      phone: msisdn || '',
+      country: input.country || campaign?.country || '',
+      operator: input.operator || campaign?.operator || '',
+      click_id: ourClickId,
+      clickId: ourClickId,
+      rcid: String(visitCtx.rcid || '').trim(),
+      campid: String(dualIds.vendorCampid || input.campid || '').trim(),
+      tracking_campid: String(
+        dualIds.trackingCampid || input.trackingCampid || '',
+      ).trim(),
+    });
+
     // Safaricom masked MSISDN must run in the browser (carrier HE path).
     // Hand config back to the client — do not cache / fail-redirect yet.
     if (runHe && heMeta?.needsClientHe) {
@@ -138,12 +154,7 @@ export function createDetectMsisdn(deps) {
       if (!rawFail && isApiHeProvider(heProviderResolved)) {
         rawFail = String(campaign?.cgRedirectUrl || '').trim();
       }
-      const heRedirectVars = {
-        msisdn: '',
-        phone: '',
-        country: input.country || campaign?.country || '',
-        operator: input.operator || campaign?.operator || '',
-      };
+      const heRedirectVars = heRedirectVarsFor('');
       const failRedirectUrl = rawFail
         ? applyHeRedirectVars(rawFail, heRedirectVars) || rawFail
         : '';
@@ -237,15 +248,9 @@ export function createDetectMsisdn(deps) {
         .catch(() => {});
     }
 
-    // HE success/fail: open configured URL as-is. Never inject click_id / campid /
-    // rcid for third parties — those stay internal (visit + api_call_logs only).
-    // Only {{msisdn}} / {{phone}} / country / operator placeholders are filled.
-    const heRedirectVars = {
-      msisdn: rawPhone,
-      phone: rawPhone,
-      country: input.country || campaign?.country || '',
-      operator: input.operator || campaign?.operator || '',
-    };
+    // HE success/fail: fill placeholders already in the URL ({click_id}, {msisdn},
+    // …). Never auto-append click_id / campid / rcid query params.
+    const heRedirectVars = heRedirectVarsFor(rawPhone);
 
     // Fail redirect: explicit heConfig.failRedirectUrl, else campaign CG URL
     // when using token/API HE (so OTP-only campaigns with a CG field are untouched).
@@ -398,7 +403,6 @@ export function createDetectMsisdn(deps) {
         isDummyPhone);
 
     if (shouldQueuePostback) {
-      const dualIds = splitDualCampids(input);
       try {
         const queued = await postbackService.registerPending({
           visitId: visitCtx.visitId,

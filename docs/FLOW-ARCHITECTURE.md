@@ -149,7 +149,7 @@ Implementation:
 
 - HE success/fail: `detectMsisdn` fills only msisdn/phone/country/operator placeholders — **no** click/campid.
 - `buildCgRedirectUrl`: does **not** auto-append `click_id` / `rcid` / `campid` (may still fill placeholders already in a configured CG/success URL; may append `msisdn` if known).
-- Frontend `appendHeAttributionToUrl`: opens URL as configured; only fills `{{msisdn}}` / `{{phone}}` — **no** auto query append of click/campid.
+- Frontend `appendHeAttributionToUrl`: opens URL as configured; fills `{click_id}` / `{{msisdn}}` / `{{phone}}` when already in the URL — **no** auto query append of click/campid.
 - `partnerApiService.partnerRequestBody` / `buildVars`: strips click/campid/rcid/visit from outbound partner requests.
 
 Vendor **CPA postbacks** (our → vendor after billing callback) **do** expand `{{click_id}}`, `{{rcid}}`, `{{campid}}` — that is intentional and separate from HE/partner redirect URLs.
@@ -388,7 +388,7 @@ Pack / CONFIRM path: `registerPending` (unless `data-postback="0"`) → blocklis
 2. Start `resolvePhoneNumber()` → `/detect-msisdn`.
 3. Boot waits (`waitForHeDetect`, ~12s) especially for API HE — prevents HOME flash before fail redirect.
 4. Apply detect result:
-   - empty phone + `failRedirectUrl` → `window.location.replace` (URL as-is)
+   - empty phone + `failRedirectUrl` → `window.location.replace` (placeholders filled; no auto-append)
    - phone + `successRedirectUrl` → success redirect
    - phone + `nextPage` (allowed) → `loadPage(nextPage)`
    - `packs_on_home` + no phone: OTP (`OTP_ONLY` / `BOTH`) or ERROR (`HEADER_INJECTION`) — do not flash HOME

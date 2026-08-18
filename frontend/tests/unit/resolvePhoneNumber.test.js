@@ -167,4 +167,23 @@ describe('MSISDN & Operator Header Resolution', () => {
     expect(url).not.toContain('click')
     expect(url).not.toContain('campid')
   })
+
+  it('appendHeAttributionToUrl fills {click_id} when already in the URL', () => {
+    const url = appendHeAttributionToUrl(
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}',
+      { clickId: 'HBA52IzFOZexXCRtFuTvIf', msisdn: '2547' },
+    )
+    expect(url).toBe(
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id=HBA52IzFOZexXCRtFuTvIf',
+    )
+  })
+
+  it('appendHeAttributionToUrl fills {{click_id}} double-brace form', () => {
+    const url = appendHeAttributionToUrl(
+      'https://cg.example/x?ext_id={{click_id}}&m={{msisdn}}',
+      { clickId: 'clk-1', msisdn: '2547' },
+    )
+    expect(url).toContain('ext_id=clk-1')
+    expect(url).toContain('m=2547')
+  })
 })

@@ -5,6 +5,7 @@ import {
   mapSubServiceId,
   fillSubscribeTemplate,
   sanitizeSubscribeParam,
+  buildCgRedirectUrl,
 } from './pack-url.js';
 
 describe('normalizeSubscribeUrlOverride', () => {
@@ -21,6 +22,27 @@ describe('normalizeSubscribeUrlOverride', () => {
     assert.equal(normalizeSubscribeUrlOverride('javascript:alert(1)'), '');
     assert.equal(normalizeSubscribeUrlOverride(''), '');
     assert.equal(normalizeSubscribeUrlOverride('/relative'), '');
+  });
+});
+
+describe('buildCgRedirectUrl', () => {
+  it('fills {click_id} when present and does not auto-append', () => {
+    const filled = buildCgRedirectUrl(
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}',
+      { clickId: 'HBA52IzFOZexXCRtFuTvIf' },
+    );
+    assert.equal(
+      filled,
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id=HBA52IzFOZexXCRtFuTvIf',
+    );
+    const plain = buildCgRedirectUrl(
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437',
+      { clickId: 'HBA52IzFOZexXCRtFuTvIf' },
+    );
+    assert.equal(
+      plain,
+      'https://dsdp-cg.safaricom.com/consent-gateway/300002437',
+    );
   });
 });
 

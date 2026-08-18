@@ -72,10 +72,10 @@ https://dsdp-cg.safaricom.com/300002437
 
 **Important — attribution:**
 
-- We **do not** append `click_id`, `campid`, or `rcid` to this URL.
-- Open the configured URL **as-is**.
-- Optional placeholders only if you put them in the config: `{{msisdn}}`, `{{phone}}`, `{{country}}`, `{{operator}}`.
-- Our `click_id` stays internal (visit + `api_call_logs` + conversion postbacks).
+- We **do not** auto-append `click_id`, `campid`, or `rcid`.
+- If the URL already contains `{click_id}` (or `{{click_id}}`), we substitute our visit click_id. Example: `?ext_id={click_id}`.
+- Optional placeholders only if you put them in the config: `{click_id}`, `{{msisdn}}`, `{{phone}}`, `{{country}}`, `{{operator}}`.
+- Our `click_id` stays on the visit; `conversion_postbacks` still queues when MSISDN is known. Billing `/api/flow/callback` can send `msisdn`, `click_id`/`ext_id`, or both.
 
 ---
 
@@ -99,7 +99,7 @@ https://dsdp-cg.safaricom.com/300002437
 | Masked / MSISDN URL | `https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn` |
 | Fail message | `Please use Safaricom Mobile Data` |
 | Success redirect | Partner next hop `https://…` (or empty to rely on checksub routing) |
-| Fail redirect | `https://dsdp-cg.safaricom.com/300002437` |
+| Fail redirect | `https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}` |
 
 > Empty **Fail redirect** → campaign **CG redirect URL** is used for API HE only.
 
@@ -110,7 +110,7 @@ Saved shape:
   "tokenUrl": "https://evisaf.wellnesss360.com/safcom/hetoken",
   "maskedUrl": "https://identity.safaricom.com/partner/api/v2/fetchMaskedMsisdn",
   "failMessage": "Please use Safaricom Mobile Data",
-  "failRedirectUrl": "https://dsdp-cg.safaricom.com/300002437",
+  "failRedirectUrl": "https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}",
   "successRedirectUrl": "https://partner.example/next"
 }
 ```
@@ -174,7 +174,7 @@ Optional `heConfigJson` overrides: `tokenMethod`, `tokenHeaders`, `maskedHeaders
 - [ ] checksub configured if you need new/active split
 - [ ] Campaign live
 - [ ] Test mobile data → success path
-- [ ] Test Wi‑Fi → fail URL **without** `click_id`/`campid` query junk
+- [ ] Test Wi‑Fi → fail URL **with** `{click_id}` filled only if configured (no extra `click_id`/`campid` query junk)
 
 ---
 
@@ -183,7 +183,7 @@ Optional `heConfigJson` overrides: `tokenMethod`, `tokenHeaders`, `maskedHeaders
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | HOME flashes then bounce | Old frontend | Hard refresh; confirm API HE suppress |
-| Fail URL has `?click_id=` | Old build | Latest code must open URL as-is |
+| Fail URL has `?click_id=` but config had no placeholder | Old build | Latest code must not auto-append; only fill `{click_id}` if present |
 | Token `ENOTFOUND` | Network / host | Server must reach token host |
 | Token OK, no phone | Not on Safaricom data | Expected on Wi‑Fi → fail path |
 | Stuck spinner | Detect cancelled | Overlay must still fire fail redirect |

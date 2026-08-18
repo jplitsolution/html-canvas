@@ -154,18 +154,32 @@ export function pickHeFailRedirectUrl({ failRedirectUrl, cgRedirectUrl } = {}) {
 
 /**
  * Open HE success/fail URL as configured.
- * Never append click_id / campid / rcid — those stay internal only.
- * Only fills {{msisdn}} / {{phone}} placeholders when present; does not
- * auto-append query params.
+ * Never auto-append click_id / campid / rcid. Fill placeholders already in
+ * the URL ({click_id}, {msisdn}, …); do not add query params.
  */
 export function appendHeAttributionToUrl(rawUrl, attrs = {}) {
   let url = String(rawUrl || '').trim()
   if (!isHeRedirectUrl(url)) return ''
 
   const msisdn = normalizeMsisdn(attrs.msisdn || attrs.phone || '')
+  const clickId = String(attrs.clickId || attrs.click_id || '').trim()
+  const rcid = String(attrs.rcid || '').trim()
+  const campid =
+    attrs.campid != null && attrs.campid !== '' ? String(attrs.campid) : ''
+  const trackingCampid =
+    attrs.trackingCampid != null && attrs.trackingCampid !== ''
+      ? String(attrs.trackingCampid)
+      : attrs.tracking_campid != null && attrs.tracking_campid !== ''
+        ? String(attrs.tracking_campid)
+        : ''
   const vars = {
     msisdn,
     phone: msisdn,
+    click_id: clickId,
+    clickId,
+    rcid,
+    campid,
+    tracking_campid: trackingCampid,
   }
   for (const [key, val] of Object.entries(vars)) {
     url = url.split(`{{${key}}}`).join(encodeURIComponent(val))

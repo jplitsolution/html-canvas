@@ -81,8 +81,14 @@ function useHeDetect({
 
     const runHeFailRedirect = (baseFailUrl, errMsg) => {
       if (!baseFailUrl) return false
-      // Fail URL opens as-is — no clickId wait (we do not append attribution).
-      const dest = appendHeAttributionToUrl(baseFailUrl, { msisdn: '' })
+      // Placeholder fill only — do not auto-append click_id.
+      const dest = appendHeAttributionToUrl(baseFailUrl, {
+        msisdn: '',
+        clickId: clickIdRef.current || '',
+        rcid: rcidRef.current || '',
+        campid: campidRef.current || campid,
+        trackingCampid: trackingCampidRef.current || trackingCampid,
+      })
       if (!dest) {
         heExitPendingRef.current = false
         setHeExitPending(false)

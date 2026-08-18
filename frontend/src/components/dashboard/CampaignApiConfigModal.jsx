@@ -502,18 +502,24 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               Success/fail filled → HOME skip (silent redirect). Both empty → show
               HOME after detect; MSISDN still used on Subscribe / OTP.
             </p>
-            <Field label="Success redirect" hint="optional — empty = stay on HOME">
+            <Field
+              label="Success redirect"
+              hint="optional — empty = stay on HOME. {click_id} filled if present."
+            >
               <Input
                 value={heFields.successRedirectUrl}
                 onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
-                placeholder="https://…/next (leave empty to show HOME)"
+                placeholder="https://…/next?ext_id={click_id}"
               />
             </Field>
-            <Field label="Fail redirect" hint="optional — else campaign CG">
+            <Field
+              label="Fail redirect"
+              hint="optional — else campaign CG. {click_id} filled if present."
+            >
               <Input
                 value={heFields.failRedirectUrl}
                 onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
-                placeholder="https://cg.example/fallback"
+                placeholder="https://cg.example/fallback?ext_id={click_id}"
               />
             </Field>
           </div>
@@ -574,18 +580,24 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               <strong>Both empty</strong> → show HOME after detect (funnel). Number
               still used later on Subscribe / OTP / Priority.
             </p>
-            <Field label="Success redirect" hint="optional — empty = stay on HOME">
+            <Field
+              label="Success redirect"
+              hint="optional — {click_id} filled if present, else empty = stay on HOME"
+            >
               <Input
                 value={heFields.successRedirectUrl}
                 onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
-                placeholder="https://dsdp-cg.safaricom.com/300002437"
+                placeholder="https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}"
               />
             </Field>
-            <Field label="Fail redirect" hint="optional — else campaign CG">
+            <Field
+              label="Fail redirect"
+              hint="optional — {click_id} filled if present, else campaign CG"
+            >
               <Input
                 value={heFields.failRedirectUrl}
                 onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
-                placeholder="https://dsdp-cg.safaricom.com/300002437"
+                placeholder="https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}"
               />
             </Field>
           </div>
