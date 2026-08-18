@@ -22,17 +22,17 @@ const STEPS = [
   {
     n: '2',
     title: 'Subscribe / confirm (or CG redirect)',
-    body: 'When the user confirms (or CG null-flow already has MSISDN), we queue a pending vendor CPA row in conversion_postbacks — only if that vendor has a postback URL.',
+    body: 'When we already have MSISDN (confirm, HE success, or CG with a number), we queue a pending vendor CPA row in conversion_postbacks. If HE never resolved the number, we only keep click_id on the visit — no pending row yet.',
   },
   {
     n: '3',
     title: 'Operator / billing calls us',
-    body: 'After successful billing, the operator hits our public callback with the subscriber MSISDN (and status). This is the same role as SAFWAP GET /v1/callback.',
+    body: 'After successful billing, the operator hits our public callback with msisdn, click_id (or ext_id), or both. Same role as SAFWAP GET /v1/callback. click_id + msisdn is the HE-fail case: user subscribed on CG, number was not resolved here.',
   },
   {
     n: '4',
     title: 'We fire the vendor postback',
-    body: 'We look up the latest pending row for that MSISDN, fill the vendor postback_url placeholders, GET that URL, and mark the row sent or failed. Events show on Campaign Logs / Session detail.',
+    body: 'We match pending by MSISDN, or the visit by click_id, fill the vendor postback_url placeholders, GET that URL, and mark the row sent or failed. Events show on Campaign Logs / Session detail.',
   },
 ]
 
@@ -85,6 +85,7 @@ function CallbackDocsPage() {
           <p className="page-header-description mt-2">
             How operators notify us after a successful subscribe, and how we then fire the vendor
             (CPA) postback — SAFWAP <code className="font-mono text-xs">/v1/callback</code> parity.
+            Callback may send MSISDN, our click_id / ext_id, or both.
           </p>
         </div>
 
@@ -120,12 +121,16 @@ function CallbackDocsPage() {
             <p>
               After billing succeeds, call our <strong className="text-fg">public</strong> callback
               endpoint. No auth token. GET or POST both work; query string and JSON body are merged.
+              Send <strong className="text-fg">msisdn</strong>,{' '}
+              <strong className="text-fg">click_id</strong>, or both — at least one is required.
             </p>
             <CodeBlock>{`GET  ${callbackUrl}?msisdn=966512345678&status=active
+GET  ${callbackUrl}?click_id=HBA52IzFOZexXCRtFuTvIf&status=active
+GET  ${callbackUrl}?ext_id=HBA52IzFOZexXCRtFuTvIf&msisdn=966512345678&status=active
 POST ${callbackUrl}
 Content-Type: application/json
 
-{ "msisdn": "966512345678", "status": "active" }`}</CodeBlock>
+{ "msisdn": "966512345678", "click_id": "HBA52IzFOZexXCRtFuTvIf", "status": "active" }`}</CodeBlock>
 
             <div className="overflow-x-auto rounded-lg border border-border">
               <table className="w-full text-left text-xs">
@@ -139,8 +144,21 @@ Content-Type: application/json
                 <tbody className="divide-y divide-border">
                   <tr>
                     <td className="px-3 py-2.5 font-mono text-fg">msisdn</td>
-                    <td className="px-3 py-2.5">Yes</td>
-                    <td className="px-3 py-2.5">Or <code className="font-mono">phone</code>. Non-digits stripped.</td>
+                    <td className="px-3 py-2.5">One of</td>
+                    <td className="px-3 py-2.5">
+                      Or <code className="font-mono">phone</code>. Non-digits stripped. Required
+                      unless <code className="font-mono">click_id</code> is sent.
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2.5 font-mono text-fg">click_id</td>
+                    <td className="px-3 py-2.5">One of</td>
+                    <td className="px-3 py-2.5">
+                      Also <code className="font-mono">clickId</code> or{' '}
+                      <code className="font-mono">ext_id</code> (Safaricom CG). Our visit click id
+                      that we put on the CG URL when the config has{' '}
+                      <code className="font-mono">{'{click_id}'}</code>.
+                    </td>
                   </tr>
                   <tr>
                     <td className="px-3 py-2.5 font-mono text-fg">status</td>
@@ -161,20 +179,37 @@ Content-Type: application/json
 
             <p className="text-xs text-fg-subtle">
               SAFWAP equivalent: <code className="font-mono">GET /v1/callback?msisdn=&amp;status=</code>
+              . Prefer sending both <code className="font-mono">click_id</code> (or{' '}
+              <code className="font-mono">ext_id</code>) and <code className="font-mono">msisdn</code>{' '}
+              when the user subscribed on CG after HE failed to resolve the number.
             </p>
           </Section>
 
           <Section icon={Server} title="What we do after the callback">
             <ol className="list-decimal pl-5 space-y-2">
-              <li>Normalize MSISDN and check <code className="font-mono text-fg">status</code>.</li>
               <li>
-                Find the latest <code className="font-mono text-fg">conversion_postbacks</code> row
-                for that MSISDN with status <code className="font-mono text-fg">pending</code>.
+                Check <code className="font-mono text-fg">status</code>. Need{' '}
+                <code className="font-mono text-fg">msisdn</code> or{' '}
+                <code className="font-mono text-fg">click_id</code> /{' '}
+                <code className="font-mono text-fg">ext_id</code>.
               </li>
               <li>
-                If none, fall back to the latest visit for that phone that has attribution (
-                <code className="font-mono text-fg">rcid</code> /{' '}
-                <code className="font-mono text-fg">click_id</code>), register a pending row, then fire.
+                <strong className="text-fg">click_id + msisdn</strong> — find the visit by{' '}
+                <code className="font-mono text-fg">click_id</code>, insert/upsert{' '}
+                <code className="font-mono text-fg">conversion_postbacks</code> with the subscribe
+                number from the callback (HE-fail / CG subscribe), then fire. Duplicate MSISDN updates{' '}
+                <code className="font-mono text-fg">click_id</code> on that row.
+              </li>
+              <li>
+                <strong className="text-fg">msisdn only</strong> — find the latest pending row for
+                that MSISDN. If none, fall back to the latest visit for that phone that has
+                attribution (<code className="font-mono text-fg">rcid</code> /{' '}
+                <code className="font-mono text-fg">click_id</code>), register pending, then fire.
+              </li>
+              <li>
+                <strong className="text-fg">click_id only</strong> — find the visit by click_id and
+                use <code className="font-mono text-fg">visit.phone</code>. Skip if the visit has no
+                number (cannot unique-insert without MSISDN).
               </li>
               <li>
                 Load the vendor&apos;s <code className="font-mono text-fg">postback_url</code>, fill
@@ -254,7 +289,9 @@ Content-Type: application/json
               </li>
               <li>
                 <strong className="text-fg">CG / null-flow</strong> — landing redirects to CG and we
-                already have MSISDN; pending is queued then.
+                already have MSISDN; pending is queued then. If HE did not resolve a number, we do
+                not queue — the billing callback with <code className="font-mono">click_id</code> +
+                msisdn creates the row.
               </li>
               <li>
                 <strong className="text-fg">Optional pre-register</strong> (SAFWAP{' '}
