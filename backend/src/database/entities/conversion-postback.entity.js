@@ -4,6 +4,7 @@ export class ConversionPostback {}
 
 export const ConversionPostbackStatus = {
   PENDING: 'pending',
+  RECEIVED: 'received',
   SENT: 'sent',
   FAILED: 'failed',
   SKIPPED: 'skipped',

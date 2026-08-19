@@ -181,6 +181,7 @@ export function createPostbackQuery(deps) {
       .getRawMany();
 
     let pending = 0;
+    let received = 0;
     let sent = 0;
     let failed = 0;
     let skipped = 0;
@@ -193,6 +194,7 @@ export function createPostbackQuery(deps) {
       const vid = r.vendorId != null ? Number(r.vendorId) : null;
       postbacksCreated += cnt;
       if (status === ConversionPostbackStatus.PENDING) pending += cnt;
+      else if (status === ConversionPostbackStatus.RECEIVED) received += cnt;
       else if (status === ConversionPostbackStatus.SENT) sent += cnt;
       else if (status === ConversionPostbackStatus.FAILED) failed += cnt;
       else if (status === ConversionPostbackStatus.SKIPPED) skipped += cnt;
@@ -205,6 +207,7 @@ export function createPostbackQuery(deps) {
           vendorName: v?.name || (vid ? `Vendor #${vid}` : 'Unknown'),
           vendorCode: v?.code || null,
           pending: 0,
+          received: 0,
           sent: 0,
           failed: 0,
           skipped: 0,
@@ -213,6 +216,7 @@ export function createPostbackQuery(deps) {
       }
       byVendorAcc[key].total += cnt;
       if (status === ConversionPostbackStatus.PENDING) byVendorAcc[key].pending += cnt;
+      else if (status === ConversionPostbackStatus.RECEIVED) byVendorAcc[key].received += cnt;
       else if (status === ConversionPostbackStatus.SENT) byVendorAcc[key].sent += cnt;
       else if (status === ConversionPostbackStatus.FAILED) byVendorAcc[key].failed += cnt;
       else if (status === ConversionPostbackStatus.SKIPPED) byVendorAcc[key].skipped += cnt;
@@ -223,6 +227,7 @@ export function createPostbackQuery(deps) {
       heFailCg,
       postbacksCreated,
       pending,
+      received,
       sent,
       failed,
       skipped,
@@ -352,7 +357,8 @@ export function createPostbackQuery(deps) {
     }
     if (
       !billingReceived &&
-      (row.status === ConversionPostbackStatus.SENT ||
+      (row.status === ConversionPostbackStatus.RECEIVED ||
+        row.status === ConversionPostbackStatus.SENT ||
         row.status === ConversionPostbackStatus.FAILED)
     ) {
       billingReceived = true;

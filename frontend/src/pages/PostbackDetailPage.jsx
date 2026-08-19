@@ -109,6 +109,7 @@ function PostbackDetailPage() {
                   subtitle={life.createdAt ? formatDate(life.createdAt) : null}
                 >
                   Queued in conversion_postbacks — waiting for operator billing callback.
+                  Funnel subscribe click can create pending; HE detect does not.
                 </Step>
                 <Step
                   done={life.billingReceived}
@@ -122,7 +123,7 @@ function PostbackDetailPage() {
                   }
                 >
                   {life.billingReceived
-                    ? 'Operator hit /api/flow/callback for this MSISDN.'
+                    ? 'Operator hit /api/flow/callback — status received, then vendor fire if URL is set.'
                     : 'Still pending — vendor CPA has not been fired from billing yet.'}
                 </Step>
                 <Step

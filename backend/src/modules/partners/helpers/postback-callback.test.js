@@ -41,6 +41,7 @@ const pendingRow = {
   campid: 'v-camp',
   trackingCampid: 'KE-SAF-3',
   msisdn: '254700000001',
+  status: 'pending',
 };
 
 const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } = {}) => {
@@ -49,6 +50,7 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
 
   const getPostbackRepo = () => ({
     findOne: async () => pending,
+    save: async (row) => row,
   });
 
   const getVisitRepo = () => ({
@@ -77,7 +79,7 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
       setVisitPhone: async () => {},
       registerPending: async (input) => {
         calls.registerPending.push(input);
-        return { success: true, id: 101, status: 'pending' };
+        return { success: true, id: 101, status: 'received' };
       },
       firePostback: async (id) => {
         calls.firePostback.push(id);

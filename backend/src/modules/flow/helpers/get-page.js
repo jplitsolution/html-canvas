@@ -3,7 +3,6 @@ import {
   pageTypeForSubscriptionStatus,
 } from '../../../database/entities/campaign-page.entity.js';
 import { partnerApiService } from '../partner-api.service.js';
-import { postbackService } from '../../partners/postback.service.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
@@ -334,22 +333,6 @@ export function createGetPage(deps) {
 
     const cgRedirect = await maybeNullFlowCgRedirect(campaign, visitId, input);
     const pageAttr = await loadVisitAttribution(visitId, input);
-
-    // CG null-flow: if we already have MSISDN, queue vendor pending for billing callback.
-    if (cgRedirect && phone) {
-      void postbackService.registerPending({
-        visitId,
-        msisdn: phone,
-        campaignId: campaign.id,
-        campid: pageAttr.campid || '',
-        trackingCampid:
-          pageAttr.trackingCampid || campaign.trackingId || '',
-        clickId: pageAttr.clickId,
-        rcid: pageAttr.rcid,
-        vendorId: pageAttr.vendorId,
-        affiliateId: null,
-      });
-    }
 
     if (cgRedirect) {
       return {

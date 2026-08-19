@@ -157,6 +157,13 @@ export const createPostbackCallback = (deps) => {
     }
 
     const firePending = async (pending, extra = {}) => {
+      if (
+        pending.status !== ConversionPostbackStatus.SENT &&
+        pending.status !== ConversionPostbackStatus.RECEIVED
+      ) {
+        pending.status = ConversionPostbackStatus.RECEIVED;
+        await getPostbackRepo().save(pending);
+      }
       await logInbound(
         pending.visitId,
         pending.campaignId,
@@ -201,6 +208,7 @@ export const createPostbackCallback = (deps) => {
         campid: visit.campid || '',
         trackingCampid: visit.trackingCampid || '',
         keepIfSent: true,
+        asReceived: true,
       });
       if (registered.skipped && !registered.id) {
         return { success: false, ...registered };

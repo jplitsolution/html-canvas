@@ -13,6 +13,7 @@ import {
   Calendar,
   Filter,
   FileDown,
+  Inbox,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -31,6 +32,7 @@ const PAGE_SIZE = 25
 const STATUS_FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'pending', label: 'Pending' },
+  { id: 'received', label: 'Received' },
   { id: 'sent', label: 'Sent' },
   { id: 'failed', label: 'Failed' },
   { id: 'skipped', label: 'Skipped' },
@@ -40,6 +42,7 @@ function statusBadge(status) {
   const s = String(status || '').toLowerCase()
   const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
   if (s === 'sent') return `${base} bg-emerald-50 text-emerald-700`
+  if (s === 'received') return `${base} bg-sky-50 text-sky-700`
   if (s === 'pending') return `${base} bg-amber-50 text-amber-700`
   if (s === 'failed') return `${base} bg-rose-50 text-rose-700`
   if (s === 'skipped') return `${base} bg-slate-100 text-slate-600`
@@ -238,6 +241,12 @@ function PostbacksPage() {
             icon={Send}
           />
           <KpiCard label="Pending" value={summary?.pending} icon={Clock} />
+          <KpiCard
+            label="Received"
+            value={summary?.received}
+            icon={Inbox}
+            hint="Operator callback"
+          />
           <KpiCard label="Sent to vendor" value={summary?.sent} icon={CheckCircle2} />
           <KpiCard label="Failed" value={summary?.failed} icon={XCircle} />
         </div>
@@ -255,6 +264,7 @@ function PostbacksPage() {
                     <th className="px-5 py-2.5 font-medium">Vendor</th>
                     <th className="px-3 py-2.5 font-medium">Total</th>
                     <th className="px-3 py-2.5 font-medium">Pending</th>
+                    <th className="px-3 py-2.5 font-medium">Received</th>
                     <th className="px-3 py-2.5 font-medium">Sent</th>
                     <th className="px-3 py-2.5 font-medium">Failed</th>
                   </tr>
@@ -277,6 +287,7 @@ function PostbacksPage() {
                       </td>
                       <td className="px-3 py-2.5 tabular-nums">{v.total}</td>
                       <td className="px-3 py-2.5 tabular-nums text-amber-700">{v.pending}</td>
+                      <td className="px-3 py-2.5 tabular-nums text-sky-700">{v.received}</td>
                       <td className="px-3 py-2.5 tabular-nums text-emerald-700">{v.sent}</td>
                       <td className="px-3 py-2.5 tabular-nums text-rose-700">{v.failed}</td>
                     </tr>
@@ -424,7 +435,7 @@ function PostbacksPage() {
           ) : !items.length ? (
             <EmptyState
               title="No postbacks yet"
-              description="When HE detect creates a pending row (status new), it will show up here."
+              description="Rows appear when the operator hits /api/flow/callback, or when a funnel subscribe click queues pending."
             />
           ) : (
             <div className="overflow-x-auto">

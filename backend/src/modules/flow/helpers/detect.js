@@ -1,9 +1,7 @@
 import {
   pageTypeForSubscriptionStatus,
 } from '../../../database/entities/campaign-page.entity.js';
-import getConfig from '../../../config/configuration.js';
 import { partnerApiService } from '../partner-api.service.js';
-import { postbackService } from '../../partners/postback.service.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { redisService } from '../../../common/services/redis.service.js';
 import { splitDualCampids } from '../../markets/helpers/tracking-id.util.js';
@@ -386,48 +384,8 @@ export function createDetectMsisdn(deps) {
       }
     }
 
-    // HE new + success redirect: upsert conversion_postbacks by msisdn.
-    // TEMP: HE_DUMMY_MSISDN (fallback or exact match) also queues pending so
-    // postback/callback flow can be tested end-to-end (unset env to disable).
-    const dummyEnv = String(getConfig().heDummyMsisdn || '').replace(/\D/g, '');
-    const isDummyPhone =
-      Boolean(heMeta?.heDummyFallback) ||
-      (Boolean(dummyEnv) && rawPhone === dummyEnv);
-    const shouldQueuePostback =
-      Boolean(rawPhone) &&
-      !blocked &&
-      !isPacksOnHome(campaign) &&
-      ((hasChecksub &&
-        isNewStatus &&
-        redirectOutcome === 'he_success') ||
-        isDummyPhone);
-
-    if (shouldQueuePostback) {
-      try {
-        const queued = await postbackService.registerPending({
-          visitId: visitCtx.visitId,
-          msisdn: rawPhone,
-          campaignId: campaign?.id,
-          campid: dualIds.vendorCampid,
-          trackingCampid: dualIds.trackingCampid || campaign?.trackingId || '',
-          clickId: visitCtx.clickId,
-          rcid: visitCtx.rcid,
-        });
-        if (queued?.skipped) {
-          console.warn(
-            `detectMsisdn registerPending skipped: ${queued.reason || 'unknown'} (msisdn=${rawPhone})`,
-          );
-        } else if (queued?.id) {
-          console.log(
-            `detectMsisdn registerPending ok id=${queued.id} msisdn=${rawPhone} dummy=${isDummyPhone}`,
-          );
-        }
-      } catch (err) {
-        console.warn(`detectMsisdn registerPending failed: ${err.message}`);
-      }
-    }
-
     // OTP_ONLY / NONE: no HE attempt → no he_redirect noise in Session Detail.
+    // Conversion rows are created on operator /callback (received), not on HE.
     if (runHe && (visitCtx.visitId || campaign?.id)) {
       try {
         await apiCallLogService.record({

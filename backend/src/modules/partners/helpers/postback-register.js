@@ -201,6 +201,9 @@ export const createPostbackRegister = (deps) => {
     const savedTemplate = template || null;
     const keepIfSent = Boolean(input.keepIfSent);
     const alreadySent = existing?.status === ConversionPostbackStatus.SENT;
+    const nextStatus = input.asReceived
+      ? ConversionPostbackStatus.RECEIVED
+      : ConversionPostbackStatus.PENDING;
 
     if (existing) {
       existing.clickId = clickId || existing.clickId || null;
@@ -213,7 +216,7 @@ export const createPostbackRegister = (deps) => {
       if (vendorId) existing.vendorId = vendorId;
       if (savedTemplate) existing.postbackUrl = savedTemplate;
       if (!(keepIfSent && alreadySent)) {
-        existing.status = ConversionPostbackStatus.PENDING;
+        existing.status = nextStatus;
         existing.httpStatus = null;
         existing.responseBody = null;
         existing.errorMessage = null;
@@ -223,30 +226,32 @@ export const createPostbackRegister = (deps) => {
 
       const row = await getPostbackRepo().save(existing);
 
-      if (parsedVisitId) {
-        await analyticsService.logEvent(
-          parsedVisitId,
-          VisitEventType.POSTBACK_PENDING,
-          {
-            info: 'Vendor CPA postback updated (msisdn upsert) — waiting for billing callback.',
-            postbackId: row.id,
-            updated: true,
-            rcid: row.rcid,
-            clickId: row.clickId,
-            campid: row.campid,
-            trackingCampid: row.trackingCampid,
-            postbackUrl: row.postbackUrl,
-          },
-        );
-      } else {
-        await indexPostbackEvent(row, 'POSTBACK_PENDING', { updated: true });
+      if (!input.asReceived) {
+        if (parsedVisitId) {
+          await analyticsService.logEvent(
+            parsedVisitId,
+            VisitEventType.POSTBACK_PENDING,
+            {
+              info: 'Vendor CPA postback updated (msisdn upsert) — waiting for billing callback.',
+              postbackId: row.id,
+              updated: true,
+              rcid: row.rcid,
+              clickId: row.clickId,
+              campid: row.campid,
+              trackingCampid: row.trackingCampid,
+              postbackUrl: row.postbackUrl,
+            },
+          );
+        } else {
+          await indexPostbackEvent(row, 'POSTBACK_PENDING', { updated: true });
+        }
       }
 
       if (input.fireImmediate) {
         return firePostback(row.id);
       }
 
-      return { success: true, id: row.id, status: 'pending', updated: true };
+      return { success: true, id: row.id, status: row.status, updated: true };
     }
 
     const row = await getPostbackRepo().save(
@@ -262,33 +267,35 @@ export const createPostbackRegister = (deps) => {
         rcid: rcid || null,
         offerCode: input.offerCode || null,
         postbackUrl: savedTemplate,
-        status: ConversionPostbackStatus.PENDING,
+        status: nextStatus,
       }),
     );
 
-    if (parsedVisitId) {
-      await analyticsService.logEvent(
-        parsedVisitId,
-        VisitEventType.POSTBACK_PENDING,
-        {
-          info: 'Vendor CPA postback queued — waiting for billing callback.',
-          postbackId: row.id,
-          rcid: row.rcid,
-          clickId: row.clickId,
-          campid: row.campid,
-          trackingCampid: row.trackingCampid,
-          postbackUrl: row.postbackUrl,
-        },
-      );
-    } else {
-      await indexPostbackEvent(row, 'POSTBACK_PENDING');
+    if (!input.asReceived) {
+      if (parsedVisitId) {
+        await analyticsService.logEvent(
+          parsedVisitId,
+          VisitEventType.POSTBACK_PENDING,
+          {
+            info: 'Vendor CPA postback queued — waiting for billing callback.',
+            postbackId: row.id,
+            rcid: row.rcid,
+            clickId: row.clickId,
+            campid: row.campid,
+            trackingCampid: row.trackingCampid,
+            postbackUrl: row.postbackUrl,
+          },
+        );
+      } else {
+        await indexPostbackEvent(row, 'POSTBACK_PENDING');
+      }
     }
 
     if (input.fireImmediate) {
       return firePostback(row.id);
     }
 
-    return { success: true, id: row.id, status: 'pending' };
+    return { success: true, id: row.id, status: row.status };
   };
 
   return {
