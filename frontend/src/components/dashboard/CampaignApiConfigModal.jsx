@@ -23,6 +23,13 @@ const DEFAULT_PARTNER = {
   verifyBodyJson: '',
   successKey: 'responseCode',
   successValue: '0',
+  payoutPercent: 100,
+}
+
+function clampPayoutPercent(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 100
+  return Math.min(100, Math.max(0, Math.round(n)))
 }
 
 const DEFAULT_CHECKSUB = {
@@ -248,6 +255,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               ...source,
               successKey: source.successKey || 'responseCode',
               successValue: source.successValue ?? '0',
+              payoutPercent: clampPayoutPercent(
+                source.payoutPercent ?? DEFAULT_PARTNER.payoutPercent,
+              ),
             })
           } catch (e) {
             console.error('Failed to parse OTP config JSON', e)
@@ -284,7 +294,10 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         resolveMsisdnUrl: resolveMsisdnUrl || null,
         heConfigJson: heConfigJson || null,
         subscribeApi: (form.subscribeApi || '').trim() || null,
-        otpConfigJson: JSON.stringify(partnerConfig),
+        otpConfigJson: JSON.stringify({
+          ...partnerConfig,
+          payoutPercent: clampPayoutPercent(partnerConfig.payoutPercent),
+        }),
         checksubConfigJson: serializeChecksubConfig(checksubConfig),
       })
       onClose()
@@ -1007,6 +1020,36 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                       />
                     </Field>
                   </div>
+                </div>
+                <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-2">
+                  <Field
+                    label="Client payout %"
+                    hint="API expose only · 100 = show all"
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={partnerConfig.payoutPercent ?? 100}
+                      onChange={(e) =>
+                        setPartnerConfig({
+                          ...partnerConfig,
+                          payoutPercent: e.target.value,
+                        })
+                      }
+                      onBlur={() =>
+                        setPartnerConfig({
+                          ...partnerConfig,
+                          payoutPercent: clampPayoutPercent(partnerConfig.payoutPercent),
+                        })
+                      }
+                    />
+                  </Field>
+                  <p className="text-[11px] leading-relaxed text-fg-muted">
+                    After partner verify succeeds, this percent is returned as success to the
+                    caller. The rest get invalid OTP. Visit stays SUCCESS internally (HELD in
+                    logs).
+                  </p>
                 </div>
                 <Field label="Headers (JSON)" hint="optional">
                   <textarea

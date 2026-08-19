@@ -54,7 +54,7 @@ function statusClass(status) {
   if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
     return 'text-emerald-700 bg-emerald-50 border-emerald-200'
   }
-  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING') {
+  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING' || s === 'HELD') {
     return 'text-amber-700 bg-amber-50 border-amber-200'
   }
   if (s.includes('FAILED') || s.includes('BLOCKED')) {
@@ -499,7 +499,9 @@ function SessionDetailPage() {
                     const label =
                       item.kind === 'api'
                         ? apiCall?.statusLabel || item.metadata?.statusLabel
-                        : visit?.visitStatus
+                        : item.metadata?.held
+                          ? 'HELD'
+                          : visit?.visitStatus
                     const desc = eventDescription(item.eventType)
                     const pack = eventPack(item.metadata)
                     const serviceId = eventChip(item.metadata, 'serviceId')

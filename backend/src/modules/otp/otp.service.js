@@ -11,6 +11,12 @@ import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from '../flow/api-call-log.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { searchService } from '../search/search.service.js';
+import {
+  HELD_OTP_MESSAGE,
+  parsePayoutPercent,
+  payoutSeqKey,
+  shouldPayoutOtp,
+} from './helpers/payout.js';
 
 /**
  * Partner-API OTP only.
@@ -71,6 +77,7 @@ export const createOtpService = () => {
     responseBody,
     success,
     errorMessage,
+    statusLabel,
   }) => {
     try {
       await apiCallLogService.record({
@@ -86,11 +93,27 @@ export const createOtpService = () => {
         responseBody: serializeBody(responseBody),
         success: Boolean(success),
         errorMessage: success ? null : errorMessage || null,
-        statusLabel: success ? 'SUCCESS' : 'FAILED',
+        statusLabel: statusLabel || (success ? 'SUCCESS' : 'FAILED'),
       });
     } catch (err) {
       console.warn(`OTP expose inbound log failed: ${err.message}`);
     }
+  };
+
+  const resolveExposePayoutHold = async (campaignId, providerConfig) => {
+    const payoutPercent = parsePayoutPercent(providerConfig?.payoutPercent);
+    if (payoutPercent >= 100) {
+      return { held: false, seq: null, payoutPercent };
+    }
+    const seq = await redisService.incr(payoutSeqKey(campaignId));
+    if (!seq) {
+      return { held: false, seq: null, payoutPercent };
+    }
+    return {
+      held: !shouldPayoutOtp(seq, payoutPercent),
+      seq,
+      payoutPercent,
+    };
   };
 
   /** Digits-only MSISDN so 88889 / "88889 " always match the same session. */
@@ -215,7 +238,13 @@ export const createOtpService = () => {
           phone: metadata?.msisdn || metadata?.phone || null,
           phoneMasked: metadata?.msisdn || metadata?.phone || null,
           eventType,
-          status: metadata?.success === false ? 'FAILED' : metadata?.success ? 'SUCCESS' : null,
+          status: metadata?.held
+            ? 'HELD'
+            : metadata?.success === false
+              ? 'FAILED'
+              : metadata?.success
+                ? 'SUCCESS'
+                : null,
           requestUrl: metadata?.partnerUrl || metadata?.inboundUrl || null,
           responseStatus: metadata?.httpStatus ?? null,
           success: metadata?.success,
@@ -791,16 +820,42 @@ export const createOtpService = () => {
       providerConfig,
     );
 
-    const responsePayload = {
-      message: verifyResult?.success
-        ? verifyResult.message || 'OTP verified successfully'
-        : verifyResult?.error || 'OTP verification failed',
-      phone: msisdn,
-      msisdn,
-      verified: Boolean(verifyResult?.success),
-      responseCode: verifyResult?.responseCode ?? null,
-      visitId: visit.id,
-    };
+    let held = false;
+    let payoutSeq = null;
+    let payoutPercent = parsePayoutPercent(providerConfig?.payoutPercent);
+    if (verifyResult?.success) {
+      const decision = await resolveExposePayoutHold(cId, providerConfig);
+      held = decision.held;
+      payoutSeq = decision.seq;
+      payoutPercent = decision.payoutPercent;
+    }
+
+    const clientSuccess = Boolean(verifyResult?.success) && !held;
+    const clientError = held
+      ? HELD_OTP_MESSAGE
+      : verifyResult?.error || 'OTP verification failed';
+    const inboundHttpStatus = clientSuccess
+      ? 200
+      : held
+        ? 400
+        : verifyResult?.httpStatus || 400;
+    const inboundBodyOut = held
+      ? {
+          statusCode: 400,
+          error: 'Error',
+          message: HELD_OTP_MESSAGE,
+          held: true,
+        }
+      : {
+          message: clientSuccess
+            ? verifyResult.message || 'OTP verified successfully'
+            : clientError,
+          phone: msisdn,
+          msisdn,
+          verified: clientSuccess,
+          responseCode: verifyResult?.responseCode ?? null,
+          visitId: visit.id,
+        };
 
     await logInboundExpose({
       callType: ApiCallType.OTP_EXPOSE_VERIFY_IN,
@@ -809,14 +864,11 @@ export const createOtpService = () => {
       phone: msisdn,
       requestUrl: inboundUrl,
       requestBody: inboundBody,
-      responseStatus: verifyResult?.success
-        ? 200
-        : verifyResult?.httpStatus || 400,
-      responseBody: responsePayload,
-      success: Boolean(verifyResult?.success),
-      errorMessage: verifyResult?.success
-        ? null
-        : verifyResult?.error || 'OTP verification failed',
+      responseStatus: inboundHttpStatus,
+      responseBody: inboundBodyOut,
+      success: clientSuccess,
+      errorMessage: clientSuccess ? null : clientError,
+      statusLabel: held ? 'HELD' : clientSuccess ? 'SUCCESS' : 'FAILED',
     });
 
     await logOtpApiCall({
@@ -835,6 +887,10 @@ export const createOtpService = () => {
       partnerUrl: verifyResult?.requestUrl || null,
       responseCode: verifyResult?.responseCode ?? null,
       success: Boolean(verifyResult?.success),
+      held,
+      payoutPercent,
+      seq: payoutSeq,
+      clientResponse: held ? 'invalid_otp' : undefined,
       error: verifyResult?.success ? undefined : verifyResult?.error,
       httpStatus: verifyResult?.httpStatus ?? null,
     });
@@ -851,7 +907,13 @@ export const createOtpService = () => {
     );
     await redisService.del(exposePendingKey(cId, phone));
 
-    return responsePayload;
+    if (held) {
+      const err = new Error(HELD_OTP_MESSAGE);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return inboundBodyOut;
   };
 
   const isVisitOtpVerified = async (visitId, phone) => {

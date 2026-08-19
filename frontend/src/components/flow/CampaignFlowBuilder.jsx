@@ -672,7 +672,9 @@ function CampaignFlowBuilder({
                   <p className="text-xs font-semibold text-fg">Exposed OTP APIs</p>
                   <p className="text-[11px] text-fg-muted mt-0.5">
                     No auth. Forwarded to Partner OTP URLs in API settings. Configure send/verify
-                    in Campaign API → Partner OTP.
+                    and client payout % in Campaign API → Partner OTP. Below 100%, some partner
+                    successes return invalid OTP to the caller; conversions still show here as
+                    SUCCESS / HELD.
                   </p>
                 </div>
                 {[

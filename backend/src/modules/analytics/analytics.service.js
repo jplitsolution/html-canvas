@@ -487,14 +487,18 @@ export const createAnalyticsService = () => {
         row.callType === 'otp_expose_verify_in'
       ) {
         const nestedOtp = responseBody?.data ?? responseBody ?? {};
-        statusLabel =
-          row.success === false
-            ? 'FAILED'
-            : nestedOtp.response
-              ? String(nestedOtp.response).toUpperCase()
-              : row.success
-                ? 'SUCCESS'
-                : null;
+        if (nestedOtp.held === true || responseBody?.held === true) {
+          statusLabel = 'HELD';
+        } else {
+          statusLabel =
+            row.success === false
+              ? 'FAILED'
+              : nestedOtp.response
+                ? String(nestedOtp.response).toUpperCase()
+                : row.success
+                  ? 'SUCCESS'
+                  : null;
+        }
       } else if (row.callType === 'subscribe' && responseBody?.skipped) {
         statusLabel =
           responseBody.statusLabel ||
