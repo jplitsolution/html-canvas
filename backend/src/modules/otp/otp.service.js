@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
 import { getRepository } from '../../database/index.js';
+import { mintClickId } from '../flow/helpers/click-id.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
 import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
@@ -159,7 +159,7 @@ export const createOtpService = () => {
       return { ...existing, ...patch, id: existing.id };
     }
 
-    const clickId = randomUUID();
+    const clickId = mintClickId();
     const visit = getVisitRepo().create({
       campaignId: cId,
       phone: msisdn,

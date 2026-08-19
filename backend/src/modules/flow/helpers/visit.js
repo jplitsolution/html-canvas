@@ -1,5 +1,5 @@
-import { randomUUID } from 'crypto';
 import { partnersService } from '../../partners/partners.service.js';
+import { mintClickId } from './click-id.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { CampaignPageType } from '../../../database/entities/campaign-page.entity.js';
@@ -84,7 +84,7 @@ export function createFlowVisit(deps) {
     }
 
     const createFresh = async () => {
-      const ourClickId = randomUUID();
+      const ourClickId = mintClickId();
       const visit = await analyticsService.createVisit({
         campaignId: campaign.id,
         phone: heService.normalizePhone(input.phone) || undefined,
