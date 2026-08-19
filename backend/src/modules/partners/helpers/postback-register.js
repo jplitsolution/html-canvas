@@ -112,13 +112,13 @@ export const createPostbackRegister = (deps) => {
    */
   const registerPending = async (input) => {
     const { firePostback } = deps;
-    const msisdn = String(input.msisdn || input.phone || '').replace(/\D/g, '');
-    if (!msisdn) {
-      return { skipped: true, reason: 'missing msisdn' };
-    }
-
+    const msisdn =
+      String(input.msisdn || input.phone || '').replace(/\D/g, '') || null;
     let vendorId = input.vendorId || null;
     let clickId = input.clickId || '';
+    if (!msisdn && !String(clickId || '').trim() && !input.visitId) {
+      return { skipped: true, reason: 'missing msisdn or click_id' };
+    }
     let rcid = input.rcid || '';
     let campid = String(input.campid || '').trim();
     let trackingCampid = String(
@@ -163,37 +163,62 @@ export const createPostbackRegister = (deps) => {
     }
 
     if (!template) {
-      // Still queue pending so Postbacks UI + billing callback lookup by msisdn work.
-      // Vendor fire will fail until a postback URL is on the resolved vendor.
+      // Still queue pending so Postbacks UI + billing callback lookup work.
       console.warn(
-        `[postback] queueing pending without postback_url (msisdn=${msisdn}, vendorId=${vendorId || 'none'}, campaignId=${campaignId || 'none'})`,
+        `[postback] queueing pending without postback_url (msisdn=${msisdn || 'none'}, clickId=${clickId || 'none'}, vendorId=${vendorId || 'none'}, campaignId=${campaignId || 'none'})`,
       );
     }
 
-    const existing = await getPostbackRepo()
-      .createQueryBuilder('p')
-      .where('p.msisdn = :msisdn', { msisdn })
-      .orderBy('p.id', 'DESC')
-      .take(1)
-      .getOne();
+    if (!msisdn && !String(clickId || '').trim()) {
+      return { skipped: true, reason: 'missing msisdn or click_id' };
+    }
+
+    const findExisting = async () => {
+      const cid = String(clickId || '').trim();
+      if (cid) {
+        const byClick = await getPostbackRepo()
+          .createQueryBuilder('p')
+          .where('p.clickId = :clickId', { clickId: cid })
+          .orderBy('p.id', 'DESC')
+          .take(1)
+          .getOne();
+        if (byClick) return byClick;
+      }
+      if (msisdn) {
+        return getPostbackRepo()
+          .createQueryBuilder('p')
+          .where('p.msisdn = :msisdn', { msisdn })
+          .orderBy('p.id', 'DESC')
+          .take(1)
+          .getOne();
+      }
+      return null;
+    };
+
+    const existing = await findExisting();
 
     const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
     const savedTemplate = template || null;
+    const keepIfSent = Boolean(input.keepIfSent);
+    const alreadySent = existing?.status === ConversionPostbackStatus.SENT;
 
     if (existing) {
       existing.clickId = clickId || existing.clickId || null;
       existing.rcid = rcid || existing.rcid || null;
       existing.campid = campid || existing.campid || null;
+      if (msisdn) existing.msisdn = msisdn;
       if (trackingCampid) existing.trackingCampid = trackingCampid;
       if (parsedVisitId) existing.visitId = parsedVisitId;
       if (campaignId) existing.campaignId = campaignId;
       if (vendorId) existing.vendorId = vendorId;
       if (savedTemplate) existing.postbackUrl = savedTemplate;
-      existing.status = ConversionPostbackStatus.PENDING;
-      existing.httpStatus = null;
-      existing.responseBody = null;
-      existing.errorMessage = null;
-      existing.sentAt = null;
+      if (!(keepIfSent && alreadySent)) {
+        existing.status = ConversionPostbackStatus.PENDING;
+        existing.httpStatus = null;
+        existing.responseBody = null;
+        existing.errorMessage = null;
+        existing.sentAt = null;
+      }
       if (input.offerCode) existing.offerCode = input.offerCode;
 
       const row = await getPostbackRepo().save(existing);
@@ -230,7 +255,7 @@ export const createPostbackRegister = (deps) => {
         campaignId: campaignId || null,
         vendorId: vendorId || null,
         affiliateId: null,
-        msisdn,
+        msisdn: msisdn || null,
         campid: campid || null,
         trackingCampid: trackingCampid || null,
         clickId: clickId || null,

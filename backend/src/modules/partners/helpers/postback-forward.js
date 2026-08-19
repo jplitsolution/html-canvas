@@ -40,10 +40,14 @@ export const createPostbackForward = (deps) => {
     const vendorCampid = row.campid || '';
 
     if (!String(row.postbackUrl || '').trim()) {
-      row.status = ConversionPostbackStatus.FAILED;
-      row.errorMessage = 'no postback_url on vendor';
-      await getPostbackRepo().save(row);
-      return { skipped: true, reason: 'no postback_url on vendor', id: row.id };
+      // Conversion row stays — vendor URL is optional for storing the callback.
+      return {
+        success: true,
+        id: row.id,
+        status: row.status,
+        vendorSkipped: true,
+        reason: 'no postback_url on vendor',
+      };
     }
 
     const url = fillTemplate(row.postbackUrl, {

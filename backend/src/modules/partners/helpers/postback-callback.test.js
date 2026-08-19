@@ -44,7 +44,7 @@ const pendingRow = {
 };
 
 const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } = {}) => {
-  const calls = { registerPending: [], firePostback: [] };
+  const calls = { registerPending: [], firePostback: [], logApiCall: [] };
   const qbState = { whereClick: false };
 
   const getPostbackRepo = () => ({
@@ -70,7 +70,9 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
     deps: {
       getPostbackRepo,
       getVisitRepo,
-      logApiCall: async () => {},
+      logApiCall: async (input) => {
+        calls.logApiCall.push(input);
+      },
       logEvent: async () => {},
       setVisitPhone: async () => {},
       registerPending: async (input) => {
@@ -88,11 +90,14 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
 
 describe('processOperatorCallback shapes', () => {
   it('skips when neither msisdn nor click_id is present', async () => {
-    const { deps } = makeDeps();
+    const { deps, calls } = makeDeps();
     const { processOperatorCallback } = createPostbackCallback(deps);
     const out = await processOperatorCallback({});
+    assert.equal(out.success, false);
     assert.equal(out.skipped, true);
     assert.match(out.reason, /msisdn or click_id/);
+    assert.equal(calls.logApiCall.length, 1);
+    assert.equal(calls.logApiCall[0].success, false);
   });
 
   it('msisdn only: fires existing pending', async () => {
@@ -141,13 +146,37 @@ describe('processOperatorCallback shapes', () => {
     assert.deepEqual(calls.firePostback, [101]);
   });
 
-  it('click_id only: skips when visit has no phone', async () => {
+  it('click_id only: stores conversion even when visit has no msisdn', async () => {
     const { deps, calls } = makeDeps({ visitByClick: { ...visit, phone: '' } });
     const { processOperatorCallback } = createPostbackCallback(deps);
     const out = await processOperatorCallback({ click_id: 'clk-he-fail' });
-    assert.equal(out.skipped, true);
-    assert.match(out.reason, /no msisdn/i);
+    assert.equal(out.id, 101);
+    assert.equal(calls.registerPending[0].clickId, 'clk-he-fail');
+    assert.equal(calls.registerPending[0].msisdn, null);
+    assert.equal(calls.registerPending[0].visitId, 9);
+    assert.deepEqual(calls.firePostback, [101]);
+    assert.equal(calls.logApiCall[0].success, true);
+  });
+
+  it('click_id not in system: stores log as unmatched', async () => {
+    const { deps, calls } = makeDeps({ visitByClick: null });
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const out = await processOperatorCallback({ click_id: 'unknown-click' });
+    assert.equal(out.success, false);
+    assert.match(out.reason, /No visit for click_id/);
     assert.equal(calls.firePostback.length, 0);
+    assert.equal(calls.logApiCall.length, 1);
+    assert.equal(calls.logApiCall[0].success, false);
+  });
+
+  it('msisdn only not in system: stores log as unmatched', async () => {
+    const { deps, calls } = makeDeps();
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const out = await processOperatorCallback({ msisdn: '254700000099' });
+    assert.equal(out.success, false);
+    assert.match(out.reason, /msisdn not in system/);
+    assert.equal(calls.firePostback.length, 0);
+    assert.equal(calls.logApiCall[0].success, false);
   });
 
   it('click_id + msisdn with no visit falls back to pending by msisdn', async () => {

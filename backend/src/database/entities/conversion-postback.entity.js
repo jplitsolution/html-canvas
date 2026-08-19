@@ -42,6 +42,7 @@ export const ConversionPostbackSchema = new EntitySchema({
     msisdn: {
       type: 'varchar',
       length: 64,
+      nullable: true,
     },
     /**
      * Vendor / network campid from tracking URL (?campid=).
@@ -126,5 +127,6 @@ export const ConversionPostbackSchema = new EntitySchema({
     },
     { name: 'IDX_postbacks_visit', columns: ['visitId'] },
     { name: 'IDX_postbacks_campid', columns: ['campid'] },
+    { name: 'IDX_postbacks_click_id', columns: ['clickId'] },
   ],
 });

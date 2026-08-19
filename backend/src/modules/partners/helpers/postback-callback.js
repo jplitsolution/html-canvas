@@ -48,32 +48,14 @@ export const createPostbackCallback = (deps) => {
   } = deps;
 
   /**
-   * Operator/billing notifies us.
-   * - msisdn only → pending by number (existing)
-   * - click_id only → visit by click_id, msisdn from visit.phone
-   * - both → visit by click_id, msisdn = subscribe number from callback
+   * Always store the inbound billing callback.
+   * Recover conversion when click_id / msisdn exists in our system.
+   * Unknown click_id, or msisdn-only not in system → success: false (still logged).
    */
   const processOperatorCallback = async (query = {}) => {
     const incomingMsisdn = parseCallbackMsisdn(query);
     const clickId = parseCallbackClickId(query);
     const status = String(query.status || 'active').toLowerCase();
-
-    if (!incomingMsisdn && !clickId) {
-      return { skipped: true, reason: 'msisdn or click_id required' };
-    }
-
-    const okStatuses = new Set([
-      '',
-      'active',
-      'success',
-      'ok',
-      'subscribed',
-      '1',
-      'true',
-    ]);
-    if (status && !okStatuses.has(status)) {
-      return { skipped: true, reason: `status=${status} ignored` };
-    }
 
     const findPendingByMsisdn = async (msisdn) => {
       if (!msisdn) return null;
@@ -113,10 +95,13 @@ export const createPostbackCallback = (deps) => {
       const safeQuery = { ...query };
       if (safeQuery.msisdn) safeQuery.msisdn = maskPhone(safeQuery.msisdn);
       if (safeQuery.phone) safeQuery.phone = maskPhone(safeQuery.phone);
+      const matched = extra.matched !== false;
 
       if (visitId) {
         await logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, {
-          info: 'Billing / operator callback received — firing vendor postback.',
+          info: matched
+            ? 'Billing / operator callback received — firing vendor postback.'
+            : 'Billing / operator callback received — not matched in our system.',
           msisdn: maskPhone(msisdn),
           clickId: rowClickId || clickId || null,
           status,
@@ -140,10 +125,36 @@ export const createPostbackCallback = (deps) => {
         }),
         responseStatus: 200,
         responseBody: null,
-        success: true,
-        statusLabel: 'RECEIVED',
+        success: matched,
+        statusLabel: matched ? 'RECEIVED' : 'UNMATCHED',
       });
     };
+
+    const reject = async (reason) => {
+      await logInbound(null, null, clickId || null, null, incomingMsisdn || null, {
+        action: 'unmatched',
+        reason,
+        matched: false,
+      });
+      return { success: false, skipped: true, reason };
+    };
+
+    if (!incomingMsisdn && !clickId) {
+      return reject('msisdn or click_id required');
+    }
+
+    const okStatuses = new Set([
+      '',
+      'active',
+      'success',
+      'ok',
+      'subscribed',
+      '1',
+      'true',
+    ]);
+    if (status && !okStatuses.has(status)) {
+      return reject(`status=${status} ignored`);
+    }
 
     const firePending = async (pending, extra = {}) => {
       await logInbound(
@@ -164,10 +175,7 @@ export const createPostbackCallback = (deps) => {
     };
 
     const registerAndFireFromVisit = async (visit, msisdn, extra = {}) => {
-      const digits = String(msisdn || '').replace(/\D/g, '');
-      if (!digits) {
-        return { skipped: true, reason: 'msisdn required' };
-      }
+      const digits = String(msisdn || '').replace(/\D/g, '') || '';
       const visitPhone = String(visit.phone || '').replace(/\D/g, '');
       if (visit.id && digits && !visitPhone) {
         await setVisitPhone(visit.id, digits).catch(() => {});
@@ -178,13 +186,13 @@ export const createPostbackCallback = (deps) => {
         visit.campaignId,
         visit.clickId || clickId,
         visit.rcid,
-        digits,
+        digits || visitPhone || null,
         extra,
       );
 
       const registered = await registerPending({
         visitId: visit.id,
-        msisdn: digits,
+        msisdn: digits || null,
         campaignId: visit.campaignId,
         vendorId: visit.vendorId,
         affiliateId: null,
@@ -192,31 +200,41 @@ export const createPostbackCallback = (deps) => {
         rcid: visit.rcid,
         campid: visit.campid || '',
         trackingCampid: visit.trackingCampid || '',
+        keepIfSent: true,
       });
       if (registered.skipped && !registered.id) {
-        return registered;
+        return { success: false, ...registered };
       }
       const id = registered.id;
       if (!id) {
-        return { skipped: true, reason: 'No pending callback' };
+        return { success: false, skipped: true, reason: 'No pending callback' };
       }
       return firePostback(id);
     };
 
-    // click_id + msisdn: visit by click (HE never resolved number, user subscribed on CG).
-    if (clickId && incomingMsisdn) {
+    // click_id present: recover if that click exists here (MSISDN optional).
+    if (clickId) {
       const visit = await findVisitByClickId(clickId);
       if (visit) {
-        return registerAndFireFromVisit(visit, incomingMsisdn, {
+        const phone =
+          incomingMsisdn || String(visit.phone || '').replace(/\D/g, '') || '';
+        return registerAndFireFromVisit(visit, phone, {
           action: 'register_then_fire',
-          reason: 'click_id + msisdn — visit by click_id',
+          reason: incomingMsisdn
+            ? 'click_id + msisdn — visit by click_id'
+            : phone
+              ? 'click_id only — msisdn from visit'
+              : 'click_id only — stored without msisdn',
           campid: visit.campid,
           trackingCampid: visit.trackingCampid,
         });
       }
+      if (!incomingMsisdn) {
+        return reject('No visit for click_id');
+      }
     }
 
-    // msisdn present (alone, or click_id with no visit): existing pending-by-number.
+    // msisdn present (alone, or unknown click_id): recover if number is in system.
     if (incomingMsisdn) {
       const pending = await findPendingByMsisdn(incomingMsisdn);
       if (pending) {
@@ -233,30 +251,12 @@ export const createPostbackCallback = (deps) => {
         });
       }
 
-      if (!clickId) {
-        return { skipped: true, reason: 'No pending callback' };
-      }
+      return reject(
+        clickId ? 'No visit for click_id and msisdn not in system' : 'msisdn not in system',
+      );
     }
 
-    // click_id only (or click_id leftover after msisdn miss): visit, phone from visit.
-    if (clickId) {
-      const visit = await findVisitByClickId(clickId);
-      if (!visit) {
-        return { skipped: true, reason: 'No visit for click_id' };
-      }
-      const visitPhone = String(visit.phone || '').replace(/\D/g, '');
-      if (!visitPhone) {
-        return { skipped: true, reason: 'click_id visit has no msisdn' };
-      }
-      return registerAndFireFromVisit(visit, visitPhone, {
-        action: 'register_then_fire',
-        reason: 'click_id only — msisdn from visit',
-        campid: visit.campid,
-        trackingCampid: visit.trackingCampid,
-      });
-    }
-
-    return { skipped: true, reason: 'No pending callback' };
+    return reject('No pending callback');
   };
 
   return { processOperatorCallback };

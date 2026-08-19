@@ -36,6 +36,7 @@ export const initDatabase = async () => {
   await ensureCampaignTrackingsSchema(dataSource);
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
+  await ensureNullableMsisdnOnPostbacks(dataSource);
   await ensureSuccessRedirectModeColumn(dataSource);
   await ensurePostbackRegisterAtColumn(dataSource);
   await ensureChecksubConfigJsonColumn(dataSource);
@@ -79,7 +80,7 @@ async function ensurePostbacksAndHeSchema(ds) {
         "campaign_id" int,
         "vendor_id" int,
         "affiliate_id" int,
-        "msisdn" varchar(64) NOT NULL,
+        "msisdn" varchar(64),
         "campid" varchar(128),
         "tracking_campid" varchar(128),
         "click_id" varchar(255),
@@ -379,6 +380,24 @@ async function ensureUniqueMsisdnOnPostbacks(ds) {
     }
   } catch (err) {
     console.warn('ensureUniqueMsisdnOnPostbacks:', err.message);
+  }
+}
+
+/** CG / click_id-only callbacks: store conversion row before MSISDN is known. */
+async function ensureNullableMsisdnOnPostbacks(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(
+        `ALTER TABLE "conversion_postbacks" ALTER COLUMN "msisdn" DROP NOT NULL`,
+      );
+      await ds.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_postbacks_click_id"
+        ON "conversion_postbacks" ("click_id")
+      `);
+    }
+  } catch (err) {
+    console.warn('ensureNullableMsisdnOnPostbacks:', err.message);
   }
 }
 
