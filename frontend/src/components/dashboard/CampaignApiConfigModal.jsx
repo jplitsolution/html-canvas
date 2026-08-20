@@ -12,7 +12,13 @@ import {
   PAGE_TYPES,
   PAGE_TYPE_LABELS,
 } from '../../services/api/campaigns'
-import { DEFAULT_DCB_CONFIG, parseDcbConfig, serializeDcbConfig } from './dcbConfig'
+import {
+  DEFAULT_DCB_CONFIG,
+  parseDcbConfig,
+  previewConfirmPayload,
+  previewPincodePayload,
+  serializeDcbConfig,
+} from './dcbConfig'
 
 const DEFAULT_PARTNER = {
   sendUrl: '',
@@ -596,6 +602,20 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         responsePaths: { ...current.responsePaths, [key]: value },
       }))
     }
+    const setEndpoint = (key, value) => {
+      setDcbConfig((current) => ({
+        ...current,
+        endpoints: { ...current.endpoints, [key]: value },
+      }))
+    }
+    const setRequestField = (key, value) => {
+      setDcbConfig((current) => ({
+        ...current,
+        request: { ...current.request, [key]: value },
+      }))
+    }
+    const pincodePreview = JSON.stringify(previewPincodePayload(dcbConfig), null, 2)
+    const confirmPreview = JSON.stringify(previewConfirmPayload(dcbConfig), null, 2)
     const setMapping = (index, key, value) => {
       setDcbConfig((current) => ({
         ...current,
@@ -651,6 +671,146 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               min={1000}
               value={dcbConfig.pollTimeoutMs}
               onChange={(event) => setDcbField('pollTimeoutMs', event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border bg-bg-elevated p-4">
+          <div>
+            <p className="text-sm font-semibold text-fg">PIN request API</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
+              Pack select ke baad ye call hoti hai. Path ya full URL dono chalenge. Neeche wale names Universe body
+              ke field names hain — API change ho to yahin rename karo.
+            </p>
+          </div>
+          <Field label="PIN API path" hint="POST">
+            <Input
+              value={dcbConfig.endpoints.pincode}
+              onChange={(event) => setEndpoint('pincode', event.target.value)}
+              placeholder="/api/dcb/pincode"
+            />
+          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="merchantId field">
+              <Input
+                value={dcbConfig.request.merchantIdField}
+                onChange={(event) => setRequestField('merchantIdField', event.target.value)}
+              />
+            </Field>
+            <Field label="serviceId field">
+              <Input
+                value={dcbConfig.request.serviceIdField}
+                onChange={(event) => setRequestField('serviceIdField', event.target.value)}
+              />
+            </Field>
+            <Field label="purchaseTypeId field">
+              <Input
+                value={dcbConfig.request.purchaseTypeIdField}
+                onChange={(event) => setRequestField('purchaseTypeIdField', event.target.value)}
+              />
+            </Field>
+            <Field label="msisdn field">
+              <Input
+                value={dcbConfig.request.msisdnField}
+                onChange={(event) => setRequestField('msisdnField', event.target.value)}
+              />
+            </Field>
+            <Field label="transactionChannel field">
+              <Input
+                value={dcbConfig.request.transactionChannelField}
+                onChange={(event) => setRequestField('transactionChannelField', event.target.value)}
+              />
+            </Field>
+            <Field label="operator field">
+              <Input
+                value={dcbConfig.request.operatorField}
+                onChange={(event) => setRequestField('operatorField', event.target.value)}
+              />
+            </Field>
+            <Field label="subscription field">
+              <Input
+                value={dcbConfig.request.subscriptionField}
+                onChange={(event) => setRequestField('subscriptionField', event.target.value)}
+              />
+            </Field>
+          </div>
+          <details className="rounded-lg border border-border bg-bg-subtle/50 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-fg-muted">Example PIN body with these fields</summary>
+            <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-bg-base p-2 font-mono text-[11px] text-fg-muted">
+              {pincodePreview}
+            </pre>
+          </details>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border bg-bg-elevated p-4">
+          <div>
+            <p className="text-sm font-semibold text-fg">PIN confirm / verify API</p>
+            <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
+              OTP page par PIN submit hone par ye call hoti hai. <code className="font-mono">requestId</code> PIN
+              response se backend save karta hai; user sirf PIN type karta hai.
+            </p>
+          </div>
+          <Field label="Confirm API path" hint="POST">
+            <Input
+              value={dcbConfig.endpoints.confirm}
+              onChange={(event) => setEndpoint('confirm', event.target.value)}
+              placeholder="/api/dcb/confirm"
+            />
+          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <Field label="requestId field">
+              <Input
+                value={dcbConfig.request.requestIdField}
+                onChange={(event) => setRequestField('requestIdField', event.target.value)}
+              />
+            </Field>
+            <Field label="pinCode field">
+              <Input
+                value={dcbConfig.request.pinField}
+                onChange={(event) => setRequestField('pinField', event.target.value)}
+              />
+            </Field>
+            <Field label="PIN response requestId path">
+              <Input
+                value={dcbConfig.responsePaths.requestId}
+                onChange={(event) => setResponsePath('requestId', event.target.value)}
+                placeholder="data.requestId"
+              />
+            </Field>
+          </div>
+          <details className="rounded-lg border border-border bg-bg-subtle/50 px-3 py-2">
+            <summary className="cursor-pointer text-xs font-medium text-fg-muted">Example confirm body with these fields</summary>
+            <pre className="mt-2 max-h-48 overflow-auto rounded-md bg-bg-base p-2 font-mono text-[11px] text-fg-muted">
+              {confirmPreview}
+            </pre>
+          </details>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border bg-bg-elevated p-4">
+          <div>
+            <p className="text-sm font-semibold text-fg">Other Universe endpoints</p>
+            <p className="mt-0.5 text-[11px] text-fg-muted">
+              Public config packs ke IDs verify karta hai. Subscriptions confirm ke baad 2s polling ke liye.
+            </p>
+          </div>
+          <Field label="Public config path" hint="GET">
+            <Input
+              value={dcbConfig.endpoints.publicConfig}
+              onChange={(event) => setEndpoint('publicConfig', event.target.value)}
+              placeholder="/api/dcb/config/public"
+            />
+          </Field>
+          <Field label="Subscriptions path" hint="GET">
+            <Input
+              value={dcbConfig.endpoints.subscriptions}
+              onChange={(event) => setEndpoint('subscriptions', event.target.value)}
+              placeholder="/api/dcb/subscriptions"
+            />
+          </Field>
+          <Field label="current query field">
+            <Input
+              value={dcbConfig.request.currentField}
+              onChange={(event) => setRequestField('currentField', event.target.value)}
             />
           </Field>
         </div>

@@ -30,6 +30,7 @@ import {
   sanitizeSubscribeParam,
   templateHasSubscribeSlots,
 } from '../utils/subscribeUrlPreview';
+import { CLASSIC_PACK_OPTIONS, editorPackOptions } from '../../components/dashboard/dcbConfig';
 import useStore from '../../store/useStore';
 
 const PROPS_COLLAPSED_KEY = 'tc-editor-props-collapsed';
@@ -700,21 +701,30 @@ function ClickActionEditor({
   const href = attrs.href || ''
   const type = getClickActionType(attrs)
   const [subscribeApiTemplate, setSubscribeApiTemplate] = useState('')
+  const [packOptions, setPackOptions] = useState(CLASSIC_PACK_OPTIONS)
 
   useEffect(() => {
     if (!campaignId) return undefined
     let cancelled = false
     getCampaignApiConfig(campaignId)
       .then((cfg) => {
-        if (!cancelled) setSubscribeApiTemplate(String(cfg?.subscribeApi || ''))
+        if (cancelled) return
+        setSubscribeApiTemplate(String(cfg?.subscribeApi || ''))
+        setPackOptions(
+          editorPackOptions(cfg?.dcbConfigJson || cfg?.dcb_config_json, {
+            universeDcb: String(campaign?.verificationMode || '').toUpperCase() === 'UNIVERSE_DCB',
+          })
+        )
       })
       .catch(() => {
-        if (!cancelled) setSubscribeApiTemplate('')
+        if (cancelled) return
+        setSubscribeApiTemplate('')
+        setPackOptions(CLASSIC_PACK_OPTIONS)
       })
     return () => {
       cancelled = true
     }
-  }, [campaignId])
+  }, [campaignId, campaign?.verificationMode])
 
   const packId = String(attrs['data-pack'] || '').toLowerCase()
   const serviceIdAttr = String(attrs['data-service-id'] || '')
@@ -871,20 +881,47 @@ function ClickActionEditor({
               const pack = e.target.value
               if (!pack) {
                 selected.removeAttributes('data-pack')
+                selected.removeAttributes('data-purchase-type-id')
               } else {
-                selected.addAttributes({ 'data-pack': pack })
+                const mapping = packOptions.find(
+                  (item) => String(item.packKey || '').toLowerCase() === pack
+                )
+                const nextAttrs = { 'data-pack': pack }
+                if (mapping?.purchaseTypeId) {
+                  nextAttrs['data-purchase-type-id'] = String(mapping.purchaseTypeId)
+                } else {
+                  selected.removeAttributes('data-purchase-type-id')
+                }
+                selected.addAttributes(nextAttrs)
               }
               update()
             }}
           >
             <option value="">None — continue flow / picker</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-            <option value="monthly">Monthly</option>
+            {(() => {
+              const currentPack = String(attrs['data-pack'] || '').toLowerCase()
+              const options = [...packOptions]
+              if (
+                currentPack &&
+                !options.some((item) => String(item.packKey || '').toLowerCase() === currentPack)
+              ) {
+                options.push({
+                  packKey: currentPack,
+                  label: currentPack,
+                  purchaseTypeId: attrs['data-purchase-type-id'] || '',
+                })
+              }
+              return options.map((item) => (
+                <option key={item.packKey} value={String(item.packKey).toLowerCase()}>
+                  {item.label || item.packKey}
+                  {item.purchaseTypeId ? ` (${item.purchaseTypeId})` : ''}
+                </option>
+              ))
+            })()}
           </select>
           <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-            Daily / Weekly / Monthly makes this button a subscribe click for that pack
-            (works on Home, Confirm, or any page).
+            Packs come from Universe DCB mappings in API settings. Choosing one sets this
+            button&apos;s pack and purchaseTypeId.
           </p>
         </Field>
       )}

@@ -2,7 +2,7 @@ import {
   isHeRedirectUrl,
   pickHeFailRedirectUrl,
 } from '../../services/flow/resolvePhoneNumber'
-import { HE_SUPPRESSED_FUNNEL_PAGES, VALID_PACKS, VALID_PAGES } from './constants'
+import { HE_SUPPRESSED_FUNNEL_PAGES, VALID_PAGES } from './constants'
 
 function isApiHeProvider(provider) {
   const p = String(provider || '').toLowerCase()
@@ -67,8 +67,11 @@ function hrefIsNavigationTarget(href) {
 }
 
 function normalizePack(value) {
-  const pack = (value || 'daily').toLowerCase()
-  return VALID_PACKS.includes(pack) ? pack : 'daily'
+  const pack = String(value || '')
+    .trim()
+    .toLowerCase()
+  if (!pack) return 'daily'
+  return pack
 }
 
 /** Pack params + postback flag from a pack / subscribe button. */

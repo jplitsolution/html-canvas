@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   hrefIsNavigationTarget,
   isPackSubscribeAction,
+  normalizePack,
   shouldSelectPackOnly,
 } from '../../src/pages/subscription/flowHelpers.js'
 
@@ -25,5 +26,12 @@ describe('pack click helpers', () => {
     const el = document.createElement('button')
     el.setAttribute('data-pack', 'daily')
     expect(shouldSelectPackOnly(el)).toBe(true)
+  })
+
+  it('keeps DCB pack keys instead of forcing Daily/Weekly/Monthly', () => {
+    expect(normalizePack('yearly')).toBe('yearly')
+    expect(normalizePack('monthly-with-ads')).toBe('monthly-with-ads')
+    expect(normalizePack('three-months')).toBe('three-months')
+    expect(normalizePack('')).toBe('daily')
   })
 })
