@@ -16,6 +16,10 @@ export const ApiCallType = {
   HE_MSISDN: 'he_msisdn',
   HE_RESOLVE: 'he_resolve',
   HE_REDIRECT: 'he_redirect',
+  DCB_CONFIG: 'dcb_config',
+  DCB_SUBSCRIPTIONS: 'dcb_subscriptions',
+  DCB_PINCODE: 'dcb_pincode',
+  DCB_CONFIRM: 'dcb_confirm',
   BILLING_CALLBACK: 'billing_callback',
   VENDOR_POSTBACK: 'vendor_postback',
 };

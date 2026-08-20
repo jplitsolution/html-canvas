@@ -50,6 +50,7 @@ const providerError = (err, config) => {
   wrapped.code = 'DCB_PROVIDER_ERROR';
   wrapped.providerStatus = err.response?.status || null;
   wrapped.providerRequestId = requestIdFrom(err.response?.data, config);
+  wrapped.providerData = err.response?.data;
   return wrapped;
 };
 
@@ -73,6 +74,14 @@ export const createUniverseDcbProvider = (http = axios) => {
     };
     if (method === 'GET') requestConfig.params = extra.payload;
     else requestConfig.data = extra.payload;
+    const startedAt = Date.now();
+    const baseLogMeta = {
+      endpointName,
+      method,
+      url: requestConfig.url,
+      payload: extra.payload || {},
+      serverRequestId,
+    };
 
     try {
       const response = await http.request(requestConfig);
@@ -85,9 +94,17 @@ export const createUniverseDcbProvider = (http = axios) => {
         data: response.data,
         status: response.status,
         providerRequestId: requestIdFrom(response.data, config),
+        logMeta: {
+          ...baseLogMeta,
+          latencyMs: Date.now() - startedAt,
+        },
       };
     } catch (err) {
       const wrapped = providerError(err, config);
+      wrapped.logMeta = {
+        ...baseLogMeta,
+        latencyMs: Date.now() - startedAt,
+      };
       console.warn(
         `Universe DCB ${endpointName} failed: status=${wrapped.providerStatus || 'unknown'} requestId=${wrapped.providerRequestId || 'missing'}`,
       );

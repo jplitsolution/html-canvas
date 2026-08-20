@@ -15,7 +15,7 @@ import {
   decorateUniverseDcbPageResponse,
 } from './helpers/universe-dcb-runtime.js';
 
-const dcbInput = (req) => {
+const dcbInput = (req, dcbSource) => {
   const values = { ...(req.query || {}), ...(req.body || {}) };
   const camp = resolveCampidParams(values);
   return {
@@ -29,6 +29,7 @@ const dcbInput = (req) => {
     transactionChannel: values.transactionChannel || values.transaction_channel,
     visitId: values.visitId || values.visit_id,
     pin: values.pin || values.pincode,
+    dcbSource,
   };
 };
 
@@ -107,6 +108,7 @@ export const flowController = {
             ...detectInput,
             msisdn: result.phone,
             visitId: result.visitId,
+            dcbSource: 'detect',
           });
         } catch {
           normalizedStatus = {
@@ -243,23 +245,27 @@ export const flowController = {
   priorityCheck,
 
   dcbConfig: asyncHandler(async (req, res) => {
-    res.json(await universeDcbService.getPublicConfig(dcbInput(req)));
+    res.json(await universeDcbService.getPublicConfig(dcbInput(req, 'config')));
   }),
 
   dcbManualCheck: asyncHandler(async (req, res) => {
-    res.json(await universeDcbService.manualCheck(dcbInput(req)));
+    res.json(
+      await universeDcbService.manualCheck(dcbInput(req, 'manual-check')),
+    );
   }),
 
   dcbPincode: asyncHandler(async (req, res) => {
-    res.json(await universeDcbService.requestPincode(dcbInput(req)));
+    res.json(
+      await universeDcbService.requestPincode(dcbInput(req, 'pincode')),
+    );
   }),
 
   dcbConfirm: asyncHandler(async (req, res) => {
-    res.json(await universeDcbService.confirm(dcbInput(req)));
+    res.json(await universeDcbService.confirm(dcbInput(req, 'confirm')));
   }),
 
   dcbStatus: asyncHandler(async (req, res) => {
-    res.json(await universeDcbService.status(dcbInput(req)));
+    res.json(await universeDcbService.status(dcbInput(req, 'poll')));
   }),
 
   callback: asyncHandler(async (req, res) => {

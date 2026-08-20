@@ -1,15 +1,18 @@
 import { getRepository } from '../../database/index.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
+import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 import { Visit } from '../../database/entities/visit.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { flowEngineService } from './flow-engine.service.js';
 import { flowService } from './flow.service.js';
+import { apiCallLogService } from './api-call-log.service.js';
 import { universeDcbProvider } from './universe-dcb.provider.js';
 import {
   DCB_OUTCOMES,
   getNestedValue,
   normalizeUniverseDcbResponse,
 } from './helpers/universe-dcb-normalizer.js';
+import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
 
 const localCorrelations = new Map();
 const localConfirmLocks = new Set();
@@ -61,7 +64,10 @@ const stripProviderRequestIds = (value) => {
   );
 };
 
-export const createUniverseDcbService = (provider = universeDcbProvider) => {
+export const createUniverseDcbService = (
+  provider = universeDcbProvider,
+  callLogger = apiCallLogService,
+) => {
   const loadContext = async (input, options = {}) => {
     const campaign = await flowService.resolveCampaign(input);
     if (!campaign) {
@@ -96,8 +102,9 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
     if (options.requireVisit && (!visitId || Number.isNaN(visitId))) {
       throw httpError('Visit ID is required', 400, 'VISIT_REQUIRED');
     }
+    let visit = null;
     if (visitId) {
-      const visit = await getRepository(Visit).findOne({
+      visit = await getRepository(Visit).findOne({
         where: { id: visitId },
       });
       if (
@@ -125,6 +132,8 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
       config,
       msisdn,
       visitId: visitId || null,
+      visit,
+      source: String(input.dcbSource || input.source || '').trim(),
       serviceId: String(
         input.serviceId || config.serviceId || campaign.serviceId || '',
       ).trim(),
@@ -179,12 +188,66 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
       serviceId: ctx.serviceId,
     });
 
+  const callProvider = async ({
+    ctx,
+    callType,
+    action,
+    execute,
+    statusLabel,
+  }) => {
+    let response;
+    try {
+      response = await execute();
+      let resolvedStatus = statusLabel;
+      if (typeof statusLabel === 'function') {
+        try {
+          resolvedStatus = statusLabel(response);
+        } catch {
+          resolvedStatus = 'PARSE_ERROR';
+        }
+      }
+      try {
+        await callLogger.record(
+          buildUniverseDcbLogRecord({
+            ctx,
+            callType,
+            action,
+            response,
+            statusLabel: resolvedStatus,
+          }),
+        );
+      } catch (logError) {
+        console.warn(`Universe DCB API log write failed: ${logError.message}`);
+      }
+      return response;
+    } catch (error) {
+      try {
+        await callLogger.record(
+          buildUniverseDcbLogRecord({
+            ctx,
+            callType,
+            action,
+            error,
+            statusLabel: 'FAILED',
+          }),
+        );
+      } catch (logError) {
+        console.warn(`Universe DCB API log write failed: ${logError.message}`);
+      }
+      throw error;
+    }
+  };
+
   const getPublicConfig = async (input) => {
     const ctx = await loadContext(input);
-    const response = await provider.getPublicConfig(
-      ctx.config,
-      providerInput(ctx),
-    );
+    const response = await callProvider({
+      ctx,
+      callType: ApiCallType.DCB_CONFIG,
+      action: 'config',
+      execute: () =>
+        provider.getPublicConfig(ctx.config, providerInput(ctx)),
+      statusLabel: 'SUCCESS',
+    });
     const envelopePath = ctx.config.responsePaths?.envelope;
     const providerConfig = envelopePath
       ? getNestedValue(response.data, envelopePath)
@@ -247,10 +310,15 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
       requireVisit: true,
     });
     // Deliberately no subscription cache: status is authoritative and always fresh.
-    const response = await provider.getSubscriptions(
-      ctx.config,
-      providerInput(ctx),
-    );
+    const response = await callProvider({
+      ctx,
+      callType: ApiCallType.DCB_SUBSCRIPTIONS,
+      action: 'subscriptions',
+      execute: () =>
+        provider.getSubscriptions(ctx.config, providerInput(ctx)),
+      statusLabel: (providerResponse) =>
+        normalize(providerResponse, ctx).outcome,
+    });
     return {
       campaignId: ctx.campaign.id,
       serviceId: ctx.serviceId,
@@ -263,10 +331,15 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
       requireMsisdn: true,
       requireVisit: true,
     });
-    const response = await provider.getSubscriptions(
-      ctx.config,
-      providerInput(ctx),
-    );
+    const response = await callProvider({
+      ctx,
+      callType: ApiCallType.DCB_SUBSCRIPTIONS,
+      action: 'manual-check',
+      execute: () =>
+        provider.getSubscriptions(ctx.config, providerInput(ctx)),
+      statusLabel: (providerResponse) =>
+        normalize(providerResponse, ctx).outcome,
+    });
     const result = normalize(response, ctx);
     if (result.outcome !== DCB_OUTCOMES.ENTITLED) {
       return {
@@ -319,10 +392,14 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
         'TRANSACTION_CHANNEL_REQUIRED',
       );
     }
-    const response = await provider.requestPincode(
-      ctx.config,
-      providerInput(ctx),
-    );
+    const response = await callProvider({
+      ctx,
+      callType: ApiCallType.DCB_PINCODE,
+      action: 'pincode',
+      execute: () =>
+        provider.requestPincode(ctx.config, providerInput(ctx)),
+      statusLabel: 'PIN_REQUIRED',
+    });
     if (!response.providerRequestId) {
       throw httpError(
         'Universe DCB pincode response did not include a request ID',
@@ -388,11 +465,21 @@ export const createUniverseDcbService = (provider = universeDcbProvider) => {
     }
     localConfirmLocks.add(lockKey);
     try {
-      await provider.confirm(ctx.config, {
-        ...providerInput(ctx),
-        purchaseTypeId: correlation.purchaseTypeId,
-        providerRequestId: correlation.providerRequestId,
-        pin,
+      await callProvider({
+        ctx: {
+          ...ctx,
+          purchaseTypeId: String(correlation.purchaseTypeId || ''),
+        },
+        callType: ApiCallType.DCB_CONFIRM,
+        action: 'confirm',
+        execute: () =>
+          provider.confirm(ctx.config, {
+            ...providerInput(ctx),
+            purchaseTypeId: correlation.purchaseTypeId,
+            providerRequestId: correlation.providerRequestId,
+            pin,
+          }),
+        statusLabel: 'POLLING',
       });
       await clearCorrelation(key);
       return {
