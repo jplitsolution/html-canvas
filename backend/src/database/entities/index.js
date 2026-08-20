@@ -36,6 +36,7 @@ export {
   ApiCallLogSchema,
   ApiCallType,
 } from './api-call-log.entity.js';
+export { DailyStat, DailyStatSchema } from './daily-stat.entity.js';
 
 import { UserSchema } from './user.entity.js';
 import { TemplateSchema } from './template.entity.js';
@@ -51,6 +52,7 @@ import { ApiConfigSchema } from './api-config.entity.js';
 import { VisitSchema } from './visit.entity.js';
 import { VisitEventSchema } from './visit-event.entity.js';
 import { ApiCallLogSchema } from './api-call-log.entity.js';
+import { DailyStatSchema } from './daily-stat.entity.js';
 
 /** Registered with TypeORM DataSource */
 export const entities = [
@@ -68,4 +70,5 @@ export const entities = [
   VisitEventSchema,
   ConversionPostbackSchema,
   ApiCallLogSchema,
+  DailyStatSchema,
 ];

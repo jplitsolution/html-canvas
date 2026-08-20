@@ -56,17 +56,62 @@ export async function getPostback(id) {
   return apiClient(`/partners/postbacks/${id}`)
 }
 
-export async function getPostbackDayReport({
+export async function getPostbackStats({
+  from,
+  to,
+  timezone,
+  campaignId,
+  vendorId,
+  groupBy,
+} = {}) {
+  const params = new URLSearchParams()
+  if (from) params.set('from', from)
+  if (to) params.set('to', to)
+  if (timezone) params.set('timezone', timezone)
+  if (campaignId) params.set('campaignId', String(campaignId))
+  if (vendorId) params.set('vendorId', String(vendorId))
+  if (groupBy) params.set('groupBy', groupBy)
+  return apiClient(`/partners/postbacks/stats?${params.toString()}`, {
+    timeout: 60000,
+  })
+}
+
+function reportQuery({
   date,
   from,
   to,
   timezone,
+  campaignId,
+  vendorId,
+  outcome,
+  hitType,
+  q,
+  view,
+  page,
+  limit,
+  writeFile,
+  format,
 } = {}) {
   const params = new URLSearchParams()
   if (date) params.set('date', date)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (timezone) params.set('timezone', timezone)
+  if (campaignId) params.set('campaignId', String(campaignId))
+  if (vendorId) params.set('vendorId', String(vendorId))
+  if (outcome && outcome !== 'all') params.set('outcome', outcome)
+  if (hitType && hitType !== 'all') params.set('hitType', hitType)
+  if (q) params.set('q', q)
+  if (view) params.set('view', view)
+  if (page) params.set('page', String(page))
+  if (limit) params.set('limit', String(limit))
+  if (writeFile) params.set('writeFile', '1')
+  if (format) params.set('format', format)
+  return params
+}
+
+export async function getPostbackDayReport(opts = {}) {
+  const params = reportQuery(opts)
   return apiClient(`/partners/postbacks/day-report?${params.toString()}`, {
     timeout: 60000,
   })
@@ -84,19 +129,9 @@ function downloadBlob(filename, blob) {
 }
 
 /** Export date-range logs as CSV or TXT (also written on the API host). */
-export async function exportPostbackDayReport({
-  date,
-  from,
-  to,
-  timezone,
-  format = 'csv',
-} = {}) {
-  const params = new URLSearchParams()
-  if (date) params.set('date', date)
-  if (from) params.set('from', from)
-  if (to) params.set('to', to)
-  if (timezone) params.set('timezone', timezone)
-  params.set('format', format === 'txt' ? 'txt' : 'csv')
+export async function exportPostbackDayReport(opts = {}) {
+  const format = opts.format === 'txt' ? 'txt' : 'csv'
+  const params = reportQuery({ ...opts, format })
   const token = getAuthToken()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), 60000)
@@ -115,7 +150,7 @@ export async function exportPostbackDayReport({
     const blob = await response.blob()
     const filename =
       response.headers.get('Content-Disposition')?.match(/filename="([^"]+)"/)?.[1] ||
-      `postback-logs-${from || date || 'export'}.${format === 'txt' ? 'txt' : 'csv'}`
+      `postback-logs-${opts.from || opts.date || 'export'}.${format === 'txt' ? 'txt' : 'csv'}`
     downloadBlob(filename, blob)
     return { filename }
   } catch (err) {

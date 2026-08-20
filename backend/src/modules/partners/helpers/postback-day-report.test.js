@@ -1,10 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  buildCallbackHit,
   buildNumberStory,
   digitsMsisdn,
   formatDayReportCsv,
   formatDayReportText,
+  formatHitLogLine,
+  summarizeHits,
   summarizeStories,
 } from './postback-day-report.js';
 
@@ -118,6 +121,56 @@ describe('buildNumberStory', () => {
     assert.equal(story.queued, false);
     assert.equal(story.billingReceived, true);
     assert.equal(story.outcome, 'callback_no_row');
+  });
+
+  it('unmatched callback without a number still appears', () => {
+    const story = buildNumberStory({
+      msisdn: '',
+      logs: [
+        {
+          callType: 'billing_callback',
+          success: false,
+          clickId: 'unknown-click',
+          createdAt: '2026-08-20T06:00:00.000Z',
+          requestBody: JSON.stringify({
+            action: 'unmatched',
+            matched: false,
+            reason: 'No visit for click_id',
+            clickId: 'unknown-click',
+          }),
+        },
+      ],
+    });
+    assert.equal(story.queued, false);
+    assert.equal(story.msisdnReceived, false);
+    assert.equal(story.unmatched, true);
+    assert.equal(story.outcome, 'callback_unmatched');
+    assert.match(story.outcomeLabel, /No visit for click_id/);
+    assert.equal(story.rowKey, 'click:unknown-click');
+  });
+
+  it('unmatched callback with msisdn not in system', () => {
+    const story = buildNumberStory({
+      msisdn: '254700000099',
+      logs: [
+        {
+          callType: 'billing_callback',
+          success: false,
+          msisdn: '254700000099',
+          createdAt: '2026-08-20T06:00:00.000Z',
+          requestBody: JSON.stringify({
+            action: 'unmatched',
+            matched: false,
+            reason: 'msisdn not in system',
+          }),
+        },
+      ],
+    });
+    assert.equal(story.msisdnReceived, true);
+    assert.equal(story.outcome, 'callback_unmatched');
+    const summary = summarizeStories([story]);
+    assert.equal(summary.callbackUnmatched, 1);
+    assert.equal(summary.billingReceived, 1);
   });
 
   it('not queued when only checksub exists', () => {
@@ -298,5 +351,55 @@ describe('formatDayReportText', () => {
     );
     assert.match(text, /\(no MSISDN\)/);
     assert.match(text, /No MSISDN → CG redirect\s+: 1/);
+  });
+
+  it('includes every callback/vendor hit datewise with number YES/NO', () => {
+    const unmatched = buildCallbackHit(
+      {
+        id: 1,
+        callType: 'billing_callback',
+        success: false,
+        clickId: 'no-visit',
+        createdAt: '2026-08-20T06:01:00.000Z',
+        requestBody: JSON.stringify({
+          action: 'unmatched',
+          matched: false,
+          reason: 'No visit for click_id',
+        }),
+      },
+      'Asia/Kolkata',
+    );
+    const fired = buildCallbackHit(
+      {
+        id: 2,
+        callType: 'vendor_postback',
+        success: true,
+        msisdn: '254700000001',
+        clickId: 'clk-1',
+        responseStatus: 200,
+        createdAt: '2026-08-20T06:02:00.000Z',
+        requestUrl: 'https://vendor.example/pb',
+      },
+      'Asia/Kolkata',
+    );
+    const hits = [unmatched, fired];
+    const text = formatDayReportText(
+      {
+        date: '2026-08-20',
+        timezone: 'Asia/Kolkata',
+        generatedAt: '2026-08-20T07:00:00.000Z',
+        summary: { ...summarizeStories([]), ...summarizeHits(hits) },
+        numbers: [],
+        hits,
+      },
+      'Asia/Kolkata',
+    );
+    assert.match(text, /HIT LOG/);
+    assert.match(text, /msisdn=NO/);
+    assert.match(text, /UNMATCHED/);
+    assert.match(text, /msisdn=254700000001/);
+    assert.match(text, /Number missing\s+: 1/);
+    assert.match(text, /Number received\s+: 1/);
+    assert.match(formatHitLogLine(unmatched, 'Asia/Kolkata'), /billing_callback/);
   });
 });

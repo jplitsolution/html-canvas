@@ -10,6 +10,8 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { searchService } from '../../search/search.service.js';
 import { apiCallLogService } from '../../flow/api-call-log.service.js';
+import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
+import { appendPostbackHitSafe } from './postback-day-report-file.js';
 
 /** Returns full MSISDN for UI display (no masking). */
 export const maskPhone = (phone) => {
@@ -101,6 +103,12 @@ export const createPostbackRegister = (deps) => {
       await apiCallLogService.record(input);
     } catch (err) {
       console.warn(`postback api_call_logs write failed: ${err.message}`);
+    }
+    if (
+      input?.callType === ApiCallType.BILLING_CALLBACK ||
+      input?.callType === ApiCallType.VENDOR_POSTBACK
+    ) {
+      await appendPostbackHitSafe({ ...input, createdAt: new Date() });
     }
   };
 

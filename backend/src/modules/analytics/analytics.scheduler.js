@@ -1,5 +1,6 @@
 import { CronJob } from 'cron';
 import { analyticsService } from './analytics.service.js';
+import { dailyStatsService } from './daily-stats.service.js';
 
 let jobs = [];
 
@@ -11,7 +12,13 @@ export const startAnalyticsScheduler = () => {
     timeZone: 'Asia/Kolkata',
     start: true,
     onTick: async () => {
-      console.log('Running midnight IST analytics archive job');
+      console.log('Running midnight IST stats rollup + archive job');
+      try {
+        const rolled = await dailyStatsService.rollupRecent('Asia/Kolkata');
+        console.log('Daily stats rollup', rolled);
+      } catch (err) {
+        console.error(`Daily stats rollup failed: ${err.message}`);
+      }
       try {
         await analyticsService.archiveOldData();
       } catch (err) {
@@ -21,7 +28,7 @@ export const startAnalyticsScheduler = () => {
   });
 
   jobs = [midnightArchive];
-  console.log('Analytics scheduler started (daily archive at 00:05 IST)');
+  console.log('Analytics scheduler started (rollup + archive at 00:05 IST)');
   return jobs;
 };
 

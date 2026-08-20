@@ -3,6 +3,7 @@ import {
 } from '../../../database/entities/conversion-postback.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
+import { appendPostbackHitSafe } from './postback-day-report-file.js';
 
 const maskPhone = (phone) => {
   if (!phone) return undefined;
@@ -42,6 +43,7 @@ export const createPostbackCallback = (deps) => {
     logApiCall,
     registerPending,
     firePostback,
+    appendHit = appendPostbackHitSafe,
     logEvent = (visitId, type, payload) =>
       callAnalytics('logEvent', visitId, type, payload),
     setVisitPhone = (id, phone) => callAnalytics('setVisitPhone', id, phone),
@@ -51,11 +53,40 @@ export const createPostbackCallback = (deps) => {
    * Always store the inbound billing callback.
    * Recover conversion when click_id / msisdn exists in our system.
    * Unknown click_id, or msisdn-only not in system → success: false (still logged).
+   * Every query is written to the hit file, including skip / false / unmatched.
    */
-  const processOperatorCallback = async (query = {}) => {
+  const persistHit = async (query, result = {}) => {
+    const skipped = Boolean(result.skipped || result.vendorSkipped);
+    const success = result.success === true && !skipped;
+    let statusLabel = 'OK';
+    if (skipped) statusLabel = 'SKIPPED';
+    else if (result.success === false) statusLabel = 'FAILED';
+    await appendHit({
+      callType: ApiCallType.BILLING_CALLBACK,
+      msisdn: parseCallbackMsisdn(query) || null,
+      clickId: parseCallbackClickId(query) || null,
+      requestUrl: '/api/flow/callback',
+      requestBody: serializeBody({
+        query,
+        skipped,
+        success: result.success === true,
+        reason: result.reason || result.error || null,
+        id: result.id || null,
+      }),
+      responseStatus: 200,
+      success,
+      statusLabel,
+      errorMessage: result.reason || result.error || null,
+      query,
+      reason: result.reason || result.error || '',
+      createdAt: new Date(),
+    });
+  };
+
+  const processOperatorCallbackInner = async (query = {}) => {
     const incomingMsisdn = parseCallbackMsisdn(query);
     const clickId = parseCallbackClickId(query);
-    const status = String(query.status || 'active').toLowerCase();
+    const status = String(query.status ?? query.result ?? 'active').toLowerCase();
 
     const findPendingByMsisdn = async (msisdn) => {
       if (!msisdn) return null;
@@ -139,10 +170,6 @@ export const createPostbackCallback = (deps) => {
       return { success: false, skipped: true, reason };
     };
 
-    if (!incomingMsisdn && !clickId) {
-      return reject('msisdn or click_id required');
-    }
-
     const okStatuses = new Set([
       '',
       'active',
@@ -154,6 +181,10 @@ export const createPostbackCallback = (deps) => {
     ]);
     if (status && !okStatuses.has(status)) {
       return reject(`status=${status} ignored`);
+    }
+
+    if (!incomingMsisdn && !clickId) {
+      return reject('msisdn or click_id required');
     }
 
     const firePending = async (pending, extra = {}) => {
@@ -265,6 +296,27 @@ export const createPostbackCallback = (deps) => {
     }
 
     return reject('No pending callback');
+  };
+
+  const processOperatorCallback = async (query = {}) => {
+    let result = { success: false, skipped: true, reason: 'unprocessed' };
+    try {
+      result = await processOperatorCallbackInner(query);
+      return result;
+    } catch (err) {
+      result = {
+        success: false,
+        skipped: true,
+        reason: err?.message || 'callback error',
+      };
+      throw err;
+    } finally {
+      try {
+        await persistHit(query, result);
+      } catch (err) {
+        console.warn(`callback hit file write failed: ${err?.message || err}`);
+      }
+    }
   };
 
   return { processOperatorCallback };

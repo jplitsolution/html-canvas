@@ -3,6 +3,7 @@ import { partnersService } from './partners.service.js';
 import { postbackService } from './postback.service.js';
 import { writeDayReportFile } from './helpers/postback-day-report-file.js';
 import { formatDayReportCsv } from './helpers/postback-day-report.js';
+import { dailyStatsService } from '../analytics/daily-stats.service.js';
 
 export const partnersController = {
   listVendors: asyncHandler(async (req, res) => {
@@ -39,6 +40,11 @@ export const partnersController = {
     res.json(data);
   }),
 
+  postbacksStats: asyncHandler(async (req, res) => {
+    const data = await dailyStatsService.getReport(req.user.id, req.query || {});
+    res.json(data);
+  }),
+
   listPostbacks: asyncHandler(async (req, res) => {
     const data = await postbackService.listPostbacks(req.user.id, req.query || {});
     res.json(data);
@@ -56,17 +62,22 @@ export const partnersController = {
     const data = await postbackService.getDayReport(req.user.id, req.query || {});
     const format = String(req.query.format || 'json').toLowerCase();
     const range = { from: data.from || data.date, to: data.to || data.date };
+    const writeFile =
+      format !== 'json' ||
+      String(req.query.writeFile || '') === '1';
     let file = null;
     let csvFile = null;
     let fileError = null;
-    const csv = format === 'csv' ? formatDayReportCsv(data, data.timezone) : '';
-    try {
-      file = await writeDayReportFile(data.text, range);
-      if (format === 'csv') {
-        csvFile = await writeDayReportFile(csv, range, undefined, 'csv');
+    const csv = format === 'csv' || writeFile ? formatDayReportCsv(data, data.timezone) : '';
+    if (writeFile) {
+      try {
+        file = await writeDayReportFile(data.text, range);
+        if (format === 'csv') {
+          csvFile = await writeDayReportFile(csv, range, undefined, 'csv');
+        }
+      } catch (err) {
+        fileError = err?.message || 'Failed to write log file on server';
       }
-    } catch (err) {
-      fileError = err?.message || 'Failed to write log file on server';
     }
 
     if (format === 'csv') {

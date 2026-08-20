@@ -18,15 +18,41 @@ export const createPostbackForward = (deps) => {
     logApiCall,
   } = deps;
 
+    const logSkippedFire = async (row, reason) => {
+      if (!logApiCall) {
+        return { skipped: true, reason, id: row?.id };
+      }
+      await logApiCall({
+        visitId: row?.visitId || null,
+        campaignId: row?.campaignId || null,
+        msisdn: row?.msisdn || null,
+        rcid: row?.rcid || null,
+        clickId: row?.clickId || null,
+        callType: ApiCallType.VENDOR_POSTBACK,
+        requestUrl: row?.postbackUrl || '',
+        requestBody: serializeBody({
+          skipped: true,
+          reason,
+          postbackId: row?.id || null,
+          vendorId: row?.vendorId || null,
+        }),
+        responseStatus: null,
+        success: false,
+        errorMessage: reason,
+        statusLabel: 'SKIPPED',
+      });
+      return { skipped: true, reason, id: row?.id };
+    };
+
   const firePostback = async (postbackId) => {
     const row = await getPostbackRepo().findOne({
       where: { id: parseInt(postbackId, 10) },
     });
     if (!row) {
-      return { skipped: true, reason: 'postback not found' };
+      return logSkippedFire(null, 'postback not found');
     }
     if (row.status === ConversionPostbackStatus.SENT) {
-      return { skipped: true, reason: 'already sent', id: row.id };
+      return logSkippedFire(row, 'already sent');
     }
 
     let vendorCode = '';
@@ -41,6 +67,7 @@ export const createPostbackForward = (deps) => {
 
     if (!String(row.postbackUrl || '').trim()) {
       // Conversion row stays — vendor URL is optional for storing the callback.
+      await logSkippedFire(row, 'no postback_url on vendor');
       return {
         success: true,
         id: row.id,

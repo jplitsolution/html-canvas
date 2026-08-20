@@ -40,6 +40,31 @@ export const publicRateLimit = async (req, res, next) => {
       const retryAfter = Math.ceil((record.resetTime - now) / 1000);
       res.setHeader('Retry-After', String(retryAfter));
 
+      if (String(path).includes('/callback')) {
+        try {
+          const { appendPostbackHitSafe } = await import(
+            '../../modules/partners/helpers/postback-day-report-file.js'
+          );
+          await appendPostbackHitSafe({
+            callType: 'billing_callback',
+            requestUrl: path.split('?')[0] || '/api/flow/callback',
+            requestBody: JSON.stringify({
+              query: req.query || {},
+              skipped: true,
+              reason: 'rate limited',
+            }),
+            success: false,
+            statusLabel: 'SKIPPED',
+            errorMessage: 'rate limited',
+            query: req.query || {},
+            reason: 'rate limited',
+            createdAt: new Date(),
+          });
+        } catch (err) {
+          console.warn(`callback rate-limit hit file write failed: ${err.message}`);
+        }
+      }
+
       const visitId = req.body?.visitId || req.query?.visitId;
       if (visitId) {
         try {

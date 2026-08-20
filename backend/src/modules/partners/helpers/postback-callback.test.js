@@ -45,7 +45,7 @@ const pendingRow = {
 };
 
 const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } = {}) => {
-  const calls = { registerPending: [], firePostback: [], logApiCall: [] };
+  const calls = { registerPending: [], firePostback: [], logApiCall: [], appendHit: [] };
   const qbState = { whereClick: false };
 
   const getPostbackRepo = () => ({
@@ -74,6 +74,9 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
       getVisitRepo,
       logApiCall: async (input) => {
         calls.logApiCall.push(input);
+      },
+      appendHit: async (input) => {
+        calls.appendHit.push(input);
       },
       logEvent: async () => {},
       setVisitPhone: async () => {},
@@ -190,5 +193,37 @@ describe('processOperatorCallback shapes', () => {
     });
     assert.equal(out.id, 77);
     assert.deepEqual(calls.firePostback, [77]);
+  });
+
+  it('always writes the hit file for skip / false / unmatched queries', async () => {
+    const { deps, calls } = makeDeps();
+    const { processOperatorCallback } = createPostbackCallback(deps);
+
+    await processOperatorCallback({});
+    await processOperatorCallback({ status: 'false' });
+    await processOperatorCallback({ click_id: 'unknown-click' });
+    await processOperatorCallback({ msisdn: '254700000099' });
+
+    assert.equal(calls.appendHit.length, 4);
+    for (const hit of calls.appendHit) {
+      assert.equal(hit.callType, 'billing_callback');
+      assert.equal(hit.success, false);
+      assert.ok(['SKIPPED', 'FAILED'].includes(hit.statusLabel));
+      assert.ok(hit.query);
+    }
+    const empty = calls.appendHit.find((h) => !h.query?.status && !h.query?.click_id && !h.query?.msisdn);
+    const statusFalse = calls.appendHit.find((h) => String(h.query?.status) === 'false');
+    const unknownClick = calls.appendHit.find((h) => h.query?.click_id === 'unknown-click');
+    const unknownMsisdn = calls.appendHit.find((h) => h.query?.msisdn === '254700000099');
+
+    assert.ok(empty);
+    assert.match(String(empty.reason), /msisdn or click_id/);
+    assert.ok(statusFalse);
+    assert.equal(statusFalse.statusLabel, 'SKIPPED');
+    assert.match(String(statusFalse.reason), /status=false/);
+    assert.ok(unknownClick);
+    assert.match(String(unknownClick.reason), /No visit for click_id/);
+    assert.ok(unknownMsisdn);
+    assert.match(String(unknownMsisdn.reason), /msisdn not in system/);
   });
 });

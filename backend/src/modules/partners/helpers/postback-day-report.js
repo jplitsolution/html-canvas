@@ -11,9 +11,13 @@ export const DAY_REPORT_HE_LOG_TYPES = [
   ApiCallType.RESOLVE_MSISDN,
 ];
 
-export const DAY_REPORT_LOG_TYPES = [
+export const DAY_REPORT_HIT_TYPES = [
   ApiCallType.BILLING_CALLBACK,
   ApiCallType.VENDOR_POSTBACK,
+];
+
+export const DAY_REPORT_LOG_TYPES = [
+  ...DAY_REPORT_HIT_TYPES,
   ApiCallType.CHECKSUB,
   ApiCallType.SUBSCRIBE,
   ...DAY_REPORT_HE_LOG_TYPES,
@@ -40,6 +44,12 @@ export function todayYmd(timezone, now = new Date()) {
     month: '2-digit',
     day: '2-digit',
   }).format(now);
+}
+
+export function ymdInZone(date, timezone) {
+  if (!date) return '';
+  const formatted = formatInZone(date, timezone);
+  return formatted ? formatted.slice(0, 10) : '';
 }
 
 export function formatInZone(date, timezone) {
@@ -100,6 +110,107 @@ export function parseLogJson(value) {
   } catch {
     return null;
   }
+}
+
+export function isUnmatchedBillingLog(log) {
+  if (!log || log.callType !== ApiCallType.BILLING_CALLBACK) return false;
+  const body = parseLogJson(log.requestBody);
+  if (body?.matched === false || body?.action === 'unmatched') return true;
+  return log.success === false;
+}
+
+export function buildCallbackHit(log, timezone) {
+  const body = parseLogJson(log.requestBody) || {};
+  const msisdn = digitsMsisdn(log.msisdn || body.msisdn);
+  const unmatched = isUnmatchedBillingLog(log);
+  const skipped =
+    String(log.statusLabel || '').toUpperCase() === 'SKIPPED' ||
+    body.skipped === true;
+  const ok = log.success !== false && !unmatched && !skipped;
+  let statusLabel = log.statusLabel || null;
+  if (!statusLabel) {
+    if (unmatched) statusLabel = 'UNMATCHED';
+    else if (log.success === false) statusLabel = 'FAILED';
+    else statusLabel = 'OK';
+  }
+  return {
+    id: log.id || null,
+    at: log.createdAt || null,
+    date: ymdInZone(log.createdAt, timezone),
+    callType: log.callType,
+    ok,
+    unmatched,
+    skipped,
+    msisdn,
+    msisdnReceived: Boolean(msisdn),
+    clickId: log.clickId || body.clickId || null,
+    rcid: log.rcid || null,
+    visitId: log.visitId || null,
+    campaignId: log.campaignId || null,
+    http: log.responseStatus ?? null,
+    url: log.requestUrl || '',
+    reason: body.reason || log.errorMessage || '',
+    error: log.errorMessage || '',
+    statusLabel,
+    query: log.query || body.query || null,
+  };
+}
+
+export function summarizeHits(hits = []) {
+  const summary = {
+    hitCount: hits.length,
+    billingHits: 0,
+    vendorHits: 0,
+    hitOk: 0,
+    hitFailed: 0,
+    unmatched: 0,
+    withMsisdn: 0,
+    withoutMsisdn: 0,
+  };
+  for (const hit of hits) {
+    if (hit.callType === ApiCallType.BILLING_CALLBACK) summary.billingHits += 1;
+    else if (hit.callType === ApiCallType.VENDOR_POSTBACK) summary.vendorHits += 1;
+    if (hit.unmatched) summary.unmatched += 1;
+    else if (hit.skipped || String(hit.statusLabel || '').toUpperCase() === 'SKIPPED') {
+      summary.hitFailed += 1;
+    } else if (hit.ok) summary.hitOk += 1;
+    else summary.hitFailed += 1;
+    if (hit.msisdnReceived) summary.withMsisdn += 1;
+    else summary.withoutMsisdn += 1;
+  }
+  return summary;
+}
+
+export function formatHitLogLine(hit, timezone) {
+  const when = formatInZone(hit.at || hit.createdAt || new Date(), timezone) || '—';
+  const type = String(hit.callType || 'hit').padEnd(18);
+  const status = String(
+    hit.statusLabel || (hit.success === false ? 'FAILED' : 'OK'),
+  ).padEnd(10);
+  const number = hit.msisdn || hit.msisdnReceived
+    ? `msisdn=${hit.msisdn || 'YES'}`
+    : 'msisdn=NO';
+  const click = `click=${hit.clickId || '—'}`;
+  const visit = hit.visitId ? `visit=#${hit.visitId}` : 'visit=—';
+  const http =
+    hit.http != null || hit.responseStatus != null
+      ? `HTTP ${hit.http ?? hit.responseStatus}`
+      : '';
+  const reason = hit.reason || hit.errorMessage || hit.error || '';
+  let queryPart = '';
+  if (hit.query && typeof hit.query === 'object') {
+    try {
+      queryPart = `query=${JSON.stringify(hit.query).slice(0, 400)}`;
+    } catch {
+      queryPart = '';
+    }
+  } else if (hit.query) {
+    queryPart = `query=${String(hit.query).slice(0, 400)}`;
+  }
+  return [when, type, status, number, click, visit, http, reason, queryPart]
+    .filter((part) => part !== '')
+    .join('  ')
+    .trimEnd();
 }
 
 /** Token/API HE did not resolve MSISDN and we sent the user to CG / fail URL. */
@@ -183,6 +294,10 @@ export function buildNumberStory({
     vendorFireStatus = ConversionPostbackStatus.PENDING;
   }
 
+  const unmatchedLog = billingLogs.find((l) => isUnmatchedBillingLog(l));
+  const unmatchedBody = parseLogJson(unmatchedLog?.requestBody);
+  const unmatchedReason = unmatchedBody?.reason || unmatchedLog?.errorMessage || '';
+
   let outcome = 'not_queued';
   let outcomeLabel =
     'NOT QUEUED — no conversion_postbacks row. Vendor CPA was never armed for this number.';
@@ -191,6 +306,11 @@ export function buildNumberStory({
     outcome = 'he_fail_cg';
     outcomeLabel =
       'NO MSISDN → CG — HE token/resolve did not return a number. User was redirected to the CG / fail URL. No postback queued.';
+  } else if (!queued && unmatchedLog) {
+    outcome = 'callback_unmatched';
+    outcomeLabel = unmatchedReason
+      ? `UNMATCHED CALLBACK — operator hit /callback but ${unmatchedReason}.`
+      : 'UNMATCHED CALLBACK — operator hit /callback; click_id / msisdn was not in our system. Vendor CPA was not fired.';
   } else if (!queued && billingReceived) {
     outcome = 'callback_no_row';
     outcomeLabel =
@@ -307,6 +427,9 @@ export function buildNumberStory({
     vendorError: postback?.errorMessage || latestVendorLog?.errorMessage || '',
     outcome,
     outcomeLabel,
+    unmatched: Boolean(unmatchedLog),
+    unmatchedReason,
+    msisdnReceived: Boolean(digits),
     timeline,
   };
 }
@@ -323,6 +446,7 @@ export function summarizeStories(numbers) {
     skipped: 0,
     notQueued: 0,
     callbackNoRow: 0,
+    callbackUnmatched: 0,
     complete: 0,
     waitingCallback: 0,
     fireFailed: 0,
@@ -331,6 +455,11 @@ export function summarizeStories(numbers) {
   for (const n of numbers) {
     if (n.outcome === 'he_fail_cg') {
       summary.heFailCg += 1;
+      continue;
+    }
+    if (n.outcome === 'callback_unmatched') {
+      summary.callbackUnmatched += 1;
+      summary.billingReceived += 1;
       continue;
     }
     if (n.queued) summary.queued += 1;
@@ -349,6 +478,7 @@ export function summarizeStories(numbers) {
     else if (n.outcome === 'waiting_callback') summary.waitingCallback += 1;
     else if (n.outcome === 'fire_failed') summary.fireFailed += 1;
     else if (n.outcome === 'callback_no_row') summary.callbackNoRow += 1;
+    else if (n.outcome === 'callback_unmatched') summary.callbackUnmatched += 1;
   }
   return summary;
 }
@@ -388,28 +518,64 @@ export function formatDayReportText(report, timezone) {
   lines.push(`  Waiting for callback     : ${summary.waitingCallback}`);
   lines.push(`  Fire failed              : ${summary.fireFailed}`);
   lines.push(`  Callback with no queue   : ${summary.callbackNoRow}`);
+  lines.push(`  Unmatched callbacks      : ${summary.callbackUnmatched || 0}`);
   lines.push(`  Not queued at all        : ${summary.notQueued}`);
   lines.push(`  No MSISDN → CG redirect  : ${summary.heFailCg || 0}`);
+  lines.push('');
+  lines.push('EVERY HIT (callback + vendor fire, pass or fail)');
+  lines.push(`  Hits in this file        : ${summary.hitCount || 0}`);
+  lines.push(`  Billing callback hits    : ${summary.billingHits || 0}`);
+  lines.push(`  Vendor postback hits     : ${summary.vendorHits || 0}`);
+  lines.push(`  OK                       : ${summary.hitOk || 0}`);
+  lines.push(`  FAILED                   : ${summary.hitFailed || 0}`);
+  lines.push(`  UNMATCHED                : ${summary.unmatched || 0}`);
+  lines.push(`  Number received          : ${summary.withMsisdn || 0}`);
+  lines.push(`  Number missing           : ${summary.withoutMsisdn || 0}`);
   lines.push('');
   lines.push('HOW TO READ EACH NUMBER');
   lines.push('  1. QUEUED   — did we create a conversion_postbacks row?');
   lines.push('  2. RECEIVED — did billing/operator hit /api/flow/callback?');
   lines.push('  3. FIRED    — did we GET the vendor CPA postback URL?');
+  lines.push('  NUMBER    — did the callback include an MSISDN?');
   lines.push('  HE fail → CG — token/resolve returned no number; user sent to CG URL.');
   lines.push('');
 
+  const hits = report.hits || [];
+  if (hits.length) {
+    lines.push(bar);
+    lines.push('HIT LOG  (one line per callback / vendor fire)');
+    lines.push(bar);
+    let lastDate = '';
+    for (const hit of hits) {
+      const day = hit.date || ymdInZone(hit.at, tz);
+      if (day && day !== lastDate) {
+        lines.push('');
+        lines.push(`  --- ${day} ---`);
+        lastDate = day;
+      }
+      lines.push(`  ${formatHitLogLine(hit, tz)}`);
+    }
+    lines.push('');
+  }
+
   const numbers = report.numbers || [];
-  if (!numbers.length) {
+  if (!numbers.length && !hits.length) {
     lines.push(thin);
     lines.push('No postback / callback / vendor-fire activity for this date.');
     lines.push(thin);
     return `${lines.join('\n')}\n`;
   }
+  if (!numbers.length) {
+    return `${lines.join('\n')}\n`;
+  }
 
   for (const n of numbers) {
     lines.push(bar);
-    lines.push(`MSISDN  ${n.msisdn || (n.outcome === 'he_fail_cg' ? '(no MSISDN)' : '(unknown)')}`);
+    lines.push(
+      `MSISDN  ${n.msisdn || (n.outcome === 'he_fail_cg' || !n.msisdnReceived ? '(no MSISDN)' : '(unknown)')}`,
+    );
     lines.push(bar);
+    lines.push(`  0. NUMBER     ${yn(n.msisdnReceived)}  ${n.msisdn || '—'}`);
     lines.push(
       `  1. QUEUED     ${yn(n.queued)}  ${formatInZone(n.queuedAt, tz) || '—'}  ${
         n.postbackId ? `row#${n.postbackId}` : 'no row'
@@ -513,6 +679,8 @@ export function formatDayReportCsv(report, timezone) {
     'verdict',
     'cg_url',
     'he_error',
+    'msisdn_received',
+    'unmatched',
   ];
   const rows = [headers.join(',')];
   for (const n of report.numbers || []) {
@@ -541,6 +709,8 @@ export function formatDayReportCsv(report, timezone) {
         n.outcomeLabel || '',
         n.cgUrl || '',
         n.heError || '',
+        n.msisdnReceived ? 'YES' : 'NO',
+        n.unmatched ? 'YES' : 'NO',
       ]
         .map(csvCell)
         .join(','),
@@ -550,26 +720,30 @@ export function formatDayReportCsv(report, timezone) {
 }
 
 export function emptyDayReport({ date, timezone, from, to, rangeClamped }) {
+  const summary = { ...summarizeStories([]), ...summarizeHits([]) };
+  const generatedAt = new Date().toISOString();
   return {
     date,
     timezone,
     from,
     to,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     truncated: false,
     rangeClamped: Boolean(rangeClamped),
-    summary: summarizeStories([]),
+    summary,
     numbers: [],
+    hits: [],
     text: formatDayReportText(
       {
         date,
         timezone,
         from,
         to,
-        generatedAt: new Date().toISOString(),
+        generatedAt,
         truncated: false,
-        summary: summarizeStories([]),
+        summary,
         numbers: [],
+        hits: [],
       },
       timezone,
     ),
