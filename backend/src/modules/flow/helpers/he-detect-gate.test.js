@@ -7,6 +7,7 @@ describe('shouldRunHeOnDetect', () => {
     assert.equal(shouldRunHeOnDetect('HEADER_INJECTION'), true);
     assert.equal(shouldRunHeOnDetect('MSISDN_ONLY'), true);
     assert.equal(shouldRunHeOnDetect('BOTH'), true);
+    assert.equal(shouldRunHeOnDetect('UNIVERSE_DCB'), true);
     assert.equal(shouldRunHeOnDetect(null), true);
     assert.equal(shouldRunHeOnDetect(undefined), true);
   });
@@ -23,6 +24,7 @@ describe('shouldRunHeOnDetect', () => {
       false,
     );
     assert.equal(shouldRunHeOnDetect('BOTH', { runHe: false }), false);
+    assert.equal(shouldRunHeOnDetect('UNIVERSE_DCB', { runHe: false }), false);
   });
 
   it('keeps HE on when startConfig.runHe=true', () => {

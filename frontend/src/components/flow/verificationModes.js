@@ -27,6 +27,12 @@ export const VERIFICATION_MODES = [
     pathHint: 'HE → HOME / OTP → HOME → outcomes',
   },
   {
+    id: 'UNIVERSE_DCB',
+    label: 'Universe Telecom DCB',
+    hint: 'Universe entitlement check with manual MSISDN fallback, plan-bound PIN, and activation polling.',
+    pathHint: 'HE/manual check → plan → PIN → activation status → outcomes',
+  },
+  {
     id: 'NONE',
     label: 'None (null / CG redirect)',
     hint: 'No HE/OTP. If a CG URL is set → redirect there on landing with click_id.',
@@ -71,14 +77,8 @@ function outcomeEdgesFrom(source) {
 export const DEFAULT_FLOWS = {
   HEADER_INJECTION: {
     entryPage: 'HOME',
-    nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
-      ...OUTCOME_NODES,
-    ],
-    edges: [
-      flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'),
-      ...outcomeEdgesFrom('HOME'),
-    ],
+    nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }, ...OUTCOME_NODES],
+    edges: [flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'), ...outcomeEdgesFrom('HOME')],
   },
   OTP_ONLY: {
     entryPage: 'OTP',
@@ -87,12 +87,22 @@ export const DEFAULT_FLOWS = {
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
       ...OUTCOME_NODES,
     ],
+    edges: [flowEdge('OTP', 'HOME', 'OTP_VERIFIED'), ...outcomeEdgesFrom('HOME')],
+  },
+  BOTH: {
+    entryPage: 'HOME',
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
+      { id: 'OTP', pageType: 'OTP', position: { x: 320, y: 60 } },
+      ...OUTCOME_NODES,
+    ],
     edges: [
+      flowEdge('HOME', 'OTP', 'HEADER_UNRESOLVED'),
       flowEdge('OTP', 'HOME', 'OTP_VERIFIED'),
       ...outcomeEdgesFrom('HOME'),
     ],
   },
-  BOTH: {
+  UNIVERSE_DCB: {
     entryPage: 'HOME',
     nodes: [
       { id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } },
@@ -125,10 +135,7 @@ export function normalizeAfterIdentity(afterIdentity, afterOtp) {
 }
 
 function otpBlockErrorEdges() {
-  return [
-    flowEdge('OTP', 'BLOCKED', 'BLOCKED'),
-    flowEdge('OTP', 'ERROR', 'ERROR'),
-  ]
+  return [flowEdge('OTP', 'BLOCKED', 'BLOCKED'), flowEdge('OTP', 'ERROR', 'ERROR')]
 }
 
 /**
@@ -183,11 +190,7 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
         version: 1,
         entryPage: 'HOME',
         startConfig: defaultStartConfig('OTP_ONLY'),
-        nodes: [
-          homeNode,
-          otpNode,
-          ...outcomes.filter((n) => n.id !== 'INPROGRESS' && n.id !== 'LOW_BALANCE'),
-        ],
+        nodes: [homeNode, otpNode, ...outcomes.filter((n) => n.id !== 'INPROGRESS' && n.id !== 'LOW_BALANCE')],
         edges: [
           flowEdge('HOME', 'OTP', 'DEFAULT'),
           flowEdge('OTP', 'THANKYOU', 'OTP_VERIFIED'),
@@ -202,11 +205,7 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
         entryPage: 'OTP',
         startConfig: defaultStartConfig('OTP_ONLY'),
         nodes: [otpNode, homeNode, ...outcomes],
-        edges: [
-          flowEdge('OTP', afterOtpTarget, 'OTP_VERIFIED'),
-          ...outcomeEdgesFrom('HOME'),
-          ...otpBlockErrorEdges(),
-        ],
+        edges: [flowEdge('OTP', afterOtpTarget, 'OTP_VERIFIED'), ...outcomeEdgesFrom('HOME'), ...otpBlockErrorEdges()],
       }
     }
     return {
@@ -225,10 +224,7 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
   }
 
   if (normalized === 'HEADER_INJECTION') {
-    const edges = [
-      flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'),
-      ...outcomeEdgesFrom('HOME'),
-    ]
+    const edges = [flowEdge('HOME', 'ERROR', 'HEADER_UNRESOLVED'), ...outcomeEdgesFrom('HOME')]
     if (skipHome) {
       edges.unshift(flowEdge('HOME', 'THANKYOU', 'HEADER_RESOLVED'))
     }
@@ -258,6 +254,20 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
       startConfig: defaultStartConfig('BOTH'),
       nodes: [homeNode, otpNode, ...outcomes],
       edges,
+    }
+  }
+
+  if (normalized === 'UNIVERSE_DCB') {
+    return {
+      version: 1,
+      entryPage: 'HOME',
+      startConfig: defaultStartConfig('UNIVERSE_DCB'),
+      nodes: [homeNode, otpNode, ...outcomes],
+      edges: [
+        flowEdge('HOME', 'OTP', 'HEADER_UNRESOLVED'),
+        flowEdge('OTP', 'HOME', 'OTP_VERIFIED'),
+        ...outcomeEdgesFrom('HOME'),
+      ],
     }
   }
 
@@ -297,26 +307,20 @@ function resolveEntryPage(config) {
 export function resolveAfterIdentityTarget(flowConfig) {
   const edges = flowConfig?.edges || []
   const otpVerified = edges.find(
-    (e) =>
-      (e.source === 'OTP' || e.source === 'otp') &&
-      String(e.condition || '').toUpperCase() === 'OTP_VERIFIED',
+    (e) => (e.source === 'OTP' || e.source === 'otp') && String(e.condition || '').toUpperCase() === 'OTP_VERIFIED'
   )
   if (otpVerified) {
     const target = String(otpVerified.target || '').toUpperCase()
     if (target === 'THANKYOU' || target === 'HOME' || target === 'CONFIRM') return target
   }
   const heResolved = edges.find(
-    (e) =>
-      (e.source === 'HOME' || e.source === 'home') &&
-      String(e.condition || '').toUpperCase() === 'HEADER_RESOLVED',
+    (e) => (e.source === 'HOME' || e.source === 'home') && String(e.condition || '').toUpperCase() === 'HEADER_RESOLVED'
   )
   if (heResolved) {
     const target = String(heResolved.target || '').toUpperCase()
     if (target === 'THANKYOU' || target === 'HOME' || target === 'CONFIRM') return target
   }
-  const hasConfirm = (flowConfig?.nodes || []).some(
-    (n) => n.pageType === 'CONFIRM' || n.id === 'CONFIRM',
-  )
+  const hasConfirm = (flowConfig?.nodes || []).some((n) => n.pageType === 'CONFIRM' || n.id === 'CONFIRM')
   return hasConfirm ? 'CONFIRM' : 'HOME'
 }
 
@@ -332,9 +336,7 @@ export function resolveAfterOtpTarget(flowConfig) {
  */
 export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectUrl } = {}) {
   const mode = normalizeModeId(verificationMode)
-  const modeMeta =
-    VERIFICATION_MODES.find((m) => m.id === mode) ||
-    VERIFICATION_MODES.find((m) => m.id === 'BOTH')
+  const modeMeta = VERIFICATION_MODES.find((m) => m.id === mode) || VERIFICATION_MODES.find((m) => m.id === 'BOTH')
 
   if (mode === 'OTP_ONLY' && isApiExposeEntry(flowConfig?.entryPage)) {
     return {
@@ -351,9 +353,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     }
   }
 
-  const config = flowConfig?.nodes?.length
-    ? flowConfig
-    : DEFAULT_FLOWS[mode] || DEFAULT_FLOWS.BOTH
+  const config = flowConfig?.nodes?.length ? flowConfig : DEFAULT_FLOWS[mode] || DEFAULT_FLOWS.BOTH
 
   if (mode === 'NONE') {
     return {
@@ -382,9 +382,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     return n?.pageType || id
   }
 
-  const prioritySources = [entryPage, 'HOME', 'OTP', 'CONFIRM'].filter(
-    (v, i, arr) => arr.indexOf(v) === i,
-  )
+  const prioritySources = [entryPage, 'HOME', 'OTP', 'CONFIRM'].filter((v, i, arr) => arr.indexOf(v) === i)
   const edges = []
   for (const source of prioritySources) {
     for (const e of config.edges || []) {
@@ -414,9 +412,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
       if (visited.has(type)) continue
       if (['INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'].includes(type)) continue
       const skipToThankYou = edges.some(
-        (ed) =>
-          ed.target === 'THANKYOU' &&
-          (ed.condition === 'OTP_VERIFIED' || ed.condition === 'HEADER_RESOLVED'),
+        (ed) => ed.target === 'THANKYOU' && (ed.condition === 'OTP_VERIFIED' || ed.condition === 'HEADER_RESOLVED')
       )
       if (type === 'THANKYOU' && !skipToThankYou) continue
       visited.add(type)
@@ -439,10 +435,12 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     steps,
     edges,
     note:
-      entryPage === 'OTP'
-        ? 'Landing opens OTP directly. After PIN, HOME shows pack / subscribe CTAs unless Skip HOME is on.'
-        : entryPage === 'API_EXPOSE'
-          ? 'API mediator only — no WAP pages.'
-          : 'Pack / subscribe CTAs live on HOME. Canvas “Go to page / URL / Priority” bypasses this path.',
+      mode === 'UNIVERSE_DCB'
+        ? 'Universe DCB uses server-directed manual MSISDN, purchase type, PIN, and activation-polling stages.'
+        : entryPage === 'OTP'
+          ? 'Landing opens OTP directly. After PIN, HOME shows pack / subscribe CTAs unless Skip HOME is on.'
+          : entryPage === 'API_EXPOSE'
+            ? 'API mediator only — no WAP pages.'
+            : 'Pack / subscribe CTAs live on HOME. Canvas “Go to page / URL / Priority” bypasses this path.',
   }
 }

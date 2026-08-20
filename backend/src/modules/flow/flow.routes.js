@@ -11,6 +11,16 @@ router.get('/entry', flowController.entry);
 router.get('/page', flowController.page);
 router.post('/transition', publicRateLimit, flowController.transition);
 router.post('/priority-check', publicRateLimit, flowController.priorityCheck);
+router.get('/dcb/config', publicRateLimit, flowController.dcbConfig);
+router.post(
+  '/dcb/manual-check',
+  publicRateLimit,
+  flowController.dcbManualCheck,
+);
+router.post('/dcb/pincode', publicRateLimit, flowController.dcbPincode);
+router.post('/dcb/confirm', publicRateLimit, flowController.dcbConfirm);
+router.get('/dcb/status', publicRateLimit, flowController.dcbStatus);
+router.post('/dcb/status', publicRateLimit, flowController.dcbStatus);
 router.get('/callback', publicRateLimit, flowController.callback);
 router.post('/callback', publicRateLimit, flowController.callback);
 router.post(

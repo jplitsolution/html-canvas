@@ -19,6 +19,7 @@ import {
 
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',
+  'UNIVERSE_DCB',
   'OTP_ONLY',
   'BOTH',
   'NONE',
@@ -222,6 +223,32 @@ export const createFlowEngineService = () => {
         options.funnelLayout,
         mode,
       );
+    }
+
+    if (mode === 'UNIVERSE_DCB') {
+      return {
+        version: 1,
+        entryPage: CampaignPageType.HOME,
+        startConfig: defaultStartConfig(mode),
+        nodes: [
+          node(CampaignPageType.HOME, 40, 160),
+          node(CampaignPageType.OTP, 320, 60),
+          outcomeNode(CampaignPageType.THANKYOU, 40),
+          outcomeNode(CampaignPageType.INPROGRESS, 160),
+          outcomeNode(CampaignPageType.LOW_BALANCE, 280),
+          outcomeNode(CampaignPageType.BLOCKED, 400),
+          outcomeNode(CampaignPageType.ERROR, 520),
+        ],
+        edges: [
+          edge(
+            CampaignPageType.HOME,
+            CampaignPageType.OTP,
+            'HEADER_UNRESOLVED',
+          ),
+          edge(CampaignPageType.OTP, CampaignPageType.HOME, 'OTP_VERIFIED'),
+          ...outcomeEdgesFrom(CampaignPageType.HOME),
+        ],
+      };
     }
 
     const nodes = [

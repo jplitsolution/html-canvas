@@ -65,6 +65,12 @@ export const ApiConfigSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
+    /** Universe Telecom DCB provider, endpoint and response-normalizer config. */
+    dcbConfigJson: {
+      name: 'dcb_config_json',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

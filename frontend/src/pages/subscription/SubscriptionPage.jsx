@@ -11,27 +11,19 @@ import SubscriptionOverlays from './SubscriptionOverlays'
 import { isHeSuppressedFunnelPage } from './flowHelpers'
 import { useFlowPages } from './useFlowPages'
 import { useFlowSession } from './useFlowSession'
+import { useDcbStatusPoll } from './useDcbStatusPoll'
 import { useHeDetect } from './useHeDetect'
 import { useShadowInteractions } from './useShadowInteractions'
 
-function deriveOverlayFlags({
-  phoneResolving,
-  heExitPending,
-  heFunnelSuppressed,
-  pageData,
-  booting,
-  error,
-}) {
+function deriveOverlayFlags({ phoneResolving, heExitPending, heFunnelSuppressed, pageData, booting, error }) {
   const hideHomeForHe =
     phoneResolving ||
     heExitPending ||
-    (heFunnelSuppressed &&
-      (!pageData || isHeSuppressedFunnelPage(pageData?.pageType)))
+    (heFunnelSuppressed && (!pageData || isHeSuppressedFunnelPage(pageData?.pageType)))
   const showBootSpinner = (booting && !pageData) || hideHomeForHe
   const showFatalError = Boolean(error && !pageData && !hideHomeForHe && !(booting && !pageData))
   const notAvailable =
-    showFatalError &&
-    (/not available|not active|inactive/i.test(error) || error === 'This offer is not available')
+    showFatalError && (/not available|not active|inactive/i.test(error) || error === 'This offer is not available')
 
   return { hideHomeForHe, showBootSpinner, showFatalError, notAvailable }
 }
@@ -45,11 +37,8 @@ function SubscriptionPage() {
   // - tracking_campid = ours (BF-OBF-11) for resolve
   // Legacy: only campid that looks like our tracking id → treat as tracking.
   const urlCampidRaw = searchParams.get('campid') || ''
-  const urlTrackingRaw =
-    searchParams.get('tracking_campid') || searchParams.get('trackingCampid') || ''
-  const looksLikeOurs =
-    /^[A-Z0-9]+-[A-Z0-9]+-\d+$/i.test(urlCampidRaw.trim()) ||
-    /^\d+$/.test(urlCampidRaw.trim())
+  const urlTrackingRaw = searchParams.get('tracking_campid') || searchParams.get('trackingCampid') || ''
+  const looksLikeOurs = /^[A-Z0-9]+-[A-Z0-9]+-\d+$/i.test(urlCampidRaw.trim()) || /^\d+$/.test(urlCampidRaw.trim())
   let trackingCampid = urlTrackingRaw
   let campid = urlCampidRaw
   if (!trackingCampid && looksLikeOurs) {
@@ -199,6 +188,18 @@ function SubscriptionPage() {
     transitionLockRef,
   })
 
+  useDcbStatusPoll({
+    pageData,
+    country,
+    operator,
+    campid,
+    trackingCampid,
+    visitIdRef,
+    phoneRef,
+    cachePage,
+    loadPage,
+  })
+
   useShadowInteractions({
     hostRef,
     pageData,
@@ -233,9 +234,7 @@ function SubscriptionPage() {
       <div className="min-h-screen flex items-center justify-center bg-bg-base p-6">
         <div className="text-center max-w-md">
           <h1 className="text-lg font-semibold text-fg mb-2">Invalid subscription URL</h1>
-          <p className="text-sm text-fg-muted">
-            Use: /subscription?country=India&amp;operator=Zain
-          </p>
+          <p className="text-sm text-fg-muted">Use: /subscription?country=India&amp;operator=Zain</p>
           <p className="text-xs text-fg-subtle mt-2">
             Phone and pack are handled on the subscription pages automatically.
           </p>

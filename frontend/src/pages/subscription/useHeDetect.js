@@ -164,6 +164,8 @@ function useHeDetect({
           visitId: heVisitId,
           clickId: heClickId,
           rcid: heRcid,
+          verificationMode,
+          flowContext,
         } = result || {}
 
         // Visit-first: store our click_id / visitId from detect so /page reuses them.
@@ -265,6 +267,25 @@ function useHeDetect({
         }
 
         if (resolved) {
+          if (
+            String(verificationMode || flowContext?.verificationMode || '').toUpperCase() ===
+            'UNIVERSE_DCB'
+          ) {
+            try {
+              const sessionKey = `tc_session_${country}_${operator}`
+              const saved = JSON.parse(sessionStorage.getItem(sessionKey) || '{}')
+              sessionStorage.setItem(
+                sessionKey,
+                JSON.stringify({
+                  ...saved,
+                  msisdnSource: 'HE',
+                  transactionChannel: 'HE',
+                })
+              )
+            } catch {
+              /* session persistence is best effort */
+            }
+          }
           phoneRef.current = resolved
           setPhone(resolved)
           persistPhone(resolved)

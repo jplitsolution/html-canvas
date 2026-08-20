@@ -27,6 +27,13 @@ export function defaultStartConfig(mode) {
       runChecksub: m === 'OTP_ONLY',
     }
   }
+  if (m === 'UNIVERSE_DCB') {
+    return {
+      runHe: true,
+      runBlocklist: true,
+      runChecksub: true,
+    }
+  }
   // HEADER_INJECTION / BOTH
   return {
     runHe: true,
@@ -40,30 +47,18 @@ export function normalizeStartConfig(raw, mode) {
   if (!raw || typeof raw !== 'object') return { ...fallback }
   return {
     runHe: typeof raw.runHe === 'boolean' ? raw.runHe : fallback.runHe,
-    runBlocklist:
-      typeof raw.runBlocklist === 'boolean'
-        ? raw.runBlocklist
-        : fallback.runBlocklist,
-    runChecksub:
-      typeof raw.runChecksub === 'boolean'
-        ? raw.runChecksub
-        : fallback.runChecksub,
+    runBlocklist: typeof raw.runBlocklist === 'boolean' ? raw.runBlocklist : fallback.runBlocklist,
+    runChecksub: typeof raw.runChecksub === 'boolean' ? raw.runChecksub : fallback.runChecksub,
   }
 }
 
 /** Strip START/END from persisted page graph (they are visual + startConfig only). */
 export function stripMetaNodes(flowConfig) {
   if (!flowConfig) return flowConfig
-  const nodes = (flowConfig.nodes || []).filter(
-    (n) => !isMetaPageType(n.pageType) && !isMetaNodeId(n.id),
-  )
+  const nodes = (flowConfig.nodes || []).filter((n) => !isMetaPageType(n.pageType) && !isMetaNodeId(n.id))
   const nodeIds = new Set(nodes.map((n) => n.id))
   const edges = (flowConfig.edges || []).filter(
-    (e) =>
-      nodeIds.has(e.source) &&
-      nodeIds.has(e.target) &&
-      !isMetaNodeId(e.source) &&
-      !isMetaNodeId(e.target),
+    (e) => nodeIds.has(e.source) && nodeIds.has(e.target) && !isMetaNodeId(e.source) && !isMetaNodeId(e.target)
   )
   return { ...flowConfig, nodes, edges }
 }
@@ -110,24 +105,11 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
     kind: 'end',
   }
 
-  const outcomeTypes = new Set([
-    'THANKYOU',
-    'INPROGRESS',
-    'LOW_BALANCE',
-    'BLOCKED',
-    'ERROR',
-  ])
-  const outcomeNodes = (base.nodes || []).filter((n) =>
-    outcomeTypes.has(n.pageType),
-  )
+  const outcomeTypes = new Set(['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'])
+  const outcomeNodes = (base.nodes || []).filter((n) => outcomeTypes.has(n.pageType))
   if (outcomeNodes.length) {
-    const avgY =
-      outcomeNodes.reduce((s, n) => s + (n.position?.y || 160), 0) /
-      outcomeNodes.length
-    const maxX = Math.max(
-      ...outcomeNodes.map((n) => n.position?.x || 880),
-      880,
-    )
+    const avgY = outcomeNodes.reduce((s, n) => s + (n.position?.y || 160), 0) / outcomeNodes.length
+    const maxX = Math.max(...outcomeNodes.map((n) => n.position?.x || 880), 880)
     endNode.position = { x: maxX + 200, y: avgY }
   }
 

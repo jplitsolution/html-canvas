@@ -7,7 +7,8 @@ import { normalizeStartConfig } from './start-config.js';
  */
 export function shouldRunHeOnDetect(verificationMode, startConfig) {
   const mode = flowEngineService.normalizeMode(verificationMode) || 'BOTH';
-  const modeAllows = mode === 'HEADER_INJECTION' || mode === 'BOTH';
+  const modeAllows =
+    mode === 'HEADER_INJECTION' || mode === 'UNIVERSE_DCB' || mode === 'BOTH';
   if (!modeAllows) return false;
   const cfg = normalizeStartConfig(startConfig, mode);
   return cfg.runHe !== false;

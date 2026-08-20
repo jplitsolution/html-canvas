@@ -5,6 +5,13 @@
 
 export function defaultStartConfig(mode) {
   const m = String(mode || 'BOTH').toUpperCase();
+  if (m === 'UNIVERSE_DCB') {
+    return {
+      runHe: true,
+      runBlocklist: true,
+      runChecksub: true,
+    };
+  }
   if (m === 'OTP_ONLY' || m === 'NONE') {
     return {
       runHe: false,

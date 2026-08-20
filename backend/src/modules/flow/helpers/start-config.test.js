@@ -14,6 +14,11 @@ describe('start-config', () => {
       runChecksub: true,
     });
     assert.equal(defaultStartConfig('HEADER_INJECTION').runHe, true);
+    assert.deepEqual(defaultStartConfig('UNIVERSE_DCB'), {
+      runHe: true,
+      runBlocklist: true,
+      runChecksub: true,
+    });
   });
 
   it('defaults HE off for OTP_ONLY', () => {

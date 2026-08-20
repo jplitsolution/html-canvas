@@ -2,6 +2,37 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { flowEngineService } from './flow-engine.service.js';
 
+describe('verification modes', () => {
+  it('accepts UNIVERSE_DCB without changing legacy aliases', () => {
+    assert.equal(
+      flowEngineService.normalizeMode('universe_dcb'),
+      'UNIVERSE_DCB',
+    );
+    assert.equal(
+      flowEngineService.normalizeMode('MSISDN_ONLY'),
+      'HEADER_INJECTION',
+    );
+    assert.equal(flowEngineService.normalizeMode('NULL'), 'NONE');
+  });
+
+  it('builds isolated Universe DCB defaults', () => {
+    const cfg = flowEngineService.getDefaultFlowConfig('UNIVERSE_DCB');
+    assert.equal(cfg.startConfig.runHe, true);
+    assert.equal(
+      cfg.nodes.some((node) => node.pageType === 'CONFIRM'),
+      false,
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'HOME', 'HEADER_UNRESOLVED'),
+      'OTP',
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'OTP', 'OTP_VERIFIED'),
+      'HOME',
+    );
+  });
+});
+
 describe('getDefaultFlowConfig packs_on_home', () => {
   it('OTP_ONLY: OTP_VERIFIED → HOME, no Confirm node', () => {
     const cfg = flowEngineService.getDefaultFlowConfig('OTP_ONLY', {

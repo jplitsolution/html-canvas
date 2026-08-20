@@ -8,6 +8,29 @@ import {
   resolveCampidParams,
 } from './helpers/request.util.js';
 import { priorityCheck } from './helpers/priority.controller.js';
+import { universeDcbService } from './universe-dcb.service.js';
+import { flowEngineService } from './flow-engine.service.js';
+import {
+  decorateUniverseDcbDetectResponse,
+  decorateUniverseDcbPageResponse,
+} from './helpers/universe-dcb-runtime.js';
+
+const dcbInput = (req) => {
+  const values = { ...(req.query || {}), ...(req.body || {}) };
+  const camp = resolveCampidParams(values);
+  return {
+    country: values.country,
+    operator: values.operator,
+    campid: camp.campid,
+    trackingCampid: camp.trackingCampid,
+    msisdn: values.msisdn || values.phone,
+    serviceId: values.serviceId || values.service_id,
+    purchaseTypeId: values.purchaseTypeId || values.purchase_type_id,
+    transactionChannel: values.transactionChannel || values.transaction_channel,
+    visitId: values.visitId || values.visit_id,
+    pin: values.pin || values.pincode,
+  };
+};
 
 export const flowController = {
   detectMsisdn: asyncHandler(async (req, res) => {
@@ -20,7 +43,8 @@ export const flowController = {
       msisdn: body.msisdn || body.phone || q.msisdn || q.phone,
       phone: body.phone || body.msisdn || q.phone || q.msisdn,
       visitId: body.visitId || q.visitId,
-      sessionId: body.sessionId || body.session_id || q.sessionId || q.session_id,
+      sessionId:
+        body.sessionId || body.session_id || q.sessionId || q.session_id,
       heSource: body.heSource || q.heSource || q.he_source,
       heClientError: body.heClientError || q.heClientError,
     };
@@ -35,29 +59,26 @@ export const flowController = {
 
     // Browser Safaricom HE: hint from client body only (HE_DUMMY applied in he.service
     // if masked MSISDN fails and HE_DUMMY_MSISDN is set).
-    const browserPhone = String(body.msisdn || body.phone || '')
-      .replace(/\D/g, '');
+    const browserPhone = String(body.msisdn || body.phone || '').replace(
+      /\D/g,
+      '',
+    );
     const phoneForDetect =
       heSource === 'browser' ? browserPhone : resolved.phone;
 
     // HE debug headers are returned in the JSON body; frontend logs them in the browser.
 
-    const result = await flowService.detectMsisdn({
+    const detectInput = {
       country: q.country || body.country,
       operator: q.operator || body.operator,
       campid: camp.campid,
       trackingCampid: camp.trackingCampid,
       phone: phoneForDetect,
       clickId:
-        q.click_id ||
-        q.clickId ||
-        q.clickid ||
-        body.clickId ||
-        body.click_id,
+        q.click_id || q.clickId || q.clickid || body.clickId || body.click_id,
       rcid: q.rcid || body.rcid,
       visitId: mergedQ.visitId ? Number(mergedQ.visitId) : undefined,
-      sessionId:
-        mergedQ.sessionId || req.headers['x-session-id'],
+      sessionId: mergedQ.sessionId || req.headers['x-session-id'],
       heSource: heSource || undefined,
       heClientLogs: body.heClientLogs || null,
       heClientError: mergedQ.heClientError || null,
@@ -65,7 +86,42 @@ export const flowController = {
       userAgent,
       landingUrl: q.landingUrl || q.landing_url || body.landingUrl,
       vid: q.vid || body.vid,
-    });
+    };
+    let result = await flowService.detectMsisdn(detectInput);
+
+    const campaign = await flowService.resolveCampaign(detectInput);
+    if (
+      flowEngineService.normalizeMode(campaign?.verificationMode) ===
+      'UNIVERSE_DCB'
+    ) {
+      let runtime = {};
+      try {
+        runtime = await universeDcbService.getRuntimeConfig(detectInput);
+      } catch {
+        runtime = {};
+      }
+      let normalizedStatus = null;
+      if (result.phone) {
+        try {
+          normalizedStatus = await universeDcbService.status({
+            ...detectInput,
+            msisdn: result.phone,
+            visitId: result.visitId,
+          });
+        } catch {
+          normalizedStatus = {
+            outcome: 'PARSE_ERROR',
+            status: null,
+            reason: 'DCB_STATUS_UNAVAILABLE',
+          };
+        }
+      }
+      result = decorateUniverseDcbDetectResponse(
+        result,
+        normalizedStatus,
+        runtime,
+      );
+    }
 
     res.json({
       ...result,
@@ -106,7 +162,7 @@ export const flowController = {
       q.direct === true ||
       q.direct === 1;
 
-    const result = await flowService.getPage({
+    const pageInput = {
       country: q.country,
       operator: q.operator,
       campid: camp.campid,
@@ -123,7 +179,26 @@ export const flowController = {
       ipAddress: Array.isArray(ipAddress) ? ipAddress[0] : ipAddress,
       userAgent,
       direct: Boolean(direct),
-    });
+    };
+    let result = await flowService.getPage(pageInput);
+
+    const campaign = await flowService.resolveCampaign(pageInput);
+    if (
+      flowEngineService.normalizeMode(campaign?.verificationMode) ===
+      'UNIVERSE_DCB'
+    ) {
+      let runtime = {};
+      try {
+        runtime = await universeDcbService.getRuntimeConfig(pageInput);
+      } catch {
+        runtime = {};
+      }
+      result = decorateUniverseDcbPageResponse(
+        result,
+        resolved.phone || result.variables?.phone,
+        runtime,
+      );
+    }
 
     res.json({
       ...result,
@@ -137,9 +212,7 @@ export const flowController = {
     const body = req.body || {};
     const hasVisit = Boolean(body.visitId);
     const rcid = String(
-      body.rcid ||
-        (!hasVisit ? body.click_id || body.clickId || '' : '') ||
-        '',
+      body.rcid || (!hasVisit ? body.click_id || body.clickId || '' : '') || '',
     ).trim();
     const clickId = String(body.clickId || body.click_id || '').trim();
 
@@ -168,6 +241,26 @@ export const flowController = {
   }),
 
   priorityCheck,
+
+  dcbConfig: asyncHandler(async (req, res) => {
+    res.json(await universeDcbService.getPublicConfig(dcbInput(req)));
+  }),
+
+  dcbManualCheck: asyncHandler(async (req, res) => {
+    res.json(await universeDcbService.manualCheck(dcbInput(req)));
+  }),
+
+  dcbPincode: asyncHandler(async (req, res) => {
+    res.json(await universeDcbService.requestPincode(dcbInput(req)));
+  }),
+
+  dcbConfirm: asyncHandler(async (req, res) => {
+    res.json(await universeDcbService.confirm(dcbInput(req)));
+  }),
+
+  dcbStatus: asyncHandler(async (req, res) => {
+    res.json(await universeDcbService.status(dcbInput(req)));
+  }),
 
   callback: asyncHandler(async (req, res) => {
     const q = { ...(req.query || {}), ...(req.body || {}) };

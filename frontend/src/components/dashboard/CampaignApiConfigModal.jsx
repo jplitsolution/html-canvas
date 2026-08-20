@@ -12,6 +12,7 @@ import {
   PAGE_TYPES,
   PAGE_TYPE_LABELS,
 } from '../../services/api/campaigns'
+import { DEFAULT_DCB_CONFIG, parseDcbConfig, serializeDcbConfig } from './dcbConfig'
 
 const DEFAULT_PARTNER = {
   sendUrl: '',
@@ -41,9 +42,7 @@ const DEFAULT_CHECKSUB = {
 }
 
 const CHECKSUB_PAGE_OPTIONS = PAGE_TYPES.filter((id) =>
-  ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR', 'HOME', 'OTP', 'CONFIRM'].includes(
-    id,
-  ),
+  ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR', 'HOME', 'OTP', 'CONFIRM'].includes(id)
 )
 
 function parseChecksubConfig(raw) {
@@ -64,10 +63,7 @@ function parseChecksubConfig(raw) {
     return {
       statusField: parsed.statusField || 'currentStatus',
       rules,
-      missGo:
-        parsed.missGo === 'page' || parsed.missGo === 'external'
-          ? parsed.missGo
-          : 'continue',
+      missGo: parsed.missGo === 'page' || parsed.missGo === 'external' ? parsed.missGo : 'continue',
       missPage: parsed.missPage || 'ERROR',
       missUrl: parsed.missUrl || '',
     }
@@ -87,12 +83,8 @@ function serializeChecksubConfig(cfg) {
     }))
     .filter((r) => r.value)
   const statusField = String(cfg.statusField || 'currentStatus').trim() || 'currentStatus'
-  const missGo =
-    cfg.missGo === 'page' || cfg.missGo === 'external' ? cfg.missGo : 'continue'
-  const isDefault =
-    rules.length === 0 &&
-    statusField === 'currentStatus' &&
-    missGo === 'continue'
+  const missGo = cfg.missGo === 'page' || cfg.missGo === 'external' ? cfg.missGo : 'continue'
+  const isDefault = rules.length === 0 && statusField === 'currentStatus' && missGo === 'continue'
   if (isDefault) return null
   return JSON.stringify({
     statusField,
@@ -146,8 +138,7 @@ function parseHeConfig(raw) {
       resolveUrl: parsed.url || parsed.resolveUrl || '',
       failMessage: parsed.failMessage || '',
       failRedirectUrl: parsed.failRedirectUrl || parsed.heFailRedirectUrl || '',
-      successRedirectUrl:
-        parsed.successRedirectUrl || parsed.heSuccessRedirectUrl || '',
+      successRedirectUrl: parsed.successRedirectUrl || parsed.heSuccessRedirectUrl || '',
     }
   } catch {
     return { ...EMPTY_HE_FIELDS }
@@ -207,6 +198,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   })
   const [heFields, setHeFields] = useState(EMPTY_HE_FIELDS)
   const [partnerConfig, setPartnerConfig] = useState(DEFAULT_PARTNER)
+  const [dcbConfig, setDcbConfig] = useState(() => parseDcbConfig(null))
   const [checksubConfig, setChecksubConfig] = useState(() => ({
     ...DEFAULT_CHECKSUB,
     rules: [],
@@ -239,6 +231,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           heProvider: provider,
         })
         setChecksubConfig(parseChecksubConfig(config.checksubConfigJson))
+        setDcbConfig(parseDcbConfig(config.dcbConfigJson || config.dcb_config_json))
         setHeFields({
           ...parsedHe,
           resolveUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
@@ -247,17 +240,13 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           try {
             const parsed = JSON.parse(config.otpConfigJson)
             const source =
-              parsed?.failover && parsed?.providers?.partner?.config
-                ? parsed.providers.partner.config
-                : parsed
+              parsed?.failover && parsed?.providers?.partner?.config ? parsed.providers.partner.config : parsed
             setPartnerConfig({
               ...DEFAULT_PARTNER,
               ...source,
               successKey: source.successKey || 'responseCode',
               successValue: source.successValue ?? '0',
-              payoutPercent: clampPayoutPercent(
-                source.payoutPercent ?? DEFAULT_PARTNER.payoutPercent,
-              ),
+              payoutPercent: clampPayoutPercent(source.payoutPercent ?? DEFAULT_PARTNER.payoutPercent),
             })
           } catch (e) {
             console.error('Failed to parse OTP config JSON', e)
@@ -273,17 +262,13 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
 
   const heConfigPreview = useMemo(
     () => buildHeConfigJson(form.heProvider, heFields, form.resolveMsisdnUrl),
-    [form.heProvider, heFields, form.resolveMsisdnUrl],
+    [form.heProvider, heFields, form.resolveMsisdnUrl]
   )
 
   const handleSave = async () => {
     setSaving(true)
     try {
-      const heConfigJson = buildHeConfigJson(
-        form.heProvider,
-        heFields,
-        form.resolveMsisdnUrl,
-      )
+      const heConfigJson = buildHeConfigJson(form.heProvider, heFields, form.resolveMsisdnUrl)
       const resolveMsisdnUrl =
         form.heProvider === 'custom_http'
           ? (heFields.resolveUrl || form.resolveMsisdnUrl || '').trim()
@@ -299,6 +284,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           payoutPercent: clampPayoutPercent(partnerConfig.payoutPercent),
         }),
         checksubConfigJson: serializeChecksubConfig(checksubConfig),
+        dcbConfigJson: serializeDcbConfig(dcbConfig),
       })
       onClose()
     } catch {
@@ -311,14 +297,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const formatTestResult = (label, res) => {
     const rule = res.successRule || {}
     const ruleText = rule.key ? `Success rule: ${rule.key} = ${rule.value}` : ''
-    const codeText =
-      res.responseCode != null
-        ? `${rule.key || 'code'}=${res.responseCode}`
-        : 'no business code'
+    const codeText = res.responseCode != null ? `${rule.key || 'code'}=${res.responseCode}` : 'no business code'
     return [
-      res.ok || res.sent || res.verified
-        ? `🟢 ${label} SUCCESS (${codeText})`
-        : `🔴 ${label} FAILED (${codeText})`,
+      res.ok || res.sent || res.verified ? `🟢 ${label} SUCCESS (${codeText})` : `🔴 ${label} FAILED (${codeText})`,
       ruleText,
       res.message || res.error || '',
       res.providerRequestId ? `transactionId: ${res.providerRequestId}` : '',
@@ -339,9 +320,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
       })
       if (res.ok) {
         const rule = res.successRule || {}
-        setTestResult(
-          `🟢 Health check OK\nSuccess when ${rule.key}=${rule.value}\n${res.message || ''}`,
-        )
+        setTestResult(`🟢 Health check OK\nSuccess when ${rule.key}=${rule.value}\n${res.message || ''}`)
       } else {
         setTestResult(`🔴 Health check failed: ${res.error || 'Unknown error'}`)
       }
@@ -412,10 +391,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
       <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
         <p className="text-sm font-medium text-fg">How phone detection works</p>
         <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-          Most campaigns need nothing here — the carrier sends the number in a
-          network header. Use Token + MSISDN only when the operator gives you two
-          APIs (token, then number). If the number is missing, users go to the
-          campaign CG URL (or an optional fail URL below).
+          Most campaigns need nothing here — the carrier sends the number in a network header. Use Token + MSISDN only
+          when the operator gives you two APIs (token, then number). If the number is missing, users go to the campaign
+          CG URL (or an optional fail URL below).
         </p>
       </div>
 
@@ -438,20 +416,14 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                 <div className="flex items-start gap-2.5">
                   <span
                     className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                      active
-                        ? 'border-accent bg-accent text-white'
-                        : 'border-border bg-bg-elevated'
+                      active ? 'border-accent bg-accent text-white' : 'border-border bg-bg-elevated'
                     }`}
                   >
                     {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
                   </span>
                   <span>
-                    <span className="block text-sm font-semibold text-fg">
-                      {mode.title}
-                    </span>
-                    <span className="mt-0.5 block text-[11px] leading-snug text-fg-muted">
-                      {mode.subtitle}
-                    </span>
+                    <span className="block text-sm font-semibold text-fg">{mode.title}</span>
+                    <span className="mt-0.5 block text-[11px] leading-snug text-fg-muted">{mode.subtitle}</span>
                   </span>
                 </div>
               </button>
@@ -465,10 +437,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
           <p className="text-xs leading-relaxed text-fg-muted">
             Recommended default. On operator mobile data the gateway injects{' '}
-            <code className="rounded bg-bg-subtle px-1 py-0.5 font-mono text-[11px]">
-              X-MSISDN
-            </code>
-            . No extra URLs needed.
+            <code className="rounded bg-bg-subtle px-1 py-0.5 font-mono text-[11px]">X-MSISDN</code>. No extra URLs
+            needed.
           </p>
         </div>
       )}
@@ -477,8 +447,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
         <div className="flex gap-3 rounded-xl border border-border bg-bg-elevated px-4 py-3">
           <WifiOff className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" />
           <p className="text-xs leading-relaxed text-fg-muted">
-            Auto-detect is off. Users enter their number via OTP (or your page
-            flow). No HE token calls on HOME.
+            Auto-detect is off. Users enter their number via OTP (or your page flow). No HE token calls on HOME.
           </p>
         </div>
       )}
@@ -488,8 +457,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div>
             <p className="text-sm font-semibold text-fg">Operator resolve API</p>
             <p className="mt-0.5 text-xs text-fg-muted">
-              One URL that returns MSISDN. Used when the carrier does not send a
-              header.
+              One URL that returns MSISDN. Used when the carrier does not send a header.
             </p>
           </div>
           <Field label="Resolve URL" hint="required">
@@ -512,23 +480,17 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-fg">After HE resolve</p>
             <p className="text-[11px] text-fg-muted leading-relaxed">
-              Success/fail filled → HOME skip (silent redirect). Both empty → show
-              HOME after detect; MSISDN still used on Subscribe / OTP.
+              Success/fail filled → HOME skip (silent redirect). Both empty → show HOME after detect; MSISDN still used
+              on Subscribe / OTP.
             </p>
-            <Field
-              label="Success redirect"
-              hint="optional — empty = stay on HOME. {click_id} filled if present."
-            >
+            <Field label="Success redirect" hint="optional — empty = stay on HOME. {click_id} filled if present.">
               <Input
                 value={heFields.successRedirectUrl}
                 onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
                 placeholder="https://…/next?ext_id={click_id}"
               />
             </Field>
-            <Field
-              label="Fail redirect"
-              hint="optional — else campaign CG. {click_id} filled if present."
-            >
+            <Field label="Fail redirect" hint="optional — else campaign CG. {click_id} filled if present.">
               <Input
                 value={heFields.failRedirectUrl}
                 onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
@@ -544,8 +506,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div>
             <p className="text-sm font-semibold text-fg">Token → MSISDN APIs</p>
             <p className="mt-0.5 text-xs text-fg-muted">
-              Safaricom Kenya: POST token with <code className="font-mono text-[11px]">X-Session-ID</code>,
-              then GET masked MSISDN with Bearer + partner headers.
+              Safaricom Kenya: POST token with <code className="font-mono text-[11px]">X-Session-ID</code>, then GET
+              masked MSISDN with Bearer + partner headers.
             </p>
           </div>
 
@@ -587,26 +549,20 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-3">
             <p className="text-xs font-semibold text-fg">After HE resolve</p>
             <p className="text-[11px] text-fg-muted leading-relaxed">
-              <strong>Success/fail filled</strong> → HOME never shown; loading then
-              redirect (MSISDN → success, missing → fail/CG).
+              <strong>Success/fail filled</strong> → HOME never shown; loading then redirect (MSISDN → success, missing
+              → fail/CG).
               <br />
-              <strong>Both empty</strong> → show HOME after detect (funnel). Number
-              still used later on Subscribe / OTP / Priority.
+              <strong>Both empty</strong> → show HOME after detect (funnel). Number still used later on Subscribe / OTP
+              / Priority.
             </p>
-            <Field
-              label="Success redirect"
-              hint="optional — {click_id} filled if present, else empty = stay on HOME"
-            >
+            <Field label="Success redirect" hint="optional — {click_id} filled if present, else empty = stay on HOME">
               <Input
                 value={heFields.successRedirectUrl}
                 onChange={(e) => setHeField('successRedirectUrl', e.target.value)}
                 placeholder="https://dsdp-cg.safaricom.com/consent-gateway/300002437?ext_id={click_id}"
               />
             </Field>
-            <Field
-              label="Fail redirect"
-              hint="optional — {click_id} filled if present, else campaign CG"
-            >
+            <Field label="Fail redirect" hint="optional — {click_id} filled if present, else campaign CG">
               <Input
                 value={heFields.failRedirectUrl}
                 onChange={(e) => setHeField('failRedirectUrl', e.target.value)}
@@ -630,6 +586,157 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     </div>
   )
 
+  const renderDcbTab = () => {
+    const setDcbField = (key, value) => {
+      setDcbConfig((current) => ({ ...current, [key]: value }))
+    }
+    const setResponsePath = (key, value) => {
+      setDcbConfig((current) => ({
+        ...current,
+        responsePaths: { ...current.responsePaths, [key]: value },
+      }))
+    }
+    const setMapping = (index, key, value) => {
+      setDcbConfig((current) => ({
+        ...current,
+        purchaseTypeMappings: current.purchaseTypeMappings.map((mapping, mappingIndex) =>
+          mappingIndex === index ? { ...mapping, [key]: value } : mapping
+        ),
+      }))
+    }
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+          <p className="text-sm font-semibold text-fg">Universe Telecom DCB</p>
+          <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+            These settings are used by the backend proxy for entitlement checks, PIN confirmation, and activation
+            polling. Provider request IDs are never saved in the browser.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field label="Base URL">
+              <Input
+                value={dcbConfig.baseUrl}
+                onChange={(event) => setDcbField('baseUrl', event.target.value)}
+                placeholder={DEFAULT_DCB_CONFIG.baseUrl}
+              />
+            </Field>
+          </div>
+          <Field label="Merchant ID">
+            <Input value={dcbConfig.merchantId} onChange={(event) => setDcbField('merchantId', event.target.value)} />
+          </Field>
+          <Field label="Service ID">
+            <Input value={dcbConfig.serviceId} onChange={(event) => setDcbField('serviceId', event.target.value)} />
+          </Field>
+          <Field label="Operator code">
+            <Input
+              value={dcbConfig.operatorCode}
+              onChange={(event) => setDcbField('operatorCode', event.target.value)}
+            />
+          </Field>
+          <Field label="Poll interval (ms)">
+            <Input
+              type="number"
+              min={250}
+              value={dcbConfig.pollIntervalMs}
+              onChange={(event) => setDcbField('pollIntervalMs', event.target.value)}
+            />
+          </Field>
+          <Field label="Poll timeout (ms)">
+            <Input
+              type="number"
+              min={1000}
+              value={dcbConfig.pollTimeoutMs}
+              onChange={(event) => setDcbField('pollTimeoutMs', event.target.value)}
+            />
+          </Field>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-border bg-bg-elevated p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-fg">Purchase type mappings</p>
+              <p className="mt-0.5 text-[11px] text-fg-muted">
+                Map each canvas pack key to the Universe purchaseTypeId.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold text-fg-muted hover:bg-bg-subtle"
+              onClick={() =>
+                setDcbConfig((current) => ({
+                  ...current,
+                  purchaseTypeMappings: [
+                    ...current.purchaseTypeMappings,
+                    { packKey: '', label: '', purchaseTypeId: '' },
+                  ],
+                }))
+              }
+            >
+              + Add mapping
+            </button>
+          </div>
+          {dcbConfig.purchaseTypeMappings.map((mapping, index) => (
+            <div
+              key={`${mapping.packKey}-${index}`}
+              className="grid grid-cols-1 gap-2 rounded-lg border border-border bg-bg-subtle/40 p-3 sm:grid-cols-[1fr_1fr_1fr_auto]"
+            >
+              <Input
+                aria-label={`Pack key ${index + 1}`}
+                value={mapping.packKey}
+                onChange={(event) => setMapping(index, 'packKey', event.target.value)}
+                placeholder="daily"
+              />
+              <Input
+                aria-label={`Plan label ${index + 1}`}
+                value={mapping.label}
+                onChange={(event) => setMapping(index, 'label', event.target.value)}
+                placeholder="Daily"
+              />
+              <Input
+                aria-label={`Purchase type ID ${index + 1}`}
+                value={mapping.purchaseTypeId}
+                onChange={(event) => setMapping(index, 'purchaseTypeId', event.target.value)}
+                placeholder="purchaseTypeId"
+              />
+              <button
+                type="button"
+                className="rounded-lg border border-red-200 px-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+                onClick={() =>
+                  setDcbConfig((current) => ({
+                    ...current,
+                    purchaseTypeMappings: current.purchaseTypeMappings.filter(
+                      (_, mappingIndex) => mappingIndex !== index
+                    ),
+                  }))
+                }
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+
+        <details className="rounded-xl border border-border bg-bg-elevated p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-fg">Response paths</summary>
+          <p className="mt-1 text-[11px] leading-relaxed text-fg-muted">
+            Dot/bracket paths used by the backend response normalizer. Invalid paths never grant entitlement.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {Object.entries(dcbConfig.responsePaths).map(([key, value]) => (
+              <Field key={key} label={key}>
+                <Input value={value} onChange={(event) => setResponsePath(key, event.target.value)} />
+              </Field>
+            ))}
+          </div>
+        </details>
+      </div>
+    )
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Campaign Integration & Settings" size="lg">
       {loading ? (
@@ -641,6 +748,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               { id: 'billing', label: 'Checksub' },
               { id: 'he', label: 'Detect phone' },
               { id: 'otp', label: 'Partner OTP' },
+              { id: 'dcb', label: 'Universe DCB' },
             ]}
             activeTab={activeTab}
             onChange={setActiveTab}
@@ -650,9 +758,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
                 <p className="text-xs leading-relaxed text-fg-muted">
-                  Checksub / blocklist / optional Confirm subscribe live here.
-                  OTP send/verify is on the Partner OTP tab. Placeholders:{' '}
-                  <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
+                  Checksub / blocklist / optional Confirm subscribe live here. OTP send/verify is on the Partner OTP
+                  tab. Placeholders: <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
                   <code className="font-mono text-[11px]">{'{{serviceId}}'}</code>,{' '}
                   <code className="font-mono text-[11px]">{'{{country}}'}</code>,{' '}
                   <code className="font-mono text-[11px]">{'{{operator}}'}</code>.
@@ -671,10 +778,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   <div>
                     <p className="text-sm font-semibold text-fg">Checksub status mapping</p>
                     <p className="text-[11px] text-fg-muted mt-0.5 leading-relaxed">
-                      When a number is found, map the partner response to continue the funnel,
-                      a campaign page, or an external website. Works with plain-text body
-                      (e.g. <code className="font-mono">INACTIVE</code>) or JSON fields.
-                      Leave empty to keep the built-in active/parking/pending mapping.
+                      When a number is found, map the partner response to continue the funnel, a campaign page, or an
+                      external website. Works with plain-text body (e.g. <code className="font-mono">INACTIVE</code>) or
+                      JSON fields. Leave empty to keep the built-in active/parking/pending mapping.
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
@@ -720,10 +826,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   </div>
                 </div>
 
-                <Field
-                  label="Status field"
-                  hint="body = whole response text; otherwise JSON key"
-                >
+                <Field label="Status field" hint="body = whole response text; otherwise JSON key">
                   <Input
                     value={checksubConfig.statusField}
                     onChange={(e) =>
@@ -770,20 +873,14 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
 
                   {checksubConfig.rules.length === 0 ? (
                     <p className="text-[11px] text-fg-muted rounded-lg border border-dashed border-border px-3 py-2">
-                      No rules yet — built-in mapping is used (active → thank you, parking →
-                      low balance, …).
+                      No rules yet — built-in mapping is used (active → thank you, parking → low balance, …).
                     </p>
                   ) : null}
 
                   {checksubConfig.rules.map((rule, idx) => (
-                    <div
-                      key={idx}
-                      className="rounded-lg border border-border bg-bg-subtle/40 p-3 space-y-2"
-                    >
+                    <div key={idx} className="rounded-lg border border-border bg-bg-subtle/40 p-3 space-y-2">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-bold text-indigo-600">
-                          Rule {idx + 1}
-                        </span>
+                        <span className="text-[10px] font-bold text-indigo-600">Rule {idx + 1}</span>
                         <button
                           type="button"
                           className="px-2 py-1 text-xs font-semibold rounded-lg border border-red-200 text-red-600 hover:bg-red-50"
@@ -943,12 +1040,13 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             </div>
           ) : activeTab === 'he' ? (
             renderHeTab()
+          ) : activeTab === 'dcb' ? (
+            renderDcbTab()
           ) : (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
                 <p className="text-xs leading-relaxed text-fg-muted">
-                  Partner generates and verifies OTP. Success when the response
-                  key matches the value below (default{' '}
+                  Partner generates and verifies OTP. Success when the response key matches the value below (default{' '}
                   <code className="font-mono text-[11px]">responseCode = 0</code>
                   ).
                 </p>
@@ -958,18 +1056,14 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                 <Field label="Send URL">
                   <Input
                     value={partnerConfig.sendUrl}
-                    onChange={(e) =>
-                      setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })
-                    }
+                    onChange={(e) => setPartnerConfig({ ...partnerConfig, sendUrl: e.target.value })}
                     placeholder="https://…/otp/subscribe?msisdn={{msisdn}}"
                   />
                 </Field>
                 <Field label="Verify URL">
                   <Input
                     value={partnerConfig.verifyUrl}
-                    onChange={(e) =>
-                      setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })
-                    }
+                    onChange={(e) => setPartnerConfig({ ...partnerConfig, verifyUrl: e.target.value })}
                     placeholder="https://…/otp/validate_otp?msisdn={{msisdn}}&otp={{otp}}"
                   />
                 </Field>
@@ -977,9 +1071,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   <Field label="Send method">
                     <Input
                       value={partnerConfig.method}
-                      onChange={(e) =>
-                        setPartnerConfig({ ...partnerConfig, method: e.target.value })
-                      }
+                      onChange={(e) => setPartnerConfig({ ...partnerConfig, method: e.target.value })}
                     />
                   </Field>
                   <Field label="Verify method">
@@ -1022,10 +1114,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-2">
-                  <Field
-                    label="Client payout %"
-                    hint="API expose only · 100 = show all"
-                  >
+                  <Field label="Client payout %" hint="API expose only · 100 = show all">
                     <Input
                       type="number"
                       min={0}
@@ -1046,9 +1135,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                     />
                   </Field>
                   <p className="text-[11px] leading-relaxed text-fg-muted">
-                    After partner verify succeeds, this percent is returned as success to the
-                    caller. The rest get invalid OTP. Visit stays SUCCESS internally (HELD in
-                    logs).
+                    After partner verify succeeds, this percent is returned as success to the caller. The rest get
+                    invalid OTP. Visit stays SUCCESS internally (HELD in logs).
                   </p>
                 </div>
                 <Field label="Headers (JSON)" hint="optional">
@@ -1067,9 +1155,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
               </div>
 
               <div className="space-y-3 rounded-xl border border-dashed border-border bg-bg-subtle/40 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">
-                  OTP API testing
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">OTP API testing</p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <Field label="Test phone">
                     <Input
@@ -1079,36 +1165,17 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                     />
                   </Field>
                   <Field label="OTP from SMS">
-                    <Input
-                      value={testOtp}
-                      onChange={(e) => setTestOtp(e.target.value)}
-                      placeholder="e.g. 4827"
-                    />
+                    <Input value={testOtp} onChange={(e) => setTestOtp(e.target.value)} placeholder="e.g. 4827" />
                   </Field>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleHealthCheck}
-                    disabled={testing}
-                  >
+                  <Button variant="outline" size="sm" onClick={handleHealthCheck} disabled={testing}>
                     Health Check
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleTestSend}
-                    disabled={testing}
-                  >
+                  <Button variant="primary" size="sm" onClick={handleTestSend} disabled={testing}>
                     {testing ? 'Processing...' : 'Send Test OTP'}
                   </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleTestVerify}
-                    disabled={testing}
-                  >
+                  <Button variant="primary" size="sm" onClick={handleTestVerify} disabled={testing}>
                     Verify Test OTP
                   </Button>
                 </div>

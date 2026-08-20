@@ -52,104 +52,112 @@ function useFlowPages({
   // does not reload the previous step (Save & preview always has step=HOME).
   const appStepRef = useRef(null)
 
-  const cachePage = useCallback((data) => {
-    if (!data?.pageType) return
-    if (heOnlyModeRef.current && isHeSuppressedFunnelPage(data.pageType)) {
-      console.log('[HE] suppressing funnel page render:', data.pageType)
-      return
-    }
+  const cachePage = useCallback(
+    (data) => {
+      if (!data?.pageType) return
+      if (heOnlyModeRef.current && isHeSuppressedFunnelPage(data.pageType)) {
+        console.log('[HE] suppressing funnel page render:', data.pageType)
+        return
+      }
 
-    // Immediate portal redirect: leave before painting thank-you (or any page with resolved URL).
-    const mode = String(data.successRedirectMode || 'thankyou').toLowerCase()
-    const dest = String(data.successRedirect || '').trim()
-    if (
-      mode === 'immediate' &&
-      dest &&
-      /^https?:\/\//i.test(dest) &&
-      String(data.pageType || '').toUpperCase() === 'THANKYOU'
-    ) {
+      // Immediate portal redirect: leave before painting thank-you (or any page with resolved URL).
+      const mode = String(data.successRedirectMode || 'thankyou').toLowerCase()
+      const dest = String(data.successRedirect || '').trim()
+      if (
+        mode === 'immediate' &&
+        dest &&
+        /^https?:\/\//i.test(dest) &&
+        String(data.pageType || '').toUpperCase() === 'THANKYOU'
+      ) {
+        if (data.visitId) visitIdRef.current = data.visitId
+        window.location.assign(dest)
+        return
+      }
+
+      if (data.entryPage) entryPageRef.current = data.entryPage
+      pageCacheRef.current.set(data.pageType, data)
       if (data.visitId) visitIdRef.current = data.visitId
-      window.location.assign(dest)
-      return
-    }
+      pageDataRef.current = data
+      appStepRef.current = String(data.pageType || '').toUpperCase()
+      setPageData(data)
 
-    if (data.entryPage) entryPageRef.current = data.entryPage
-    pageCacheRef.current.set(data.pageType, data)
-    if (data.visitId) visitIdRef.current = data.visitId
-    pageDataRef.current = data
-    appStepRef.current = String(data.pageType || '').toUpperCase()
-    setPageData(data)
+      // Backend dual IDs: our clickId + affiliate rcid (stable for the visit).
+      if (data.clickId) clickIdRef.current = String(data.clickId)
+      if (data.rcid) rcidRef.current = String(data.rcid)
 
-    // Backend dual IDs: our clickId + affiliate rcid (stable for the visit).
-    if (data.clickId) clickIdRef.current = String(data.clickId)
-    if (data.rcid) rcidRef.current = String(data.rcid)
+      const resolvedPhone = phoneRef.current || data.variables?.phone || data.variables?.msisdn || ''
+      if (resolvedPhone) {
+        phoneRef.current = resolvedPhone
+        setPhone(resolvedPhone)
+        persistPhone(resolvedPhone)
+      }
 
-    const resolvedPhone =
-      phoneRef.current || data.variables?.phone || data.variables?.msisdn || ''
-    if (resolvedPhone) {
-      phoneRef.current = resolvedPhone
-      setPhone(resolvedPhone)
-      persistPhone(resolvedPhone)
-    }
+      // Save session in sessionStorage
+      const isVerified = data.pageType === 'CONFIRM' || data.pageType === 'THANKYOU' || data.verified === true
+      saveSession({
+        verificationStatus: isVerified ? 'verified' : 'unverified',
+        flowId: data.campaignId,
+        campaignId: data.campaignId,
+        visitId: data.visitId || visitIdRef.current,
+        phone: resolvedPhone,
+        step: data.pageType,
+        clickId: clickIdRef.current || undefined,
+        rcid: rcidRef.current || undefined,
+        purchaseTypeId: data.flowContext?.purchaseTypeId || undefined,
+        transactionChannel: data.flowContext?.transactionChannel || undefined,
+        msisdnSource: data.flowContext?.msisdnSource || undefined,
+      })
 
-    // Save session in sessionStorage
-    const isVerified = (data.pageType === 'CONFIRM' || data.pageType === 'THANKYOU' || data.verified === true)
-    saveSession({
-      verificationStatus: isVerified ? 'verified' : 'unverified',
-      flowId: data.campaignId,
-      campaignId: data.campaignId,
-      visitId: data.visitId || visitIdRef.current,
-      phone: resolvedPhone,
-      step: data.pageType,
-      clickId: clickIdRef.current || undefined,
-      rcid: rcidRef.current || undefined,
-    })
-
-    // Sync URL step + msisdn + dual click attribution params.
-    setSearchParams((prev) => {
-      const nextParams = new URLSearchParams(prev)
-      let changed = false
-      if (nextParams.get('step') !== data.pageType) {
-        nextParams.set('step', data.pageType)
-        changed = true
-      }
-      if (resolvedPhone && !nextParams.get('msisdn')) {
-        nextParams.set('msisdn', resolvedPhone)
-        changed = true
-      }
-      const cid = clickIdRef.current
-      const rid = rcidRef.current
-      const v = vidRef.current
-      const a = affIdRef.current
-      const c = campidRef.current
-      const tc = trackingCampidRef.current
-      if (cid && nextParams.get('click_id') !== cid) {
-        nextParams.set('click_id', cid)
-        changed = true
-      }
-      if (rid && nextParams.get('rcid') !== rid) {
-        nextParams.set('rcid', rid)
-        changed = true
-      }
-      if (v && nextParams.get('vid') !== v) {
-        nextParams.set('vid', v)
-        changed = true
-      }
-      if (a && nextParams.get('aff_id') !== a) {
-        nextParams.set('aff_id', a)
-        changed = true
-      }
-      if (c && nextParams.get('campid') !== c) {
-        nextParams.set('campid', c)
-        changed = true
-      }
-      if (tc && nextParams.get('tracking_campid') !== tc) {
-        nextParams.set('tracking_campid', tc)
-        changed = true
-      }
-      return changed ? nextParams : prev
-    }, { replace: true })
-  }, [saveSession, setSearchParams])
+      // Sync URL step + msisdn + dual click attribution params.
+      setSearchParams(
+        (prev) => {
+          const nextParams = new URLSearchParams(prev)
+          let changed = false
+          if (nextParams.get('step') !== data.pageType) {
+            nextParams.set('step', data.pageType)
+            changed = true
+          }
+          if (resolvedPhone && !nextParams.get('msisdn')) {
+            nextParams.set('msisdn', resolvedPhone)
+            changed = true
+          }
+          const cid = clickIdRef.current
+          const rid = rcidRef.current
+          const v = vidRef.current
+          const a = affIdRef.current
+          const c = campidRef.current
+          const tc = trackingCampidRef.current
+          if (cid && nextParams.get('click_id') !== cid) {
+            nextParams.set('click_id', cid)
+            changed = true
+          }
+          if (rid && nextParams.get('rcid') !== rid) {
+            nextParams.set('rcid', rid)
+            changed = true
+          }
+          if (v && nextParams.get('vid') !== v) {
+            nextParams.set('vid', v)
+            changed = true
+          }
+          if (a && nextParams.get('aff_id') !== a) {
+            nextParams.set('aff_id', a)
+            changed = true
+          }
+          if (c && nextParams.get('campid') !== c) {
+            nextParams.set('campid', c)
+            changed = true
+          }
+          if (tc && nextParams.get('tracking_campid') !== tc) {
+            nextParams.set('tracking_campid', tc)
+            changed = true
+          }
+          return changed ? nextParams : prev
+        },
+        { replace: true }
+      )
+    },
+    [saveSession, setSearchParams]
+  )
 
   // Null-flow CG: backend sends externalRedirect with click_id → leave immediately
   useEffect(() => {
@@ -166,20 +174,13 @@ function useFlowPages({
     if (String(pageData?.successRedirectMode || 'thankyou').toLowerCase() === 'immediate') {
       return undefined
     }
-    const dest = String(
-      pageData?.successRedirect || pageData?.successRedirectUrl || '',
-    ).trim()
+    const dest = String(pageData?.successRedirect || pageData?.successRedirectUrl || '').trim()
     if (!dest || !/^https?:\/\//i.test(dest)) return undefined
     const timer = window.setTimeout(() => {
       window.location.assign(dest)
     }, 2000)
     return () => window.clearTimeout(timer)
-  }, [
-    pageData?.pageType,
-    pageData?.successRedirect,
-    pageData?.successRedirectUrl,
-    pageData?.successRedirectMode,
-  ])
+  }, [pageData?.pageType, pageData?.successRedirect, pageData?.successRedirectUrl, pageData?.successRedirectMode])
 
   const prefetchPages = useCallback(
     async (pages, visitId) => {
@@ -209,15 +210,18 @@ function useFlowPages({
           } else if (data?.pageType && !pageCacheRef.current.has(data.pageType)) {
             pageCacheRef.current.set(data.pageType, data)
           }
-        }),
+        })
       )
     },
-    [country, operator, campid, trackingCampid, vid, affId],
+    [country, operator, campid, trackingCampid, vid, affId]
   )
 
   const loadPage = useCallback(
     async (page = 'HOME', options = {}) => {
-      const requested = String(page || 'HOME').trim().toUpperCase() || 'HOME'
+      const requested =
+        String(page || 'HOME')
+          .trim()
+          .toUpperCase() || 'HOME'
       if (!country || !operator) {
         setError('Missing country or operator in URL')
         setBooting(false)
@@ -234,11 +238,7 @@ function useFlowPages({
       const generation = ++loadGenerationRef.current
 
       // Direct page-link navigations must not reuse a guarded/prefetch rewrite cache.
-      if (
-        FLOW_PAGE_CACHE_ENABLED &&
-        !options.direct &&
-        pageCacheRef.current.has(requested)
-      ) {
+      if (FLOW_PAGE_CACHE_ENABLED && !options.direct && pageCacheRef.current.has(requested)) {
         const cachedData = pageCacheRef.current.get(requested)
         if (generation !== loadGenerationRef.current) return
         pageDataRef.current = cachedData
@@ -274,7 +274,7 @@ function useFlowPages({
         }
       }
     },
-    [country, operator, cachePage, campid, trackingCampid, vid, affId, setPhoneResolving],
+    [country, operator, cachePage, campid, trackingCampid, vid, affId, setPhoneResolving]
   )
 
   useEffect(() => {

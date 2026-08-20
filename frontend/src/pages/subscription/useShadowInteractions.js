@@ -1,20 +1,20 @@
 import { useEffect } from 'react'
 import { transitionFlow } from '../../services/api/flow'
 import { trackEvent } from '../../utils/analytics'
-import {
-  parseSubscribeRoutes,
-  resolveSubscribeDestination,
-} from '../../editor/utils/subscribeRoutes'
+import { parseSubscribeRoutes, resolveSubscribeDestination } from '../../editor/utils/subscribeRoutes'
 import { VALID_PAGES } from './constants'
-import { findActionTarget, hrefIsNavigationTarget, isCampaignPageHref, normalizePack, packSubscribeExtras, shouldSelectPackOnly } from './flowHelpers'
-import { runPriorityChain } from './runPriorityChain'
-import { setupOtpBindings } from './setupOtpBindings'
 import {
-  getSelectedPackFromShadow,
-  mountPageInShadow,
-  syncPackPicker,
-  syncPhoneDisplay,
-} from './shadowDom'
+  findActionTarget,
+  hrefIsNavigationTarget,
+  isCampaignPageHref,
+  normalizePack,
+  packSubscribeExtras,
+  shouldSelectPackOnly,
+} from './flowHelpers'
+import { runPriorityChain } from './runPriorityChain'
+import { isDcbFlowContext, setupDcbBindings } from './setupDcbBindings'
+import { setupOtpBindings } from './setupOtpBindings'
+import { getSelectedPackFromShadow, mountPageInShadow, syncPackPicker, syncPhoneDisplay } from './shadowDom'
 
 /**
  * Shadow DOM click routing (Layer C + bridge to Layer B).
@@ -71,9 +71,9 @@ function useShadowInteractions({
     }
 
     const handlePackClick = (event) => {
-      const packBtn = event.composedPath?.().find(
-        (node) => node instanceof HTMLElement && node.hasAttribute('data-pack'),
-      )
+      const packBtn = event
+        .composedPath?.()
+        .find((node) => node instanceof HTMLElement && node.hasAttribute('data-pack'))
       if (!packBtn || transitionLockRef.current) return
       // Pack + subscribe action → let handleClick fire subscribe, not just select.
       // Pack + Open a website / page jump → let handleClick (or the browser) navigate.
@@ -102,8 +102,7 @@ function useShadowInteractions({
         event.preventDefault()
         event.stopPropagation()
         if (transitionLockRef.current) return
-        const onHome =
-          String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
+        const onHome = String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
         if (onHome && warnIfHeUnresolved()) return
         const targetPage = href.toUpperCase()
         if (String(pageDataRef.current?.pageType || '').toUpperCase() === targetPage) return
@@ -133,8 +132,7 @@ function useShadowInteractions({
       if (!hit) return
 
       const { action, node } = hit
-      const onHome =
-        String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
+      const onHome = String(pageDataRef.current?.pageType || '').toUpperCase() === 'HOME'
 
       // Stop href="#" from reloading the current page (editor preview uses ?step=HOME).
       event.preventDefault()
@@ -149,12 +147,7 @@ function useShadowInteractions({
       // Token/Custom HE: HOME CTA without MSISDN → warning (then CG if configured).
       // Skip for SUBSCRIBE_ROUTE — missing phone is a first-class outcome (usually → OTP).
       // Skip for reconfigured CTAs that only navigate (no flow action).
-      if (
-        action &&
-        action !== 'SUBSCRIBE_ROUTE' &&
-        onHome &&
-        warnIfHeUnresolved()
-      ) {
+      if (action && action !== 'SUBSCRIBE_ROUTE' && onHome && warnIfHeUnresolved()) {
         return
       }
 
@@ -257,9 +250,7 @@ function useShadowInteractions({
         setTransitioning(true)
         setError('')
         const planId =
-          (node.hasAttribute('data-pack')
-            ? normalizePack(node.getAttribute('data-pack'))
-            : '') ||
+          (node.hasAttribute('data-pack') ? normalizePack(node.getAttribute('data-pack')) : '') ||
           getSelectedPackFromShadow(shadow) ||
           selectedPackRef.current ||
           'daily'
@@ -336,12 +327,8 @@ function useShadowInteractions({
       setTransitioning(true)
       setError('')
 
-      const packOnButton = node.hasAttribute('data-pack')
-        ? normalizePack(node.getAttribute('data-pack'))
-        : ''
-      const planId =
-        packOnButton ||
-        (fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined)
+      const packOnButton = node.hasAttribute('data-pack') ? normalizePack(node.getAttribute('data-pack')) : ''
+      const planId = packOnButton || (fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined)
 
       try {
         const next = await transitionFlow({
@@ -379,9 +366,27 @@ function useShadowInteractions({
       }
     }
 
-    let otpCleanup = null
-    if (pageData.pageType === 'OTP') {
-      otpCleanup = setupOtpBindings(shadow, {
+    let flowCleanup = null
+    if (isDcbFlowContext(pageData)) {
+      flowCleanup = setupDcbBindings(shadow, {
+        pageData,
+        cachePage,
+        loadPage,
+        country,
+        operator,
+        campid,
+        trackingCampid,
+        visitIdRef,
+        phoneRef,
+        selectedPackRef,
+        setPhone,
+        setTransitioning,
+        setError,
+        saveSession,
+        transitionLockRef,
+      })
+    } else if (pageData.pageType === 'OTP') {
+      flowCleanup = setupOtpBindings(shadow, {
         transitionFlow,
         cachePage,
         loadPage,
@@ -407,7 +412,7 @@ function useShadowInteractions({
       shadow.removeEventListener('click', handlePackClick)
       shadow.removeEventListener('click', handleClick)
       shadow.removeEventListener('click', handleAnchorClick)
-      if (otpCleanup) otpCleanup()
+      if (flowCleanup) flowCleanup()
     }
   }, [pageData, country, operator, campid, trackingCampid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
 }

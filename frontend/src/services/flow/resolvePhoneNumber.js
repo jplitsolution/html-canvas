@@ -78,6 +78,8 @@ function mapDetectResponse(res) {
     clickId: res.clickId || null,
     rcid: res.rcid || null,
     campaignId: res.campaignId || null,
+    verificationMode: res.verificationMode || null,
+    flowContext: res.flowContext || null,
   }
 }
 

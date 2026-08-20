@@ -9,6 +9,14 @@ const ipStore = new Map();
 const getLimitForPath = (path) => {
   if (path.includes('/otp/send')) return 5;
   if (path.includes('/otp/verify')) return 10;
+  if (path.includes('/flow/dcb/status')) return 60;
+  if (
+    path.includes('/flow/dcb/pincode') ||
+    path.includes('/flow/dcb/confirm') ||
+    path.includes('/flow/dcb/manual-check')
+  ) {
+    return 10;
+  }
   if (path.includes('/flow/transition')) return 20;
   return 20;
 };
@@ -42,9 +50,8 @@ export const publicRateLimit = async (req, res, next) => {
 
       if (String(path).includes('/callback')) {
         try {
-          const { appendPostbackHitSafe } = await import(
-            '../../modules/partners/helpers/postback-day-report-file.js'
-          );
+          const { appendPostbackHitSafe } =
+            await import('../../modules/partners/helpers/postback-day-report-file.js');
           await appendPostbackHitSafe({
             callType: 'billing_callback',
             requestUrl: path.split('?')[0] || '/api/flow/callback',
@@ -61,7 +68,9 @@ export const publicRateLimit = async (req, res, next) => {
             createdAt: new Date(),
           });
         } catch (err) {
-          console.warn(`callback rate-limit hit file write failed: ${err.message}`);
+          console.warn(
+            `callback rate-limit hit file write failed: ${err.message}`,
+          );
         }
       }
 

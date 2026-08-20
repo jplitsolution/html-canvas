@@ -40,6 +40,7 @@ export const initDatabase = async () => {
   await ensureSuccessRedirectModeColumn(dataSource);
   await ensurePostbackRegisterAtColumn(dataSource);
   await ensureChecksubConfigJsonColumn(dataSource);
+  await ensureDcbConfigJsonColumn(dataSource);
   await ensureFunnelLayoutColumn(dataSource);
   await ensureDailyStatsTable(dataSource);
   return dataSource;
@@ -228,6 +229,32 @@ async function ensureChecksubConfigJsonColumn(ds) {
     }
   } catch (err) {
     console.warn('ensureChecksubConfigJsonColumn:', err.message);
+  }
+}
+
+/** Idempotent: Universe Telecom DCB provider and normalizer configuration. */
+async function ensureDcbConfigJsonColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "api_configs"
+        ADD COLUMN IF NOT EXISTS "dcb_config_json" text
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'api_configs' AND COLUMN_NAME = 'dcb_config_json'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`api_configs\` ADD COLUMN \`dcb_config_json\` text NULL`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureDcbConfigJsonColumn:', err.message);
   }
 }
 

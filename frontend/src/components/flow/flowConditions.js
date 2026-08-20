@@ -36,17 +36,10 @@ export function getValidConditions(sourcePageType, verificationMode) {
       if (
         verificationMode === 'HEADER_INJECTION' ||
         verificationMode === 'MSISDN_ONLY' ||
-        verificationMode === 'BOTH'
+        verificationMode === 'BOTH' ||
+        verificationMode === 'UNIVERSE_DCB'
       ) {
-        return [
-          'HEADER_RESOLVED',
-          'HEADER_UNRESOLVED',
-          'SUBSCRIBED',
-          'PENDING',
-          'LOW_BALANCE',
-          'BLOCKED',
-          'ERROR',
-        ]
+        return ['HEADER_RESOLVED', 'HEADER_UNRESOLVED', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       }
       return ['DEFAULT', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
     case 'OTP':

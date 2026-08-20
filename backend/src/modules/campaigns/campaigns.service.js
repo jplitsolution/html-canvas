@@ -1,13 +1,21 @@
 import { getRepository } from '../../database/index.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
-import { ALL_CAMPAIGN_PAGE_TYPES, CampaignPage, REQUIRED_CAMPAIGN_PAGE_TYPES } from '../../database/entities/campaign-page.entity.js';
+import {
+  ALL_CAMPAIGN_PAGE_TYPES,
+  CampaignPage,
+  REQUIRED_CAMPAIGN_PAGE_TYPES,
+} from '../../database/entities/campaign-page.entity.js';
 import { Template } from '../../database/entities/template.entity.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
 import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { marketsService } from '../markets/markets.service.js';
-import { buildTrackingId, deriveCountryCode, deriveOperatorCode } from '../markets/helpers/tracking-id.util.js';
+import {
+  buildTrackingId,
+  deriveCountryCode,
+  deriveOperatorCode,
+} from '../markets/helpers/tracking-id.util.js';
 import { redisService } from '../../common/services/redis.service.js';
 
 export const createCampaignsService = () => {
@@ -139,9 +147,7 @@ export const createCampaignsService = () => {
       },
       order: { updatedAt: 'DESC' },
     });
-    return campaigns.map((c) =>
-      sanitizeCampaignListItem(withTrackingId(c)),
-    );
+    return campaigns.map((c) => sanitizeCampaignListItem(withTrackingId(c)));
   };
 
   const findOne = async (id, userId) => {
@@ -159,7 +165,9 @@ export const createCampaignsService = () => {
       throw err;
     }
     if (campaign.userId !== userId) {
-      const err = new Error('You do not have permission to access this campaign');
+      const err = new Error(
+        'You do not have permission to access this campaign',
+      );
       err.statusCode = 403;
       throw err;
     }
@@ -254,8 +262,8 @@ export const createCampaignsService = () => {
   };
 
   const create = async (dto, userId) => {
-    const { country, operator } =
-      await marketsService.resolveOperatorForCreate({
+    const { country, operator } = await marketsService.resolveOperatorForCreate(
+      {
         userId,
         operatorId: dto.operatorId,
         countryCode:
@@ -266,7 +274,8 @@ export const createCampaignsService = () => {
           (dto.operator ? deriveOperatorCode(dto.operator) : undefined),
         countryName: dto.country,
         operatorName: dto.operator,
-      });
+      },
+    );
 
     const countryName = normalize(dto.country || country.name);
     const operatorName = normalize(dto.operator || operator.name);
@@ -289,7 +298,9 @@ export const createCampaignsService = () => {
         relations: { pages: { template: true } },
       });
       if (!source) {
-        const err = new Error(`Source campaign ${dto.copyFromCampaignId} not found`);
+        const err = new Error(
+          `Source campaign ${dto.copyFromCampaignId} not found`,
+        );
         err.statusCode = 404;
         throw err;
       }
@@ -403,7 +414,10 @@ export const createCampaignsService = () => {
       campaign.funnelLayout = nextLayout;
       // Default: pack-click pending only. Classic "otp only" would skip pack CTAs
       // as the primary register — reset so Advanced can opt back into OTP.
-      if (nextLayout === 'packs_on_home' && campaign.postbackRegisterAt === 'otp') {
+      if (
+        nextLayout === 'packs_on_home' &&
+        campaign.postbackRegisterAt === 'otp'
+      ) {
         campaign.postbackRegisterAt = 'confirm';
       }
       const parsed = flowEngineService.parseFlowConfig(campaign.flowConfig);
@@ -474,7 +488,10 @@ export const createCampaignsService = () => {
 
     let flowConfig;
     if (dto.flowConfig) {
-      flowConfig = flowEngineService.stripUnreachableNodes(dto.flowConfig, mode);
+      flowConfig = flowEngineService.stripUnreachableNodes(
+        dto.flowConfig,
+        mode,
+      );
       const { ok, errors } = flowEngineService.validate(flowConfig, mode);
       if (!ok) {
         const err = new Error(`Invalid flow: ${errors.join(' ')}`);
@@ -542,21 +559,27 @@ export const createCampaignsService = () => {
       throw err;
     }
     if (campaign.userId !== userId) {
-      const err = new Error('You do not have permission to access this campaign');
+      const err = new Error(
+        'You do not have permission to access this campaign',
+      );
       err.statusCode = 403;
       throw err;
     }
 
     await ensureCampaignPages(campaign);
 
-    const normalizedType = String(pageType || '').trim().toUpperCase();
+    const normalizedType = String(pageType || '')
+      .trim()
+      .toUpperCase();
     if (!ALL_CAMPAIGN_PAGE_TYPES.includes(normalizedType)) {
       const err = new Error(`Invalid page type "${pageType}"`);
       err.statusCode = 400;
       throw err;
     }
 
-    const page = (campaign.pages || []).find((p) => p.pageType === normalizedType);
+    const page = (campaign.pages || []).find(
+      (p) => p.pageType === normalizedType,
+    );
     if (!page) {
       const err = new Error(`Page type ${pageType} not found for campaign`);
       err.statusCode = 404;
@@ -575,7 +598,9 @@ export const createCampaignsService = () => {
   };
 
   const updatePageContent = async (campaignId, pageType, dto, userId) => {
-    const normalizedType = String(pageType || '').trim().toUpperCase();
+    const normalizedType = String(pageType || '')
+      .trim()
+      .toUpperCase();
     if (!ALL_CAMPAIGN_PAGE_TYPES.includes(normalizedType)) {
       const err = new Error(`Invalid page type "${pageType}"`);
       err.statusCode = 400;
@@ -612,7 +637,9 @@ export const createCampaignsService = () => {
 
   const getApiConfig = async (campaignId, userId) => {
     await findOne(campaignId, userId);
-    return getApiConfigRepo().findOne({ where: { campaignId: parseInt(campaignId, 10) } });
+    return getApiConfigRepo().findOne({
+      where: { campaignId: parseInt(campaignId, 10) },
+    });
   };
 
   const upsertApiConfig = async (campaignId, payload, userId) => {
@@ -628,6 +655,7 @@ export const createCampaignsService = () => {
       heProvider: payload.heProvider,
       heConfigJson: payload.heConfigJson,
       checksubConfigJson: payload.checksubConfigJson,
+      dcbConfigJson: payload.dcbConfigJson,
     };
     // Strip undefined so we don't wipe fields the client omitted
     Object.keys(allowed).forEach((k) => {
@@ -642,6 +670,11 @@ export const createCampaignsService = () => {
     if (Object.prototype.hasOwnProperty.call(allowed, 'checksubConfigJson')) {
       const raw = allowed.checksubConfigJson;
       allowed.checksubConfigJson =
+        raw == null || String(raw).trim() === '' ? null : String(raw).trim();
+    }
+    if (Object.prototype.hasOwnProperty.call(allowed, 'dcbConfigJson')) {
+      const raw = allowed.dcbConfigJson;
+      allowed.dcbConfigJson =
         raw == null || String(raw).trim() === '' ? null : String(raw).trim();
     }
 
