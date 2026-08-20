@@ -67,7 +67,9 @@ function toRfNodes(flowConfig, startConfig, mode) {
       data: {
         label: isMeta
           ? n.pageType
-          : PAGE_TYPE_LABELS[n.pageType] || n.pageType,
+          : mode === 'UNIVERSE_DCB' && n.pageType === 'OTP'
+            ? 'Number / Billing PIN'
+            : PAGE_TYPE_LABELS[n.pageType] || n.pageType,
         pageType: n.pageType,
         kind: n.kind || (n.pageType === 'START' ? 'start' : n.pageType === 'END' ? 'end' : 'page'),
         startConfig: isMeta && n.pageType === 'START' ? visual.startConfig : undefined,
@@ -82,7 +84,7 @@ function toRfEdges(flowConfig, startConfig, mode) {
     id: e.id,
     source: e.source,
     target: e.target,
-    label: e.condition || 'DEFAULT',
+    label: conditionLabel(e.condition || 'DEFAULT'),
     animated: true,
     data: { condition: e.condition || 'DEFAULT' },
   }))

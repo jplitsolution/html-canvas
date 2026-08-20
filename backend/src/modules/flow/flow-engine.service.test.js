@@ -23,12 +23,20 @@ describe('verification modes', () => {
       false,
     );
     assert.equal(
-      flowEngineService.nextPage(cfg, 'HOME', 'HEADER_UNRESOLVED'),
+      flowEngineService.nextPage(cfg, 'OTP', 'MSISDN_CHECKED'),
+      'HOME',
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'HOME', 'PIN_REQUESTED'),
       'OTP',
     );
     assert.equal(
-      flowEngineService.nextPage(cfg, 'OTP', 'OTP_VERIFIED'),
-      'HOME',
+      flowEngineService.nextPage(cfg, 'OTP', 'PIN_CONFIRMED'),
+      'INPROGRESS',
+    );
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'INPROGRESS', 'ACTIVATED'),
+      'THANKYOU',
     );
   });
 });

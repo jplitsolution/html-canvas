@@ -105,7 +105,12 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
     kind: 'end',
   }
 
-  const outcomeTypes = new Set(['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR'])
+  const dcbMode = String(mode || '').toUpperCase() === 'UNIVERSE_DCB'
+  const outcomeTypes = new Set(
+    dcbMode
+      ? ['THANKYOU', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
+      : ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
+  )
   const outcomeNodes = (base.nodes || []).filter((n) => outcomeTypes.has(n.pageType))
   if (outcomeNodes.length) {
     const avgY = outcomeNodes.reduce((s, n) => s + (n.position?.y || 160), 0) / outcomeNodes.length
@@ -113,14 +118,31 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
     endNode.position = { x: maxX + 200, y: avgY }
   }
 
-  const extraEdges = [
-    {
-      id: `${START_NODE_ID}-DEFAULT-${entryId}`,
-      source: START_NODE_ID,
-      target: entryId,
-      condition: 'AFTER_CHECKS',
-    },
-  ]
+  const otpNode = (base.nodes || []).find((n) => n.pageType === 'OTP')
+  const extraEdges =
+    dcbMode && otpNode
+      ? [
+          {
+            id: `${START_NODE_ID}-HEADER_RESOLVED-${entryId}`,
+            source: START_NODE_ID,
+            target: entryId,
+            condition: 'HEADER_RESOLVED',
+          },
+          {
+            id: `${START_NODE_ID}-MANUAL_MSISDN_REQUIRED-${otpNode.id}`,
+            source: START_NODE_ID,
+            target: otpNode.id,
+            condition: 'MANUAL_MSISDN_REQUIRED',
+          },
+        ]
+      : [
+          {
+            id: `${START_NODE_ID}-DEFAULT-${entryId}`,
+            source: START_NODE_ID,
+            target: entryId,
+            condition: 'AFTER_CHECKS',
+          },
+        ]
   for (const n of outcomeNodes) {
     extraEdges.push({
       id: `${n.id}-DEFAULT-${END_NODE_ID}`,

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildDefaultFlow, resolveAfterIdentityTarget } from './verificationModes.js'
+import { START_NODE_ID, END_NODE_ID, withVisualStartEnd } from './startConfig.js'
 
 describe('buildDefaultFlow', () => {
   it('HE: HOME after resolve, no Confirm, miss → Error', () => {
@@ -41,8 +42,37 @@ describe('buildDefaultFlow', () => {
     expect(cfg.nodes.some((node) => node.pageType === 'INPROGRESS')).toBe(true)
     expect(
       cfg.edges.some(
-        (edge) => edge.source === 'HOME' && edge.condition === 'HEADER_UNRESOLVED' && edge.target === 'OTP'
+        (edge) => edge.source === 'OTP' && edge.condition === 'MSISDN_CHECKED' && edge.target === 'HOME'
       )
     ).toBe(true)
+    expect(
+      cfg.edges.some((edge) => edge.source === 'HOME' && edge.condition === 'PIN_REQUESTED' && edge.target === 'OTP')
+    ).toBe(true)
+    expect(
+      cfg.edges.some(
+        (edge) => edge.source === 'OTP' && edge.condition === 'PIN_CONFIRMED' && edge.target === 'INPROGRESS'
+      )
+    ).toBe(true)
+    expect(
+      cfg.edges.some(
+        (edge) => edge.source === 'INPROGRESS' && edge.condition === 'ACTIVATED' && edge.target === 'THANKYOU'
+      )
+    ).toBe(true)
+
+    const visual = withVisualStartEnd(cfg, cfg.startConfig, 'UNIVERSE_DCB')
+    expect(
+      visual.edges.some(
+        (edge) => edge.source === START_NODE_ID && edge.condition === 'HEADER_RESOLVED' && edge.target === 'HOME'
+      )
+    ).toBe(true)
+    expect(
+      visual.edges.some(
+        (edge) =>
+          edge.source === START_NODE_ID && edge.condition === 'MANUAL_MSISDN_REQUIRED' && edge.target === 'OTP'
+      )
+    ).toBe(true)
+    expect(
+      visual.edges.some((edge) => edge.source === 'INPROGRESS' && edge.target === END_NODE_ID)
+    ).toBe(false)
   })
 })

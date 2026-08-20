@@ -231,8 +231,8 @@ export const createFlowEngineService = () => {
         entryPage: CampaignPageType.HOME,
         startConfig: defaultStartConfig(mode),
         nodes: [
-          node(CampaignPageType.HOME, 40, 160),
-          node(CampaignPageType.OTP, 320, 60),
+          node(CampaignPageType.HOME, 360, 220),
+          node(CampaignPageType.OTP, 360, 20),
           outcomeNode(CampaignPageType.THANKYOU, 40),
           outcomeNode(CampaignPageType.INPROGRESS, 160),
           outcomeNode(CampaignPageType.LOW_BALANCE, 280),
@@ -241,12 +241,39 @@ export const createFlowEngineService = () => {
         ],
         edges: [
           edge(
-            CampaignPageType.HOME,
             CampaignPageType.OTP,
-            'HEADER_UNRESOLVED',
+            CampaignPageType.HOME,
+            'MSISDN_CHECKED',
           ),
-          edge(CampaignPageType.OTP, CampaignPageType.HOME, 'OTP_VERIFIED'),
-          ...outcomeEdgesFrom(CampaignPageType.HOME),
+          edge(CampaignPageType.HOME, CampaignPageType.OTP, 'PIN_REQUESTED'),
+          edge(
+            CampaignPageType.HOME,
+            CampaignPageType.THANKYOU,
+            'ENTITLED',
+          ),
+          edge(
+            CampaignPageType.HOME,
+            CampaignPageType.LOW_BALANCE,
+            'LOW_BALANCE',
+          ),
+          edge(CampaignPageType.HOME, CampaignPageType.BLOCKED, 'BLOCKED'),
+          edge(CampaignPageType.HOME, CampaignPageType.ERROR, 'ERROR'),
+          edge(
+            CampaignPageType.OTP,
+            CampaignPageType.INPROGRESS,
+            'PIN_CONFIRMED',
+          ),
+          edge(
+            CampaignPageType.INPROGRESS,
+            CampaignPageType.THANKYOU,
+            'ACTIVATED',
+          ),
+          edge(
+            CampaignPageType.INPROGRESS,
+            CampaignPageType.LOW_BALANCE,
+            'LOW_BALANCE',
+          ),
+          edge(CampaignPageType.INPROGRESS, CampaignPageType.ERROR, 'ERROR'),
         ],
       };
     }
