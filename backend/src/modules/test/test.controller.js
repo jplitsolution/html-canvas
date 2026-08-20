@@ -1,4 +1,12 @@
 import { redisService } from '../../common/services/redis.service.js';
+import {
+  createDummyDcbHandlers,
+  createRedisBackedCache,
+} from './dummy-dcb.js';
+
+const dummyDcb = createDummyDcbHandlers({
+  cache: createRedisBackedCache(redisService),
+});
 
 const getOtpFromRedis = async (mobile) => {
   return redisService.get(`otp:${mobile}`);
@@ -124,4 +132,10 @@ export const testController = {
       return res.status(500).json({ success: false, message: error.message });
     }
   },
+
+  dummyDcbDirectory: dummyDcb.directory,
+  dummyDcbPublicConfig: dummyDcb.publicConfig,
+  dummyDcbSubscriptions: dummyDcb.subscriptions,
+  dummyDcbPincode: dummyDcb.pincode,
+  dummyDcbConfirm: dummyDcb.confirm,
 };
