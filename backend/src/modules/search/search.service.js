@@ -8,6 +8,7 @@ import {
   DEFAULT_TIMEZONE,
   resolveRangeBounds,
 } from '../../common/zoned-day.js';
+import { otpConversionStats } from '../otp/helpers/conversion.js';
 
 export const createSearchService = () => {
   const config = getConfig();
@@ -172,7 +173,7 @@ export const createSearchService = () => {
     }
   };
 
-  const applyDbFilters = (queryBuilder, params) => {
+  const applyDbFilters = (queryBuilder, params, options = {}) => {
     if (Array.isArray(params.campaignId)) {
       queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
         campaignIds: params.campaignId.length > 0 ? params.campaignId : [-1],
@@ -189,7 +190,7 @@ export const createSearchService = () => {
       });
     }
 
-    if (params.eventType) {
+    if (params.eventType && !options.ignoreEventType) {
       queryBuilder.andWhere('event.eventType = :eventType', {
         eventType: params.eventType,
       });
@@ -515,6 +516,44 @@ export const createSearchService = () => {
     }
   };
 
+  const jsonBoolSql = (columnJsonPath, jsonKey) => {
+    const dbType = getDataSource().options.type;
+    if (dbType === 'postgres') {
+      return `(${columnJsonPath}->>'${jsonKey}') IN ('true', 't', '1')`;
+    }
+    if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
+      return `json_extract(${columnJsonPath}, '$.${jsonKey}') IN (1, 'true', 't')`;
+    }
+    return `JSON_EXTRACT(${columnJsonPath}, '$.${jsonKey}') IN (true, 1, 'true')`;
+  };
+
+  const otpStatsFromDb = async (params) => {
+    const successTrue = jsonBoolSql('event.metadata', 'success');
+    const heldTrue = jsonBoolSql('event.metadata', 'held');
+    const qb = getRepository(VisitEvent)
+      .createQueryBuilder('event')
+      .leftJoin('event.visit', 'visit')
+      .select(
+        `COALESCE(SUM(CASE WHEN event.event_type = 'OTP_SEND' AND ${successTrue} THEN 1 ELSE 0 END), 0)`,
+        'requested',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.event_type = 'OTP_VERIFY' AND ${successTrue} THEN 1 ELSE 0 END), 0)`,
+        'liveVerified',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.event_type = 'OTP_VERIFY' AND ${heldTrue} THEN 1 ELSE 0 END), 0)`,
+        'held',
+      );
+    applyDbFilters(qb, params, { ignoreEventType: true });
+    const row = await qb.getRawOne();
+    return otpConversionStats({
+      requested: row?.requested,
+      liveVerified: row?.liveVerified,
+      held: row?.held,
+    });
+  };
+
   const aggregationsFromDb = async (
     params,
     interval = 'day',
@@ -587,6 +626,7 @@ export const createSearchService = () => {
       byVendor: formatBuckets(byVendorRaw),
       byAffiliate: formatBuckets(byAffiliateRaw),
       byStatus: formatBuckets(byStatusRaw),
+      otpStats: await otpStatsFromDb(params),
     };
   };
 
@@ -632,6 +672,7 @@ export const createSearchService = () => {
           byVendor: buckets('byVendor'),
           byAffiliate: buckets('byAffiliate'),
           byStatus: buckets('byStatus'),
+          otpStats: await otpStatsFromDb(params),
         };
       } catch (err) {
         connectionFailed = true;

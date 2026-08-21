@@ -2,6 +2,8 @@ import { getRepository } from '../../database/index.js';
 import { mintClickId } from '../flow/helpers/click-id.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
+import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
+import { Vendor } from '../../database/entities/vendor.entity.js';
 import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
@@ -26,14 +28,16 @@ import {
 export const createOtpService = () => {
   const getApiConfigRepo = () => getRepository(ApiConfig);
   const getCampaignRepo = () => getRepository(Campaign);
+  const getTrackingRepo = () => getRepository(CampaignTracking);
+  const getVendorRepo = () => getRepository(Vendor);
   const getVisitRepo = () => getRepository(Visit);
   const getVisitEventRepo = () => getRepository(VisitEvent);
 
   const pendingKey = (visitId, phone) =>
     `otp:pending:${visitId || 'none'}:${String(phone).trim()}`;
 
-  const exposePendingKey = (campaignId, phone) =>
-    `otp:pending:expose:${campaignId}:${String(phone).trim()}`;
+  const exposePendingKey = (campaignId, vendorId, phone) =>
+    `otp:pending:expose:${campaignId}:${vendorId || 'none'}:${String(phone).trim()}`;
 
   const serializeInboundBody = (body) => {
     if (body == null) return null;
@@ -96,12 +100,60 @@ export const createOtpService = () => {
     }
   };
 
-  const resolveExposePayoutHold = async (campaignId, providerConfig) => {
-    const payoutPercent = parsePayoutPercent(providerConfig?.payoutPercent);
+  const missingVendorError = (campaignId) => {
+    const err = new Error(
+      `vendorId is required. Use GET/POST /api/otp/${campaignId}/{vendorId}/send and /verify`,
+    );
+    err.statusCode = 400;
+    return err;
+  };
+
+  const resolveAssignedVendor = async (campaign, vendorRaw) => {
+    const ref = String(vendorRaw || '').trim();
+    if (!ref) throw missingVendorError(campaign.id);
+
+    let vendor = null;
+    if (/^\d+$/.test(ref)) {
+      vendor = await getVendorRepo().findOne({ where: { id: Number(ref) } });
+    }
+    if (!vendor) {
+      vendor = await getVendorRepo().findOne({
+        where: { code: ref, userId: campaign.userId },
+      });
+    }
+    if (!vendor) {
+      const err = new Error('Vendor not found');
+      err.statusCode = 404;
+      throw err;
+    }
+    if (vendor.active === false) {
+      const err = new Error('Vendor is deactivated');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const tracking = await getTrackingRepo().findOne({
+      where: { campaignId: campaign.id, vendorId: vendor.id },
+    });
+    if (!tracking || tracking.active === false) {
+      const err = new Error('This vendor is not assigned to the campaign');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return { vendor, tracking };
+  };
+
+  const resolveExposePayoutHold = async (
+    campaignId,
+    vendorId,
+    payoutPercentRaw,
+  ) => {
+    const payoutPercent = parsePayoutPercent(payoutPercentRaw);
     if (payoutPercent >= 100) {
       return { held: false, seq: null, payoutPercent };
     }
-    const seq = await redisService.incr(payoutSeqKey(campaignId));
+    const seq = await redisService.incr(payoutSeqKey(campaignId, vendorId));
     if (!seq) {
       return { held: false, seq: null, payoutPercent };
     }
@@ -116,7 +168,7 @@ export const createOtpService = () => {
   const normalizeMsisdn = (phone) => String(phone || '').replace(/\D/g, '');
 
   /**
-   * One session per campaign + MSISDN for API-expose (no new row every send/verify).
+   * One session per campaign + vendor + MSISDN for API-expose.
    */
   const ensureExposeVisit = async ({
     campaign,
@@ -124,6 +176,7 @@ export const createOtpService = () => {
     clientIp,
     landingUrl,
     visitStatus,
+    vendorId,
   }) => {
     const cId = campaign.id;
     const msisdn = normalizeMsisdn(phone);
@@ -133,9 +186,12 @@ export const createOtpService = () => {
       throw err;
     }
 
-    // Always reuse — Campaign Logs is one row per visit/click; same MSISDN must not multiply.
+    const vid = Number(vendorId) || null;
+    const where = { campaignId: cId, phone: msisdn };
+    if (vid) where.vendorId = vid;
+
     const existing = await getVisitRepo().findOne({
-      where: { campaignId: cId, phone: msisdn },
+      where,
       order: { id: 'DESC' },
     });
 
@@ -151,6 +207,9 @@ export const createOtpService = () => {
       if (visitStatus) {
         patch.visitStatus = visitStatus;
       }
+      if (vid && !existing.vendorId) {
+        patch.vendorId = vid;
+      }
       await getVisitRepo().update({ id: existing.id }, patch);
       return { ...existing, ...patch, id: existing.id };
     }
@@ -158,6 +217,7 @@ export const createOtpService = () => {
     const clickId = mintClickId();
     const visit = getVisitRepo().create({
       campaignId: cId,
+      vendorId: vid,
       phone: msisdn,
       country: campaign.country || null,
       operator: campaign.operator || null,
@@ -172,6 +232,7 @@ export const createOtpService = () => {
     await logOtpEvent(saved.id, VisitEventType.VISIT, {
       source: 'otp_expose',
       campaignId: cId,
+      vendorId: vid,
       msisdn,
       landingUrl: landingUrl || null,
     });
@@ -180,6 +241,7 @@ export const createOtpService = () => {
       void searchService.indexEvent({
         campaignId: cId,
         visitId: saved.id,
+        vendorId: vid,
         clickId,
         phone: msisdn,
         phoneMasked: msisdn,
@@ -231,6 +293,7 @@ export const createOtpService = () => {
         void searchService.indexEvent({
           visitId: parseInt(visitId, 10),
           campaignId: metadata?.campaignId || null,
+          vendorId: metadata?.vendorId || null,
           phone: metadata?.msisdn || metadata?.phone || null,
           phoneMasked: metadata?.msisdn || metadata?.phone || null,
           eventType,
@@ -526,7 +589,11 @@ export const createOtpService = () => {
    * Public API-expose mediator: mint visit → log inbound → partner OTP → log outbound.
    * Visit ties logs into Campaign Logs / Session Detail with full req/res.
    */
-  const exposeSendOtp = async ({ campaignId, phone, pack }, clientIp, meta = {}) => {
+  const exposeSendOtp = async (
+    { campaignId, vendorId, phone, pack },
+    clientIp,
+    meta = {},
+  ) => {
     const cId = parseInt(campaignId, 10);
     if (!cId) {
       const err = new Error('campaignId is required');
@@ -546,10 +613,11 @@ export const createOtpService = () => {
       throw err;
     }
     const inboundUrl =
-      meta.requestUrl || `/api/otp/${cId}/send`;
+      meta.requestUrl || `/api/otp/${cId}/${vendorId || '{vendorId}'}/send`;
     const inboundBody = serializeInboundBody({
       msisdn,
       pack: pack || 'daily',
+      vendorId: vendorId || null,
     });
 
     if (await isRateLimited(clientIp, null)) {
@@ -587,12 +655,30 @@ export const createOtpService = () => {
       throw err;
     }
 
+    let vendor;
+    try {
+      ({ vendor } = await resolveAssignedVendor(campaign, vendorId));
+    } catch (err) {
+      await logInboundExpose({
+        callType: ApiCallType.OTP_EXPOSE_SEND_IN,
+        campaignId: cId,
+        phone: msisdn,
+        requestUrl: inboundUrl,
+        requestBody: inboundBody,
+        responseStatus: err.statusCode || 400,
+        success: false,
+        errorMessage: err.message,
+      });
+      throw err;
+    }
+
     const visit = await ensureExposeVisit({
       campaign,
       phone: msisdn,
       clientIp,
       landingUrl: inboundUrl,
       visitStatus: VisitStatus.OTP_SHOWN,
+      vendorId: vendor.id,
     });
 
     const apiConfig = await getApiConfigForCampaign(cId);
@@ -639,6 +725,7 @@ export const createOtpService = () => {
       providerRequestId: sendResult?.providerRequestId || null,
       sent: Boolean(sendResult?.success),
       visitId: visit.id,
+      vendorId: vendor.id,
     };
 
     await logInboundExpose({
@@ -667,6 +754,7 @@ export const createOtpService = () => {
     await logOtpEvent(visit.id, VisitEventType.OTP_SEND, {
       source: 'otp_expose',
       campaignId: cId,
+      vendorId: vendor.id,
       msisdn,
       pack: pack || 'daily',
       inboundUrl,
@@ -685,11 +773,12 @@ export const createOtpService = () => {
 
     if (sendResult.providerRequestId) {
       await redisService.set(
-        exposePendingKey(cId, phone),
+        exposePendingKey(cId, vendor.id, phone),
         {
           providerRequestId: sendResult.providerRequestId,
           phone: msisdn,
           visitId: visit.id,
+          vendorId: vendor.id,
         },
         15 * 60,
       );
@@ -699,7 +788,7 @@ export const createOtpService = () => {
   };
 
   const exposeVerifyOtp = async (
-    { campaignId, phone, otp, otpCode },
+    { campaignId, vendorId, phone, otp, otpCode },
     clientIp,
     meta = {},
   ) => {
@@ -729,10 +818,11 @@ export const createOtpService = () => {
       throw err;
     }
     const inboundUrl =
-      meta.requestUrl || `/api/otp/${cId}/verify`;
+      meta.requestUrl || `/api/otp/${cId}/${vendorId || '{vendorId}'}/verify`;
     const inboundBody = serializeInboundBody({
       msisdn,
       otp: otpPin,
+      vendorId: vendorId || null,
     });
 
     if (await isBruteForceAttempt(clientIp, null)) {
@@ -770,12 +860,31 @@ export const createOtpService = () => {
       throw err;
     }
 
+    let vendor;
+    let tracking;
+    try {
+      ({ vendor, tracking } = await resolveAssignedVendor(campaign, vendorId));
+    } catch (err) {
+      await logInboundExpose({
+        callType: ApiCallType.OTP_EXPOSE_VERIFY_IN,
+        campaignId: cId,
+        phone: msisdn,
+        requestUrl: inboundUrl,
+        requestBody: inboundBody,
+        responseStatus: err.statusCode || 400,
+        success: false,
+        errorMessage: err.message,
+      });
+      throw err;
+    }
+
     const visit = await ensureExposeVisit({
       campaign,
       phone: msisdn,
       clientIp,
       landingUrl: inboundUrl,
       visitStatus: VisitStatus.OTP_SHOWN,
+      vendorId: vendor.id,
     });
 
     const apiConfig = await getApiConfigForCampaign(cId);
@@ -801,7 +910,7 @@ export const createOtpService = () => {
     }
 
     let providerRequestId = '';
-    const pending = await redisService.get(exposePendingKey(cId, phone));
+    const pending = await redisService.get(exposePendingKey(cId, vendor.id, phone));
     if (pending?.providerRequestId) {
       providerRequestId = pending.providerRequestId;
     }
@@ -815,9 +924,17 @@ export const createOtpService = () => {
 
     let held = false;
     let payoutSeq = null;
-    let payoutPercent = parsePayoutPercent(providerConfig?.payoutPercent);
+    const trackingPayout =
+      tracking?.payoutPercent != null && tracking.payoutPercent !== ''
+        ? tracking.payoutPercent
+        : providerConfig?.payoutPercent;
+    let payoutPercent = parsePayoutPercent(trackingPayout);
     if (verifyResult?.success) {
-      const decision = await resolveExposePayoutHold(cId, providerConfig);
+      const decision = await resolveExposePayoutHold(
+        cId,
+        vendor.id,
+        trackingPayout,
+      );
       held = decision.held;
       payoutSeq = decision.seq;
       payoutPercent = decision.payoutPercent;
@@ -848,6 +965,7 @@ export const createOtpService = () => {
           verified: clientSuccess,
           responseCode: verifyResult?.responseCode ?? null,
           visitId: visit.id,
+          vendorId: vendor.id,
         };
 
     await logInboundExpose({
@@ -875,6 +993,7 @@ export const createOtpService = () => {
     await logOtpEvent(visit.id, VisitEventType.OTP_VERIFY, {
       source: 'otp_expose',
       campaignId: cId,
+      vendorId: vendor.id,
       msisdn,
       inboundUrl,
       partnerUrl: verifyResult?.requestUrl || null,
@@ -898,7 +1017,7 @@ export const createOtpService = () => {
       { id: visit.id },
       { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
     );
-    await redisService.del(exposePendingKey(cId, phone));
+    await redisService.del(exposePendingKey(cId, vendor.id, phone));
 
     if (held) {
       const err = new Error(HELD_OTP_MESSAGE);

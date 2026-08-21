@@ -74,7 +74,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'phone-field',
         label: 'Phone number box',
         why: 'User types their mobile number here.',
-        match: 'data-otp-field="phone"',
+        matchAny: ['data-otp-field="phone"', 'data-dcb-field="phone"'],
         thumb: 'contact',
         snippet: phoneFieldSnippet,
       },
@@ -82,7 +82,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'send-otp',
         label: 'Get OTP button',
         why: 'Sends SMS code to the server.',
-        match: 'data-otp-action="send"',
+        matchAny: ['data-otp-action="send"', 'data-dcb-action="manual-check"'],
         thumb: 'button',
         snippet: `<button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Get OTP</button>`,
       },
@@ -90,7 +90,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'otp-field',
         label: 'OTP code box',
         why: 'User enters the SMS code here.',
-        match: 'data-otp-field="otp"',
+        matchAny: ['data-otp-field="otp"', 'data-dcb-field="pin"'],
         thumb: 'contact',
         snippet: otpFieldSnippet,
       },
@@ -98,7 +98,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'verify-otp',
         label: 'Verify button',
         why: 'Checks the code with the server and continues the flow.',
-        match: 'data-otp-action="verify"',
+        matchAny: ['data-otp-action="verify"', 'data-dcb-action="confirm-pin"'],
         thumb: 'button',
         snippet: `<button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>`,
       },
@@ -106,7 +106,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'error-slot',
         label: 'Error message area',
         why: 'Shows errors like wrong OTP (can be empty but must exist).',
-        match: 'data-otp-slot="error"',
+        matchAny: ['data-otp-slot="error"', 'data-dcb-slot="error"'],
         thumb: 'text',
         snippet: `<div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>`,
       },
@@ -114,7 +114,7 @@ export const FUNNEL_PAGE_GUIDES = {
         id: 'status-slot',
         label: 'Status message area',
         why: 'Shows “code sent” messages (can be empty but must exist).',
-        match: 'data-otp-slot="status"',
+        matchAny: ['data-otp-slot="status"', 'data-dcb-slot="status"'],
         thumb: 'text',
         snippet: `<div data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>`,
       },
@@ -184,6 +184,75 @@ export const FUNNEL_PAGE_GUIDES = {
   },
 }
 
+export function getFunnelPageGuide(pageType, verificationMode) {
+  const base = pageType ? FUNNEL_PAGE_GUIDES[pageType] ?? null : null
+  if (!base) return null
+  if (String(verificationMode || '').toUpperCase() !== 'UNIVERSE_DCB') return base
+
+  if (pageType === 'OTP') {
+    return {
+      ...base,
+      title: 'Number, then PIN (same canvas)',
+      summary:
+        'Live pe pehle sirf number dikhega. Pack choose ke baad user wapas isi page pe aata hai, tab sirf PIN. Editor mein dono parts rakho — user ko ek saath nahi dikhte. Preview se Number / PIN alag dekh sakte ho.',
+      required: base.required.map((item) => {
+        if (item.id === 'phone-field') {
+          return {
+            ...item,
+            label: 'Mobile number box',
+            why: 'Pehli screen. Pack ke baad yeh hide ho jata hai.',
+            snippet: `
+    <div data-dcb-stage="number" style="text-align:left;margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
+      <input data-dcb-field="phone" data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+    </div>`,
+          }
+        }
+        if (item.id === 'send-otp') {
+          return {
+            ...item,
+            label: 'Check number button',
+            why: 'Checks the number, then continues to Home packs.',
+            snippet: `<div data-dcb-stage="number"><button type="button" data-dcb-action="manual-check" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Check subscription</button></div>`,
+          }
+        }
+        if (item.id === 'otp-field') {
+          return {
+            ...item,
+            label: 'Billing PIN box',
+            why: 'Pack ke baad wapas isi page pe sirf yeh dikhega.',
+            snippet: `
+    <div data-dcb-stage="pin" style="text-align:left;margin-bottom:12px;">
+      <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Billing PIN</label>
+      <input data-dcb-field="pin" data-otp-field="otp" inputmode="numeric" placeholder="Enter billing PIN" style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+    </div>`,
+          }
+        }
+        if (item.id === 'verify-otp') {
+          return {
+            ...item,
+            label: 'Confirm PIN button',
+            why: 'Confirms the billing PIN and starts activation.',
+            snippet: `<div data-dcb-stage="pin"><button type="button" data-dcb-action="confirm-pin" data-otp-action="verify" class="flow-btn">Confirm billing PIN</button></div>`,
+          }
+        }
+        return item
+      }),
+    }
+  }
+
+  if (pageType === 'HOME') {
+    return {
+      ...base,
+      title: 'Pack selection',
+      summary:
+        'After identity, user picks a pack here. Each pack button sends a billing PIN, then opens the PIN page.',
+    }
+  }
+
+  return base
+}
+
 export function getPageHtml(editor) {
   if (!editor) return ''
   try {
@@ -196,8 +265,9 @@ export function getPageHtml(editor) {
 export function validateFunnelPage(
   editor,
   pageType,
+  verificationMode,
 ) {
-  const guide = pageType ? FUNNEL_PAGE_GUIDES[pageType] ?? null : null
+  const guide = getFunnelPageGuide(pageType, verificationMode)
   if (!guide || !editor) return { ok: true, missing: [], guide }
 
   const html = getPageHtml(editor)
@@ -213,7 +283,17 @@ export function validateFunnelPage(
   return { ok: missing.length === 0, missing, guide }
 }
 
-const FLOW_MARKER_ATTRS = ['data-otp-field', 'data-otp-action', 'data-otp-slot', 'data-action', 'data-pack', 'data-flow-pack-picker']
+const FLOW_MARKER_ATTRS = [
+  'data-otp-field',
+  'data-otp-action',
+  'data-otp-slot',
+  'data-dcb-field',
+  'data-dcb-action',
+  'data-dcb-slot',
+  'data-action',
+  'data-pack',
+  'data-flow-pack-picker',
+]
 
 function hasFlowMarker(component) {
   const attrs = component?.getAttributes?.() || {}

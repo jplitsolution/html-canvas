@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_DCB_CONFIG, editorPackOptions, parseDcbConfig, previewConfirmPayload, previewPincodePayload, serializeDcbConfig } from '../../src/components/dashboard/dcbConfig'
+import {
+  DEFAULT_DCB_CONFIG,
+  buildDcbApiGuide,
+  editorPackOptions,
+  parseDcbConfig,
+  previewConfirmPayload,
+  previewPincodePayload,
+  serializeDcbConfig,
+} from '../../src/components/dashboard/dcbConfig'
 
 describe('Universe DCB campaign config', () => {
   it('provides the approved provider and polling defaults', () => {
@@ -139,5 +147,28 @@ describe('Universe DCB campaign config', () => {
       { packKey: 'weekly', label: 'Weekly', purchaseTypeId: '' },
       { packKey: 'monthly', label: 'Monthly', purchaseTypeId: '' },
     ])
+  })
+
+  it('builds downloadable API guide from UI field names and endpoints', () => {
+    const md = buildDcbApiGuide({
+      ...DEFAULT_DCB_CONFIG,
+      request: {
+        ...DEFAULT_DCB_CONFIG.request,
+        pinField: 'otp',
+        requestIdField: 'txnId',
+      },
+      endpoints: {
+        ...DEFAULT_DCB_CONFIG.endpoints,
+        pincode: '/api/dcb/pincode',
+        confirm: '/api/dcb/confirm',
+      },
+    })
+    expect(md).toContain('POST /api/dcb/pincode')
+    expect(md).toContain('POST /api/dcb/confirm')
+    expect(md).toContain('`otp`')
+    expect(md).toContain('`txnId`')
+    expect(md).toContain('merchantId')
+    expect(md).toContain('subscriptions')
+    expect(md).toContain('Maintain from UI')
   })
 })

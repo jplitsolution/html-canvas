@@ -1,5 +1,5 @@
 import { memo, useEffect, useMemo, useState } from 'react'
-import { Check, Smartphone, WifiOff } from 'lucide-react'
+import { Check, Download, Smartphone, WifiOff } from 'lucide-react'
 import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import Input from '../ui/Input'
@@ -14,11 +14,13 @@ import {
 } from '../../services/api/campaigns'
 import {
   DEFAULT_DCB_CONFIG,
+  buildDcbApiGuide,
   parseDcbConfig,
   previewConfirmPayload,
   previewPincodePayload,
   serializeDcbConfig,
 } from './dcbConfig'
+import { downloadTextFile } from '../../utils/download'
 
 const DEFAULT_PARTNER = {
   sendUrl: '',
@@ -628,11 +630,33 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     return (
       <div className="space-y-5">
         <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
-          <p className="text-sm font-semibold text-fg">Universe Telecom DCB</p>
-          <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-            These settings are used by the backend proxy for entitlement checks, PIN confirmation, and activation
-            polling. Provider request IDs are never saved in the browser.
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-fg">Universe Telecom DCB</p>
+              <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+                These settings are used by the backend proxy for entitlement checks, PIN confirmation, and activation
+                polling. Provider request IDs are never saved in the browser. Field names / endpoints yahan change
+                karo — Download guide usi se regenerate hota hai.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => {
+                downloadTextFile(
+                  `dcb-api-guide-campaign-${campaignId || 'draft'}.md`,
+                  buildDcbApiGuide(dcbConfig),
+                  'text/markdown;charset=utf-8',
+                )
+                useStore.getState().addToast('DCB API guide downloaded', 'success')
+              }}
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download API guide
+            </Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -1278,7 +1302,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                   </div>
                 </div>
                 <div className="rounded-lg border border-border bg-bg-subtle/50 p-3 space-y-2">
-                  <Field label="Client payout %" hint="API expose only · 100 = show all">
+                  <Field label="Default payout %" hint="Fallback if vendor assignment has none · 100 = show all">
                     <Input
                       type="number"
                       min={0}
@@ -1299,8 +1323,9 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
                     />
                   </Field>
                   <p className="text-[11px] leading-relaxed text-fg-muted">
-                    After partner verify succeeds, this percent is returned as success to the caller. The rest get
-                    invalid OTP. Visit stays SUCCESS internally (HELD in logs).
+                    Prefer payout % on each vendor assignment. This campaign default is used only
+                    when the assignment has no percent. After partner verify succeeds, that percent
+                    is returned as success to the vendor; the rest get invalid OTP (HELD in logs).
                   </p>
                 </div>
                 <Field label="Headers (JSON)" hint="optional">

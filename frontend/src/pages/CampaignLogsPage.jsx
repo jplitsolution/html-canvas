@@ -19,7 +19,6 @@ import {
   Database,
   AlertCircle,
   Activity,
-  Layers,
   Users,
   UserCheck,
   Calendar,
@@ -29,6 +28,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
+  KeyRound,
+  Percent,
+  Shield,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -110,7 +112,7 @@ function SectionCard({ title, children, actions, className = "" }) {
   )
 }
 
-function StatCard({ label, value, icon: Icon, colorClass = "from-indigo-500 to-indigo-600" }) {
+function StatCard({ label, value, hint, icon: Icon, colorClass = "from-indigo-500 to-indigo-600" }) {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-gray-100 bg-white p-5 shadow-xs transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm">
       <div className={`absolute top-0 left-0 h-1 w-full bg-gradient-to-r ${colorClass}`} />
@@ -118,6 +120,9 @@ function StatCard({ label, value, icon: Icon, colorClass = "from-indigo-500 to-i
         <div>
           <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>
           <p className="text-3xl font-extrabold text-gray-900 mt-2 tracking-tight">{value}</p>
+          {hint ? (
+            <p className="text-[11px] text-gray-400 mt-1 font-medium">{hint}</p>
+          ) : null}
         </div>
         {Icon && (
           <div className="rounded-xl p-3 bg-gray-50 border border-gray-100 text-gray-500 transition-all duration-300 group-hover:scale-110">
@@ -217,6 +222,8 @@ function CampaignLogsPage() {
   const addToast = useStore((s) => s.addToast)
   const campaigns = useStore((s) => s.campaigns)
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
+  const vendors = useStore((s) => s.vendors)
+  const fetchVendors = useStore((s) => s.fetchVendors)
   const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
   const dateFormat = useStore((s) => s.dateFormat)
   const [searchParams] = useSearchParams()
@@ -276,7 +283,8 @@ function CampaignLogsPage() {
         }
       })
       .catch(() => {})
-  }, [addToast, paramCampaignId, fetchCampaigns])
+    fetchVendors().catch(() => {})
+  }, [addToast, paramCampaignId, fetchCampaigns, fetchVendors])
 
   // Keep Today/Week/Month ranges aligned when profile timezone changes
   useEffect(() => {
@@ -317,6 +325,16 @@ function CampaignLogsPage() {
     () => (aggs?.byEventType || []).reduce((sum, b) => sum + b.count, 0),
     [aggs],
   )
+
+  const otpStats = aggs?.otpStats || {
+    requested: 0,
+    verifiedLive: 0,
+    verifiedVendor: 0,
+    held: 0,
+    liveConvPercent: 0,
+    vendorConvPercent: 0,
+    holdPercent: 0,
+  }
 
   const eventTypeOptions = useMemo(() => {
     const set = new Set(STANDARD_EVENT_TYPES)
@@ -434,7 +452,7 @@ function CampaignLogsPage() {
 
           <div
             className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${
-              datePreset === 'custom' ? 'lg:grid-cols-5' : 'lg:grid-cols-3'
+              datePreset === 'custom' ? 'lg:grid-cols-6' : 'lg:grid-cols-4'
             }`}
           >
             <div>
@@ -466,6 +484,21 @@ function CampaignLogsPage() {
                 {eventTypeOptions.map((type) => (
                   <option key={type} value={type}>
                     {type}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">Vendor</label>
+              <select
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
+                value={filters.vendorId}
+                onChange={(e) => updateFilter('vendorId', e.target.value)}
+              >
+                <option value="">— All Vendors —</option>
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.id}>
+                    {v.name} ({v.code})
                   </option>
                 ))}
               </select>
@@ -515,11 +548,49 @@ function CampaignLogsPage() {
         </div>
 
         {/* KPI Summary Widgets */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           <StatCard label="Total Event Count" value={totalEvents} icon={Activity} colorClass="from-indigo-500 to-purple-500" />
           <StatCard label="Clicks in filter" value={logs.total || 0} icon={Database} colorClass="from-blue-500 to-indigo-500" />
           <StatCard label="Unique Vendors" value={(aggs?.byVendor || []).length} icon={Users} colorClass="from-teal-500 to-emerald-500" />
           <StatCard label="Campaigns in view" value={selectedId === 'all' ? (aggs?.byCampaign || []).length || '—' : 1} icon={UserCheck} colorClass="from-amber-500 to-orange-500" />
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <StatCard
+            label="OTP requested"
+            value={otpStats.requested}
+            hint="Successful send"
+            icon={KeyRound}
+            colorClass="from-amber-500 to-orange-500"
+          />
+          <StatCard
+            label="OTP verified"
+            value={otpStats.verifiedLive}
+            hint={`${otpStats.verifiedVendor} shown to vendor`}
+            icon={KeyRound}
+            colorClass="from-violet-500 to-indigo-500"
+          />
+          <StatCard
+            label="Live conv %"
+            value={`${otpStats.liveConvPercent}%`}
+            hint="Verified / requested"
+            icon={Percent}
+            colorClass="from-emerald-500 to-teal-500"
+          />
+          <StatCard
+            label="Vendor conv %"
+            value={`${otpStats.vendorConvPercent}%`}
+            hint="After hold, what vendor sees"
+            icon={Percent}
+            colorClass="from-sky-500 to-blue-500"
+          />
+          <StatCard
+            label="Hold %"
+            value={`${otpStats.holdPercent}%`}
+            hint={`${otpStats.held} held of live verifies`}
+            icon={Shield}
+            colorClass="from-rose-500 to-orange-500"
+          />
         </div>
 
         {/* Charts Dashboard */}

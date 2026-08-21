@@ -24,4 +24,8 @@ export const shouldPayoutOtp = (n, payoutPercent) => {
   return Math.floor((seq * p) / 100) > Math.floor(((seq - 1) * p) / 100);
 };
 
-export const payoutSeqKey = (campaignId) => `otp:payout:n:${campaignId}`;
+export const payoutSeqKey = (campaignId, vendorId) => {
+  const vid = Number(vendorId) || 0;
+  if (!vid) return `otp:payout:n:${campaignId}`;
+  return `otp:payout:n:${campaignId}:${vid}`;
+};

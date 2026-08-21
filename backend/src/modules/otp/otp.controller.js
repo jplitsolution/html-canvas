@@ -74,11 +74,14 @@ export const otpController = {
 
   exposeSend: asyncHandler(async (req, res) => {
     const campaignId = req.params.campaignId;
+    const vendorId =
+      req.params.vendorId || pickExposeField(req, 'vendorId', 'vid');
     const phone = pickExposeField(req, 'msisdn', 'phone');
     const pack = pickExposeField(req, 'pack') || 'daily';
     const data = await otpService.exposeSendOtp(
       {
         campaignId,
+        vendorId,
         phone,
         pack,
       },
@@ -92,11 +95,14 @@ export const otpController = {
 
   exposeVerify: asyncHandler(async (req, res) => {
     const campaignId = req.params.campaignId;
+    const vendorId =
+      req.params.vendorId || pickExposeField(req, 'vendorId', 'vid');
     const phone = pickExposeField(req, 'msisdn', 'phone');
     const otp = pickExposeField(req, 'otp', 'otpCode', 'pin');
     const data = await otpService.exposeVerifyOtp(
       {
         campaignId,
+        vendorId,
         phone,
         otpCode: otp,
         otp,

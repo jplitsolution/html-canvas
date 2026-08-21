@@ -25,7 +25,7 @@ import { insertBackgroundWithText } from '../utils/insertBackground'
 import { unlockInsertion } from '../utils/insertionLock'
 import { uploadImage } from '../../services/api/upload'
 import { PlacementModal } from '../components/PlacementModal'
-import { FUNNEL_PAGE_GUIDES } from '../utils/funnelGuide'
+import { getFunnelPageGuide } from '../utils/funnelGuide'
 import useStore from '../../store/useStore'
 
 const TABS = [
@@ -64,9 +64,9 @@ function updateBackgroundText(editor, text) {
 const SIDEBAR_COLLAPSED_KEY = 'tc-editor-sidebar-collapsed'
 
 export function EditorSidebar() {
-  const { editor, funnelPageType, campaignId } = useEditor()
+  const { editor, funnelPageType, verificationMode, campaignId } = useEditor()
   const updateCampaign = useStore((s) => s.updateCampaign)
-  const flowGuide = funnelPageType ? FUNNEL_PAGE_GUIDES[funnelPageType] : undefined
+  const flowGuide = funnelPageType ? getFunnelPageGuide(funnelPageType, verificationMode) : undefined
   const hasFlowParts = Boolean(
     flowGuide && ((flowGuide.required?.length || 0) + (flowGuide.optional?.length || 0) > 0)
   )

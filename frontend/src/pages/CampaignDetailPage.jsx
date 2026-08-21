@@ -12,12 +12,14 @@ import {
   Trash2,
   AlertCircle,
   Check,
+  Download,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import Modal from '../components/common/Modal'
+import IconButton from '../components/ui/IconButton'
 import { copyToClipboard } from '../utils/clipboard'
 import {
   marketPath,
@@ -25,6 +27,10 @@ import {
 } from '../utils/routes'
 import { getCampaignPreviewUrl } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
+import { buildOtpExposeApiGuide, buildOtpExposeUrls, clampPayoutPercent } from '../services/api/otp'
+import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbExpose'
+import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/verificationModes'
+import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import CampaignFlowBuilder from '../components/flow/CampaignFlowBuilder'
 
@@ -56,6 +62,11 @@ function CompactStatusToggle({ active, onToggle, disabled, activating, blockedRe
   )
 }
 
+function relativeUrl(url) {
+  if (!url || typeof window === 'undefined') return url
+  return url.replace(window.location.origin, '')
+}
+
 function CampaignDetailPage() {
   const { id, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
   const navigate = useNavigate()
@@ -72,6 +83,7 @@ function CampaignDetailPage() {
   const [assigningVendor, setAssigningVendor] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
   const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
+  const [addPayoutPercent, setAddPayoutPercent] = useState(100)
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -110,25 +122,37 @@ function CampaignDetailPage() {
     }
   }
 
+  const serializeTrackings = (list) =>
+    (list || [])
+      .map((t) => ({
+        vendorId: Number(t.vendorId ?? t.vendor?.id),
+        affiliateId: null,
+        active: t.active !== false,
+        payoutPercent: clampPayoutPercent(t.payoutPercent ?? 100),
+      }))
+      .filter((t) => t.vendorId)
+
   const handleSubmitTracking = async () => {
     if (!campaign || !selectedVendorForAdd) return
     setAssigningVendor(true)
     try {
       const vendorId = Number(selectedVendorForAdd)
-      const currentTrackings = (campaign.trackings || [])
-        .map((t) => ({
-          vendorId: t.vendor?.id,
-          affiliateId: null,
-          active: t.active !== false,
-        }))
-        .filter((t) => t.vendorId !== vendorId)
+      const currentTrackings = serializeTrackings(campaign.trackings).filter(
+        (t) => t.vendorId !== vendorId,
+      )
 
       if (!currentTrackings.find((t) => t.vendorId === vendorId)) {
-        currentTrackings.push({ vendorId, affiliateId: null, active: true })
+        currentTrackings.push({
+          vendorId,
+          affiliateId: null,
+          active: true,
+          payoutPercent: clampPayoutPercent(addPayoutPercent),
+        })
         await updateCampaign(campaign.id, { trackings: currentTrackings })
-        useStore.getState().addToast('Vendor tracking assigned', 'success')
+        useStore.getState().addToast('Vendor assigned', 'success')
       }
       setSelectedVendorForAdd('')
+      setAddPayoutPercent(100)
     } finally {
       setAssigningVendor(false)
     }
@@ -142,13 +166,9 @@ function CampaignDetailPage() {
     if (!ok) return
     setAssigningVendor(true)
     try {
-      const newTrackings = (campaign.trackings || [])
-        .filter((t) => Number(t.vendor?.id) !== Number(vendorId))
-        .map((t) => ({
-          vendorId: t.vendor?.id,
-          affiliateId: null,
-          active: t.active !== false,
-        }))
+      const newTrackings = serializeTrackings(campaign.trackings).filter(
+        (t) => t.vendorId !== Number(vendorId),
+      )
       await updateCampaign(campaign.id, { trackings: newTrackings })
       useStore.getState().addToast('Tracking removed', 'success')
     } finally {
@@ -161,15 +181,10 @@ function CampaignDetailPage() {
     setAssigningVendor(true)
     try {
       const targetVendorId = Number(vendorId)
-      const currentTrackings = (campaign.trackings || []).map((t) => {
-        const tVendorId = Number(t.vendor?.id)
-        const currentlyOn = t.active !== false
-        return {
-          vendorId: tVendorId,
-          affiliateId: null,
-          active: tVendorId === targetVendorId ? !currentlyOn : currentlyOn,
-        }
-      })
+      const currentTrackings = serializeTrackings(campaign.trackings).map((t) => ({
+        ...t,
+        active: t.vendorId === targetVendorId ? !t.active : t.active,
+      }))
       await updateCampaign(campaign.id, { trackings: currentTrackings })
       const nowActive = currentTrackings.find(
         (t) => t.vendorId === targetVendorId,
@@ -185,16 +200,62 @@ function CampaignDetailPage() {
     }
   }
 
+  const handleSavePayoutPercent = async (vendorId, nextPercent) => {
+    if (!campaign) return
+    const payoutPercent = clampPayoutPercent(nextPercent)
+    const current = serializeTrackings(campaign.trackings)
+    const existing = current.find((t) => t.vendorId === Number(vendorId))
+    if (!existing || existing.payoutPercent === payoutPercent) return
+    setAssigningVendor(true)
+    try {
+      await updateCampaign(campaign.id, {
+        trackings: current.map((t) =>
+          t.vendorId === Number(vendorId) ? { ...t, payoutPercent } : t,
+        ),
+      })
+      useStore.getState().addToast(`Payout set to ${payoutPercent}%`, 'success')
+    } finally {
+      setAssigningVendor(false)
+    }
+  }
+
   const copyTracking = (url, copyKey) => {
     copyToClipboard(url).then((success) => {
       if (success) {
         setCopiedId(copyKey)
         setTimeout(() => setCopiedId(null), 2000)
-        useStore.getState().addToast('Tracking URL copied', 'success')
+        useStore.getState().addToast('Copied', 'success')
       } else {
         useStore.getState().addToast('Copy failed', 'error')
       }
     })
+  }
+
+  const downloadVendorApiGuide = (t, vendor) => {
+    const vendorId = vendor?.id || t.vendor?.id
+    const payload = dcbApiExpose
+      ? buildDcbExposeApiGuide({
+          origin: window.location.origin,
+          campaign,
+          vendor,
+          vendorId,
+        })
+      : buildOtpExposeApiGuide({
+          origin: window.location.origin,
+          campaign,
+          vendor,
+          vendorId,
+        })
+    const safeName = String(vendor?.code || vendor?.name || vendorId || 'vendor')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .toLowerCase()
+    const prefix = dcbApiExpose ? 'dcb-billing-api' : 'otp-api'
+    downloadTextFile(
+      `${prefix}-campaign-${campaign.id}-vendor-${safeName}.json`,
+      payload,
+      'application/json;charset=utf-8',
+    )
+    useStore.getState().addToast('API payload downloaded', 'success')
   }
 
   const handleToggleActive = async () => {
@@ -263,6 +324,8 @@ function CampaignDetailPage() {
       ? 'Complete the pages required by this flow first'
       : null
   const trackings = vendorTrackings
+  const apiExpose = isApiExposeCampaign(campaign)
+  const dcbApiExpose = isDcbApiExposeCampaign(campaign)
 
   const pageActions = (
     <>
@@ -408,71 +471,73 @@ function CampaignDetailPage() {
       <Modal
         isOpen={showVendorModal}
         onClose={() => setShowVendorModal(false)}
-        title="Vendors & tracking"
-        size="xl"
+        title="Vendors"
+        size="lg"
       >
         <div className="space-y-4">
-          <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-fg-muted">
-              Assign vendors to generate shareable tracking URLs.{' '}
-              <code className="font-mono text-[10px]">tracking_campid</code> = ours;{' '}
-              <code className="font-mono text-[10px]">campid=&#123;&#125;</code> +{' '}
-              <code className="font-mono text-[10px]">click_id=&#123;&#125;</code> = vendor
-              macros.
+              {apiExpose
+                ? 'Assign a vendor, set payout %, copy or download APIs.'
+                : 'Assign a vendor to generate a tracking URL.'}
             </p>
             <Link to="/vendors" className="text-xs text-accent hover:underline shrink-0">
-              Manage vendors
+              Manage
             </Link>
           </div>
 
-          <div className="rounded-lg border border-border bg-bg-muted/25 p-4">
-            <p className="text-xs font-medium text-fg mb-3">Assign vendor</p>
-            <div className="flex flex-col sm:flex-row gap-2.5">
-              <select
-                className="flex-1 text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring"
-                value={selectedVendorForAdd}
-                onChange={(e) => setSelectedVendorForAdd(e.target.value)}
-                disabled={assigningVendor}
-              >
-                <option value="">Select vendor…</option>
-                {activeVendors.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.name} ({v.code})
-                  </option>
-                ))}
-              </select>
-              <Button
-                size="sm"
-                variant="primary"
-                onClick={handleSubmitTracking}
-                disabled={assigningVendor || !selectedVendorForAdd}
-                className="sm:shrink-0"
-              >
-                <Plus className="w-4 h-4" />
-                {assigningVendor ? 'Assigning…' : 'Assign'}
-              </Button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <select
+              className="flex-1 text-sm border border-border rounded-md px-3 py-1.5 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring"
+              value={selectedVendorForAdd}
+              onChange={(e) => setSelectedVendorForAdd(e.target.value)}
+              disabled={assigningVendor}
+            >
+              <option value="">Select vendor…</option>
+              {activeVendors.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+            <div className="flex items-center gap-1.5">
+              <input
+                id="add-payout"
+                type="number"
+                min={0}
+                max={100}
+                aria-label="Payout percent"
+                value={addPayoutPercent}
+                onChange={(e) => setAddPayoutPercent(e.target.value)}
+                onBlur={() => setAddPayoutPercent(clampPayoutPercent(addPayoutPercent))}
+                className="w-14 bg-bg-elevated border border-border rounded-md px-2 py-1.5 text-sm text-fg tabular-nums"
+              />
+              <span className="text-[11px] text-fg-muted">%</span>
             </div>
-            {activeVendors.length === 0 && (
-              <p className="text-xs text-fg-muted mt-3">
-                No active vendors yet.{' '}
-                <Link to="/vendors" className="text-accent hover:underline">
-                  Create a vendor
-                </Link>{' '}
-                first.
-              </p>
-            )}
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handleSubmitTracking}
+              disabled={assigningVendor || !selectedVendorForAdd}
+              className="sm:shrink-0"
+            >
+              <Plus className="w-4 h-4" />
+              {assigningVendor ? 'Assigning…' : 'Assign'}
+            </Button>
           </div>
+          {activeVendors.length === 0 && (
+            <p className="text-xs text-fg-muted">
+              No active vendors.{' '}
+              <Link to="/vendors" className="text-accent hover:underline">
+                Create one
+              </Link>
+            </p>
+          )}
 
           {trackings.length === 0 ? (
-            <div className="py-8 text-center">
-              <Store className="w-8 h-8 mx-auto mb-3 text-fg-subtle" />
-              <p className="text-sm font-medium text-fg">No tracking assigned</p>
-              <p className="text-xs text-fg-muted mt-1 max-w-sm mx-auto">
-                Pick a vendor above to generate a tracking link for this campaign.
-              </p>
-            </div>
+            <p className="py-6 text-center text-sm text-fg-muted">No vendors assigned</p>
           ) : (
-            <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+            <div className="divide-y divide-border border-t border-border">
               {trackings.map((t) => {
                 const vendorId = t.vendor?.id
                 const vendor = vendors.find((v) => v.id === vendorId) || t.vendor
@@ -483,101 +548,114 @@ function CampaignDetailPage() {
                   campaign,
                   vendorCode: vendor?.code,
                 })
-                const relativeDisplay = displayUrl.replace(window.location.origin, '')
+                const otpUrls = buildOtpExposeUrls(window.location.origin, campaign.id, vendorId)
+                const dcbUrls = buildDcbExposeUrls(window.location.origin, campaign.id, vendorId)
                 const copyKey = String(vendorId)
+                const payout = clampPayoutPercent(t.payoutPercent ?? 100)
+                const endpoints = dcbApiExpose
+                  ? [
+                      { key: `${copyKey}-pin`, method: 'POST', label: 'PIN', url: dcbUrls.pincodeUrl },
+                      { key: `${copyKey}-confirm`, method: 'POST', label: 'Confirm', url: dcbUrls.confirmUrl },
+                      { key: `${copyKey}-status`, method: 'GET', label: 'Status', url: dcbUrls.statusUrl },
+                    ]
+                  : apiExpose
+                    ? [
+                        { key: `${copyKey}-send`, method: 'POST', label: 'Send', url: otpUrls.sendUrl },
+                        { key: `${copyKey}-verify`, method: 'POST', label: 'Verify', url: otpUrls.verifyUrl },
+                      ]
+                    : [{ key: copyKey, method: 'GET', label: 'Track', url: displayUrl }]
 
                 return (
-                  <div
-                    key={copyKey}
-                    className={`px-4 py-3.5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between ${
-                      linkActive ? '' : 'bg-bg-muted/30'
-                    }`}
-                  >
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold text-fg">{vendor?.name}</span>
-                        <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bg-muted text-fg-muted border border-border">
-                          {vendor?.code}
-                        </code>
-                        <span className={`badge ${linkActive ? 'badge-success' : 'badge-muted'}`}>
-                          {linkActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </div>
-                      {!linkActive && (
-                        <p className="text-[11px] text-warning flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3" />
-                          {!assignmentActive
-                            ? 'Assignment off — visitors see “not available”'
-                            : 'Vendor is deactivated — reactivate on Vendors page'}
-                        </p>
-                      )}
-                      <code className="block text-[11px] text-fg-subtle break-all leading-relaxed bg-bg-muted/50 border border-border rounded-md px-2.5 py-2">
-                        {relativeDisplay}
-                      </code>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 shrink-0">
-                      <div className="flex items-center gap-2 mr-1">
-                        <span className="text-[11px] text-fg-subtle">
-                          {assignmentActive ? 'On' : 'Off'}
-                        </span>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={assignmentActive}
-                          aria-label={
-                            assignmentActive
-                              ? 'Deactivate assignment'
-                              : 'Activate assignment'
-                          }
-                          disabled={assigningVendor}
-                          onClick={() => handleToggleTrackingActive(vendorId)}
-                          className={`
-                            relative inline-flex h-6 w-11 shrink-0 items-center rounded-full
-                            transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
-                            disabled:cursor-not-allowed disabled:opacity-50
-                            ${assignmentActive ? 'bg-success' : 'bg-bg-canvas border border-border'}
-                          `}
-                        >
-                          <span
-                            className={`
-                              inline-block h-4 w-4 transform rounded-full bg-white shadow-sm
-                              transition-transform duration-200
-                              ${assignmentActive ? 'translate-x-6' : 'translate-x-1'}
-                            `}
-                          />
-                        </button>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => copyTracking(displayUrl, copyKey)}
-                        title="Copy tracking URL"
-                      >
-                        {copiedId === copyKey ? (
-                          <Check className="w-3.5 h-3.5 text-success" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
+                  <div key={copyKey} className={`py-3 ${linkActive ? '' : 'opacity-70'}`}>
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-fg truncate">{vendor?.name}</p>
+                        {!linkActive && (
+                          <p className="text-[11px] text-warning">
+                            {!assignmentActive ? 'Assignment off' : 'Vendor deactivated'}
+                          </p>
                         )}
-                        {copiedId === copyKey ? 'Copied' : 'Copy'}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(displayUrl, '_blank')}
-                        title="Open tracking URL"
+                      </div>
+                      <input
+                        id={`payout-${vendorId}`}
+                        key={`${vendorId}-${payout}`}
+                        type="number"
+                        min={0}
+                        max={100}
+                        aria-label={`${vendor?.name} payout percent`}
+                        defaultValue={payout}
+                        disabled={assigningVendor}
+                        className="w-12 bg-transparent border-b border-border px-1 py-0.5 text-sm text-fg tabular-nums text-right disabled:opacity-50"
+                        onBlur={(e) => handleSavePayoutPercent(vendorId, e.target.value)}
+                      />
+                      <span className="text-[11px] text-fg-subtle">%</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={assignmentActive}
+                        aria-label={assignmentActive ? 'Deactivate assignment' : 'Activate assignment'}
+                        disabled={assigningVendor}
+                        onClick={() => handleToggleTrackingActive(vendorId)}
+                        className={`
+                          relative inline-flex h-5 w-9 shrink-0 items-center rounded-full
+                          transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring
+                          disabled:cursor-not-allowed disabled:opacity-50
+                          ${assignmentActive ? 'bg-success' : 'bg-bg-canvas border border-border'}
+                        `}
                       >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
+                        <span
+                          className={`
+                            inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm
+                            transition-transform duration-200
+                            ${assignmentActive ? 'translate-x-[1.1rem]' : 'translate-x-0.5'}
+                          `}
+                        />
+                      </button>
+                      {apiExpose && (
+                        <IconButton
+                          onClick={() => downloadVendorApiGuide(t, vendor)}
+                          title="Download API payload"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                        </IconButton>
+                      )}
+                      {!apiExpose && (
+                        <IconButton
+                          onClick={() => window.open(displayUrl, '_blank')}
+                          title="Open tracking URL"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </IconButton>
+                      )}
+                      <IconButton
                         className="text-danger hover:text-danger hover:bg-danger-muted"
                         onClick={() => handleRemoveTracking(vendorId)}
                         disabled={assigningVendor}
                         title="Remove assignment"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                      </IconButton>
+                    </div>
+                    <div className="mt-1.5 space-y-0.5">
+                      {endpoints.map((row) => (
+                        <div key={row.key} className="flex items-center gap-2 text-[11px]">
+                          <span className="w-10 shrink-0 font-mono text-fg-subtle">{row.method}</span>
+                          <span className="w-14 shrink-0 text-fg-muted">{row.label}</span>
+                          <code className="min-w-0 flex-1 truncate font-mono text-fg-subtle">
+                            {relativeUrl(row.url)}
+                          </code>
+                          <IconButton
+                            title={`Copy ${row.label}`}
+                            onClick={() => copyTracking(row.url, row.key)}
+                          >
+                            {copiedId === row.key ? (
+                              <Check className="w-3.5 h-3.5 text-success" />
+                            ) : (
+                              <Copy className="w-3.5 h-3.5" />
+                            )}
+                          </IconButton>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )

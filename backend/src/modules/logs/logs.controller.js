@@ -71,6 +71,15 @@ export const logsController = {
         byVendor: [],
         byAffiliate: [],
         byStatus: [],
+        otpStats: {
+          requested: 0,
+          verifiedLive: 0,
+          verifiedVendor: 0,
+          held: 0,
+          liveConvPercent: 0,
+          vendorConvPercent: 0,
+          holdPercent: 0,
+        },
       });
     }
     const data = await searchService.aggregations(

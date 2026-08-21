@@ -29,8 +29,8 @@ export const VERIFICATION_MODES = [
   {
     id: 'UNIVERSE_DCB',
     label: 'Universe Telecom DCB',
-    hint: 'Universe entitlement check with manual MSISDN fallback, plan-bound PIN, and activation polling.',
-    pathHint: 'HE → plan / manual number → plan → billing PIN → polling → outcome',
+    hint: 'WAP funnel with PIN + pack, or API expose for vendor billing PIN send/confirm (no pages).',
+    pathHint: 'No HE: number → packs → PIN. HE: packs → PIN → polling. Or public pincode/confirm APIs',
   },
   {
     id: 'NONE',
@@ -53,6 +53,36 @@ const OUTCOME_NODES = [
   { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 880, y: 400 } },
   { id: 'ERROR', pageType: 'ERROR', position: { x: 880, y: 520 } },
 ]
+
+const DCB_PAGE_POSITIONS = {
+  OTP: { x: 300, y: 48 },
+  HOME: { x: 620, y: 48 },
+  INPROGRESS: { x: 940, y: 48 },
+  THANKYOU: { x: 1220, y: 48 },
+  LOW_BALANCE: { x: 940, y: 200 },
+  BLOCKED: { x: 940, y: 340 },
+  ERROR: { x: 940, y: 480 },
+}
+
+const DCB_OUTCOME_NODES = [
+  { id: 'THANKYOU', pageType: 'THANKYOU', position: { ...DCB_PAGE_POSITIONS.THANKYOU } },
+  { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { ...DCB_PAGE_POSITIONS.INPROGRESS } },
+  { id: 'LOW_BALANCE', pageType: 'LOW_BALANCE', position: { ...DCB_PAGE_POSITIONS.LOW_BALANCE } },
+  { id: 'BLOCKED', pageType: 'BLOCKED', position: { ...DCB_PAGE_POSITIONS.BLOCKED } },
+  { id: 'ERROR', pageType: 'ERROR', position: { ...DCB_PAGE_POSITIONS.ERROR } },
+]
+
+/** Left-to-right wifi path: number → packs → PIN (same OTP page) → polling. */
+export function applyUniverseDcbGraphLayout(flowConfig) {
+  if (!flowConfig) return flowConfig
+  const nodes = (flowConfig.nodes || []).map((node) => {
+    const position = DCB_PAGE_POSITIONS[node.pageType]
+    return position ? { ...node, position: { ...position } } : node
+  })
+  const savedEntry = String(flowConfig.entryPage || '').toUpperCase()
+  const entryPage = savedEntry === 'API_EXPOSE' ? 'API_EXPOSE' : savedEntry || 'OTP'
+  return { ...flowConfig, entryPage, nodes }
+}
 
 function flowEdge(source, target, condition) {
   return {
@@ -103,16 +133,15 @@ export const DEFAULT_FLOWS = {
     ],
   },
   UNIVERSE_DCB: {
-    entryPage: 'HOME',
+    entryPage: 'OTP',
     nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 360, y: 220 } },
-      { id: 'OTP', pageType: 'OTP', position: { x: 360, y: 20 } },
-      ...OUTCOME_NODES,
+      { id: 'OTP', pageType: 'OTP', position: { ...DCB_PAGE_POSITIONS.OTP } },
+      { id: 'HOME', pageType: 'HOME', position: { ...DCB_PAGE_POSITIONS.HOME } },
+      ...DCB_OUTCOME_NODES,
     ],
     edges: [
       flowEdge('OTP', 'HOME', 'MSISDN_CHECKED'),
       flowEdge('HOME', 'OTP', 'PIN_REQUESTED'),
-      flowEdge('HOME', 'THANKYOU', 'ENTITLED'),
       flowEdge('HOME', 'LOW_BALANCE', 'LOW_BALANCE'),
       flowEdge('HOME', 'BLOCKED', 'BLOCKED'),
       flowEdge('HOME', 'ERROR', 'ERROR'),
@@ -132,6 +161,28 @@ export const DEFAULT_FLOWS = {
 /** True when OTP_ONLY campaign is API-mediator only (no WAP pages). */
 export function isApiExposeEntry(entryPage) {
   return String(entryPage || '').toUpperCase() === 'API_EXPOSE'
+}
+
+export function isApiExposeCampaign(campaign) {
+  const mode = normalizeModeId(campaign?.verificationMode)
+  return (
+    (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') &&
+    isApiExposeEntry(campaign?.flowConfig?.entryPage)
+  )
+}
+
+export function isDcbApiExposeCampaign(campaign) {
+  return (
+    normalizeModeId(campaign?.verificationMode) === 'UNIVERSE_DCB' &&
+    isApiExposeEntry(campaign?.flowConfig?.entryPage)
+  )
+}
+
+export function isOtpApiExposeCampaign(campaign) {
+  return (
+    normalizeModeId(campaign?.verificationMode) === 'OTP_ONLY' &&
+    isApiExposeEntry(campaign?.flowConfig?.entryPage)
+  )
 }
 
 /** HOME = pack canvas after identity. THANKYOU = skip HOME. */
@@ -265,19 +316,27 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
   }
 
   if (normalized === 'UNIVERSE_DCB') {
+    if (apiExpose) {
+      return {
+        version: 1,
+        entryPage: 'API_EXPOSE',
+        startConfig: defaultStartConfig('UNIVERSE_DCB'),
+        nodes: [],
+        edges: [],
+      }
+    }
     return {
       version: 1,
-      entryPage: 'HOME',
+      entryPage: 'OTP',
       startConfig: defaultStartConfig('UNIVERSE_DCB'),
       nodes: [
-        { ...homeNode, position: { x: 360, y: 220 } },
-        { ...otpNode, position: { x: 360, y: 20 } },
-        ...outcomes,
+        { ...otpNode, position: { ...DCB_PAGE_POSITIONS.OTP } },
+        { ...homeNode, position: { ...DCB_PAGE_POSITIONS.HOME } },
+        ...DCB_OUTCOME_NODES.map((node) => ({ ...node })),
       ],
       edges: [
         flowEdge('OTP', 'HOME', 'MSISDN_CHECKED'),
         flowEdge('HOME', 'OTP', 'PIN_REQUESTED'),
-        flowEdge('HOME', 'THANKYOU', 'ENTITLED'),
         flowEdge('HOME', 'LOW_BALANCE', 'LOW_BALANCE'),
         flowEdge('HOME', 'BLOCKED', 'BLOCKED'),
         flowEdge('HOME', 'ERROR', 'ERROR'),
@@ -304,9 +363,9 @@ const CONDITION_LABELS = {
   HEADER_RESOLVED: 'HE ok',
   HEADER_UNRESOLVED: 'no HE',
   OTP_VERIFIED: 'OTP ok',
-  MSISDN_CHECKED: 'number checked',
-  PIN_REQUESTED: 'billing PIN sent',
-  PIN_CONFIRMED: 'billing PIN confirmed',
+  MSISDN_CHECKED: 'then choose pack',
+  PIN_REQUESTED: 'then enter PIN',
+  PIN_CONFIRMED: 'then wait for activation',
   ENTITLED: 'already active',
   ACTIVATED: 'activated',
   SUBSCRIBED: 'subscribed',
@@ -373,6 +432,22 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
       ],
       edges: [],
       note: 'API mediator only — no WAP pages. External clients call the exposed send/verify URLs.',
+    }
+  }
+
+  if (mode === 'UNIVERSE_DCB' && isApiExposeEntry(flowConfig?.entryPage)) {
+    return {
+      mode,
+      modeLabel: modeMeta.label,
+      modeHint: modeMeta.hint,
+      entryPage: 'API_EXPOSE',
+      steps: [
+        { id: 'dcb_pincode', label: 'Billing PIN request API' },
+        { id: 'dcb_confirm', label: 'Billing PIN confirm API' },
+        { id: 'dcb_status', label: 'Status poll API' },
+      ],
+      edges: [],
+      note: 'DCB API mediator only — no WAP pages. Vendors call pincode / confirm / status with vendor ID in the path.',
     }
   }
 
@@ -459,7 +534,7 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
     edges,
     note:
       mode === 'UNIVERSE_DCB'
-        ? 'Universe DCB uses server-directed manual MSISDN, purchase type, PIN, and activation-polling stages.'
+        ? 'Wifi: number → choose pack → PIN. HE: skip number, open packs. PIN reuses the number page.'
         : entryPage === 'OTP'
           ? 'Landing opens OTP directly. After PIN, HOME shows pack / subscribe CTAs unless Skip HOME is on.'
           : entryPage === 'API_EXPOSE'

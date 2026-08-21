@@ -36,6 +36,7 @@ export default function TemplateEditor({
   breadcrumbLabel,
   breadcrumbHref,
   funnelPageType,
+  verificationMode,
   campaignId,
   countryCode,
   operatorCode,
@@ -310,7 +311,7 @@ export default function TemplateEditor({
       window.editor = ed
     }
 
-    registerAllBlocks(ed, funnelPageType)
+    registerAllBlocks(ed, funnelPageType, verificationMode)
     setupAssetUpload(ed)
     setupAssetCanvasDrop(ed)
     const cleanupDragAndDrop = setupDragAndDrop(ed, setDragDebug)
@@ -787,6 +788,7 @@ export default function TemplateEditor({
     zoom,
     advancedMode,
     funnelPageType,
+    verificationMode,
     campaignId,
     countryCode,
     operatorCode,

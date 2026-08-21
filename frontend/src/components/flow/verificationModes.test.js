@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { buildDefaultFlow, resolveAfterIdentityTarget } from './verificationModes.js'
+import {
+  applyUniverseDcbGraphLayout,
+  buildDefaultFlow,
+  resolveAfterIdentityTarget,
+  isApiExposeCampaign,
+} from './verificationModes.js'
 import { START_NODE_ID, END_NODE_ID, withVisualStartEnd } from './startConfig.js'
 
 describe('buildDefaultFlow', () => {
@@ -39,6 +44,9 @@ describe('buildDefaultFlow', () => {
       runBlocklist: true,
       runChecksub: true,
     })
+    expect(cfg.entryPage).toBe('OTP')
+    expect(cfg.nodes.find((node) => node.pageType === 'OTP')?.position).toEqual({ x: 300, y: 48 })
+    expect(cfg.nodes.find((node) => node.pageType === 'HOME')?.position).toEqual({ x: 620, y: 48 })
     expect(cfg.nodes.some((node) => node.pageType === 'INPROGRESS')).toBe(true)
     expect(
       cfg.edges.some(
@@ -74,5 +82,69 @@ describe('buildDefaultFlow', () => {
     expect(
       visual.edges.some((edge) => edge.source === 'INPROGRESS' && edge.target === END_NODE_ID)
     ).toBe(false)
+  })
+})
+
+describe('isApiExposeCampaign', () => {
+  it('is true for OTP_ONLY or UNIVERSE_DCB with API_EXPOSE entry', () => {
+    expect(
+      isApiExposeCampaign({
+        verificationMode: 'OTP_ONLY',
+        flowConfig: { entryPage: 'API_EXPOSE' },
+      }),
+    ).toBe(true)
+    expect(
+      isApiExposeCampaign({
+        verificationMode: 'UNIVERSE_DCB',
+        flowConfig: { entryPage: 'API_EXPOSE' },
+      }),
+    ).toBe(true)
+    expect(
+      isApiExposeCampaign({
+        verificationMode: 'OTP_ONLY',
+        flowConfig: { entryPage: 'OTP' },
+      }),
+    ).toBe(false)
+    expect(
+      isApiExposeCampaign({
+        verificationMode: 'UNIVERSE_DCB',
+        flowConfig: { entryPage: 'OTP' },
+      }),
+    ).toBe(false)
+    expect(
+      isApiExposeCampaign({
+        verificationMode: 'BOTH',
+        flowConfig: { entryPage: 'API_EXPOSE' },
+      }),
+    ).toBe(false)
+  })
+})
+
+describe('buildDefaultFlow UNIVERSE_DCB API_EXPOSE', () => {
+  it('returns empty graph for API expose', () => {
+    const flow = buildDefaultFlow('UNIVERSE_DCB', { entryPage: 'API_EXPOSE' })
+    expect(flow.entryPage).toBe('API_EXPOSE')
+    expect(flow.nodes).toEqual([])
+    expect(flow.edges).toEqual([])
+  })
+})
+
+describe('applyUniverseDcbGraphLayout', () => {
+  it('keeps API_EXPOSE entry so refresh does not fall back to WAP funnel', () => {
+    const laidOut = applyUniverseDcbGraphLayout({
+      entryPage: 'API_EXPOSE',
+      nodes: [],
+      edges: [],
+    })
+    expect(laidOut.entryPage).toBe('API_EXPOSE')
+  })
+
+  it('defaults WAP funnel DCB graphs to OTP when entry is missing', () => {
+    const laidOut = applyUniverseDcbGraphLayout({
+      nodes: [{ id: 'OTP', pageType: 'OTP', position: { x: 0, y: 0 } }],
+      edges: [],
+    })
+    expect(laidOut.entryPage).toBe('OTP')
+    expect(laidOut.nodes[0].position).toEqual({ x: 300, y: 48 })
   })
 })

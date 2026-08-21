@@ -2,6 +2,19 @@ import { transformReactComponentsInHtml } from '../utils/styleUtils'
 import { sanitizeSavedPageHtml } from './wysiwygContract'
 
 export function loadIntoEditor(editor, data) {
+  const html = typeof data?.html === 'string' ? data.html.trim() : ''
+
+  // Live subscription serves html/css. Prefer that snapshot so the editor
+  // does not reopen a stale GrapesJS projectData from an older template.
+  if (html) {
+    editor.setStyle(data.css || '')
+    const compiledHtml = transformReactComponentsInHtml(
+      sanitizeSavedPageHtml(data.html || ''),
+    )
+    editor.setComponents(compiledHtml)
+    return
+  }
+
   const hasProjectData =
     data.projectData &&
     typeof data.projectData === 'object' &&
@@ -9,15 +22,7 @@ export function loadIntoEditor(editor, data) {
 
   if (hasProjectData) {
     editor.loadProjectData(data.projectData)
-    return
   }
-
-  editor.setStyle(data.css || '')
-  // Sanitize before setComponents so stray absolute CTAs never enter the canvas off-card
-  const compiledHtml = transformReactComponentsInHtml(
-    sanitizeSavedPageHtml(data.html || ''),
-  )
-  editor.setComponents(compiledHtml)
 }
 
 export function extractEditorData(editor) {

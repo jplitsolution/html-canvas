@@ -11,7 +11,7 @@ import {
   useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Link2, Plus, Save, Trash2, Pencil, Copy, Check } from 'lucide-react'
+import { Link2, Plus, Save, Trash2, Pencil } from 'lucide-react'
 import Button from '../ui/Button'
 import PageNode from './PageNode'
 import StartEndNode from './StartEndNode'
@@ -22,6 +22,7 @@ import {
 } from './flowConditions'
 import {
   VERIFICATION_MODES,
+  applyUniverseDcbGraphLayout,
   buildDefaultFlow,
   normalizeModeId,
   isApiExposeEntry,
@@ -55,8 +56,16 @@ const PAGE_TYPES = [
   'ERROR',
 ]
 
+function dcbPageLabel(pageType) {
+  if (pageType === 'OTP') return 'Number then PIN'
+  if (pageType === 'HOME') return 'Choose pack'
+  return PAGE_TYPE_LABELS[pageType] || pageType
+}
+
 function toRfNodes(flowConfig, startConfig, mode) {
-  const visual = withVisualStartEnd(flowConfig, startConfig, mode)
+  const source =
+    mode === 'UNIVERSE_DCB' ? applyUniverseDcbGraphLayout(flowConfig) : flowConfig
+  const visual = withVisualStartEnd(source, startConfig, mode)
   return (visual.nodes || []).map((n) => {
     const isMeta = isMetaPageType(n.pageType)
     return {
@@ -67,8 +76,8 @@ function toRfNodes(flowConfig, startConfig, mode) {
       data: {
         label: isMeta
           ? n.pageType
-          : mode === 'UNIVERSE_DCB' && n.pageType === 'OTP'
-            ? 'Number / Billing PIN'
+          : mode === 'UNIVERSE_DCB'
+            ? dcbPageLabel(n.pageType)
             : PAGE_TYPE_LABELS[n.pageType] || n.pageType,
         pageType: n.pageType,
         kind: n.kind || (n.pageType === 'START' ? 'start' : n.pageType === 'END' ? 'end' : 'page'),
@@ -79,7 +88,9 @@ function toRfNodes(flowConfig, startConfig, mode) {
 }
 
 function toRfEdges(flowConfig, startConfig, mode) {
-  const visual = withVisualStartEnd(flowConfig, startConfig, mode)
+  const source =
+    mode === 'UNIVERSE_DCB' ? applyUniverseDcbGraphLayout(flowConfig) : flowConfig
+  const visual = withVisualStartEnd(source, startConfig, mode)
   return (visual.edges || []).map((e) => ({
     id: e.id,
     source: e.source,
@@ -118,12 +129,11 @@ function CampaignFlowBuilder({
   const [newConnTarget, setNewConnTarget] = useState('')
   const [newConnCondition, setNewConnCondition] = useState('DEFAULT')
   const [selectedNodeId, setSelectedNodeId] = useState(null)
-  const [copiedApi, setCopiedApi] = useState('')
 
   const applyFlowTemplate = useCallback(
     (nextMode, nextEntry, nextAfter) => {
       const def = buildDefaultFlow(nextMode, {
-        entryPage: nextMode === 'OTP_ONLY' ? nextEntry : 'HOME',
+        entryPage: nextMode === 'OTP_ONLY' || nextMode === 'UNIVERSE_DCB' ? nextEntry : 'HOME',
         afterIdentity: isApiExposeEntry(nextEntry) ? 'HOME' : nextAfter,
       })
       const nextStart = defaultStartConfig(nextMode)
@@ -145,7 +155,11 @@ function CampaignFlowBuilder({
   const handleModeChange = useCallback(
     (newMode) => {
       setMode(newMode)
-      applyFlowTemplate(newMode, newMode === 'OTP_ONLY' ? 'OTP' : 'HOME', 'HOME')
+      applyFlowTemplate(
+        newMode,
+        newMode === 'OTP_ONLY' || newMode === 'UNIVERSE_DCB' ? 'OTP' : 'HOME',
+        'HOME',
+      )
     },
     [applyFlowTemplate],
   )
@@ -154,8 +168,8 @@ function CampaignFlowBuilder({
     (nextEntry) => {
       const next = String(nextEntry || 'HOME').toUpperCase()
       setEntryPage(next)
-      if (mode === 'OTP_ONLY') {
-        applyFlowTemplate('OTP_ONLY', next, afterIdentity)
+      if (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') {
+        applyFlowTemplate(mode, next, afterIdentity)
       }
     },
     [mode, afterIdentity, applyFlowTemplate],
@@ -180,13 +194,17 @@ function CampaignFlowBuilder({
       .then((res) => {
         if (cancelled) return
         const nextMode = normalizeModeId(res.verificationMode)
-        const nextStart = normalizeStartConfig(res.flowConfig?.startConfig, nextMode)
+        const flowConfig =
+          nextMode === 'UNIVERSE_DCB'
+            ? applyUniverseDcbGraphLayout(res.flowConfig)
+            : res.flowConfig
+        const nextStart = normalizeStartConfig(flowConfig?.startConfig, nextMode)
         setMode(nextMode)
-        setEntryPage(res.flowConfig?.entryPage || 'HOME')
-        setAfterIdentity(resolveAfterIdentityTarget(res.flowConfig))
+        setEntryPage(flowConfig?.entryPage || 'HOME')
+        setAfterIdentity(resolveAfterIdentityTarget(flowConfig))
         setStartConfig(nextStart)
-        setNodes(toRfNodes(res.flowConfig, nextStart, nextMode))
-        setEdges(toRfEdges(res.flowConfig, nextStart, nextMode))
+        setNodes(toRfNodes(flowConfig, nextStart, nextMode))
+        setEdges(toRfEdges(flowConfig, nextStart, nextMode))
       })
       .catch(() => {})
       .finally(() => !cancelled && setLoading(false))
@@ -435,7 +453,8 @@ function CampaignFlowBuilder({
   const handleSave = useCallback(async () => {
     const clientErrors = []
     const pageTypes = new Set(pageNodes.map((n) => n.data.pageType))
-    const isApiExpose = mode === 'OTP_ONLY' && entryPage === 'API_EXPOSE'
+    const isApiExpose =
+      (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') && entryPage === 'API_EXPOSE'
 
     if (!isApiExpose) {
       if (!pageTypes.has(entryPage)) {
@@ -443,7 +462,7 @@ function CampaignFlowBuilder({
           `Start page "${PAGE_TYPE_LABELS[entryPage] || entryPage}" must be in the flow.`,
         )
       }
-      if ((mode === 'OTP_ONLY' || mode === 'BOTH') && !pageTypes.has('OTP')) {
+      if ((mode === 'OTP_ONLY' || mode === 'BOTH' || mode === 'UNIVERSE_DCB') && !pageTypes.has('OTP')) {
         clientErrors.push(`Verification mode "${mode}" requires an OTP page node.`)
       }
 
@@ -533,21 +552,7 @@ function CampaignFlowBuilder({
   }
 
   const canvasHeight = embedded ? '56vh' : '72vh'
-  const showApiExpose = mode === 'OTP_ONLY' && isApiExposeEntry(entryPage)
-  const origin =
-    typeof window !== 'undefined' ? window.location.origin : 'https://your-domain.com'
-  const sendUrl = `${origin}/api/otp/${campaignId}/send?msisdn=`
-  const verifyUrl = `${origin}/api/otp/${campaignId}/verify?msisdn=&otp=`
-
-  const copyApiUrl = async (key, url) => {
-    try {
-      await navigator.clipboard.writeText(url)
-      setCopiedApi(key)
-      setTimeout(() => setCopiedApi(''), 1500)
-    } catch {
-      // ignore
-    }
-  }
+  const showApiExpose = (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') && isApiExposeEntry(entryPage)
 
   return (
     <div className="space-y-4">
@@ -559,6 +564,12 @@ function CampaignFlowBuilder({
           <p className={`text-fg-muted mt-0.5 ${embedded ? 'text-xs' : 'page-header-description'}`}>
             START configures checks before the first page (HE / blocklist / checksub). END marks
             funnel outcomes. Edit page content from any page node.
+            {mode === 'UNIVERSE_DCB' ? (
+              <span className="block mt-1">
+                Wifi path: <strong>Number then PIN</strong> → <strong>Choose pack</strong> → PIN
+                on the same number page. HE skips number and opens packs.
+              </span>
+            ) : null}
           </p>
         </div>
         <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || loading}>
@@ -667,46 +678,51 @@ function CampaignFlowBuilder({
                 </div>
               </div>
             )}
-
-            {showApiExpose && (
-              <div className="rounded-lg border border-border bg-bg-muted/40 px-3.5 py-3 space-y-3">
-                <div>
-                  <p className="text-xs font-semibold text-fg">Exposed OTP APIs</p>
-                  <p className="text-[11px] text-fg-muted mt-0.5">
-                    No auth. Forwarded to Partner OTP URLs in API settings. Configure send/verify
-                    and client payout % in Campaign API → Partner OTP. Below 100%, some partner
-                    successes return invalid OTP to the caller; conversions still show here as
-                    SUCCESS / HELD.
-                  </p>
-                </div>
-                {[
-                  { key: 'send', label: 'GET/POST — send OTP', url: sendUrl },
-                  { key: 'verify', label: 'GET/POST — verify OTP', url: verifyUrl },
-                ].map((row) => (
-                  <div key={row.key} className="space-y-1">
-                    <p className="text-[11px] font-medium text-fg">{row.label}</p>
-                    <div className="flex items-start gap-2">
-                      <code className="flex-1 text-[11px] font-mono text-fg break-all rounded-md border border-border bg-bg-elevated px-2.5 py-2">
-                        {row.url}
-                      </code>
-                      <button
-                        type="button"
-                        onClick={() => copyApiUrl(row.key, row.url)}
-                        className="shrink-0 inline-flex items-center gap-1 rounded-md border border-border bg-bg-elevated px-2 py-1.5 text-[11px] text-fg-muted hover:text-fg"
-                      >
-                        {copiedApi === row.key ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5" />
-                        )}
-                        {copiedApi === row.key ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </>
+        )}
+
+        {mode === 'UNIVERSE_DCB' && (
+          <div>
+            <p className="text-xs font-medium text-fg mb-2">Delivery</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleEntryPageChange('OTP')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  !isApiExposeEntry(entryPage)
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">WAP funnel</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  Full pages: number → pack → PIN → activation poll.
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleEntryPageChange('API_EXPOSE')}
+                className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                  isApiExposeEntry(entryPage)
+                    ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                    : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                }`}
+              >
+                <p className="text-sm font-semibold text-fg">API expose</p>
+                <p className="text-[11px] text-fg-muted mt-1 leading-snug">
+                  No pages — vendor calls billing PIN request / confirm / status APIs.
+                </p>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {showApiExpose && (
+          <p className="text-[11px] text-fg-muted">
+            {mode === 'UNIVERSE_DCB'
+              ? 'Vendor billing PIN APIs are in the Vendors tab. Configure Universe DCB in Campaign API.'
+              : 'Vendor send/verify APIs are in the Vendors tab. Configure Partner OTP in Campaign API.'}
+          </p>
         )}
 
         {(mode === 'HEADER_INJECTION' || mode === 'BOTH') && (
@@ -807,8 +823,9 @@ function CampaignFlowBuilder({
             </div>
           ) : showApiExpose ? (
             <div className="flex items-center justify-center h-full text-sm text-fg-muted px-6 text-center">
-              API expose mode — no WAP page graph. Use the exposed OTP URLs above and Partner OTP
-              in API settings.
+              {mode === 'UNIVERSE_DCB'
+                ? 'DCB API expose — no WAP page graph. Billing APIs are in the Vendors tab.'
+                : 'API expose — no WAP page graph. OTP APIs are in the Vendors tab.'}
             </div>
           ) : (
             <ReactFlow

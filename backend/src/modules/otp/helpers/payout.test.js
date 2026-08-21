@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   parsePayoutPercent,
+  payoutSeqKey,
   shouldPayoutOtp,
 } from './payout.js';
 
@@ -25,6 +26,17 @@ describe('parsePayoutPercent', () => {
     assert.equal(parsePayoutPercent(-5), 0);
     assert.equal(parsePayoutPercent(70.4), 70);
     assert.equal(parsePayoutPercent(150), 100);
+  });
+});
+
+describe('payoutSeqKey', () => {
+  it('campaign-only when vendor missing', () => {
+    assert.equal(payoutSeqKey(12), 'otp:payout:n:12');
+    assert.equal(payoutSeqKey(12, 0), 'otp:payout:n:12');
+  });
+
+  it('scopes Redis counter per vendor', () => {
+    assert.equal(payoutSeqKey(12, 8), 'otp:payout:n:12:8');
   });
 });
 

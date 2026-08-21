@@ -119,21 +119,26 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
   }
 
   const otpNode = (base.nodes || []).find((n) => n.pageType === 'OTP')
+  const homeNode = (base.nodes || []).find((n) => n.pageType === 'HOME')
   const extraEdges =
     dcbMode && otpNode
       ? [
-          {
-            id: `${START_NODE_ID}-HEADER_RESOLVED-${entryId}`,
-            source: START_NODE_ID,
-            target: entryId,
-            condition: 'HEADER_RESOLVED',
-          },
           {
             id: `${START_NODE_ID}-MANUAL_MSISDN_REQUIRED-${otpNode.id}`,
             source: START_NODE_ID,
             target: otpNode.id,
             condition: 'MANUAL_MSISDN_REQUIRED',
           },
+          ...(homeNode
+            ? [
+                {
+                  id: `${START_NODE_ID}-HEADER_RESOLVED-${homeNode.id}`,
+                  source: START_NODE_ID,
+                  target: homeNode.id,
+                  condition: 'HEADER_RESOLVED',
+                },
+              ]
+            : []),
         ]
       : [
           {

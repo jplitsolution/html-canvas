@@ -39,7 +39,9 @@ export function createFlowPageResponse(deps) {
     let templateData = page?.template?.data;
     if (!templateData) {
       try {
-        templateData = getDefaultFunnelPageData(pageType);
+        templateData = getDefaultFunnelPageData(pageType, {
+          verificationMode: campaign.verificationMode,
+        });
       } catch {
         const err = new Error(`Page ${pageType} not configured`);
         err.statusCode = 404;

@@ -2,11 +2,16 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Plus, ShieldAlert } from 'lucide-react'
 import { useEditor } from '../context/EditorContext'
 import { insertFunnelPart, validateFunnelPage } from '../utils/funnelGuide'
+import { setDcbEditorPreview } from '../../services/flow/dcbStageUi'
 
 export function FunnelGuideBanner({ pageType }) {
-  const { editor } = useEditor()
+  const { editor, verificationMode } = useEditor()
   const [expanded, setExpanded] = useState(false)
-  const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType))
+  const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType, verificationMode))
+  const [dcbPreview, setDcbPreview] = useState('number')
+  const isDcbOtp =
+    String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB' &&
+    String(pageType || '').toUpperCase() === 'OTP'
 
   useEffect(() => {
     if (!editor || !pageType) return
@@ -14,7 +19,7 @@ export function FunnelGuideBanner({ pageType }) {
     let lastKey = ''
 
     const refresh = () => {
-      const next = validateFunnelPage(editor, pageType)
+      const next = validateFunnelPage(editor, pageType, verificationMode)
       setStatus(next)
 
       const key = `${next.ok}:${next.missing.map((m) => m.id).join(',')}`
@@ -53,14 +58,22 @@ export function FunnelGuideBanner({ pageType }) {
       editor.off('component:update', refresh)
       editor.off('change:changesCount', refresh)
     }
-  }, [editor, pageType])
+  }, [editor, pageType, verificationMode])
+
+  useEffect(() => {
+    if (!editor || !isDcbOtp) return undefined
+    const apply = () => setDcbEditorPreview(editor, dcbPreview)
+    apply()
+    editor.on('canvas:frame:load', apply)
+    return () => editor.off('canvas:frame:load', apply)
+  }, [editor, isDcbOtp, dcbPreview])
 
   const { guide, ok, missing } = status
   if (!pageType || !guide) return null
 
   const handleAddBack = (req) => {
     insertFunnelPart(editor, req.snippet)
-    setStatus(validateFunnelPage(editor, pageType))
+    setStatus(validateFunnelPage(editor, pageType, verificationMode))
   }
 
   return (
@@ -94,6 +107,27 @@ export function FunnelGuideBanner({ pageType }) {
                 ? 'Tap ▼ to see what you can change vs. must keep'
                 : 'Tap ▼ for tips — this page is fully customizable'}
           </p>
+          {isDcbOtp && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {[
+                { id: 'number', label: '1. Enter number' },
+                { id: 'pin', label: '2. Enter PIN after pack' },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setDcbPreview(opt.id)}
+                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                    dcbPreview === opt.id
+                      ? 'bg-accent text-white'
+                      : 'bg-bg-elevated border border-border text-fg-muted hover:text-fg'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {!ok && (
             <div className="mt-1.5">

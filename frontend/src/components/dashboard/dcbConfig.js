@@ -193,6 +193,168 @@ function previewConfirmPayload(config) {
   }
 }
 
+function joinUrl(baseUrl, path) {
+  const base = String(baseUrl || '').replace(/\/+$/, '')
+  const p = String(path || '')
+  if (/^https?:\/\//i.test(p)) return p
+  if (!base) return p
+  return `${base}${p.startsWith('/') ? p : `/${p}`}`
+}
+
+/**
+ * Markdown API guide from live DCB UI config (endpoints + field names).
+ * Change fields in Campaign API → download again to refresh the doc.
+ */
+function buildDcbApiGuide(config) {
+  const current = parseDcbConfig(config)
+  const f = current.request
+  const ep = current.endpoints
+  const pinUrl = joinUrl(current.baseUrl, ep.pincode)
+  const confirmUrl = joinUrl(current.baseUrl, ep.confirm)
+  const subUrl = joinUrl(current.baseUrl, ep.subscriptions)
+  const publicUrl = joinUrl(current.baseUrl, ep.publicConfig)
+  const pinBody = JSON.stringify(previewPincodePayload(current), null, 2)
+  const confirmBody = JSON.stringify(previewConfirmPayload(current), null, 2)
+  const packs = current.purchaseTypeMappings
+    .map((m) => `- \`${m.packKey}\` (${m.label}) → purchaseTypeId \`${m.purchaseTypeId}\``)
+    .join('\n')
+  const pollSec = Math.round(Number(current.pollIntervalMs) / 1000) || 2
+  const timeoutSec = Math.round(Number(current.pollTimeoutMs) / 1000) || 60
+
+  return `# Universe Telecom DCB API guide
+
+Generated from Campaign API settings. Edit endpoints / field names in the UI, then download again.
+
+| Setting | Value |
+|---|---|
+| Base URL | \`${current.baseUrl}\` |
+| Merchant ID | \`${current.merchantId}\` |
+| Service ID | \`${current.serviceId}\` |
+| Operator | \`${current.operatorCode}\` |
+| Poll | every ${pollSec}s for up to ${timeoutSec}s |
+
+### Purchase types
+
+${packs || '_No pack mappings configured._'}
+
+---
+
+## 1. Public config (packs)
+
+\`\`\`http
+GET ${publicUrl}
+\`\`\`
+
+Returns packs / purchase types for the funnel.
+
+---
+
+## 2. Check subscriptions (entitlement)
+
+\`\`\`http
+GET ${subUrl}?${f.msisdnField}={msisdn}&${f.serviceIdField}=${current.serviceId}&${f.currentField}=true
+\`\`\`
+
+Use before PIN and while polling after confirm.
+
+---
+
+## 3. Request a subscription PIN
+
+Starts the subscription process and asks Universe Telecom to send or generate a PIN.
+
+\`\`\`http
+POST ${ep.pincode}
+Content-Type: application/json
+\`\`\`
+
+Full URL: \`${pinUrl}\`
+
+### Request body
+
+| Field | Config key | Required | Description |
+|---|---|---:|---|
+| \`${f.merchantIdField}\` | merchantId | Yes | Use \`${current.merchantId}\` |
+| \`${f.serviceIdField}\` | serviceId | Yes | Use \`${current.serviceId}\` |
+| \`${f.purchaseTypeIdField}\` | purchaseTypeId | Yes | Selected billing period |
+| \`${f.msisdnField}\` | msisdn | Yes | Subscriber phone number |
+| \`${f.transactionChannelField}\` | transactionChannel | Yes | \`Wifi\` or \`HE\` |
+| \`${f.operatorField}\` | operator | Yes | Use \`${current.operatorCode}\` |
+| \`${f.subscriptionField}\` | subscription | No | Existing provider subscription; otherwise empty string |
+
+### Example request
+
+\`\`\`bash
+curl -X POST '${pinUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -d @payload.json
+\`\`\`
+
+\`\`\`json
+${pinBody}
+\`\`\`
+
+### Response handling
+
+The provider response is returned in \`${current.responsePaths.envelope || 'data'}\`.  
+Save the provider request ID at path \`${current.responsePaths.requestId || 'data.PinInfo.ID'}\` — required for PIN confirmation (sent as \`${f.requestIdField}\`).
+
+---
+
+## 4. Confirm the subscription PIN
+
+Submits the subscriber's PIN to Universe Telecom.
+
+\`\`\`http
+POST ${ep.confirm}
+Content-Type: application/json
+\`\`\`
+
+Full URL: \`${confirmUrl}\`
+
+### Request body
+
+| Field | Config key | Required | Description |
+|---|---|---:|---|
+| \`${f.requestIdField}\` | requestId | Yes | Provider request ID from the PIN API |
+| \`${f.pinField}\` | pinCode | Yes | PIN entered by the subscriber |
+| \`${f.msisdnField}\` | msisdn | Yes | Same phone used for the PIN request |
+| \`${f.serviceIdField}\` | serviceId | Yes | Use \`${current.serviceId}\` |
+| \`${f.purchaseTypeIdField}\` | purchaseTypeId | Yes | Same purchase type as PIN request |
+
+### Example request
+
+\`\`\`bash
+curl -X POST '${confirmUrl}' \\
+  -H 'Content-Type: application/json' \\
+  -d @payload.json
+\`\`\`
+
+\`\`\`json
+${confirmBody}
+\`\`\`
+
+### Important activation behavior
+
+A successful confirmation HTTP response does **not** prove the subscriber was charged. Billing and entitlement are finalized asynchronously by the Universe Telecom callback.
+
+After confirmation, poll the subscriptions endpoint every ${pollSec}–${pollSec + 1} seconds for up to ${timeoutSec} seconds:
+
+\`\`\`http
+GET ${subUrl}?${f.msisdnField}={msisdn}&${f.serviceIdField}=${current.serviceId}&${f.currentField}=true
+\`\`\`
+
+Complete the mobile flow only when the response reports an entitled state (\`${current.responsePaths.entitlementActive || 'entitlementActive'}\` / status paths configured in UI).
+
+---
+
+## Maintain from UI
+
+- Endpoints, request field names, response paths, merchant/service/operator, and pack → purchaseTypeId map live under **Campaign → API → Universe Telecom DCB**.
+- If the provider adds or renames fields, update them there and re-download this guide.
+`
+}
+
 const CLASSIC_PACK_OPTIONS = [
   { packKey: 'daily', label: 'Daily', purchaseTypeId: '' },
   { packKey: 'weekly', label: 'Weekly', purchaseTypeId: '' },
@@ -216,7 +378,9 @@ export {
   DEFAULT_DCB_CONFIG,
   DEFAULT_DCB_ENDPOINTS,
   DEFAULT_DCB_REQUEST_FIELDS,
+  buildDcbApiGuide,
   editorPackOptions,
+  joinUrl,
   parseDcbConfig,
   previewConfirmPayload,
   previewPincodePayload,

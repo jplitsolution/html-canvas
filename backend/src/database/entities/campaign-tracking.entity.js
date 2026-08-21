@@ -29,6 +29,12 @@ export const CampaignTrackingSchema = new EntitySchema({
       type: 'boolean',
       default: true,
     },
+    /** API-expose: % of partner-success OTP verifies shown to this vendor. */
+    payoutPercent: {
+      name: 'payout_percent',
+      type: 'int',
+      default: 100,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

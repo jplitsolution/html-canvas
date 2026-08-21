@@ -1,6 +1,7 @@
 import { checkDcbMsisdn, confirmDcbPincode, getDcbConfig, sendDcbPincode } from '../../services/api/dcb'
 import { sendOtp, verifyOtp } from '../../services/api/otp'
 import { persistPhone } from '../../services/flow/resolvePhoneNumber'
+import { applyDcbStageUi } from '../../services/flow/dcbStageUi'
 
 const DCB_STAGES = new Set([
   'MANUAL_MSISDN',
@@ -106,66 +107,8 @@ function resolvePurchaseType(source, packKey, directId) {
   return String(match?.purchaseTypeId ?? match?.id ?? '')
 }
 
-function setFieldVisibility(input, visible) {
-  if (!input) return
-  const container = input.parentElement
-  if (container) container.hidden = !visible
-  else input.hidden = !visible
-}
-
 function adaptDcbStageUi(shadow, stage, { phoneInput, pinInput }) {
-  const heading = shadow.querySelector('h1')
-  const description = heading?.nextElementSibling
-  const sendButton = shadow.querySelector('[data-dcb-action="manual-check"], [data-otp-action="send"]')
-  const verifyButton = shadow.querySelector('[data-dcb-action="confirm-pin"], [data-otp-action="verify"]')
-  const footnote = shadow.querySelector('.flow-footnote')
-
-  if (['MANUAL_MSISDN', 'MANUAL_CHECK', 'MANUAL_ENTRY', 'MSISDN_REQUIRED'].includes(stage)) {
-    setFieldVisibility(phoneInput, true)
-    setFieldVisibility(pinInput, false)
-    if (sendButton) {
-      sendButton.hidden = false
-      sendButton.textContent = 'Check subscription'
-    }
-    if (verifyButton) verifyButton.hidden = true
-    if (heading) heading.textContent = 'Enter Mobile Number'
-    if (description) description.textContent = 'Enter your number to check your current subscription status.'
-    if (footnote) footnote.textContent = 'We will only request a billing PIN if you select a plan.'
-    return
-  }
-
-  if (['BILLING_PIN', 'PIN_ENTRY', 'PIN_SENT', 'PIN_REQUIRED'].includes(stage)) {
-    setFieldVisibility(phoneInput, false)
-    setFieldVisibility(pinInput, true)
-    if (sendButton) sendButton.hidden = true
-    if (verifyButton) {
-      verifyButton.hidden = false
-      verifyButton.textContent = 'Confirm billing PIN'
-    }
-    if (heading) heading.textContent = 'Confirm Subscription'
-    if (description) description.textContent = 'Enter the billing PIN sent to your mobile number.'
-    if (footnote) footnote.textContent = 'Your subscription will activate after the PIN is confirmed.'
-    return
-  }
-
-  if (['AUTH_OTP', 'AUTHORIZATION_REQUIRED'].includes(stage)) {
-    setFieldVisibility(phoneInput, false)
-    setFieldVisibility(pinInput, true)
-    if (sendButton) {
-      sendButton.hidden = false
-      sendButton.textContent = 'Send OTP'
-    }
-    if (verifyButton) {
-      verifyButton.hidden = false
-      verifyButton.textContent = 'Verify OTP'
-    }
-    if (heading) heading.textContent = 'Verify subscription'
-    if (description) {
-      description.textContent =
-        'This number is already subscribed. Enter the authorization OTP to continue.'
-    }
-    if (footnote) footnote.textContent = 'Dummy OTP is printed in the server log. 1234 also works.'
-  }
+  applyDcbStageUi(shadow, stage, { phoneInput, pinInput })
 }
 
 function setupDcbBindings(

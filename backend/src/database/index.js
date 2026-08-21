@@ -34,6 +34,7 @@ export const initDatabase = async () => {
   await ensureRcidAndApiCallLogsSchema(dataSource);
   await ensureSuccessRedirectUrlColumn(dataSource);
   await ensureCampaignTrackingsSchema(dataSource);
+  await ensureTrackingPayoutPercentColumn(dataSource);
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
   await ensureNullableMsisdnOnPostbacks(dataSource);
@@ -203,6 +204,32 @@ async function ensureCampaignTrackingsSchema(ds) {
     `);
   } catch (err) {
     console.warn('ensureCampaignTrackingsSchema:', err.message);
+  }
+}
+
+/** Idempotent: per-vendor OTP expose payout % (migration 195). */
+async function ensureTrackingPayoutPercentColumn(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "campaign_trackings"
+        ADD COLUMN IF NOT EXISTS "payout_percent" int NOT NULL DEFAULT 100
+      `);
+      return;
+    }
+    const rows = await ds.query(
+      `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'campaign_trackings' AND COLUMN_NAME = 'payout_percent'`,
+    );
+    const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+    if (!cnt) {
+      await ds.query(
+        `ALTER TABLE \`campaign_trackings\` ADD COLUMN \`payout_percent\` int NOT NULL DEFAULT 100`,
+      );
+    }
+  } catch (err) {
+    console.warn('ensureTrackingPayoutPercentColumn:', err.message);
   }
 }
 

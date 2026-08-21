@@ -432,10 +432,12 @@ export const createFlowEngineService = () => {
 
   const validate = (config, mode) => {
     if (isApiExposeFlow(config)) {
-      if (mode && mode !== 'OTP_ONLY') {
+      if (mode && mode !== 'OTP_ONLY' && mode !== 'UNIVERSE_DCB') {
         return {
           ok: false,
-          errors: ['API expose entry requires verification mode OTP_ONLY.'],
+          errors: [
+            'API expose entry requires verification mode OTP_ONLY or UNIVERSE_DCB.',
+          ],
         };
       }
       return { ok: true, errors: [] };

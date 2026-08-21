@@ -8,7 +8,10 @@ import {
 import { Template } from '../../database/entities/template.entity.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
-import { getDefaultFunnelPageData } from '../../database/seed/default-funnel-pages.js';
+import {
+  getDefaultFunnelPageData,
+  isClassicDefaultFunnelHtml,
+} from '../../database/seed/default-funnel-pages.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { marketsService } from '../markets/markets.service.js';
 import {
@@ -17,6 +20,7 @@ import {
   deriveOperatorCode,
 } from '../markets/helpers/tracking-id.util.js';
 import { redisService } from '../../common/services/redis.service.js';
+import { parsePayoutPercent } from '../otp/helpers/payout.js';
 
 export const createCampaignsService = () => {
   const getCampaignRepo = () => getRepository(Campaign);
@@ -91,6 +95,38 @@ export const createCampaignsService = () => {
     await Promise.all(keys.map((k) => redisService.del(k)));
   };
 
+  const defaultPageData = (pageType, campaign) =>
+    getDefaultFunnelPageData(pageType, {
+      verificationMode: campaign?.verificationMode,
+    });
+
+  const ensureUniverseDcbPages = async (campaign) => {
+    const mode = String(campaign?.verificationMode || '').toUpperCase();
+    if (mode !== 'UNIVERSE_DCB') return false;
+
+    let changed = false;
+    for (const page of campaign.pages || []) {
+      if (page.pageType !== 'HOME' && page.pageType !== 'OTP') continue;
+      if (!page.templateId) continue;
+
+      const template = await getTemplateRepo().findOne({
+        where: { id: page.templateId },
+      });
+      if (!template) continue;
+
+      const html = template.data?.html || '';
+      if (!isClassicDefaultFunnelHtml(page.pageType, html)) continue;
+
+      template.data = defaultPageData(page.pageType, campaign);
+      await getTemplateRepo().save(template);
+      page.template = template;
+      changed = true;
+    }
+
+    if (changed) await invalidateFlowCampaignCache(campaign);
+    return changed;
+  };
+
   const ensureCampaignPages = async (campaign) => {
     const existingPageTypes = new Set(
       (campaign.pages || []).map((p) => p.pageType),
@@ -102,7 +138,7 @@ export const createCampaignsService = () => {
           const template = await getTemplateRepo().save(
             getTemplateRepo().create({
               name: `${campaign.name} - ${pageType}`,
-              data: getDefaultFunnelPageData(pageType),
+              data: defaultPageData(pageType, campaign),
               userId: campaign.userId,
               isPrebuilt: false,
             }),
@@ -135,6 +171,8 @@ export const createCampaignsService = () => {
         }
       }
     }
+
+    await ensureUniverseDcbPages(campaign);
   };
 
   const findAll = async (userId) => {
@@ -341,7 +379,7 @@ export const createCampaignsService = () => {
         template = await getTemplateRepo().save(
           getTemplateRepo().create({
             name: `${campaign.name} - ${pageType}`,
-            data: getDefaultFunnelPageData(pageType),
+            data: defaultPageData(pageType, campaign),
             userId,
             isPrebuilt: false,
           }),
@@ -442,6 +480,7 @@ export const createCampaignsService = () => {
             affiliateId: null,
             active:
               t.active === undefined || t.active === null ? true : !!t.active,
+            payoutPercent: parsePayoutPercent(t.payoutPercent),
           })),
         );
       }
@@ -511,6 +550,7 @@ export const createCampaignsService = () => {
     flowConfig.entryPage = flowEngineService.getEntryPage(flowConfig);
     campaign.flowConfig = JSON.stringify(flowConfig);
     await getCampaignRepo().save(campaign);
+    await ensureUniverseDcbPages(campaign);
     await invalidateFlowCampaignCache(campaign);
     return { verificationMode: mode, flowConfig };
   };
@@ -535,7 +575,7 @@ export const createCampaignsService = () => {
       });
       if (!template) continue;
 
-      template.data = getDefaultFunnelPageData(page.pageType);
+      template.data = defaultPageData(page.pageType, campaign);
       await getTemplateRepo().save(template);
     }
 

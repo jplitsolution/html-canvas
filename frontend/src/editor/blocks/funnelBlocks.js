@@ -1,14 +1,14 @@
 import { thumbnails } from './thumbnails'
-import { FUNNEL_PAGE_GUIDES } from '../utils/funnelGuide'
+import { getFunnelPageGuide } from '../utils/funnelGuide'
 
 /**
  * Registers required + optional flow elements of a funnel page (e.g. "Get OTP button",
  * "Subscribe button") as draggable blocks, so clients can re-add any element they
  * accidentally deleted. Blocks carry the `tc-cat-flow` class for sidebar filtering.
  */
-export function registerFunnelBlocks(editor, funnelPageType) {
+export function registerFunnelBlocks(editor, funnelPageType, verificationMode) {
   if (!funnelPageType) return
-  const guide = FUNNEL_PAGE_GUIDES[funnelPageType]
+  const guide = getFunnelPageGuide(funnelPageType, verificationMode)
   if (!guide) return
 
   const parts = [

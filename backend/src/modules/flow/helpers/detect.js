@@ -33,8 +33,11 @@ export function createDetectMsisdn(deps) {
     if (campaign) {
       const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
       if (flowEngineService.isApiExposeFlow(flowConfig)) {
+        const mode = flowEngineService.normalizeMode(campaign.verificationMode);
         const err = new Error(
-          'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/send and /verify — no WAP subscription pages.',
+          mode === 'UNIVERSE_DCB'
+            ? 'This campaign exposes DCB billing APIs only. Use POST /api/flow/dcb/:campaignId/:vendorId/pincode and /confirm — no WAP subscription pages.'
+            : 'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/:vendorId/send and /verify — no WAP subscription pages.',
         );
         err.statusCode = 400;
         throw err;

@@ -350,12 +350,157 @@ const defaultPages = {
   },
 };
 
-export function getDefaultFunnelPageData(pageType) {
-  const page = defaultPages[pageType];
+const DCB_HOME_PACKS = [
+  { packKey: 'daily', period: 'Daily', name: 'Daily Access', desc: 'Flexible access for one day' },
+  {
+    packKey: 'weekly',
+    period: 'Weekly',
+    name: 'Weekly Access',
+    desc: 'Access for the full week',
+    badge: 'POPULAR',
+  },
+  { packKey: 'monthly', period: 'Monthly', name: 'Monthly Access', desc: 'A complete monthly pack' },
+  {
+    packKey: 'yearly',
+    period: 'Yearly',
+    name: 'Yearly Access',
+    desc: 'Long-term annual access',
+    badge: 'BEST VALUE',
+  },
+  {
+    packKey: 'monthly-with-ads',
+    period: 'Monthly',
+    name: 'Monthly with Ads',
+    desc: 'Monthly access with advertisements',
+  },
+  {
+    packKey: 'three-months',
+    period: '3 months',
+    name: 'Three Months',
+    desc: 'Convenient three-month access',
+  },
+];
+
+function dcbPackButtons() {
+  return DCB_HOME_PACKS.map(
+    (pack) => `
+      <button type="button" data-action="SUBSCRIBE" data-pack="${pack.packKey}" class="dcb-plan${
+        pack.badge ? ' dcb-plan-featured' : ''
+      }">
+        ${pack.badge ? `<span class="dcb-badge">${pack.badge}</span>` : ''}
+        <span class="dcb-plan-period">${pack.period}</span>
+        <span class="dcb-plan-name">${pack.name}</span>
+        <span class="dcb-plan-desc">${pack.desc}</span>
+      </button>`,
+  ).join('');
+}
+
+const dcbPages = {
+  [CampaignPageType.HOME]: {
+    css:
+      sharedCss +
+      `
+.dcb-home { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; background: linear-gradient(160deg,#f8fafc 0%,#eef2ff 100%); font-family: ${ff}; }
+.dcb-shell { width: 100%; max-width: 420px; background: #fff; border-radius: 20px; box-shadow: 0 20px 50px rgba(15,23,42,0.08); border: 1px solid #e2e8f0; padding: 28px 22px; text-align: center; }
+.dcb-kicker { display: inline-block; margin: 0 0 10px; font-size: 12px; font-weight: 700; color: #7c4dff; text-transform: uppercase; letter-spacing: 0.06em; }
+.dcb-title { margin: 0 0 8px; font-size: 24px; font-weight: 800; line-height: 1.25; color: #0f172a; }
+.dcb-subtitle { margin: 0 0 18px; font-size: 14px; line-height: 1.6; color: #64748b; }
+.dcb-plans { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.dcb-plan { position: relative; width: 100%; border: 2px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; background: #fff; cursor: pointer; text-align: left; }
+.dcb-plan:hover { border-color: #c7d2fe; background: #fafaff; }
+.dcb-plan-featured { border-color: #7c4dff; background: #f5f3ff; }
+.dcb-badge { position: absolute; top: 10px; right: 12px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; color: #6d28d9; background: #ede9fe; border-radius: 999px; padding: 3px 8px; }
+.dcb-plan-period { display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #7c4dff; margin-bottom: 2px; }
+.dcb-plan-name { display: block; font-size: 16px; font-weight: 800; color: #0f172a; }
+.dcb-plan-desc { display: block; font-size: 12px; color: #64748b; margin-top: 2px; }
+.dcb-footnote { margin-top: 16px; font-size: 11px; color: #94a3b8; line-height: 1.5; }
+`,
+    html: `
+<div class="dcb-home">
+  <div class="dcb-shell">
+    <p class="dcb-kicker">{{operator}} &#xB7; {{country}}</p>
+    <h1 class="dcb-title">Choose your access pack</h1>
+    <p class="dcb-subtitle">Select a plan. A billing PIN will be sent to your mobile to confirm the subscription.</p>
+    <div class="dcb-plans">${dcbPackButtons()}
+    </div>
+    <p class="dcb-footnote">By continuing you agree to the service terms. Standard data charges may apply.</p>
+  </div>
+</div>`,
+  },
+
+  [CampaignPageType.OTP]: {
+    css: sharedCss,
+    html: wrapPage(
+      `
+      <div class="dcb-otp" style="padding:32px 28px 28px;text-align:center;">
+        <div style="width:56px;height:56px;margin:0 auto 18px;border-radius:50%;background:#eef2ff;display:flex;align-items:center;justify-content:center;font-size:24px;">🔐</div>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:800;color:#0f172a;">Confirm billing PIN</h1>
+        <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#64748b;">
+          Enter your number if we could not detect it, then confirm the billing PIN sent by SMS.
+        </p>
+
+        <div style="text-align:left;margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
+          <input data-dcb-field="phone" data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210"
+            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+        </div>
+
+        <button type="button" data-dcb-action="manual-check" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Check subscription</button>
+
+        <div style="text-align:left;margin-bottom:12px;">
+          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Billing PIN</label>
+          <input data-dcb-field="pin" data-otp-field="otp" inputmode="numeric" placeholder="Enter billing PIN"
+            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+        </div>
+
+        <div data-dcb-slot="error" data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>
+        <div data-dcb-slot="status" data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>
+
+        <button type="button" data-dcb-action="confirm-pin" data-otp-action="verify" class="flow-btn">Confirm billing PIN</button>
+        <p class="flow-footnote">The PIN is sent after you choose a pack on Home. Dummy PIN 1234 also works in test.</p>
+      </div>
+    `,
+      '#6366f1',
+    ),
+  },
+};
+
+function pageRecord(page) {
   return {
     editor: 'grapesjs',
     projectData: {},
     html: page.html.trim(),
     css: page.css.trim(),
   };
+}
+
+export function getDefaultFunnelPageData(pageType, options = {}) {
+  const mode = String(options.verificationMode || options.mode || '').toUpperCase();
+  const page =
+    (mode === 'UNIVERSE_DCB' && dcbPages[pageType]) || defaultPages[pageType];
+  if (!page) {
+    return { editor: 'grapesjs', projectData: {}, html: '', css: '' };
+  }
+  return pageRecord(page);
+}
+
+export function isClassicDefaultFunnelHtml(pageType, html) {
+  const source = String(html || '');
+  if (pageType === CampaignPageType.OTP) {
+    return (
+      source.includes('Verify Mobile Number') &&
+      source.includes('Get OTP') &&
+      !source.includes('dcb-otp') &&
+      !source.includes('Confirm billing PIN')
+    );
+  }
+  if (pageType === CampaignPageType.HOME) {
+    return (
+      source.includes('Premium Mobile Service') &&
+      source.includes('Subscribe Now') &&
+      !source.includes('data-pack=') &&
+      !source.includes('dcb-home')
+    );
+  }
+  return false;
 }

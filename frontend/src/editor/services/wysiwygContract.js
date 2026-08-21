@@ -22,6 +22,8 @@ const FLOW_CTA_SELECTOR = [
   'a[data-action]',
   'button[data-otp-action]',
   '[data-otp-action]',
+  'button[data-dcb-action]',
+  '[data-dcb-action]',
   'a[data-tc-type="button"]',
   'button[data-tc-type="button"]',
 ].join(',')

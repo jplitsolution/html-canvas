@@ -9,6 +9,7 @@ import {
 } from './helpers/request.util.js';
 import { priorityCheck } from './helpers/priority.controller.js';
 import { universeDcbService } from './universe-dcb.service.js';
+import { universeDcbExposeService } from './universe-dcb-expose.service.js';
 import { flowEngineService } from './flow-engine.service.js';
 import {
   decorateUniverseDcbDetectResponse,
@@ -266,6 +267,68 @@ export const flowController = {
 
   dcbStatus: asyncHandler(async (req, res) => {
     res.json(await universeDcbService.status(dcbInput(req, 'poll')));
+  }),
+
+  dcbExposePincode: asyncHandler(async (req, res) => {
+    const values = { ...(req.query || {}), ...(req.body || {}) };
+    const data = await universeDcbExposeService.exposePincode(
+      {
+        campaignId: req.params.campaignId,
+        vendorId: req.params.vendorId,
+        msisdn: values.msisdn || values.phone,
+        purchaseTypeId: values.purchaseTypeId || values.purchase_type_id,
+        transactionChannel:
+          values.transactionChannel || values.transaction_channel || 'Wifi',
+        serviceId: values.serviceId || values.service_id,
+      },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
+    );
+    res.json(data);
+  }),
+
+  dcbExposeConfirm: asyncHandler(async (req, res) => {
+    const values = { ...(req.query || {}), ...(req.body || {}) };
+    const data = await universeDcbExposeService.exposeConfirm(
+      {
+        campaignId: req.params.campaignId,
+        vendorId: req.params.vendorId,
+        msisdn: values.msisdn || values.phone,
+        purchaseTypeId: values.purchaseTypeId || values.purchase_type_id,
+        transactionChannel:
+          values.transactionChannel || values.transaction_channel || 'Wifi',
+        serviceId: values.serviceId || values.service_id,
+        pin: values.pin || values.pincode || values.pinCode || values.otp,
+        requestId: values.requestId || values.request_id || values.id,
+      },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
+    );
+    res.json(data);
+  }),
+
+  dcbExposeStatus: asyncHandler(async (req, res) => {
+    const values = { ...(req.query || {}), ...(req.body || {}) };
+    const data = await universeDcbExposeService.exposeStatus(
+      {
+        campaignId: req.params.campaignId,
+        vendorId: req.params.vendorId,
+        msisdn: values.msisdn || values.phone,
+        serviceId: values.serviceId || values.service_id,
+        purchaseTypeId: values.purchaseTypeId || values.purchase_type_id,
+        transactionChannel:
+          values.transactionChannel || values.transaction_channel || 'Wifi',
+      },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
+    );
+    res.json(data);
   }),
 
   callback: asyncHandler(async (req, res) => {
