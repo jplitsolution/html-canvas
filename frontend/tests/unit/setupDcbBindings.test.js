@@ -7,11 +7,17 @@ vi.mock('../../src/services/api/dcb', () => ({
   sendDcbPincode: vi.fn(),
 }))
 
+vi.mock('../../src/services/api/otp', () => ({
+  sendOtp: vi.fn(),
+  verifyOtp: vi.fn(),
+}))
+
 vi.mock('../../src/services/flow/resolvePhoneNumber', () => ({
   persistPhone: vi.fn(),
 }))
 
 import { checkDcbMsisdn, confirmDcbPincode, sendDcbPincode } from '../../src/services/api/dcb'
+import { sendOtp, verifyOtp } from '../../src/services/api/otp'
 import { setupDcbBindings } from '../../src/pages/subscription/setupDcbBindings'
 
 function createShadow(html) {
@@ -131,5 +137,46 @@ describe('setupDcbBindings', () => {
       })
     })
     expect(confirmDcbPincode.mock.calls[0][0]).not.toHaveProperty('requestId')
+  })
+
+  it('sends partner OTP when a manual number is already entitled', async () => {
+    const shadow = createShadow(`
+      <input data-otp-field="phone" value="500000001" />
+      <input data-otp-field="otp" />
+      <button data-otp-action="send">Check</button>
+      <button data-otp-action="verify">Verify</button>
+      <div data-otp-slot="error"></div>
+      <div data-otp-slot="status"></div>
+    `)
+    const options = bindingsOptions({
+      pageType: 'OTP',
+      verificationMode: 'UNIVERSE_DCB',
+      flowContext: { stage: 'MANUAL_MSISDN', mode: 'UNIVERSE_DCB' },
+    })
+    checkDcbMsisdn.mockResolvedValue({
+      outcome: 'ENTITLED',
+      nextPage: 'OTP',
+      stage: 'AUTH_OTP',
+      authorization: 'PARTNER_OTP',
+    })
+    sendOtp.mockResolvedValue({ message: 'OTP sent' })
+
+    setupDcbBindings(shadow, options)
+    shadow.querySelector('[data-otp-action="send"]').click()
+
+    await vi.waitFor(() => {
+      expect(sendOtp).toHaveBeenCalledWith(expect.objectContaining({ phone: '500000001', visitId: 91 }))
+    })
+    expect(options.saveSession).toHaveBeenCalledWith(expect.objectContaining({ dcbStage: 'AUTH_OTP' }))
+    expect(shadow.querySelector('[data-otp-action="verify"]').textContent).toBe('Verify OTP')
+
+    shadow.querySelector('[data-otp-field="otp"]').value = '1234'
+    verifyOtp.mockResolvedValue({ verified: true })
+    shadow.querySelector('[data-otp-action="verify"]').click()
+
+    await vi.waitFor(() => {
+      expect(verifyOtp).toHaveBeenCalledWith(expect.objectContaining({ phone: '500000001', otp: '1234' }))
+      expect(options.loadPage).toHaveBeenCalledWith('THANKYOU', { direct: true })
+    })
   })
 })

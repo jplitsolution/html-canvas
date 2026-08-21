@@ -1,4 +1,5 @@
 import { checkDcbMsisdn, confirmDcbPincode, getDcbConfig, sendDcbPincode } from '../../services/api/dcb'
+import { sendOtp, verifyOtp } from '../../services/api/otp'
 import { persistPhone } from '../../services/flow/resolvePhoneNumber'
 
 const DCB_STAGES = new Set([
@@ -144,6 +145,26 @@ function adaptDcbStageUi(shadow, stage, { phoneInput, pinInput }) {
     if (heading) heading.textContent = 'Confirm Subscription'
     if (description) description.textContent = 'Enter the billing PIN sent to your mobile number.'
     if (footnote) footnote.textContent = 'Your subscription will activate after the PIN is confirmed.'
+    return
+  }
+
+  if (['AUTH_OTP', 'AUTHORIZATION_REQUIRED'].includes(stage)) {
+    setFieldVisibility(phoneInput, false)
+    setFieldVisibility(pinInput, true)
+    if (sendButton) {
+      sendButton.hidden = false
+      sendButton.textContent = 'Send OTP'
+    }
+    if (verifyButton) {
+      verifyButton.hidden = false
+      verifyButton.textContent = 'Verify OTP'
+    }
+    if (heading) heading.textContent = 'Verify subscription'
+    if (description) {
+      description.textContent =
+        'This number is already subscribed. Enter the authorization OTP to continue.'
+    }
+    if (footnote) footnote.textContent = 'Dummy OTP is printed in the server log. 1234 also works.'
   }
 }
 
@@ -170,7 +191,17 @@ function setupDcbBindings(
   if (!isDcbFlowContext(pageData)) return null
 
   const context = pageData.flowContext || {}
-  const stage = normalizeDcbStage(pageData)
+  const saved = (() => {
+    try {
+      return JSON.parse(sessionStorage.getItem(`tc_session_${country}_${operator}`) || '{}')
+    } catch {
+      return {}
+    }
+  })()
+  let currentStage =
+    saved.dcbStage === 'AUTH_OTP' && String(pageData.pageType || '').toUpperCase() === 'OTP'
+      ? 'AUTH_OTP'
+      : normalizeDcbStage(pageData)
   const phoneInput = shadow.querySelector(
     '[data-dcb-field="phone"], [data-otp-field="phone"], [data-field="phone"], input[type="tel"]'
   )
@@ -181,7 +212,7 @@ function setupDcbBindings(
   const statusSlot = shadow.querySelector('[data-dcb-slot="status"], [data-otp-slot="status"], [data-slot="status"]')
   let busy = false
 
-  adaptDcbStageUi(shadow, stage, { phoneInput, pinInput })
+  adaptDcbStageUi(shadow, currentStage, { phoneInput, pinInput })
   if (phoneInput && phoneRef.current) phoneInput.value = phoneRef.current
 
   const setSlot = (slot, text, error = false) => {
@@ -238,7 +269,24 @@ function setupDcbBindings(
       phoneRef.current = phone
       setPhone(phone)
       persistPhone(phone)
-      saveSession({ phone, msisdnSource: 'MANUAL', transactionChannel: 'Wifi' })
+      const responseStage = String(response?.stage || response?.flowContext?.stage || '').toUpperCase()
+      const authOtp = responseStage === 'AUTH_OTP' || response?.authorization === 'PARTNER_OTP'
+      saveSession({
+        phone,
+        msisdnSource: 'MANUAL',
+        transactionChannel: 'Wifi',
+        dcbStage: authOtp ? 'AUTH_OTP' : undefined,
+      })
+      if (authOtp) {
+        currentStage = 'AUTH_OTP'
+        adaptDcbStageUi(shadow, 'AUTH_OTP', { phoneInput, pinInput })
+        await sendOtp({ phone, visitId: visitIdRef.current })
+        setSlot(statusSlot, 'OTP sent. Check the server log or enter 1234.')
+        if (String(pageData.pageType || '').toUpperCase() !== 'OTP') {
+          await loadPage('OTP', { direct: true })
+        }
+        return
+      }
       setSlot(statusSlot, 'Number checked')
       await routeDcbResponse(response, {
         currentPage: pageData.pageType,
@@ -273,6 +321,7 @@ function setupDcbBindings(
         purchaseTypeId,
         transactionChannel,
         msisdnSource: msisdnSource || undefined,
+        dcbStage: 'PIN_REQUIRED',
       })
       const response = await sendDcbPincode({
         ...commonPayload(),
@@ -315,6 +364,37 @@ function setupDcbBindings(
     }, 'Confirming PIN...')
   }
 
+  const handleAuthSend = (event) => {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const phone = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    if (!phone) {
+      setSlot(errorSlot, 'Please enter a valid mobile number', true)
+      return
+    }
+    run(async () => {
+      await sendOtp({ phone, visitId: visitIdRef.current })
+      setSlot(statusSlot, 'OTP sent. Check the server log or enter 1234.')
+    }, 'Sending OTP...')
+  }
+
+  const handleAuthVerify = (event) => {
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    const phone = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    const otp = String(pinInput?.value || '').trim()
+    if (!otp) {
+      setSlot(errorSlot, 'Please enter the OTP', true)
+      return
+    }
+    run(async () => {
+      await verifyOtp({ phone, otp, visitId: visitIdRef.current })
+      saveSession({ dcbStage: undefined })
+      setSlot(statusSlot, 'OTP verified')
+      await loadPage('THANKYOU', { direct: true })
+    }, 'Verifying OTP...')
+  }
+
   const handleClick = (event) => {
     const path = event.composedPath?.() || []
     const node = path.find(
@@ -330,13 +410,13 @@ function setupDcbBindings(
         ''
     ).toUpperCase()
 
-    if (['MANUAL_MSISDN', 'MANUAL_CHECK', 'MANUAL_ENTRY', 'MSISDN_REQUIRED'].includes(stage)) {
+    if (['MANUAL_MSISDN', 'MANUAL_CHECK', 'MANUAL_ENTRY', 'MSISDN_REQUIRED'].includes(currentStage)) {
       if (['MANUAL-CHECK', 'MANUAL_CHECK', 'SEND'].includes(action)) {
         handleManualCheck(event)
       }
       return
     }
-    if (['PLAN_SELECT', 'SELECT_PLAN', 'PLAN_REQUIRED', 'PURCHASE_TYPE_SELECTION'].includes(stage)) {
+    if (['PLAN_SELECT', 'SELECT_PLAN', 'PLAN_REQUIRED', 'PURCHASE_TYPE_SELECTION'].includes(currentStage)) {
       if (
         node.hasAttribute('data-purchase-type-id') ||
         ['SEND-PIN', 'SEND_PIN', 'SUBSCRIBE', 'CONFIRM'].includes(action)
@@ -345,9 +425,18 @@ function setupDcbBindings(
       }
       return
     }
-    if (['BILLING_PIN', 'PIN_ENTRY', 'PIN_SENT', 'PIN_REQUIRED'].includes(stage)) {
+    if (['BILLING_PIN', 'PIN_ENTRY', 'PIN_SENT', 'PIN_REQUIRED'].includes(currentStage)) {
       if (['CONFIRM-PIN', 'CONFIRM_PIN', 'VERIFY', 'VERIFY-OTP'].includes(action)) {
         handleConfirm(event)
+      }
+      return
+    }
+    if (['AUTH_OTP', 'AUTHORIZATION_REQUIRED'].includes(currentStage)) {
+      if (['MANUAL-CHECK', 'MANUAL_CHECK', 'SEND', 'SEND-PIN', 'SEND_PIN'].includes(action)) {
+        handleAuthSend(event)
+      }
+      if (['CONFIRM-PIN', 'CONFIRM_PIN', 'VERIFY', 'VERIFY-OTP'].includes(action)) {
+        handleAuthVerify(event)
       }
     }
   }

@@ -351,24 +351,21 @@ export const createUniverseDcbService = (
           : {}),
       };
     }
-    // Authorization transport for manual+entitled subscribers is not supplied.
     return {
       campaignId: ctx.campaign.id,
       serviceId: ctx.serviceId,
       ...result,
-      providerOutcome: result.outcome,
-      outcome: DCB_OUTCOMES.TERMINAL_FAILURE,
-      nextPage: 'ERROR',
-      stage: 'AUTHORIZATION_REQUIRED',
-      authorization: 'NOT_CONFIGURED',
-      message:
-        'Authorization is required for this number, but the authorization provider is not configured.',
+      nextPage: 'OTP',
+      stage: 'AUTH_OTP',
+      authorization: 'PARTNER_OTP',
+      message: 'Enter the authorization OTP sent to this number.',
       flowContext: {
         provider: 'UNIVERSE_DCB',
         verificationMode: 'UNIVERSE_DCB',
-        stage: 'AUTHORIZATION_REQUIRED',
-        authorization: 'NOT_CONFIGURED',
-        outcome: DCB_OUTCOMES.TERMINAL_FAILURE,
+        stage: 'AUTH_OTP',
+        authorization: 'PARTNER_OTP',
+        outcome: result.outcome,
+        status: result.status,
       },
     };
   };
