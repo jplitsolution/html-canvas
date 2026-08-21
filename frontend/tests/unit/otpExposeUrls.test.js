@@ -34,7 +34,10 @@ describe('buildOtpExposeApiGuide', () => {
       payoutPercent: 80,
     })
     const data = JSON.parse(raw)
+    expect(data.comment).toMatch(/send → verify/)
     expect(data.apis).toHaveLength(2)
+    expect(data.apis[0].comment).toMatch(/send OTP/)
+    expect(data.apis[1].comment).toMatch(/verify/)
     expect(data.apis[0].url).toBe('https://app.example/api/otp/16/6/send')
     expect(data.apis[1].url).toBe('https://app.example/api/otp/16/6/verify')
     for (const api of data.apis) {

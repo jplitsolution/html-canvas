@@ -26,6 +26,7 @@ export function buildOtpExposeApiPayload({ origin, campaign, vendor, vendorId } 
   const urls = buildOtpExposeUrls(origin, cid, vid)
   return [
     {
+      comment: 'Step 1 — send OTP to this MSISDN. Use the same msisdn on verify.',
       method: 'POST',
       url: urls.sendUrl.replace(/\?.*$/, ''),
       request: {
@@ -40,6 +41,7 @@ export function buildOtpExposeApiPayload({ origin, campaign, vendor, vendorId } 
       },
     },
     {
+      comment: 'Step 2 — verify the OTP the user received. Conversion is counted on success.',
       method: 'POST',
       url: urls.verifyUrl.replace(/\?.*$/, ''),
       request: {
@@ -57,7 +59,14 @@ export function buildOtpExposeApiPayload({ origin, campaign, vendor, vendorId } 
 }
 
 export function buildOtpExposeApiGuide(opts = {}) {
-  return JSON.stringify({ apis: buildOtpExposeApiPayload(opts) }, null, 2)
+  return JSON.stringify(
+    {
+      comment: 'Vendor OTP APIs. Call in order: send → verify. GET or POST. Query or JSON body.',
+      apis: buildOtpExposeApiPayload(opts),
+    },
+    null,
+    2,
+  )
 }
 
 export async function sendOtp({ phone, visitId, pack, campaignId }) {

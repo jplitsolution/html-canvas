@@ -24,6 +24,8 @@ export function buildDcbExposeApiPayload({ origin, campaign, vendor, vendorId } 
   const urls = buildDcbExposeUrls(origin, cid, vid)
   return [
     {
+      comment:
+        'Step 1 — send billing PIN to this MSISDN. Save requestId from the response; confirm needs it.',
       method: 'POST',
       url: urls.pincodeUrl,
       request: {
@@ -41,6 +43,8 @@ export function buildDcbExposeApiPayload({ origin, campaign, vendor, vendorId } 
       },
     },
     {
+      comment:
+        'Step 2 — confirm the PIN. Send only requestId + pin (no msisdn). Then poll status.',
       method: 'POST',
       url: urls.confirmUrl,
       request: {
@@ -56,6 +60,8 @@ export function buildDcbExposeApiPayload({ origin, campaign, vendor, vendorId } 
       },
     },
     {
+      comment:
+        'Step 3 — poll subscription status until outcome is ENTITLED (user is billed / active).',
       method: 'GET',
       url: `${urls.statusUrl}${SAMPLE_MSISDN}`,
       request: {
@@ -73,5 +79,13 @@ export function buildDcbExposeApiPayload({ origin, campaign, vendor, vendorId } 
 }
 
 export function buildDcbExposeApiGuide(opts = {}) {
-  return JSON.stringify({ apis: buildDcbExposeApiPayload(opts) }, null, 2)
+  return JSON.stringify(
+    {
+      comment:
+        'Vendor DCB billing APIs. Call in order: pincode → confirm → status. GET or POST. Query or JSON body.',
+      apis: buildDcbExposeApiPayload(opts),
+    },
+    null,
+    2,
+  )
 }
