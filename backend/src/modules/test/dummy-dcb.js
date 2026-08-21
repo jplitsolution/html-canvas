@@ -256,21 +256,33 @@ export const createDummyDcbHandlers = ({
       return res.status(400).json(failure('purchaseTypeId is required'));
     }
 
-    const requestId = randomUUID();
+    const pinRequestId = String(Math.floor(10_000_000 + Math.random() * 90_000_000));
     const pin = String(Math.floor(1000 + Math.random() * 9000));
     await writeStore(
       pinKey(msisdn),
-      { pin, requestId, purchaseTypeId, msisdn },
+      { pin, requestId: pinRequestId, purchaseTypeId, msisdn },
       PIN_TTL_SECONDS,
     );
 
     log(
-      `[Dummy DCB] billing PIN for ${msisdn}: ${pin}  (requestId=${requestId}, purchaseTypeId=${purchaseTypeId})`,
+      `[Dummy DCB] billing PIN for ${msisdn}: ${pin}  (PinInfo.ID=${pinRequestId}, purchaseTypeId=${purchaseTypeId})`,
     );
     log(`[Dummy DCB] you can also verify with master PIN ${DUMMY_DCB_MASTER_PIN}`);
 
     return res.json(
-      envelope('PIN requested', { requestId, pin, pinCode: pin }, { requestId }),
+      envelope(
+        'PIN request processed',
+        {
+          Success: true,
+          MessageEn: 'Success',
+          ErrorCode: 'Ok',
+          PinInfo: { ID: pinRequestId, PinCode: pin },
+          requestId: pinRequestId,
+          pin,
+          pinCode: pin,
+        },
+        { requestId: randomUUID() },
+      ),
     );
   };
 
@@ -278,7 +290,7 @@ export const createDummyDcbHandlers = ({
     const body = req.body || {};
     const msisdn = digitsOnly(body.msisdn || body.phone);
     const pin = String(body.pinCode || body.pin || body.otp || '').trim();
-    const requestId = String(body.requestId || '').trim();
+    const requestId = String(body.id || body.requestId || '').trim();
     const purchaseTypeId = String(body.purchaseTypeId || '').trim();
     if (!msisdn || !pin || !requestId) {
       return res

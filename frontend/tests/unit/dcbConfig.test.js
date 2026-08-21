@@ -83,7 +83,7 @@ describe('Universe DCB campaign config', () => {
     })
     expect(parsed.request.pinField).toBe('pinCode')
     expect(parsed.request.merchantIdField).toBe('merchantId')
-    expect(parsed.responsePaths.requestId).toBe('data.requestId')
+    expect(parsed.responsePaths.requestId).toBe('data.PinInfo.ID')
   })
 
   it('previews PIN and confirm bodies using the configured field names', () => {
@@ -97,7 +97,7 @@ describe('Universe DCB campaign config', () => {
       subscription: '',
     })
     expect(previewConfirmPayload(null)).toMatchObject({
-      requestId: 'REQUEST-ID-FROM-PIN-RESPONSE',
+      id: 'REQUEST-ID-FROM-PIN-RESPONSE',
       pinCode: '1234',
       msisdn: '566891023',
       serviceId: 581,

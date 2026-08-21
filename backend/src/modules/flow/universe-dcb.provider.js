@@ -27,15 +27,30 @@ const endpointUrl = (baseUrl, endpoint) => {
   return new URL(path, base.endsWith('/') ? base : `${base}/`).toString();
 };
 
+const REQUEST_ID_FALLBACK_PATHS = [
+  'data.PinInfo.ID',
+  'data.PinInfo.Id',
+  'data.pinInfo.ID',
+  'data.pinInfo.id',
+  'data.requestId',
+  'data.request_id',
+  'requestId',
+  'request_id',
+];
+
 const requestIdFrom = (data, config) => {
   const configured =
     config.responsePaths?.requestId ||
     config.response?.requestIdPath ||
     config.normalizer?.requestIdPath;
-  const paths = configured
-    ? [configured]
-    : ['data.requestId', 'data.request_id', 'requestId', 'request_id'];
+  const paths = [
+    ...(configured ? [configured] : []),
+    ...REQUEST_ID_FALLBACK_PATHS,
+  ];
+  const seen = new Set();
   for (const path of paths) {
+    if (seen.has(path)) continue;
+    seen.add(path);
     const value = getNestedValue(data, path);
     if (value !== undefined && value !== null && String(value).trim()) {
       return String(value).trim();

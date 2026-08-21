@@ -746,8 +746,10 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
           <div>
             <p className="text-sm font-semibold text-fg">PIN confirm / verify API</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-fg-muted">
-              OTP page par PIN submit hone par ye call hoti hai. <code className="font-mono">requestId</code> PIN
-              response se backend save karta hai; user sirf PIN type karta hai.
+              PIN submit par ye call hoti hai. Path se PIN response ka ID nikalta hai
+              (jaise <code className="font-mono">data.PinInfo.ID</code>), field us ID ko
+              confirm body mein bhejta hai (jaise <code className="font-mono">id</code>).
+              User sirf SMS PIN type karta hai.
             </p>
           </div>
           <Field label="Confirm API path" hint="POST">
@@ -758,23 +760,25 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             />
           </Field>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="requestId field">
+            <Field label="Confirm body ID field" hint="verify payload key">
               <Input
                 value={dcbConfig.request.requestIdField}
                 onChange={(event) => setRequestField('requestIdField', event.target.value)}
+                placeholder="id"
               />
             </Field>
-            <Field label="pinCode field">
+            <Field label="Confirm body PIN field">
               <Input
                 value={dcbConfig.request.pinField}
                 onChange={(event) => setRequestField('pinField', event.target.value)}
+                placeholder="pinCode"
               />
             </Field>
-            <Field label="PIN response requestId path">
+            <Field label="PIN response ID path" hint="read from pincode JSON">
               <Input
                 value={dcbConfig.responsePaths.requestId}
                 onChange={(event) => setResponsePath('requestId', event.target.value)}
-                placeholder="data.requestId"
+                placeholder="data.PinInfo.ID"
               />
             </Field>
           </div>

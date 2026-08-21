@@ -30,7 +30,7 @@ const DEFAULT_DCB_REQUEST_FIELDS = {
   transactionChannelField: 'transactionChannel',
   operatorField: 'operator',
   subscriptionField: 'subscription',
-  requestIdField: 'requestId',
+  requestIdField: 'id',
   pinField: 'pinCode',
   currentField: 'current',
 }
@@ -52,7 +52,7 @@ const DEFAULT_DCB_CONFIG = {
     entitlementActive: 'entitlementActive',
     current: 'current',
     serviceId: 'providerServiceId',
-    requestId: 'data.requestId',
+    requestId: 'data.PinInfo.ID',
   },
 }
 

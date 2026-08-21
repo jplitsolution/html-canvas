@@ -33,6 +33,35 @@ describe('Universe DCB provider logging metadata', () => {
     assert.equal(typeof response.logMeta.latencyMs, 'number');
   });
 
+  it('reads PinInfo.ID when the configured requestId path is missing', async () => {
+    const http = {
+      request: async () => ({
+        status: 200,
+        data: {
+          success: true,
+          requestId: 'envelope-uuid',
+          data: {
+            PinInfo: { ID: '16726123', PinCode: '0000' },
+          },
+        },
+      }),
+    };
+    const provider = createUniverseDcbProvider(http);
+    const response = await provider.requestPincode(
+      {
+        ...config,
+        responsePaths: { requestId: 'data.requestId' },
+      },
+      {
+        msisdn: '972500000000',
+        serviceId: '581',
+        purchaseTypeId: '2',
+        transactionChannel: 'Wifi',
+      },
+    );
+    assert.equal(response.providerRequestId, '16726123');
+  });
+
   it('attaches request metadata and provider response to errors', async () => {
     const http = {
       request: async () => {
