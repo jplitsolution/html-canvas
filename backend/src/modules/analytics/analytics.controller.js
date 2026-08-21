@@ -10,6 +10,14 @@ export const analyticsController = {
     res.json(data);
   }),
 
+  campaignVendorStats: asyncHandler(async (req, res) => {
+    const data = await analyticsService.getCampaignVendorStats(
+      req.params.campaignId,
+      req.user.id,
+    );
+    res.json(data);
+  }),
+
   campaignLogs: asyncHandler(async (req, res) => {
     const data = await analyticsService.getCampaignActivityLogs(
       req.params.campaignId,

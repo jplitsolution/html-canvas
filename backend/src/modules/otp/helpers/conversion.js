@@ -29,3 +29,30 @@ export const otpConversionStats = ({
     holdPercent: pct(otpHeld, otpVerifiedLive),
   };
 };
+
+/**
+ * One vendor row for campaign detail: WAP uses subscribe/clicks;
+ * API expose uses verified/requested and publisher (after-hold) %.
+ */
+export const campaignVendorPerf = ({
+  clicks = 0,
+  subscribeSuccess = 0,
+  requested = 0,
+  liveVerified = 0,
+  held = 0,
+  failedApi = 0,
+  apiExpose = false,
+} = {}) => {
+  const totalClicks = Math.max(0, Number(clicks) || 0);
+  const conversionsWap = Math.max(0, Number(subscribeSuccess) || 0);
+  const otp = otpConversionStats({ requested, liveVerified, held });
+  return {
+    totalClicks,
+    conversions: apiExpose ? otp.verifiedLive : conversionsWap,
+    convPercent: apiExpose ? otp.liveConvPercent : pct(conversionsWap, totalClicks),
+    requestedApi: otp.requested,
+    verifiedApi: otp.verifiedLive,
+    failedApi: Math.max(0, Number(failedApi) || 0),
+    pubConvPercent: otp.vendorConvPercent,
+  };
+};

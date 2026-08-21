@@ -272,6 +272,10 @@ export async function saveCampaignFlow(campaignId, payload) {
   })
 }
 
+export async function getCampaignVendorStats(campaignId) {
+  return apiClient(`/analytics/campaign/${campaignId}/vendor-stats`)
+}
+
 export async function getCampaignActivityLogs(campaignId, params = {}) {
   const query = new URLSearchParams()
   if (params.page) query.append('page', params.page)

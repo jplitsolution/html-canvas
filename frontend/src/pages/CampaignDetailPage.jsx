@@ -25,7 +25,7 @@ import {
   marketPath,
   resolveMarketCodes,
 } from '../utils/routes'
-import { getCampaignPreviewUrl } from '../services/api/campaigns'
+import { getCampaignPreviewUrl, getCampaignVendorStats } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
 import { buildOtpExposeApiGuide, buildOtpExposeUrls, clampPayoutPercent } from '../services/api/otp'
 import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbExpose'
@@ -87,10 +87,31 @@ function CampaignDetailPage() {
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const [vendorStats, setVendorStats] = useState({ apiExpose: false, vendors: [] })
+  const [vendorStatsLoading, setVendorStatsLoading] = useState(false)
 
   useEffect(() => {
     fetchVendors().catch(() => {})
   }, [fetchVendors])
+
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setVendorStatsLoading(true)
+    getCampaignVendorStats(id)
+      .then((data) => {
+        if (!cancelled) setVendorStats(data || { apiExpose: false, vendors: [] })
+      })
+      .catch(() => {
+        if (!cancelled) setVendorStats({ apiExpose: false, vendors: [] })
+      })
+      .finally(() => {
+        if (!cancelled) setVendorStatsLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id, campaign?.trackings])
 
   useEffect(() => {
     setNameDraft(campaign?.name || '')
@@ -465,6 +486,97 @@ function CampaignDetailPage() {
             operatorCode={operatorCode}
             embedded
           />
+        </div>
+
+        <div className="surface-card overflow-hidden mt-5">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-fg">Vendors</h2>
+              <p className="text-[11px] text-fg-muted mt-0.5">
+                {apiExpose
+                  ? 'Requested / verified / failed API counts. Conv % is verified ÷ requested. Pub conv % is after payout hold.'
+                  : 'Clicks and conversion % for each assigned vendor.'}
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
+              <Store className="w-4 h-4" />
+              Manage
+            </Button>
+          </div>
+          {vendorStatsLoading && vendorStats.vendors.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-fg-muted">Loading vendor stats…</p>
+          ) : vendorStats.vendors.length === 0 && trackings.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-fg-muted">
+              No vendors assigned.{' '}
+              <button
+                type="button"
+                className="text-accent hover:underline"
+                onClick={() => setShowVendorModal(true)}
+              >
+                Assign a vendor
+              </button>
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th className="col-text">Vendor</th>
+                    <th className="col-num">Total clicks</th>
+                    {apiExpose ? (
+                      <>
+                        <th className="col-num">Requested API</th>
+                        <th className="col-num">Verified API</th>
+                        <th className="col-num">Failed API</th>
+                        <th className="col-num">Conv %</th>
+                        <th className="col-num">Pub conv %</th>
+                      </>
+                    ) : (
+                      <th className="col-num">Conv %</th>
+                    )}
+                  </tr>
+                </thead>
+                <tbody>
+                  {(vendorStats.vendors.length > 0
+                    ? vendorStats.vendors
+                    : trackings.map((t) => ({
+                        vendorId: t.vendor?.id,
+                        vendorName: t.vendor?.name,
+                        vendorCode: t.vendor?.code,
+                        assignmentActive: t.active !== false,
+                        totalClicks: 0,
+                        requestedApi: 0,
+                        verifiedApi: 0,
+                        failedApi: 0,
+                        convPercent: 0,
+                        pubConvPercent: 0,
+                      }))
+                  ).map((row) => (
+                    <tr key={row.vendorId} className={row.assignmentActive === false ? 'opacity-70' : ''}>
+                      <td className="col-text">
+                        <p className="font-medium text-fg">{row.vendorName}</p>
+                        {row.vendorCode ? (
+                          <p className="text-[11px] text-fg-muted font-mono">{row.vendorCode}</p>
+                        ) : null}
+                      </td>
+                      <td className="col-num">{row.totalClicks ?? 0}</td>
+                      {apiExpose ? (
+                        <>
+                          <td className="col-num">{row.requestedApi ?? 0}</td>
+                          <td className="col-num">{row.verifiedApi ?? 0}</td>
+                          <td className="col-num">{row.failedApi ?? 0}</td>
+                          <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
+                          <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
+                        </>
+                      ) : (
+                        <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
 

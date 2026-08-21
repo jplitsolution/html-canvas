@@ -1,12 +1,14 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Like } from 'typeorm';
-import { getRepository } from '../../database/index.js';
+import { getDataSource, getRepository } from '../../database/index.js';
 import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { ApiCallLog } from '../../database/entities/api-call-log.entity.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
 import { searchService } from '../search/search.service.js';
+import { flowEngineService } from '../flow/flow-engine.service.js';
+import { campaignVendorPerf } from '../otp/helpers/conversion.js';
 import getConfig from '../../config/configuration.js';
 
 export const createAnalyticsService = () => {
@@ -276,6 +278,135 @@ export const createAnalyticsService = () => {
       rateLimitHits,
       bruteForceAttempts,
     };
+  };
+
+  const jsonBoolSql = (columnJsonPath, jsonKey) => {
+    const dbType = getDataSource().options.type;
+    if (dbType === 'postgres') {
+      return `(${columnJsonPath}->>'${jsonKey}') IN ('true', 't', '1')`;
+    }
+    if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
+      return `json_extract(${columnJsonPath}, '$.${jsonKey}') IN (1, 'true', 't')`;
+    }
+    return `JSON_EXTRACT(${columnJsonPath}, '$.${jsonKey}') IN (true, 1, 'true')`;
+  };
+
+  const getCampaignVendorStats = async (campaignId, userId) => {
+    const campaign = await campaignsService.findOne(campaignId, userId);
+    const { flowConfig } = await campaignsService.getFlow(campaignId, userId);
+    const apiExpose = flowEngineService.isApiExposeFlow(flowConfig);
+    const cId = parseInt(campaignId, 10);
+    const successTrue = jsonBoolSql('event.metadata', 'success');
+    const heldTrue = jsonBoolSql('event.metadata', 'held');
+
+    const clickRows = await getVisitRepo()
+      .createQueryBuilder('visit')
+      .select('visit.vendorId', 'vendorId')
+      .addSelect('COUNT(*)', 'clicks')
+      .where('visit.campaignId = :cId', { cId })
+      .groupBy('visit.vendorId')
+      .getRawMany();
+
+    const eventRows = await getVisitEventRepo()
+      .createQueryBuilder('event')
+      .innerJoin('event.visit', 'visit')
+      .select('visit.vendorId', 'vendorId')
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_SEND' AND ${successTrue} THEN 1 ELSE 0 END), 0)`,
+        'requested',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_VERIFY' AND ${successTrue} THEN 1 ELSE 0 END), 0)`,
+        'liveVerified',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_VERIFY' AND ${heldTrue} THEN 1 ELSE 0 END), 0)`,
+        'held',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_SEND' AND NOT (${successTrue}) THEN 1 ELSE 0 END), 0)`,
+        'failedSend',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_VERIFY' AND NOT (${successTrue}) THEN 1 ELSE 0 END), 0)`,
+        'failedVerify',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'SUBSCRIBE_SUCCESS' THEN 1 ELSE 0 END), 0)`,
+        'subscribeSuccess',
+      )
+      .where('visit.campaignId = :cId', { cId })
+      .groupBy('visit.vendorId')
+      .getRawMany();
+
+    const statsByVendor = new Map();
+    for (const row of clickRows) {
+      const key = Number(row.vendorId) || 0;
+      statsByVendor.set(key, {
+        clicks: Number(row.clicks) || 0,
+        requested: 0,
+        liveVerified: 0,
+        held: 0,
+        failedApi: 0,
+        subscribeSuccess: 0,
+      });
+    }
+    for (const row of eventRows) {
+      const key = Number(row.vendorId) || 0;
+      const prev = statsByVendor.get(key) || {
+        clicks: 0,
+        requested: 0,
+        liveVerified: 0,
+        held: 0,
+        failedApi: 0,
+        subscribeSuccess: 0,
+      };
+      statsByVendor.set(key, {
+        ...prev,
+        requested: Number(row.requested) || 0,
+        liveVerified: Number(row.liveVerified) || 0,
+        held: Number(row.held) || 0,
+        failedApi: (Number(row.failedSend) || 0) + (Number(row.failedVerify) || 0),
+        subscribeSuccess: Number(row.subscribeSuccess) || 0,
+      });
+    }
+
+    const seen = new Set();
+    const vendors = [];
+    for (const t of campaign.trackings || []) {
+      const vendor = t.vendor || {};
+      const vendorId = Number(vendor.id || t.vendorId);
+      if (!vendorId || seen.has(vendorId)) continue;
+      seen.add(vendorId);
+      const raw = statsByVendor.get(vendorId) || {};
+      vendors.push({
+        vendorId,
+        vendorName: vendor.name || `Vendor #${vendorId}`,
+        vendorCode: vendor.code || null,
+        assignmentActive: t.active !== false,
+        payoutPercent: Number(t.payoutPercent ?? 100),
+        ...campaignVendorPerf({ ...raw, apiExpose }),
+      });
+    }
+
+    for (const [vendorId, raw] of statsByVendor.entries()) {
+      if (!vendorId || seen.has(vendorId)) continue;
+      seen.add(vendorId);
+      vendors.push({
+        vendorId,
+        vendorName: `Vendor #${vendorId}`,
+        vendorCode: null,
+        assignmentActive: false,
+        payoutPercent: 100,
+        ...campaignVendorPerf({ ...raw, apiExpose }),
+      });
+    }
+
+    vendors.sort(
+      (a, b) => b.totalClicks - a.totalClicks || a.vendorName.localeCompare(b.vendorName),
+    );
+
+    return { apiExpose, vendors };
   };
 
   const derivePagePath = (visit) => {
@@ -643,6 +774,7 @@ export const createAnalyticsService = () => {
     abandonOrphanVisit,
     logEvent,
     getCampaignAnalytics,
+    getCampaignVendorStats,
     getCampaignActivityLogs,
     derivePagePath,
     archiveOldData,

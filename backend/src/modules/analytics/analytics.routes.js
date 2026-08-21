@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/campaign/:campaignId', analyticsController.campaignAnalytics);
+router.get('/campaign/:campaignId/vendor-stats', analyticsController.campaignVendorStats);
 router.get('/campaign/:campaignId/logs', analyticsController.campaignLogs);
 router.get('/visits/:visitId', analyticsController.visitDetail);
 
