@@ -35,14 +35,10 @@ export const createOtpService = () => {
   const exposePendingKey = (campaignId, phone) =>
     `otp:pending:expose:${campaignId}:${String(phone).trim()}`;
 
-  const redactInboundBody = (body, otp) => {
+  const serializeInboundBody = (body) => {
     if (body == null) return null;
     try {
-      const raw = typeof body === 'string' ? body : JSON.stringify(body);
-      let out = raw;
-      if (otp) out = out.split(String(otp)).join('****');
-      out = out.replace(/("(?:pin|otp|otpCode|code)"\s*:\s*")[^"]*"/gi, '$1****"');
-      return out;
+      return typeof body === 'string' ? body : JSON.stringify(body);
     } catch {
       return String(body);
     }
@@ -551,7 +547,7 @@ export const createOtpService = () => {
     }
     const inboundUrl =
       meta.requestUrl || `/api/otp/${cId}/send`;
-    const inboundBody = redactInboundBody({
+    const inboundBody = serializeInboundBody({
       msisdn,
       pack: pack || 'daily',
     });
@@ -734,13 +730,10 @@ export const createOtpService = () => {
     }
     const inboundUrl =
       meta.requestUrl || `/api/otp/${cId}/verify`;
-    const inboundBody = redactInboundBody(
-      {
-        msisdn,
-        otp: otpPin,
-      },
-      otpPin,
-    );
+    const inboundBody = serializeInboundBody({
+      msisdn,
+      otp: otpPin,
+    });
 
     if (await isBruteForceAttempt(clientIp, null)) {
       await logInboundExpose({

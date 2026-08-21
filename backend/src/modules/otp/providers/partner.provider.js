@@ -93,20 +93,10 @@ const formatPartnerError = (data, config, fallback) => {
   return fallback;
 };
 
-/** Mask PIN/OTP in logged URLs/bodies so Campaign Logs stay useful without leaking codes. */
-const redactSecrets = (value, otp) => {
-  if (value == null) return value;
-  let out = String(value);
-  if (otp) out = out.split(String(otp)).join('****');
-  out = out.replace(/([?&](?:pin|otp|code|passwd|password)=)[^&]*/gi, '$1****');
-  out = out.replace(/("(?:pin|otp|code)"\s*:\s*")[^"]*"/gi, '$1****"');
-  return out;
-};
-
-const withRequestMeta = (result, { requestUrl, requestBody, otp }) => ({
+const withRequestMeta = (result, { requestUrl, requestBody }) => ({
   ...result,
-  requestUrl: redactSecrets(requestUrl, otp) || null,
-  requestBody: requestBody ? redactSecrets(requestBody, otp) : null,
+  requestUrl: requestUrl || null,
+  requestBody: requestBody || null,
 });
 
 export const partnerProvider = {

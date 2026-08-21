@@ -6,7 +6,7 @@ import {
 } from './universe-dcb-log.js';
 
 describe('Universe DCB API logging', () => {
-  it('redacts PINs and provider request IDs recursively', () => {
+  it('keeps PINs, OTPs, and provider request IDs in log payloads', () => {
     assert.deepEqual(
       sanitizeUniverseDcbLogValue({
         pinCode: '1234',
@@ -14,8 +14,8 @@ describe('Universe DCB API logging', () => {
         code: 'RenewalDaily',
       }),
       {
-        pinCode: '****',
-        nested: { otp: '****', requestId: '[REDACTED]' },
+        pinCode: '1234',
+        nested: { otp: '9999', requestId: 'provider-secret' },
         code: 'RenewalDaily',
       },
     );
@@ -56,8 +56,8 @@ describe('Universe DCB API logging', () => {
     assert.equal(record.success, true);
     assert.equal(record.statusLabel, 'POLLING');
     assert.match(record.requestBody, /"latencyMs":125/);
-    assert.match(record.requestBody, /"pinCode":"\*\*\*\*"/);
-    assert.doesNotMatch(record.requestBody, /provider-secret/);
-    assert.doesNotMatch(record.responseBody, /provider-secret/);
+    assert.match(record.requestBody, /"pinCode":"1234"/);
+    assert.match(record.requestBody, /provider-secret/);
+    assert.match(record.responseBody, /provider-secret/);
   });
 });

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { stripProviderRequestIds } from '../../src/services/api/dcb'
 
 describe('DCB API response safety', () => {
-  it('removes provider request IDs before runtime state can persist them', () => {
+  it('keeps provider request IDs in runtime responses', () => {
     expect(
       stripProviderRequestIds({
         outcome: 'PENDING',
@@ -14,7 +14,11 @@ describe('DCB API response safety', () => {
       })
     ).toEqual({
       outcome: 'PENDING',
-      nested: { safe: true },
+      requestId: 'provider-1',
+      nested: {
+        providerRequestId: 'provider-2',
+        safe: true,
+      },
     })
   })
 })

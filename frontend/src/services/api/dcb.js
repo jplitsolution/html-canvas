@@ -7,15 +7,7 @@ function compactPayload(payload = {}) {
 }
 
 function stripProviderRequestIds(value) {
-  if (Array.isArray(value)) return value.map(stripProviderRequestIds)
-  if (!value || typeof value !== 'object') return value
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(
-        ([key]) => !['requestid', 'request_id', 'providerrequestid', 'provider_request_id'].includes(key.toLowerCase())
-      )
-      .map(([key, child]) => [key, stripProviderRequestIds(child)])
-  )
+  return value
 }
 
 async function postDcb(path, payload) {

@@ -270,7 +270,7 @@ export const createDummyDcbHandlers = ({
     log(`[Dummy DCB] you can also verify with master PIN ${DUMMY_DCB_MASTER_PIN}`);
 
     return res.json(
-      envelope('PIN requested', { requestId }, { requestId }),
+      envelope('PIN requested', { requestId, pin, pinCode: pin }, { requestId }),
     );
   };
 

@@ -53,9 +53,12 @@ export const testController = {
         `[Dummy OTP] authorization OTP for ${mobile}: ${otp}  (master OTP 1234 also works)`,
       );
       await saveOtpInRedis(mobile, otp);
-      return res
-        .status(200)
-        .json({ success: true, responseCode: '0', message: 'OTP generated' });
+      return res.status(200).json({
+        success: true,
+        responseCode: '0',
+        message: 'OTP generated',
+        otp: String(otp),
+      });
     } catch (error) {
       return res.status(500).json({ success: false, message: error.message });
     }

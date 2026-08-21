@@ -85,7 +85,10 @@ describe('Dummy Universe DCB APIs', () => {
     assert.equal(pinRes.statusCode, 200);
     assert.match(logs[0], /billing PIN for 588800099: \d{4}/);
     const requestId = pinRes.body.data.requestId;
+    const pin = pinRes.body.data.pin;
     assert.ok(requestId);
+    assert.match(pin, /^\d{4}$/);
+    assert.equal(pinRes.body.data.pinCode, pin);
 
     const bad = mockRes();
     await handlers.confirm(

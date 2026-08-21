@@ -1,34 +1,4 @@
-const SENSITIVE_KEYS = new Set([
-  'pin',
-  'pincode',
-  'pin_code',
-  'otp',
-  'onetimepassword',
-]);
-
-const REQUEST_ID_KEYS = new Set([
-  'requestid',
-  'request_id',
-  'providerrequestid',
-]);
-
-const normalizedKey = (key) =>
-  String(key || '')
-    .replace(/[^a-z0-9_]/gi, '')
-    .toLowerCase();
-
-export const sanitizeUniverseDcbLogValue = (value) => {
-  if (Array.isArray(value)) return value.map(sanitizeUniverseDcbLogValue);
-  if (!value || typeof value !== 'object') return value;
-  return Object.fromEntries(
-    Object.entries(value).map(([key, nested]) => {
-      const normalized = normalizedKey(key);
-      if (SENSITIVE_KEYS.has(normalized)) return [key, '****'];
-      if (REQUEST_ID_KEYS.has(normalized)) return [key, '[REDACTED]'];
-      return [key, sanitizeUniverseDcbLogValue(nested)];
-    }),
-  );
-};
+export const sanitizeUniverseDcbLogValue = (value) => value;
 
 const serialize = (value) => {
   if (value === undefined || value === null) return null;
