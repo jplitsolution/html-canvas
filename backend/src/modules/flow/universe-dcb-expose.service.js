@@ -7,7 +7,6 @@ import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 import { CampaignPageType } from '../../database/entities/campaign-page.entity.js';
-import { mintClickId } from './helpers/click-id.js';
 import { flowEngineService } from './flow-engine.service.js';
 import { universeDcbProvider } from './universe-dcb.provider.js';
 import { apiCallLogService } from './api-call-log.service.js';
@@ -19,6 +18,11 @@ import {
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
 import { pickDcbExposeRequestId } from './helpers/dcb-expose-fields.js';
+import {
+  DCB_EXPOSE_INBOUND_CALL_TYPES,
+  DCB_EXPOSE_INBOUND_EVENT_TYPES,
+  serializeDcbExposeInboundBody,
+} from './helpers/dcb-expose-inbound.js';
 import {
   HELD_OTP_MESSAGE,
   parsePayoutPercent,
@@ -152,6 +156,7 @@ export const createUniverseDcbExposeService = (
               ? 'SUCCESS'
               : null,
         success: metadata?.success,
+        errorMessage: metadata?.error || null,
         timestamp: new Date().toISOString(),
       });
     } catch (err) {
@@ -159,41 +164,71 @@ export const createUniverseDcbExposeService = (
     }
   };
 
-  const ensureExposeVisit = async ({ campaign, phone, vendorId, clientIp, landingUrl }) => {
-    const msisdn = cleanPhone(phone);
-    if (!msisdn) throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
+  const patchExposeVisit = async (visit, { msisdn, vendorId, clientIp, landingUrl }) => {
     const vid = Number(vendorId) || null;
-    const where = { campaignId: campaign.id, phone: msisdn };
-    if (vid) where.vendorId = vid;
+    const patch = {
+      landingUrl: landingUrl || visit.landingUrl,
+      updatedAt: new Date(),
+    };
+    if (msisdn) patch.phone = msisdn;
+    if (clientIp) patch.ipAddress = String(clientIp).split(',')[0].trim();
+    if (vid && !visit.vendorId) patch.vendorId = vid;
+    await getVisitRepo().update({ id: visit.id }, patch);
+    return { ...visit, ...patch, id: visit.id };
+  };
 
-    const existing = await getVisitRepo().findOne({
-      where,
-      order: { id: 'DESC' },
-    });
-    if (existing) {
-      const patch = {
-        phone: msisdn,
-        landingUrl: landingUrl || existing.landingUrl,
-        visitStatus: VisitStatus.OTP_SHOWN,
-        updatedAt: new Date(),
-      };
-      if (clientIp) patch.ipAddress = String(clientIp).split(',')[0].trim();
-      if (vid && !existing.vendorId) patch.vendorId = vid;
-      await getVisitRepo().update({ id: existing.id }, patch);
-      return { ...existing, ...patch, id: existing.id };
+  const ensureExposeVisit = async ({
+    campaign,
+    phone,
+    vendorId,
+    clientIp,
+    landingUrl,
+    existingVisit,
+    reuseVisitId,
+    allowMissingMsisdn = false,
+  }) => {
+    const msisdn = cleanPhone(phone);
+    const vid = Number(vendorId) || null;
+
+    if (existingVisit?.id) {
+      return patchExposeVisit(existingVisit, {
+        msisdn,
+        vendorId: vid,
+        clientIp,
+        landingUrl,
+      });
     }
 
-    const clickId = mintClickId();
+    if (reuseVisitId) {
+      const linked = await getVisitRepo().findOne({
+        where: { id: Number(reuseVisitId) },
+      });
+      if (linked) {
+        return patchExposeVisit(linked, {
+          msisdn,
+          vendorId: vid,
+          clientIp,
+          landingUrl,
+        });
+      }
+    }
+
+    if (!msisdn && !allowMissingMsisdn) {
+      throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
+    }
+
+    // Always insert a new visit for each pincode attempt. Do not reuse MSISDN
+    // sessions or mint click_id — vendors report success/fail themselves.
     const saved = await getVisitRepo().save(
       getVisitRepo().create({
         campaignId: campaign.id,
         vendorId: vid,
-        phone: msisdn,
+        phone: msisdn || null,
         country: campaign.country || null,
         operator: campaign.operator || null,
         ipAddress: clientIp ? String(clientIp).split(',')[0].trim() : null,
         landingUrl: landingUrl || null,
-        clickId,
+        clickId: null,
         pageType: CampaignPageType.OTP,
         visitStatus: VisitStatus.OTP_SHOWN,
       }),
@@ -202,9 +237,128 @@ export const createUniverseDcbExposeService = (
       source: 'dcb_expose',
       campaignId: campaign.id,
       vendorId: vid,
-      msisdn,
+      msisdn: msisdn || null,
     });
     return saved;
+  };
+
+  const serializeBody = (body) => {
+    if (body == null) return null;
+    try {
+      return typeof body === 'string' ? body : JSON.stringify(body);
+    } catch {
+      return String(body);
+    }
+  };
+
+  const logInboundExpose = async ({
+    callType,
+    visit,
+    campaignId,
+    vendorId,
+    phone,
+    requestUrl,
+    requestBody,
+    responseStatus,
+    responseBody,
+    success,
+    errorMessage,
+    statusLabel,
+  }) => {
+    try {
+      await callLogger.record({
+        visitId: visit?.id || null,
+        campaignId: campaignId || visit?.campaignId || null,
+        vendorId: vendorId || visit?.vendorId || null,
+        msisdn: phone,
+        rcid: visit?.rcid || null,
+        clickId: null,
+        callType,
+        requestUrl,
+        requestBody,
+        responseStatus: responseStatus ?? null,
+        responseBody: serializeBody(responseBody),
+        success: Boolean(success),
+        errorMessage: success ? null : errorMessage || null,
+        statusLabel: statusLabel || (success ? 'SUCCESS' : 'FAILED'),
+      });
+    } catch (err) {
+      console.warn(`DCB expose inbound log failed: ${err.message}`);
+    }
+  };
+
+  const mintLogVisit = async ({ campaignId, vendorId, msisdn, clientIp, landingUrl }) => {
+    const cId = parseInt(campaignId, 10);
+    if (!cId) return null;
+    try {
+      const campaign =
+        (await getCampaignRepo().findOne({ where: { id: cId } })) || { id: cId };
+      return await ensureExposeVisit({
+        campaign,
+        phone: msisdn,
+        vendorId,
+        clientIp,
+        landingUrl,
+        allowMissingMsisdn: true,
+      });
+    } catch (err) {
+      console.warn(`DCB expose visit mint failed: ${err.message}`);
+      return null;
+    }
+  };
+
+  const runExpose = async (action, input, clientIp, meta, work) => {
+    const inboundUrl = meta.requestUrl || '';
+    const inboundBody = serializeDcbExposeInboundBody(input);
+    const callType = DCB_EXPOSE_INBOUND_CALL_TYPES[action];
+    const eventType = DCB_EXPOSE_INBOUND_EVENT_TYPES[action];
+    const campaignId = parseInt(input.campaignId, 10) || null;
+    const vendorId = Number(input.vendorId) || null;
+    const phone = cleanPhone(input.msisdn);
+    const visit = await seedExposeVisit(action, input, clientIp, inboundUrl);
+
+    try {
+      const result = await work(visit);
+      await logInboundExpose({
+        callType,
+        visit: result.visit || visit,
+        campaignId: result.campaignId || campaignId,
+        vendorId: result.vendorId || vendorId,
+        phone: result.msisdn || phone,
+        requestUrl: inboundUrl,
+        requestBody: inboundBody,
+        responseStatus: 200,
+        responseBody: result.payload,
+        success: true,
+      });
+      return result.payload;
+    } catch (err) {
+      await logInboundExpose({
+        callType,
+        visit,
+        campaignId,
+        vendorId,
+        phone,
+        requestUrl: inboundUrl,
+        requestBody: inboundBody,
+        responseStatus: err.statusCode || 500,
+        responseBody: { error: err.message, code: err.code || null },
+        success: false,
+        errorMessage: err.message,
+      });
+      if (visit?.id && eventType && !err.held) {
+        await logVisitEvent(visit.id, eventType, {
+          source: 'dcb_expose',
+          campaignId,
+          vendorId,
+          msisdn: phone || null,
+          success: false,
+          error: err.message,
+          code: err.code || null,
+        });
+      }
+      throw err;
+    }
   };
 
   const correlationKey = (campaignId, visitId, msisdn) =>
@@ -234,6 +388,55 @@ export const createUniverseDcbExposeService = (
       return null;
     }
     return local.value.providerRequestId ? local.value : null;
+  };
+
+  const loadVisitFromRequestId = async (input) => {
+    const requestId = pickDcbExposeRequestId(input);
+    const cId = parseInt(input.campaignId, 10);
+    if (!requestId || !cId) return null;
+    try {
+      const campaign = await getCampaignRepo().findOne({ where: { id: cId } });
+      if (!campaign) return null;
+      const { vendor } = await resolveAssignedVendor(campaign, input.vendorId);
+      const correlation = await loadCorrelation(
+        requestCorrelationKey(campaign.id, vendor.id, requestId),
+      );
+      if (!correlation?.visitId) return null;
+      return getVisitRepo().findOne({ where: { id: Number(correlation.visitId) } });
+    } catch {
+      return null;
+    }
+  };
+
+  const loadLatestVisitForMsisdn = async (input) => {
+    const cId = parseInt(input.campaignId, 10);
+    const phone = cleanPhone(input.msisdn);
+    const vid = Number(input.vendorId) || null;
+    if (!cId || !phone) return null;
+    const where = { campaignId: cId, phone };
+    if (vid) where.vendorId = vid;
+    return getVisitRepo().findOne({
+      where,
+      order: { id: 'DESC' },
+    });
+  };
+
+  const seedExposeVisit = async (action, input, clientIp, landingUrl) => {
+    if (action === 'confirm') {
+      const linked = await loadVisitFromRequestId(input);
+      if (linked) return linked;
+    }
+    if (action === 'status') {
+      const latest = await loadLatestVisitForMsisdn(input);
+      if (latest) return latest;
+    }
+    return mintLogVisit({
+      campaignId: input.campaignId,
+      vendorId: input.vendorId,
+      msisdn: input.msisdn,
+      clientIp,
+      landingUrl,
+    });
   };
 
   const clearCorrelation = async (keys) => {
@@ -312,6 +515,7 @@ export const createUniverseDcbExposeService = (
     requestId,
     clientIp,
     requestUrl,
+    existingVisit,
   }) => {
     const cId = parseInt(campaignId, 10);
     if (!cId) throw httpError('campaignId is required', 400, 'CAMPAIGN_REQUIRED');
@@ -345,7 +549,6 @@ export const createUniverseDcbExposeService = (
     if (msisdn && correlation?.msisdn && phone !== String(correlation.msisdn)) {
       throw httpError('msisdn does not match PIN request', 409, 'DCB_MSISDN_MISMATCH');
     }
-    if (!phone) throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
 
     const apiConfig = await getApiConfigRepo().findOne({
       where: { campaignId: cId },
@@ -357,7 +560,11 @@ export const createUniverseDcbExposeService = (
       vendorId: vendor.id,
       clientIp,
       landingUrl: requestUrl,
+      existingVisit,
+      reuseVisitId: correlation?.visitId,
+      allowMissingMsisdn: true,
     });
+    if (!phone) throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
 
     const rawChannel = String(
       transactionChannel || correlation?.transactionChannel || 'Wifi',
@@ -403,244 +610,271 @@ export const createUniverseDcbExposeService = (
     transactionChannel: ctx.transactionChannel,
   });
 
-  const exposePincode = async (input, clientIp, meta = {}) => {
-    const ctx = await loadExposeContext({
-      ...input,
-      clientIp,
-      requestUrl: meta.requestUrl,
-    });
-    if (!ctx.purchaseTypeId) {
-      throw httpError('purchaseTypeId is required', 400, 'PURCHASE_TYPE_REQUIRED');
-    }
-
-    const response = await callProvider({
-      ctx,
-      callType: ApiCallType.DCB_PINCODE,
-      action: 'pincode',
-      execute: () => provider.requestPincode(ctx.config, providerInput(ctx)),
-      statusLabel: 'PIN_REQUIRED',
-    });
-    if (!response.providerRequestId) {
-      throw httpError(
-        'Universe DCB pincode response did not include a request ID',
-        502,
-        'DCB_PROVIDER_REQUEST_ID_MISSING',
-      );
-    }
-    await saveCorrelation(
-      [
-        correlationKey(ctx.campaign.id, ctx.visitId, ctx.msisdn),
-        requestCorrelationKey(
-          ctx.campaign.id,
-          ctx.vendor.id,
-          response.providerRequestId,
-        ),
-      ],
-      {
-        providerRequestId: response.providerRequestId,
-        purchaseTypeId: ctx.purchaseTypeId,
-        campaignId: ctx.campaign.id,
-        vendorId: ctx.vendor.id,
-        visitId: ctx.visitId,
-        msisdn: ctx.msisdn,
-        serviceId: ctx.serviceId,
-        transactionChannel: ctx.transactionChannel,
-      },
-      ctx.config.correlationTtlSeconds,
-    );
-
-    await logVisitEvent(ctx.visitId, VisitEventType.OTP_SEND, {
-      source: 'dcb_expose',
-      campaignId: ctx.campaign.id,
-      vendorId: ctx.vendor.id,
-      msisdn: ctx.msisdn,
-      purchaseTypeId: ctx.purchaseTypeId,
-      requestId: response.providerRequestId,
-      success: true,
-    });
-
-    return {
-      sent: true,
-      requestId: response.providerRequestId,
-      campaignId: ctx.campaign.id,
-      vendorId: ctx.vendor.id,
-      visitId: ctx.visitId,
-      msisdn: ctx.msisdn,
-      serviceId: ctx.serviceId,
-      purchaseTypeId: ctx.purchaseTypeId,
-      outcome: DCB_OUTCOMES.PENDING,
-      stage: 'PIN_REQUIRED',
-      message: 'PIN requested successfully',
-    };
-  };
-
-  const exposeConfirm = async (input, clientIp, meta = {}) => {
-    const pin = String(input.pin || input.pincode || input.pinCode || '').trim();
-    if (!pin) throw httpError('PIN is required', 400, 'PIN_REQUIRED');
-    const requestId = pickDcbExposeRequestId(input);
-    if (!requestId) {
-      throw httpError(
-        'requestId is required. Use the requestId returned from pincode.',
-        400,
-        'REQUEST_ID_REQUIRED',
-      );
-    }
-
-    const ctx = await loadExposeContext({
-      ...input,
-      requestId,
-      clientIp,
-      requestUrl: meta.requestUrl,
-    });
-    const correlation = ctx.correlation;
-    if (!correlation?.providerRequestId) {
-      throw httpError(
-        'requestId is missing or expired. Call pincode first and send the returned requestId.',
-        409,
-        'DCB_CORRELATION_REQUIRED',
-      );
-    }
-    if (
-      ctx.purchaseTypeId &&
-      correlation.purchaseTypeId &&
-      String(correlation.purchaseTypeId) !== ctx.purchaseTypeId
-    ) {
-      throw httpError(
-        'PIN request does not match the selected purchase type',
-        409,
-        'DCB_CORRELATION_MISMATCH',
-      );
-    }
-
-    const pendingKey = correlationKey(ctx.campaign.id, ctx.visitId, ctx.msisdn);
-    const reqKey = requestCorrelationKey(
-      ctx.campaign.id,
-      ctx.vendor.id,
-      correlation.providerRequestId,
-    );
-    const lockKey = `${reqKey}:confirm`;
-    if (localConfirmLocks.has(lockKey)) {
-      throw httpError(
-        'PIN confirmation is already in progress',
-        409,
-        'DCB_CONFIRM_IN_PROGRESS',
-      );
-    }
-    const lockAcquired = await redisService.setNx(lockKey, '1', 30);
-    if (!lockAcquired) {
-      throw httpError(
-        'PIN confirmation is already in progress',
-        409,
-        'DCB_CONFIRM_IN_PROGRESS',
-      );
-    }
-    localConfirmLocks.add(lockKey);
-
-    try {
-      await callProvider({
-        ctx: {
-          ...ctx,
-          purchaseTypeId: String(correlation.purchaseTypeId || ctx.purchaseTypeId || ''),
-        },
-        callType: ApiCallType.DCB_CONFIRM,
-        action: 'confirm',
-        execute: () =>
-          provider.confirm(ctx.config, {
-            ...providerInput(ctx),
-            purchaseTypeId: correlation.purchaseTypeId || ctx.purchaseTypeId,
-            providerRequestId: correlation.providerRequestId,
-            pin,
-          }),
-        statusLabel: 'POLLING',
+  const exposePincode = async (input, clientIp, meta = {}) =>
+    runExpose('pincode', input, clientIp, meta, async (existingVisit) => {
+      const ctx = await loadExposeContext({
+        ...input,
+        clientIp,
+        requestUrl: meta.requestUrl,
+        existingVisit,
       });
-      await clearCorrelation([pendingKey, reqKey]);
+      if (!ctx.purchaseTypeId) {
+        throw httpError('purchaseTypeId is required', 400, 'PURCHASE_TYPE_REQUIRED');
+      }
 
-      const trackingPayout =
-        ctx.tracking?.payoutPercent != null && ctx.tracking.payoutPercent !== ''
-          ? ctx.tracking.payoutPercent
-          : 100;
-      const decision = await resolvePayoutHold(
-        ctx.campaign.id,
-        ctx.vendor.id,
-        trackingPayout,
+      const response = await callProvider({
+        ctx,
+        callType: ApiCallType.DCB_PINCODE,
+        action: 'pincode',
+        execute: () => provider.requestPincode(ctx.config, providerInput(ctx)),
+        statusLabel: 'PIN_REQUIRED',
+      });
+      if (!response.providerRequestId) {
+        throw httpError(
+          'Universe DCB pincode response did not include a request ID',
+          502,
+          'DCB_PROVIDER_REQUEST_ID_MISSING',
+        );
+      }
+      await saveCorrelation(
+        [
+          correlationKey(ctx.campaign.id, ctx.visitId, ctx.msisdn),
+          requestCorrelationKey(
+            ctx.campaign.id,
+            ctx.vendor.id,
+            response.providerRequestId,
+          ),
+        ],
+        {
+          providerRequestId: response.providerRequestId,
+          purchaseTypeId: ctx.purchaseTypeId,
+          campaignId: ctx.campaign.id,
+          vendorId: ctx.vendor.id,
+          visitId: ctx.visitId,
+          msisdn: ctx.msisdn,
+          serviceId: ctx.serviceId,
+          transactionChannel: ctx.transactionChannel,
+        },
+        ctx.config.correlationTtlSeconds,
       );
 
-      await getVisitRepo().update(
-        { id: ctx.visitId },
-        { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
-      );
-
-      await logVisitEvent(ctx.visitId, VisitEventType.OTP_VERIFY, {
+      await logVisitEvent(ctx.visitId, VisitEventType.OTP_SEND, {
         source: 'dcb_expose',
         campaignId: ctx.campaign.id,
         vendorId: ctx.vendor.id,
         msisdn: ctx.msisdn,
-        requestId: correlation.providerRequestId,
+        purchaseTypeId: ctx.purchaseTypeId,
+        requestId: response.providerRequestId,
         success: true,
-        held: decision.held,
-        payoutPercent: decision.payoutPercent,
-        seq: decision.seq,
-        clientResponse: decision.held ? 'invalid_otp' : undefined,
       });
 
-      if (decision.held) {
-        const err = new Error(HELD_OTP_MESSAGE);
-        err.statusCode = 400;
-        err.code = 'DCB_HELD';
-        err.held = true;
-        throw err;
-      }
-
-      return {
-        verified: true,
-        requestId: correlation.providerRequestId,
+      const payload = {
+        sent: true,
+        requestId: response.providerRequestId,
         campaignId: ctx.campaign.id,
         vendorId: ctx.vendor.id,
         visitId: ctx.visitId,
         msisdn: ctx.msisdn,
         serviceId: ctx.serviceId,
+        purchaseTypeId: ctx.purchaseTypeId,
         outcome: DCB_OUTCOMES.PENDING,
-        stage: 'POLLING',
-        message:
-          'PIN confirmed. Poll status until the subscription is entitled.',
+        stage: 'PIN_REQUIRED',
+        message: 'PIN requested successfully',
       };
-    } catch (err) {
-      throw err;
-    } finally {
-      await redisService.del(lockKey);
-      localConfirmLocks.delete(lockKey);
-    }
-  };
+      return {
+        visit: ctx.visit,
+        campaignId: ctx.campaign.id,
+        vendorId: ctx.vendor.id,
+        msisdn: ctx.msisdn,
+        payload,
+      };
+    });
 
-  const exposeStatus = async (input, clientIp, meta = {}) => {
-    const ctx = await loadExposeContext({
-      ...input,
-      clientIp,
-      requestUrl: meta.requestUrl,
-      transactionChannel: input.transactionChannel || 'Wifi',
-    });
-    const response = await callProvider({
-      ctx,
-      callType: ApiCallType.DCB_SUBSCRIPTIONS,
-      action: 'status',
-      execute: () => provider.getSubscriptions(ctx.config, providerInput(ctx)),
-      statusLabel: (providerResponse) =>
-        normalizeUniverseDcbResponse(providerResponse.data, ctx.config, {
+  const exposeConfirm = async (input, clientIp, meta = {}) =>
+    runExpose('confirm', input, clientIp, meta, async (existingVisit) => {
+      const pin = String(input.pin || input.pincode || input.pinCode || '').trim();
+      if (!pin) throw httpError('PIN is required', 400, 'PIN_REQUIRED');
+      const requestId = pickDcbExposeRequestId(input);
+      if (!requestId) {
+        throw httpError(
+          'requestId is required. Use the requestId returned from pincode.',
+          400,
+          'REQUEST_ID_REQUIRED',
+        );
+      }
+
+      const ctx = await loadExposeContext({
+        ...input,
+        requestId,
+        clientIp,
+        requestUrl: meta.requestUrl,
+        existingVisit,
+      });
+      const correlation = ctx.correlation;
+      if (!correlation?.providerRequestId) {
+        throw httpError(
+          'requestId is missing or expired. Call pincode first and send the returned requestId.',
+          409,
+          'DCB_CORRELATION_REQUIRED',
+        );
+      }
+      if (
+        ctx.purchaseTypeId &&
+        correlation.purchaseTypeId &&
+        String(correlation.purchaseTypeId) !== ctx.purchaseTypeId
+      ) {
+        throw httpError(
+          'PIN request does not match the selected purchase type',
+          409,
+          'DCB_CORRELATION_MISMATCH',
+        );
+      }
+
+      const pendingKey = correlationKey(ctx.campaign.id, ctx.visitId, ctx.msisdn);
+      const reqKey = requestCorrelationKey(
+        ctx.campaign.id,
+        ctx.vendor.id,
+        correlation.providerRequestId,
+      );
+      const lockKey = `${reqKey}:confirm`;
+      if (localConfirmLocks.has(lockKey)) {
+        throw httpError(
+          'PIN confirmation is already in progress',
+          409,
+          'DCB_CONFIRM_IN_PROGRESS',
+        );
+      }
+      const lockAcquired = await redisService.setNx(lockKey, '1', 30);
+      if (!lockAcquired) {
+        throw httpError(
+          'PIN confirmation is already in progress',
+          409,
+          'DCB_CONFIRM_IN_PROGRESS',
+        );
+      }
+      localConfirmLocks.add(lockKey);
+
+      try {
+        await callProvider({
+          ctx: {
+            ...ctx,
+            purchaseTypeId: String(correlation.purchaseTypeId || ctx.purchaseTypeId || ''),
+          },
+          callType: ApiCallType.DCB_CONFIRM,
+          action: 'confirm',
+          execute: () =>
+            provider.confirm(ctx.config, {
+              ...providerInput(ctx),
+              purchaseTypeId: correlation.purchaseTypeId || ctx.purchaseTypeId,
+              providerRequestId: correlation.providerRequestId,
+              pin,
+            }),
+          statusLabel: 'POLLING',
+        });
+        await clearCorrelation([pendingKey, reqKey]);
+
+        const trackingPayout =
+          ctx.tracking?.payoutPercent != null && ctx.tracking.payoutPercent !== ''
+            ? ctx.tracking.payoutPercent
+            : 100;
+        const decision = await resolvePayoutHold(
+          ctx.campaign.id,
+          ctx.vendor.id,
+          trackingPayout,
+        );
+
+        await getVisitRepo().update(
+          { id: ctx.visitId },
+          { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
+        );
+
+        await logVisitEvent(ctx.visitId, VisitEventType.OTP_VERIFY, {
+          source: 'dcb_expose',
+          campaignId: ctx.campaign.id,
+          vendorId: ctx.vendor.id,
+          msisdn: ctx.msisdn,
+          requestId: correlation.providerRequestId,
+          success: true,
+          held: decision.held,
+          payoutPercent: decision.payoutPercent,
+          seq: decision.seq,
+          clientResponse: decision.held ? 'invalid_otp' : undefined,
+        });
+
+        if (decision.held) {
+          const err = new Error(HELD_OTP_MESSAGE);
+          err.statusCode = 400;
+          err.code = 'DCB_HELD';
+          err.held = true;
+          throw err;
+        }
+
+        const payload = {
+          verified: true,
+          requestId: correlation.providerRequestId,
+          campaignId: ctx.campaign.id,
+          vendorId: ctx.vendor.id,
+          visitId: ctx.visitId,
+          msisdn: ctx.msisdn,
           serviceId: ctx.serviceId,
-        }).outcome,
+          outcome: DCB_OUTCOMES.PENDING,
+          stage: 'POLLING',
+          message:
+            'PIN confirmed. Poll status until the subscription is entitled.',
+        };
+        return {
+          visit: ctx.visit,
+          campaignId: ctx.campaign.id,
+          vendorId: ctx.vendor.id,
+          msisdn: ctx.msisdn,
+          payload,
+        };
+      } catch (err) {
+        throw err;
+      } finally {
+        await redisService.del(lockKey);
+        localConfirmLocks.delete(lockKey);
+      }
     });
-    const result = normalizeUniverseDcbResponse(response.data, ctx.config, {
-      serviceId: ctx.serviceId,
+
+  const exposeStatus = async (input, clientIp, meta = {}) =>
+    runExpose('status', input, clientIp, meta, async (existingVisit) => {
+      const ctx = await loadExposeContext({
+        ...input,
+        clientIp,
+        requestUrl: meta.requestUrl,
+        transactionChannel: input.transactionChannel || 'Wifi',
+        existingVisit,
+      });
+      const response = await callProvider({
+        ctx,
+        callType: ApiCallType.DCB_SUBSCRIPTIONS,
+        action: 'status',
+        execute: () => provider.getSubscriptions(ctx.config, providerInput(ctx)),
+        statusLabel: (providerResponse) =>
+          normalizeUniverseDcbResponse(providerResponse.data, ctx.config, {
+            serviceId: ctx.serviceId,
+          }).outcome,
+      });
+      const result = normalizeUniverseDcbResponse(response.data, ctx.config, {
+        serviceId: ctx.serviceId,
+      });
+      const payload = {
+        campaignId: ctx.campaign.id,
+        vendorId: ctx.vendor.id,
+        visitId: ctx.visitId,
+        msisdn: ctx.msisdn,
+        serviceId: ctx.serviceId,
+        ...result,
+      };
+      return {
+        visit: ctx.visit,
+        campaignId: ctx.campaign.id,
+        vendorId: ctx.vendor.id,
+        msisdn: ctx.msisdn,
+        payload,
+      };
     });
-    return {
-      campaignId: ctx.campaign.id,
-      vendorId: ctx.vendor.id,
-      visitId: ctx.visitId,
-      msisdn: ctx.msisdn,
-      serviceId: ctx.serviceId,
-      ...result,
-    };
-  };
 
   return {
     exposePincode,

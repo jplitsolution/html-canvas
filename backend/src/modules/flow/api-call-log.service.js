@@ -44,6 +44,7 @@ export const createApiCallLogService = () => {
     void searchService.indexEvent({
       campaignId: saved.campaignId,
       visitId: saved.visitId,
+      vendorId: input.vendorId ? parseInt(input.vendorId, 10) : null,
       clickId: saved.clickId,
       rcid: saved.rcid,
       phoneMasked: maskPhone(saved.msisdn),

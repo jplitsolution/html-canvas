@@ -124,6 +124,20 @@ function eventDescription(eventType) {
       return 'Inbound OTP expose send request (mediator).'
     case 'API_OTP_EXPOSE_VERIFY_IN':
       return 'Inbound OTP expose verify request (mediator).'
+    case 'API_DCB_CONFIG':
+      return 'Outbound Universe DCB public config fetch.'
+    case 'API_DCB_SUBSCRIPTIONS':
+      return 'Outbound Universe DCB subscriptions / status check.'
+    case 'API_DCB_PINCODE':
+      return 'Outbound Universe DCB PIN request to the operator.'
+    case 'API_DCB_CONFIRM':
+      return 'Outbound Universe DCB PIN confirm to the operator.'
+    case 'API_DCB_EXPOSE_PINCODE_IN':
+      return 'Inbound DCB expose PIN request (vendor hit).'
+    case 'API_DCB_EXPOSE_CONFIRM_IN':
+      return 'Inbound DCB expose PIN confirm (vendor hit).'
+    case 'API_DCB_EXPOSE_STATUS_IN':
+      return 'Inbound DCB expose status poll (vendor hit).'
     case 'CALLBACK_RECEIVED':
       return 'Billing callback hit our server — next we fire the vendor postback.'
     case 'POSTBACK_PENDING':

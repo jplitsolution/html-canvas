@@ -23,7 +23,17 @@ router.post(
   publicRateLimit,
   flowController.dcbExposePincode,
 );
+router.get(
+  '/dcb/:campaignId/:vendorId/pincode',
+  publicRateLimit,
+  flowController.dcbExposePincode,
+);
 router.post(
+  '/dcb/:campaignId/:vendorId/confirm',
+  publicRateLimit,
+  flowController.dcbExposeConfirm,
+);
+router.get(
   '/dcb/:campaignId/:vendorId/confirm',
   publicRateLimit,
   flowController.dcbExposeConfirm,
