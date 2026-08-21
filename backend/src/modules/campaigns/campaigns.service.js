@@ -62,6 +62,26 @@ export const createCampaignsService = () => {
     return campaign;
   };
 
+  /** Persist campaign columns only — never cascade to trackings/pages. */
+  const persistCampaign = async (campaign) => {
+    const trackings = campaign.trackings;
+    const pages = campaign.pages;
+    const marketOperator = campaign.marketOperator;
+    const user = campaign.user;
+    delete campaign.trackings;
+    delete campaign.pages;
+    delete campaign.marketOperator;
+    delete campaign.user;
+    try {
+      return await getCampaignRepo().save(campaign);
+    } finally {
+      campaign.trackings = trackings;
+      campaign.pages = pages;
+      campaign.marketOperator = marketOperator;
+      campaign.user = user;
+    }
+  };
+
   const invalidateFlowCampaignCache = async (campaignOrPartial) => {
     if (!campaignOrPartial) return;
 
@@ -499,7 +519,7 @@ export const createCampaignsService = () => {
     }
 
     delete campaign.trackings;
-    await getCampaignRepo().save(campaign);
+    await persistCampaign(campaign);
     const refreshed = sanitizeCampaignListItem(await findOne(id, userId));
     await invalidateFlowCampaignCache(refreshed);
     return refreshed;
@@ -549,7 +569,7 @@ export const createCampaignsService = () => {
     // Honor flowConfig.entryPage (e.g. OTP-first). Do not force HOME.
     flowConfig.entryPage = flowEngineService.getEntryPage(flowConfig);
     campaign.flowConfig = JSON.stringify(flowConfig);
-    await getCampaignRepo().save(campaign);
+    await persistCampaign(campaign);
     await ensureUniverseDcbPages(campaign);
     await invalidateFlowCampaignCache(campaign);
     return { verificationMode: mode, flowConfig };
@@ -558,7 +578,7 @@ export const createCampaignsService = () => {
   const remove = async (id, userId) => {
     const campaign = await findOne(id, userId);
     campaign.active = false;
-    await getCampaignRepo().save(campaign);
+    await persistCampaign(campaign);
     await invalidateFlowCampaignCache(campaign);
   };
 
@@ -734,6 +754,38 @@ export const createCampaignsService = () => {
     return saved;
   };
 
+  const serializeCampaign = (campaign, extras = {}) => {
+    if (!campaign) return null;
+    const flowConfig =
+      extras.flowConfig !== undefined ? extras.flowConfig : campaign.flowConfig;
+    return {
+      id: campaign.id,
+      name: campaign.name,
+      country: campaign.country,
+      operator: campaign.operator,
+      operatorId: campaign.operatorId,
+      serviceId: campaign.serviceId,
+      active: campaign.active,
+      userId: campaign.userId,
+      verificationMode: extras.verificationMode ?? campaign.verificationMode,
+      flowConfig:
+        flowConfig && typeof flowConfig !== 'string'
+          ? JSON.stringify(flowConfig)
+          : flowConfig,
+      cgRedirectUrl: campaign.cgRedirectUrl,
+      successRedirectUrl: campaign.successRedirectUrl,
+      successRedirectMode: campaign.successRedirectMode,
+      postbackRegisterAt: campaign.postbackRegisterAt,
+      funnelLayout: campaign.funnelLayout,
+      createdAt: campaign.createdAt,
+      updatedAt: campaign.updatedAt,
+      pages: campaign.pages || [],
+      trackings: campaign.trackings || [],
+      marketOperator: campaign.marketOperator || null,
+      trackingId: campaign.trackingId,
+    };
+  };
+
   return {
     findAll,
     findOne,
@@ -751,6 +803,7 @@ export const createCampaignsService = () => {
     updatePageContent,
     getApiConfig,
     upsertApiConfig,
+    serializeCampaign,
     pageHasContent,
     sanitizeCampaignListItem,
     withTrackingId,

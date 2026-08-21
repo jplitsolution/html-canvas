@@ -5,6 +5,7 @@ import { getDataSource, getRepository } from '../../database/index.js';
 import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { ApiCallLog } from '../../database/entities/api-call-log.entity.js';
+import { ConversionPostback, ConversionPostbackStatus } from '../../database/entities/conversion-postback.entity.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
 import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
@@ -15,6 +16,7 @@ export const createAnalyticsService = () => {
   const getVisitRepo = () => getRepository(Visit);
   const getVisitEventRepo = () => getRepository(VisitEvent);
   const getApiCallLogRepo = () => getRepository(ApiCallLog);
+  const getPostbackRepo = () => getRepository(ConversionPostback);
 
   const parseJsonSafe = (value) => {
     if (value == null || value === '') return null;
@@ -339,36 +341,53 @@ export const createAnalyticsService = () => {
       .groupBy('visit.vendorId')
       .getRawMany();
 
+    const postbackRows = await getPostbackRepo()
+      .createQueryBuilder('p')
+      .select('p.vendorId', 'vendorId')
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN p.status IN ('${ConversionPostbackStatus.RECEIVED}', '${ConversionPostbackStatus.SENT}') THEN 1 ELSE 0 END), 0)`,
+        'postbacksMatched',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN p.status = '${ConversionPostbackStatus.SENT}' THEN 1 ELSE 0 END), 0)`,
+        'postbacksSent',
+      )
+      .where('p.campaignId = :cId', { cId })
+      .groupBy('p.vendorId')
+      .getRawMany();
+
     const statsByVendor = new Map();
+    const emptyStats = () => ({
+      clicks: 0,
+      requested: 0,
+      liveVerified: 0,
+      held: 0,
+      failedApi: 0,
+      subscribeSuccess: 0,
+      postbacksMatched: 0,
+      postbacksSent: 0,
+    });
+    const ensure = (vendorId) => {
+      const key = Number(vendorId) || 0;
+      if (!statsByVendor.has(key)) statsByVendor.set(key, emptyStats());
+      return statsByVendor.get(key);
+    };
+
     for (const row of clickRows) {
-      const key = Number(row.vendorId) || 0;
-      statsByVendor.set(key, {
-        clicks: Number(row.clicks) || 0,
-        requested: 0,
-        liveVerified: 0,
-        held: 0,
-        failedApi: 0,
-        subscribeSuccess: 0,
-      });
+      ensure(row.vendorId).clicks = Number(row.clicks) || 0;
     }
     for (const row of eventRows) {
-      const key = Number(row.vendorId) || 0;
-      const prev = statsByVendor.get(key) || {
-        clicks: 0,
-        requested: 0,
-        liveVerified: 0,
-        held: 0,
-        failedApi: 0,
-        subscribeSuccess: 0,
-      };
-      statsByVendor.set(key, {
-        ...prev,
-        requested: Number(row.requested) || 0,
-        liveVerified: Number(row.liveVerified) || 0,
-        held: Number(row.held) || 0,
-        failedApi: (Number(row.failedSend) || 0) + (Number(row.failedVerify) || 0),
-        subscribeSuccess: Number(row.subscribeSuccess) || 0,
-      });
+      const prev = ensure(row.vendorId);
+      prev.requested = Number(row.requested) || 0;
+      prev.liveVerified = Number(row.liveVerified) || 0;
+      prev.held = Number(row.held) || 0;
+      prev.failedApi = (Number(row.failedSend) || 0) + (Number(row.failedVerify) || 0);
+      prev.subscribeSuccess = Number(row.subscribeSuccess) || 0;
+    }
+    for (const row of postbackRows) {
+      const prev = ensure(row.vendorId);
+      prev.postbacksMatched = Number(row.postbacksMatched) || 0;
+      prev.postbacksSent = Number(row.postbacksSent) || 0;
     }
 
     const seen = new Set();

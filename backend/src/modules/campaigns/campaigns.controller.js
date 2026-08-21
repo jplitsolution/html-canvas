@@ -19,11 +19,12 @@ export const campaignsController = {
       id,
       req.user.id,
     );
-    res.json({
-      ...campaign,
-      flowConfig: JSON.stringify(flowConfig),
-      verificationMode,
-    });
+    res.json(
+      campaignsService.serializeCampaign(campaign, {
+        flowConfig,
+        verificationMode,
+      }),
+    );
   }),
 
   update: asyncHandler(async (req, res) => {

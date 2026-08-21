@@ -302,13 +302,42 @@ function CampaignDetailPage() {
     const seen = new Set()
     const list = []
     for (const t of campaign?.trackings || []) {
-      const tid = t.vendor?.id
+      const tid = Number(t.vendor?.id ?? t.vendorId)
       if (!tid || seen.has(tid)) continue
       seen.add(tid)
-      list.push(t)
+      list.push({
+        ...t,
+        vendor: t.vendor || vendors.find((v) => Number(v.id) === tid) || { id: tid },
+      })
     }
     return list
-  }, [campaign?.trackings])
+  }, [campaign?.trackings, vendors])
+
+  const vendorRows = useMemo(() => {
+    const byId = new Map(
+      (vendorStats.vendors || []).map((row) => [Number(row.vendorId), row]),
+    )
+    const rows = vendorTrackings.map((t) => {
+      const vendorId = Number(t.vendor?.id ?? t.vendorId)
+      const vendor = t.vendor || {}
+      const stats = byId.get(vendorId)
+      byId.delete(vendorId)
+      return {
+        vendorId,
+        vendorName: stats?.vendorName || vendor.name || `Vendor #${vendorId}`,
+        vendorCode: stats?.vendorCode || vendor.code || null,
+        assignmentActive: t.active !== false,
+        totalClicks: stats?.totalClicks ?? 0,
+        requestedApi: stats?.requestedApi ?? 0,
+        verifiedApi: stats?.verifiedApi ?? 0,
+        failedApi: stats?.failedApi ?? 0,
+        convPercent: stats?.convPercent ?? 0,
+        pubConvPercent: stats?.pubConvPercent ?? 0,
+      }
+    })
+    for (const leftover of byId.values()) rows.push(leftover)
+    return rows
+  }, [vendorTrackings, vendorStats.vendors])
 
   if (loading) {
     return (
@@ -495,7 +524,7 @@ function CampaignDetailPage() {
               <p className="text-[11px] text-fg-muted mt-0.5">
                 {apiExpose
                   ? 'Requested / verified / failed API counts. Conv % is verified ÷ requested. Pub conv % is after payout hold.'
-                  : 'Clicks and conversion % for each assigned vendor.'}
+                  : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
               </p>
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
@@ -503,9 +532,9 @@ function CampaignDetailPage() {
               Manage
             </Button>
           </div>
-          {vendorStatsLoading && vendorStats.vendors.length === 0 ? (
+          {vendorStatsLoading && vendorRows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-fg-muted">Loading vendor stats…</p>
-          ) : vendorStats.vendors.length === 0 && trackings.length === 0 ? (
+          ) : vendorRows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-fg-muted">
               No vendors assigned.{' '}
               <button
@@ -532,26 +561,15 @@ function CampaignDetailPage() {
                         <th className="col-num">Pub conv %</th>
                       </>
                     ) : (
-                      <th className="col-num">Conv %</th>
+                      <>
+                        <th className="col-num">Conv %</th>
+                        <th className="col-num">Pub conv %</th>
+                      </>
                     )}
                   </tr>
                 </thead>
                 <tbody>
-                  {(vendorStats.vendors.length > 0
-                    ? vendorStats.vendors
-                    : trackings.map((t) => ({
-                        vendorId: t.vendor?.id,
-                        vendorName: t.vendor?.name,
-                        vendorCode: t.vendor?.code,
-                        assignmentActive: t.active !== false,
-                        totalClicks: 0,
-                        requestedApi: 0,
-                        verifiedApi: 0,
-                        failedApi: 0,
-                        convPercent: 0,
-                        pubConvPercent: 0,
-                      }))
-                  ).map((row) => (
+                  {vendorRows.map((row) => (
                     <tr key={row.vendorId} className={row.assignmentActive === false ? 'opacity-70' : ''}>
                       <td className="col-text">
                         <p className="font-medium text-fg">{row.vendorName}</p>
@@ -569,7 +587,10 @@ function CampaignDetailPage() {
                           <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
                         </>
                       ) : (
-                        <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
+                        <>
+                          <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
+                          <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
+                        </>
                       )}
                     </tr>
                   ))}

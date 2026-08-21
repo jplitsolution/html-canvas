@@ -119,8 +119,8 @@ export const CampaignSchema = new EntitySchema({
       type: 'one-to-many',
       target: 'CampaignTracking',
       inverseSide: 'campaign',
-      cascade: true,
-      orphanedRowAction: 'delete',
+      // Managed only via campaign_trackings repo. Cascade+orphan-delete
+      // wiped assignments on Save flow / activate / rename.
     },
     pages: {
       type: 'one-to-many',

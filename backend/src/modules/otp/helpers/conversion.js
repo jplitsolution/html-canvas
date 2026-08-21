@@ -31,12 +31,16 @@ export const otpConversionStats = ({
 };
 
 /**
- * One vendor row for campaign detail: WAP uses subscribe/clicks;
- * API expose uses verified/requested and publisher (after-hold) %.
+ * One vendor row for campaign detail.
+ * API expose: verified/requested (+ pub after hold).
+ * WAP / CG: conversions = operator callbacks (received+sent) or subscribe success.
+ * Pub conv % = vendor postbacks actually sent.
  */
 export const campaignVendorPerf = ({
   clicks = 0,
   subscribeSuccess = 0,
+  postbacksMatched = 0,
+  postbacksSent = 0,
   requested = 0,
   liveVerified = 0,
   held = 0,
@@ -44,7 +48,9 @@ export const campaignVendorPerf = ({
   apiExpose = false,
 } = {}) => {
   const totalClicks = Math.max(0, Number(clicks) || 0);
-  const conversionsWap = Math.max(0, Number(subscribeSuccess) || 0);
+  const matched = Math.max(0, Number(postbacksMatched) || 0);
+  const sent = Math.max(0, Number(postbacksSent) || 0);
+  const conversionsWap = Math.max(matched, Math.max(0, Number(subscribeSuccess) || 0));
   const otp = otpConversionStats({ requested, liveVerified, held });
   return {
     totalClicks,
@@ -53,6 +59,6 @@ export const campaignVendorPerf = ({
     requestedApi: otp.requested,
     verifiedApi: otp.verifiedLive,
     failedApi: Math.max(0, Number(failedApi) || 0),
-    pubConvPercent: otp.vendorConvPercent,
+    pubConvPercent: apiExpose ? otp.vendorConvPercent : pct(sent, totalClicks),
   };
 };

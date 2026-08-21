@@ -45,6 +45,31 @@ describe('campaignVendorPerf', () => {
     assert.equal(row.totalClicks, 200);
     assert.equal(row.conversions, 50);
     assert.equal(row.convPercent, 25);
+    assert.equal(row.pubConvPercent, 0);
+  });
+
+  it('CG conv % is matched operator callbacks over clicks', () => {
+    const row = campaignVendorPerf({
+      clicks: 100,
+      subscribeSuccess: 0,
+      postbacksMatched: 8,
+      postbacksSent: 6,
+    });
+    assert.equal(row.conversions, 8);
+    assert.equal(row.convPercent, 8);
+    assert.equal(row.pubConvPercent, 6);
+  });
+
+  it('WAP uses the larger of subscribe success and matched callbacks', () => {
+    const row = campaignVendorPerf({
+      clicks: 50,
+      subscribeSuccess: 10,
+      postbacksMatched: 4,
+      postbacksSent: 4,
+    });
+    assert.equal(row.conversions, 10);
+    assert.equal(row.convPercent, 20);
+    assert.equal(row.pubConvPercent, 8);
   });
 
   it('API conv % is verified / requested and pub is after hold', () => {
