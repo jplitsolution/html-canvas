@@ -215,15 +215,12 @@ export const FLOW_HOST_CSS = `
     width: 100%;
     min-height: 100vh;
   }
-  /* Do NOT force width/max-width:!important here — customWidth inline on #wrapper
-     must win so Save→Preview keeps the canvas frame size (1200×800 etc.).
-     Preview sets max-width:min(100%, customWidth) so phone/tablet never left-pin
-     an overflowing fixed canvas (margin:auto cannot center when width > viewport). */
+  /* Live fills the viewport; customWidth is editor-only and must not cap Preview. */
   .flow-page-inner {
     display: block;
     width: 100%;
     max-width: 100%;
-    margin: 0 auto;
+    margin: 0;
     opacity: 1;
     min-height: 100vh;
     height: auto !important;

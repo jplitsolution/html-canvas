@@ -1,4 +1,4 @@
-import { healLiveHotspots, fitCreativeToViewport } from '../../editor/utils/overlayStacking'
+import { healLiveHotspots } from '../../editor/utils/overlayStacking'
 import { healLiveFlowButtons } from '../../editor/utils/textSizeAlign'
 import {
   FLOW_RUNTIME_CSS,
@@ -17,14 +17,11 @@ function mountPageInShadow(shadow, pageData, options = {}) {
   const mobile =
     options.mobile != null ? options.mobile : isMobileViewport()
   pageData = pickLivePageData(pageData, mobile) || pageData
-  const { customWidth, customHeight } = pageData.projectData || {}
+  const { customHeight } = pageData.projectData || {}
 
-  let inlineStyles = ''
-  if (customWidth) {
-    // Shrink with the viewport. A fixed 1200px width + overflow-x:hidden clips
-    // the creative to nothing (or a sliver) when the window is narrowed.
-    inlineStyles += `width: 100% !important; max-width: min(100%, ${customWidth}px) !important; `
-  }
+  // Live always fills the screen. customWidth is an editor frame only —
+  // capping preview at that px left gray gutters on desktop.
+  let inlineStyles = `width: 100% !important; max-width: 100% !important; `
   if (customHeight) {
     inlineStyles += `position: relative; `
   }
@@ -68,6 +65,10 @@ function mountPageInShadow(shadow, pageData, options = {}) {
       }
       .page-wrapper, .flow-page-inner {
         overflow: visible !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
       }
     </style>
     <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
@@ -76,7 +77,6 @@ function mountPageInShadow(shadow, pageData, options = {}) {
   function finishLiveLayout() {
     healLiveHotspots(shadow, pageData.pageType)
     healLiveFlowButtons(shadow)
-    fitCreativeToViewport(shadow)
   }
 
   finishLiveLayout()
