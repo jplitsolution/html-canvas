@@ -35,7 +35,7 @@ import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
-import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE } from './utils/overlayStacking'
+import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, HOTSPOT_RESIZABLE, freezeHotspotToPixels } from './utils/overlayStacking'
 
 export default function TemplateEditor({
   projectId,
@@ -202,7 +202,7 @@ export default function TemplateEditor({
             const walk = (cmp) => {
               if (cmp.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
                 try {
-                  healEditorHotspot(cmp, ed)
+                  healEditorHotspot(cmp, ed, { geometry: 'pixels' })
                 } catch (_) {
                   /* noop */
                 }
@@ -280,7 +280,7 @@ export default function TemplateEditor({
           tagName: 'a',
           draggable: true,
           droppable: false,
-          resizable: true,
+          resizable: HOTSPOT_RESIZABLE,
           traits: [
             {
               type: 'text',
@@ -379,8 +379,7 @@ export default function TemplateEditor({
           style: hotspotStyle,
           draggable: true,
           droppable: false,
-          resizable: true,
-          selectable: true,
+          resizable: HOTSPOT_RESIZABLE,
           hoverable: true,
         })
 
@@ -579,13 +578,11 @@ export default function TemplateEditor({
           configureFlowButtonResizable(component)
         } else if (isButton && isOverlay) {
           configureFlowButtonResizable(component)
-        } else if (
-          isButton ||
-          isImageComponent(component) ||
-          component.getAttributes()?.['data-tc-type'] === 'hotspot'
-        ) {
-          // Freeform buttons / images / hotspots — full resizer
+        } else if (isButton || isImageComponent(component)) {
           component.set('resizable', true)
+        } else if (component.getAttributes()?.['data-tc-type'] === 'hotspot') {
+          component.set('resizable', HOTSPOT_RESIZABLE)
+          freezeHotspotToPixels(component)
         } else {
           // Sections / blocks / divs — corner+edge handles (min-height in flow)
           configureBlockResizable(component)
@@ -598,7 +595,7 @@ export default function TemplateEditor({
       if (!mounted || !component) return
       if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
         // px → % + restore data-action / pointer-events (absolute drag leaves junk)
-        healEditorHotspot(component, ed)
+        healEditorHotspot(component, ed, { geometry: 'pixels' })
         promoteOverlayIfNeeded(component)
         return
       }
@@ -730,7 +727,7 @@ export default function TemplateEditor({
           }
 
           if (isHotspot) {
-            healEditorHotspot(cmp, ed)
+            healEditorHotspot(cmp, ed, { geometry: 'pixels' })
           }
 
           const isAbsolute = style.position === 'absolute' || isHotspot
@@ -751,7 +748,7 @@ export default function TemplateEditor({
                 parent.addStyle({ position: 'relative' })
               }
             }
-            cmp.set('resizable', true)
+            cmp.set('resizable', isHotspot ? HOTSPOT_RESIZABLE : true)
             cmp.set('draggable', true)
           }
           if (style.height && !isHotspot) {
@@ -779,7 +776,7 @@ export default function TemplateEditor({
           if (w) {
             const walkHs = (cmp) => {
               if (cmp.getAttributes()?.['data-tc-type'] === 'hotspot') {
-                healEditorHotspot(cmp, ed)
+                healEditorHotspot(cmp, ed, { geometry: 'pixels' })
               }
               cmp.components()?.forEach?.(walkHs)
             }

@@ -23,6 +23,7 @@ import { campaignEditPath } from '../../utils/routes';
 import { PriorityChainTrigger } from './PriorityChainModal';
 import { SubscribeRouteTrigger } from './SubscribeRouteModal';
 import { MIN_BTN_WIDTH } from '../utils/textSizeAlign';
+import { coverHotspotFullImage } from '../utils/overlayStacking';
 import { DEFAULT_SUBSCRIBE_ROUTES } from '../utils/subscribeRoutes';
 import {
   defaultSubServiceId,
@@ -1607,20 +1608,13 @@ export function PropertyPanel() {
                 <button
                   title="Make the whole image clickable"
                   onClick={() => {
-                    selected.addAttributes({ 'data-tc-cover-full': '1' });
-                    selected.addStyle({
-                      position: 'absolute',
-                      width: '100%',
-                      height: '100%',
-                      top: '0%',
-                      left: '0%',
-                      right: '0%',
-                      bottom: '0%',
-                      'z-index': '50',
-                      'pointer-events': 'auto',
-                      cursor: 'pointer',
-                    });
+                    coverHotspotFullImage(selected);
                     update();
+                    try {
+                      editor?.Canvas?.refresh?.();
+                    } catch (_) {
+                      /* noop */
+                    }
                   }}
                   style={{
                     fontSize: '10px',

@@ -9,7 +9,7 @@ import {
   wasIntentionallyAbsolute,
   TEXT_SIZE_ALIGN_CANVAS_CSS,
 } from '../utils/textSizeAlign'
-import { OVERLAY_STACKING_CANVAS_CSS, healEditorHotspot } from '../utils/overlayStacking'
+import { OVERLAY_STACKING_CANVAS_CSS, freezeHotspotToPixels } from '../utils/overlayStacking'
 
 function getCanvasFrameEl(editor) {
   if (!editor?.Canvas?.getFrameEl) return null
@@ -516,6 +516,9 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   editor.on('component:selected', (component) => {
     if (!alive || !component) return
     configureFlowButtonResizable(component)
+    if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+      freezeHotspotToPixels(component)
+    }
   })
 
   editor.on('component:resize:end', protectFlowButton)
@@ -534,7 +537,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
           cmp.setAttributes(attrs)
         }
       }
-      healEditorHotspot(cmp, editor)
+      freezeHotspotToPixels(cmp)
     } catch (_) {
       /* noop */
     }

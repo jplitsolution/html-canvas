@@ -1,9 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import {
   remapHotspotToAnchor,
   pinLiveHotspotToImage,
   IMAGE_BANNER_STYLE,
   fitCreativeToViewport,
+  persistEditorHotspotBox,
+  freezeHotspotToPixels,
+  coverHotspotFullImage,
 } from './overlayStacking.js'
 
 function stubRect(el, { left, top, width, height }) {
@@ -127,5 +130,95 @@ describe('fitCreativeToViewport', () => {
     fitCreativeToViewport(document)
     expect(banner.style.transform).toMatch(/scale\(/)
     banner.remove()
+  })
+})
+
+describe('persistEditorHotspotBox', () => {
+  it('saves the on-screen resized box instead of the old % height', () => {
+    const parent = document.createElement('div')
+    parent.setAttribute('data-tc-type', 'image-banner')
+    const img = document.createElement('img')
+    stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    Object.defineProperty(img, 'complete', { value: true })
+    Object.defineProperty(img, 'naturalWidth', { value: 400 })
+    Object.defineProperty(img, 'naturalHeight', { value: 800 })
+    parent.appendChild(img)
+
+    const el = document.createElement('a')
+    el.setAttribute('data-tc-type', 'hotspot')
+    el.style.top = '10%'
+    el.style.height = '12%'
+    stubRect(el, { left: 40, top: 230, width: 200, height: 240 })
+    parent.appendChild(el)
+
+    const addStyle = vi.fn()
+    persistEditorHotspotBox({
+      getAttributes: () => ({ 'data-tc-type': 'hotspot' }),
+      getEl: () => el,
+      parent: () => ({ getEl: () => parent }),
+      addStyle,
+      removeStyle: vi.fn(),
+    })
+
+    expect(parseFloat(el.style.top)).toBeCloseTo(28.75)
+    expect(parseFloat(el.style.height)).toBe(30)
+  })
+})
+
+describe('freezeHotspotToPixels', () => {
+  it('writes the on-screen box in px so Grapes can resize it', () => {
+    const parent = document.createElement('div')
+    const img = document.createElement('img')
+    stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    parent.appendChild(img)
+    const el = document.createElement('a')
+    el.setAttribute('data-tc-type', 'hotspot')
+    el.style.height = '12%'
+    stubRect(el, { left: 40, top: 230, width: 200, height: 80 })
+    parent.appendChild(el)
+    const set = vi.fn()
+    freezeHotspotToPixels({
+      getAttributes: () => ({ 'data-tc-type': 'hotspot' }),
+      getEl: () => el,
+      parent: () => ({ getEl: () => parent }),
+      addStyle: vi.fn(),
+      removeStyle: vi.fn(),
+      set,
+    })
+    expect(el.style.height).toBe('80px')
+    expect(el.style.top).toBe('230px')
+  })
+})
+
+describe('coverHotspotFullImage', () => {
+  it('covers the image using pixel size so 100% height is not ignored', () => {
+    const parent = document.createElement('div')
+    parent.setAttribute('data-tc-type', 'image-banner')
+    const img = document.createElement('img')
+    stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    parent.appendChild(img)
+    const el = document.createElement('a')
+    el.setAttribute('data-tc-type', 'hotspot')
+    parent.appendChild(el)
+    let attrs = { 'data-tc-type': 'hotspot' }
+    coverHotspotFullImage({
+      getAttributes: () => ({ ...attrs }),
+      setAttributes: (next) => {
+        attrs = { ...next }
+      },
+      getEl: () => el,
+      parent: () => ({
+        getEl: () => parent,
+        getAttributes: () => ({ 'data-tc-type': 'image-banner' }),
+        addStyle: vi.fn(),
+      }),
+      addStyle: vi.fn(),
+      removeStyle: vi.fn(),
+    })
+    expect(attrs['data-tc-cover-full']).toBe('1')
+    expect(el.style.top).toBe('0px')
+    expect(el.style.left).toBe('0px')
+    expect(el.style.width).toBe('400px')
+    expect(el.style.height).toBe('800px')
   })
 })

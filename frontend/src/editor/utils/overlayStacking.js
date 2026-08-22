@@ -288,10 +288,8 @@ export function pinEditorHotspotToImage(component) {
 
   if (isImageBannerHost(parent)) {
     parent.addStyle?.(IMAGE_BANNER_STYLE)
-    const imgEl = parent.getEl?.()?.querySelector?.('img')
-    if (hotspotEl && imgEl && imageBoxReady(imgEl) && remapHotspotToAnchor(hotspotEl, imgEl)) {
-      syncHotspotElToModel(component, hotspotEl)
-    }
+    // Already on the image box — do not re-measure. Remap on resize/drag-end
+    // overwrote Grapes' new px size and snapped the hotspot back.
     return
   }
 
@@ -310,6 +308,131 @@ export function pinEditorHotspotToImage(component) {
   if (!host || component.parent?.() === host) return
   if (typeof host.append === 'function') host.append(component)
   else host.components?.()?.add?.(component)
+}
+
+/** Grapes must resize in px — height:% against an auto-height banner does not apply. */
+export const HOTSPOT_RESIZABLE = {
+  tl: 1,
+  tc: 1,
+  tr: 1,
+  cl: 1,
+  cr: 1,
+  bl: 1,
+  bc: 1,
+  br: 1,
+  minDim: 24,
+  ratioDefault: 0,
+  unitWidth: 'px',
+  unitHeight: 'px',
+  currentUnit: 0,
+}
+
+/** After Grapes resize: save the on-screen box as % of the image (do not heal/remap from stale %). */
+export function persistEditorHotspotBox(component) {
+  if (!isHotspotComponent(component)) return
+  const el = component.getEl?.()
+  const parentEl = component.parent?.()?.getEl?.()
+  if (!el || !parentEl) return
+  const img = parentEl.querySelector?.('img')
+  const anchor = img && imageBoxReady(img) ? img : parentEl
+  if (!remapHotspotToAnchor(el, anchor)) return
+  syncHotspotElToModel(component, el)
+}
+
+/**
+ * Editor interaction uses pixels so handles can actually change size.
+ * Convert back to % of the image only on Save (healEditorHotspot).
+ */
+export function freezeHotspotToPixels(component) {
+  if (!isHotspotComponent(component)) return
+  try {
+    component.set?.({
+      resizable: HOTSPOT_RESIZABLE,
+      draggable: true,
+      locked: false,
+    })
+  } catch (_) {
+    /* noop */
+  }
+  const cover =
+    component.getAttributes?.()?.['data-tc-cover-full'] === '1' ||
+    component.getAttributes?.()?.['data-tc-cover-full'] === 'true'
+  if (cover) {
+    coverHotspotFullImage(component)
+    return
+  }
+  const el = component.getEl?.()
+  const parentEl = component.parent?.()?.getEl?.()
+  if (!el || !parentEl) return
+  const img = parentEl.querySelector?.('img')
+  const anchor = img || parentEl
+  const ar = anchor.getBoundingClientRect?.()
+  const er = el.getBoundingClientRect?.()
+  if (!ar || !er || ar.width < 8 || ar.height < 8) return
+  const left = Math.round(er.left - ar.left)
+  const top = Math.round(er.top - ar.top)
+  const width = Math.max(24, Math.round(er.width))
+  const height = Math.max(24, Math.round(er.height))
+  el.style.position = 'absolute'
+  el.style.left = `${left}px`
+  el.style.top = `${top}px`
+  el.style.width = `${width}px`
+  el.style.height = `${height}px`
+  el.style.right = 'auto'
+  el.style.bottom = 'auto'
+  syncHotspotElToModel(component, el)
+}
+
+/** Stretch the hotspot to the image box using px in the editor (height:% does not apply). */
+export function coverHotspotFullImage(component) {
+  if (!isHotspotComponent(component)) return
+  try {
+    pinEditorHotspotToImage(component)
+  } catch (_) {
+    /* noop */
+  }
+  try {
+    const attrs = { ...(component.getAttributes?.() || {}), 'data-tc-cover-full': '1' }
+    component.setAttributes?.(attrs)
+  } catch (_) {
+    /* noop */
+  }
+  const el = component.getEl?.()
+  const parentEl = component.parent?.()?.getEl?.()
+  const img = parentEl?.querySelector?.('img')
+  const anchor = img || parentEl
+  const ar = anchor?.getBoundingClientRect?.()
+  const w = Math.round(ar?.width || 0)
+  const h = Math.round(ar?.height || 0)
+  const width = w >= 8 ? `${w}px` : '100%'
+  const height = h >= 8 ? `${h}px` : '100%'
+  const box = {
+    position: 'absolute',
+    display: 'block',
+    top: '0px',
+    left: '0px',
+    width,
+    height,
+    'z-index': String(Z_HOTSPOT),
+    'pointer-events': 'auto',
+    cursor: 'pointer',
+    'text-decoration': 'none',
+  }
+  try {
+    component.removeStyle?.('right')
+    component.removeStyle?.('bottom')
+    component.addStyle?.(box)
+  } catch (_) {
+    /* noop */
+  }
+  if (!el) return
+  el.style.position = 'absolute'
+  el.style.top = '0px'
+  el.style.left = '0px'
+  el.style.width = width
+  el.style.height = height
+  el.style.right = 'auto'
+  el.style.bottom = 'auto'
 }
 
 function pct(n, fallback = 0) {
@@ -366,7 +489,7 @@ export function normalizeHotspotBox(el, parentEl, { coverFull = false } = {}) {
 
   // Prefer layout sizes (stable) over getBoundingClientRect (flex/transform drift)
   // offsetParent box can be taller than the image; use the larger of client vs rect
-  const rect = parentEl.getBoundingClientRect()
+  const rect = parentEl.getBoundingClientRect?.() || { width: 0, height: 0 }
   const pw = Math.max(parentEl.clientWidth || 0, parentEl.offsetWidth || 0, rect.width || 0)
   const ph = Math.max(parentEl.clientHeight || 0, parentEl.offsetHeight || 0, rect.height || 0)
   // Parent not laid out yet (images still loading) — skip so we don't corrupt %
@@ -471,7 +594,7 @@ function hrefIsNavigationTarget(href) {
  * - Convert px geometry → % so preview stays aligned
  * - Strip cursor:move leftovers from absolute drag
  */
-export function healEditorHotspot(component, editor) {
+export function healEditorHotspot(component, editor, { geometry = 'percent' } = {}) {
   if (!isHotspotComponent(component)) return
 
   const attrs = { ...(component.getAttributes?.() || {}) }
@@ -520,7 +643,7 @@ export function healEditorHotspot(component, editor) {
       hoverable: true,
       highlightable: true,
       locked: false,
-      resizable: true,
+      resizable: HOTSPOT_RESIZABLE,
     })
   } catch (_) {
     /* noop */
@@ -565,6 +688,11 @@ export function healEditorHotspot(component, editor) {
 
   const coverFull =
     attrs['data-tc-cover-full'] === '1' || attrs['data-tc-cover-full'] === 'true'
+
+  if (geometry === 'pixels') {
+    freezeHotspotToPixels(component)
+    return
+  }
 
   // Sync model → DOM when Grapes left styles only on the component
   const modelStyle = component.getStyle?.() || {}
@@ -954,6 +1082,9 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
     z-index: ${Z_HOTSPOT};
     pointer-events: auto;
     cursor: grab;
+    box-sizing: border-box;
+    line-height: normal;
+    min-height: 24px;
   }
   [data-tc-type="hotspot"]:active {
     cursor: grabbing;
