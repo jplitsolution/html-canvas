@@ -222,7 +222,11 @@ export function createGetPage(deps) {
         flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
       const partnerChecksDone = await visitHasDetectPartnerChecks(visitId, phone);
       // detect-msisdn already ran checksub/blocklist — do not duplicate on HOME load.
-      if (guardModeForSub !== 'NONE' && phone && !partnerChecksDone) {
+      if (
+        !flowEngineService.isNullIdentityMode(guardModeForSub) &&
+        phone &&
+        !partnerChecksDone
+      ) {
         const partnerCtx = {
           phone,
           serviceId,
@@ -310,7 +314,7 @@ export function createGetPage(deps) {
     } else if (visitId && phone) {
       await analyticsService.setVisitPhone(visitId, phone);
       if (
-        guardMode !== 'NONE' &&
+        !flowEngineService.isNullIdentityMode(guardMode) &&
         resolvedPageType === CampaignPageType.HOME
       ) {
         const revisitAttr = await loadVisitAttribution(visitId, input);

@@ -26,6 +26,7 @@ import {
   buildDefaultFlow,
   normalizeModeId,
   isApiExposeEntry,
+  isNullIdentityMode,
   resolveAfterIdentityTarget,
 } from './verificationModes'
 import {
@@ -774,10 +775,20 @@ function CampaignFlowBuilder({
           </div>
         )}
 
-        {mode === 'NONE' && (
+        {isNullIdentityMode(mode) && (
           <p className="text-[11px] text-fg-muted">
-            Start page is locked to <strong>HOME</strong> for this mode. Change connections on the
-            canvas or use Reset layout after switching modes.
+            {mode === 'CG_HOME' ? (
+              <>
+                Landing shows <strong>HOME</strong> (no HE). Subscribe sends the user to the CG URL
+                with <code className="font-mono">click_id</code>. Set the CG URL below.
+              </>
+            ) : (
+              <>
+                Start page is locked to <strong>HOME</strong> for this mode. If a CG URL is set,
+                landing redirects immediately. Change connections on the canvas or use Reset layout
+                after switching modes.
+              </>
+            )}
           </p>
         )}
 
@@ -917,7 +928,7 @@ function CampaignFlowBuilder({
                   key: 'runHe',
                   label: 'Header enrichment (HE)',
                   hint: 'Resolve MSISDN before showing the first page',
-                  disabled: mode === 'OTP_ONLY' || mode === 'NONE',
+                  disabled: mode === 'OTP_ONLY' || isNullIdentityMode(mode),
                 },
                 {
                   key: 'runBlocklist',

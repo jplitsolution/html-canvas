@@ -38,7 +38,7 @@ export function createFlowRouting(deps) {
       flowEngineService.nextPage(flowConfig, CampaignPageType.HOME, condition) ||
       fallback;
   
-    if (mode === 'NONE') {
+    if (mode === 'NONE' || mode === 'CG_HOME') {
       return {
         nextPage: CampaignPageType.HOME,
         resolvedPhone: ctx.phone || ctx.visitPhone || '',

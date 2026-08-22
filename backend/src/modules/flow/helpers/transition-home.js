@@ -39,7 +39,7 @@ export function createHandleHomeSubscribe(deps) {
     let nextPage;
     let resolvedPhone = phone || visitPhone;
 
-    if (mode === 'NONE') {
+    if (mode === 'NONE' || mode === 'CG_HOME') {
       nextPage = CampaignPageType.HOME;
       const redirect = await maybeNullFlowCgRedirect(
         campaign,
@@ -51,6 +51,7 @@ export function createHandleHomeSubscribe(deps) {
           campid: input.campid,
           trackingCampid: input.trackingCampid || input.tracking_campid,
         },
+        { when: 'subscribe' },
       );
       if (redirect) {
         await analyticsService.updateVisit(
@@ -88,7 +89,7 @@ export function createHandleHomeSubscribe(deps) {
     }
 
     let subscribeAttr = null;
-    if (mode !== 'NONE' && resolvedPhone) {
+    if (mode !== 'NONE' && mode !== 'CG_HOME' && resolvedPhone) {
       subscribeAttr = await loadVisitAttribution(input.visitId, input);
       const blockResult = await checkBlocklist(apiConfig, {
         phone: resolvedPhone,

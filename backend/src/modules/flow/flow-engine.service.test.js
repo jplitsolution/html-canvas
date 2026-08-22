@@ -13,6 +13,11 @@ describe('verification modes', () => {
       'HEADER_INJECTION',
     );
     assert.equal(flowEngineService.normalizeMode('NULL'), 'NONE');
+    assert.equal(flowEngineService.normalizeMode('CG_HOME'), 'CG_HOME');
+    assert.equal(flowEngineService.isLandingCgRedirectMode('NONE'), true);
+    assert.equal(flowEngineService.isLandingCgRedirectMode('CG_HOME'), false);
+    assert.equal(flowEngineService.isSubscribeCgRedirectMode('CG_HOME'), true);
+    assert.equal(flowEngineService.isNullIdentityMode('CG_HOME'), true);
   });
 
   it('builds isolated Universe DCB defaults', () => {

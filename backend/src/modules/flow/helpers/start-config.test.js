@@ -24,6 +24,7 @@ describe('start-config', () => {
   it('defaults HE off for OTP_ONLY', () => {
     assert.equal(defaultStartConfig('OTP_ONLY').runHe, false);
     assert.equal(defaultStartConfig('NONE').runHe, false);
+    assert.equal(defaultStartConfig('CG_HOME').runHe, false);
   });
 
   it('normalize fills missing keys from mode defaults', () => {

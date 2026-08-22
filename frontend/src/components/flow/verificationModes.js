@@ -38,12 +38,24 @@ export const VERIFICATION_MODES = [
     hint: 'No HE/OTP. If a CG URL is set → redirect there on landing with click_id.',
     pathHint: 'Landing → CG redirect (if URL set), else HOME only',
   },
+  {
+    id: 'CG_HOME',
+    label: 'CG via HOME (no HE)',
+    hint: 'No HE/OTP. Show HOME first. Subscribe redirects to CG URL with click_id.',
+    pathHint: 'HOME → Subscribe → CG redirect (click_id)',
+  },
 ]
 
 export function normalizeModeId(mode) {
   if (mode === 'MSISDN_ONLY') return 'HEADER_INJECTION'
   if (mode === 'NULL' || mode === null || mode === undefined || mode === '') return 'BOTH'
   return mode || 'BOTH'
+}
+
+/** No HE/OTP — CG URL carries click_id (landing or subscribe). */
+export function isNullIdentityMode(mode) {
+  const m = normalizeModeId(mode)
+  return m === 'NONE' || m === 'CG_HOME'
 }
 
 const OUTCOME_NODES = [
@@ -156,6 +168,11 @@ export const DEFAULT_FLOWS = {
     nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }],
     edges: [],
   },
+  CG_HOME: {
+    entryPage: 'HOME',
+    nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }],
+    edges: [],
+  },
 }
 
 /** True when OTP_ONLY campaign is API-mediator only (no WAP pages). */
@@ -208,11 +225,11 @@ export function buildDefaultFlow(mode, { entryPage, afterIdentity, afterOtp } = 
   const otpEntry = entry === 'OTP' || (normalized === 'OTP_ONLY' && !entry)
   const apiExpose = entry === 'API_EXPOSE'
 
-  if (normalized === 'NONE') {
+  if (normalized === 'NONE' || normalized === 'CG_HOME') {
     return {
       version: 1,
       entryPage: 'HOME',
-      startConfig: defaultStartConfig('NONE'),
+      startConfig: defaultStartConfig(normalized),
       nodes: [{ id: 'HOME', pageType: 'HOME', position: { x: 40, y: 160 } }],
       edges: [],
     }
@@ -470,6 +487,26 @@ export function buildFlowPathSummary(verificationMode, flowConfig, { cgRedirectU
           ],
       edges: [],
       note: 'Canvas buttons can still jump to a page or URL if you show HOME.',
+    }
+  }
+
+  if (mode === 'CG_HOME') {
+    return {
+      mode,
+      modeLabel: modeMeta.label,
+      modeHint: modeMeta.hint,
+      entryPage: 'HOME',
+      steps: cgRedirectUrl
+        ? [
+            { id: 'HOME', label: 'HOME' },
+            { id: 'cg', label: 'CG redirect', condition: 'subscribe + click_id' },
+          ]
+        : [
+            { id: 'HOME', label: 'HOME' },
+            { id: 'stay', label: 'Stay (no CG URL)', condition: 'null-flow' },
+          ],
+      edges: [],
+      note: 'No HE. User sees HOME; Subscribe sends them to CG URL with click_id.',
     }
   }
 

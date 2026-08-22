@@ -180,7 +180,8 @@ function FlowCampaignSettings({ campaignId }) {
           <h3 className="text-sm font-semibold text-fg">CG / home redirect URL</h3>
           <p className="text-xs text-fg-muted mt-1">
             With flow mode <strong>None</strong> and this URL set, users are redirected here on
-            landing. HE/OTP is not required. Also used as the HOME fallback when API HE cannot
+            landing. With <strong>CG via HOME</strong>, they see HOME first and this URL is used
+            when they tap Subscribe (still no HE). Also used as the HOME fallback when API HE cannot
             resolve MSISDN and no <code>failRedirectUrl</code> is set. Optional placeholders like{' '}
             <code className="font-mono">{'{{msisdn}}'}</code> /{' '}
             <code className="font-mono">{'{click_id}'}</code> are filled when present.

@@ -8,6 +8,14 @@ import {
 import { START_NODE_ID, END_NODE_ID, withVisualStartEnd } from './startConfig.js'
 
 describe('buildDefaultFlow', () => {
+  it('CG_HOME: HOME only, no HE, no outcomes', () => {
+    const cfg = buildDefaultFlow('CG_HOME')
+    expect(cfg.entryPage).toBe('HOME')
+    expect(cfg.startConfig.runHe).toBe(false)
+    expect(cfg.nodes.map((n) => n.pageType)).toEqual(['HOME'])
+    expect(cfg.edges).toEqual([])
+  })
+
   it('HE: HOME after resolve, no Confirm, miss → Error', () => {
     const cfg = buildDefaultFlow('HEADER_INJECTION', { afterIdentity: 'HOME' })
     expect(cfg.nodes.some((n) => n.pageType === 'CONFIRM')).toBe(false)

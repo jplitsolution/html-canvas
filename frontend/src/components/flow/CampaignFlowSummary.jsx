@@ -10,6 +10,7 @@ import {
   buildFlowPathSummary,
   resolveAfterIdentityTarget,
   isApiExposeEntry,
+  isNullIdentityMode,
 } from './verificationModes'
 import { campaignFlowPath, resolveMarketCodes } from '../../utils/routes'
 
@@ -76,6 +77,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
       draftEntry !== savedEntry) ||
     (!isApiExposeEntry(draftEntry) &&
       draftMode !== 'NONE' &&
+      draftMode !== 'CG_HOME' &&
       draftMode !== 'UNIVERSE_DCB' &&
       draftAfterIdentity !== savedAfterIdentity)
 
@@ -363,7 +365,7 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                   ? isApiExposeEntry(draftEntry)
                     ? ' (DCB API expose — billing PIN APIs only)'
                     : ' (WAP funnel)'
-                  : draftMode === 'NONE'
+                  : isNullIdentityMode(draftMode)
                     ? ''
                     : ` (${draftAfterIdentity === 'THANKYOU' ? 'skip HOME' : 'HOME packs'})`}
               .

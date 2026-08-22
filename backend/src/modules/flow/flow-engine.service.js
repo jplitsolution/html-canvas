@@ -23,6 +23,7 @@ export const VERIFICATION_MODES = [
   'OTP_ONLY',
   'BOTH',
   'NONE',
+  'CG_HOME',
 ];
 
 const LEGACY_MODE_ALIASES = {
@@ -68,6 +69,19 @@ export const createFlowEngineService = () => {
     }
     return VERIFICATION_MODES.includes(upper) ? upper : null;
   };
+
+  /** No HE/OTP — CG URL carries click_id. */
+  const isNullIdentityMode = (mode) => {
+    const m = normalizeMode(mode) || String(mode || '').toUpperCase();
+    return m === 'NONE' || m === 'CG_HOME';
+  };
+
+  /** Landing immediately leaves to CG (existing null flow). */
+  const isLandingCgRedirectMode = (mode) =>
+    (normalizeMode(mode) || String(mode || '').toUpperCase()) === 'NONE';
+
+  /** Subscribe / pack CTA leaves to CG with click_id. */
+  const isSubscribeCgRedirectMode = (mode) => isNullIdentityMode(mode);
 
   /** OTP_ONLY campaign that exposes public send/verify APIs (no WAP funnel). */
   const isApiExposeFlow = (config) =>
@@ -177,11 +191,11 @@ export const createFlowEngineService = () => {
       condition,
     });
 
-    if (mode === 'NONE') {
+    if (mode === 'NONE' || mode === 'CG_HOME') {
       return {
         version: 1,
         entryPage: CampaignPageType.HOME,
-        startConfig: defaultStartConfig('NONE'),
+        startConfig: defaultStartConfig(mode),
         nodes: [node(CampaignPageType.HOME, 40, 160)],
         edges: [],
       };
@@ -462,7 +476,7 @@ export const createFlowEngineService = () => {
       errors.push(`Verification mode ${mode} requires an OTP page node.`);
     }
 
-    if (mode === 'NONE') {
+    if (mode === 'NONE' || mode === 'CG_HOME') {
       return { ok: errors.length === 0, errors };
     }
 
@@ -486,6 +500,9 @@ export const createFlowEngineService = () => {
   return {
     parseFlowConfig,
     normalizeMode,
+    isNullIdentityMode,
+    isLandingCgRedirectMode,
+    isSubscribeCgRedirectMode,
     isApiExposeFlow,
     getDefaultFlowConfig,
     applyFunnelLayoutToFlowConfig,

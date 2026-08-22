@@ -15,6 +15,7 @@ describe('shouldRunHeOnDetect', () => {
   it('skips HE for OTP_ONLY and NONE', () => {
     assert.equal(shouldRunHeOnDetect('OTP_ONLY'), false);
     assert.equal(shouldRunHeOnDetect('NONE'), false);
+    assert.equal(shouldRunHeOnDetect('CG_HOME'), false);
     assert.equal(shouldRunHeOnDetect('NULL'), false);
   });
 

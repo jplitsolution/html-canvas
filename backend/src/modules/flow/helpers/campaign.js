@@ -103,11 +103,27 @@ export function createFlowCampaignFns(deps) {
   const shouldRegisterPostbackAt = (campaign, trigger, extras) =>
     shouldRegisterPostbackAtPure(campaign, trigger, extras);
 
-  const maybeNullFlowCgRedirect = async (campaign, visitId, input = {}) => {
+  /**
+   * CG URL with click_id.
+   * when=landing → NONE only (leave immediately).
+   * when=subscribe → NONE or CG_HOME (HOME CTA).
+   */
+  const maybeNullFlowCgRedirect = async (
+    campaign,
+    visitId,
+    input = {},
+    { when = 'landing' } = {},
+  ) => {
     const mode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
     const cg = campaign.cgRedirectUrl?.trim();
-    if (mode !== 'NONE' || !cg) return null;
+    if (!cg) return null;
+    const allow =
+      (when === 'landing' &&
+        flowEngineService.isLandingCgRedirectMode(mode)) ||
+      (when === 'subscribe' &&
+        flowEngineService.isSubscribeCgRedirectMode(mode));
+    if (!allow) return null;
   
     const attr = await loadVisitAttribution(visitId, input);
     return buildCgRedirectUrl(cg, {

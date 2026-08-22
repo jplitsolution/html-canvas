@@ -45,7 +45,7 @@ export function getValidConditions(sourcePageType, verificationMode) {
       if (verificationMode === 'UNIVERSE_DCB') {
         return ['PIN_REQUESTED', 'ENTITLED', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       }
-      if (verificationMode === 'NONE') {
+      if (verificationMode === 'NONE' || verificationMode === 'CG_HOME') {
         return ['DEFAULT', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       }
       if (

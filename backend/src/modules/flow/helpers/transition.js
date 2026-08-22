@@ -1,4 +1,5 @@
 import { CampaignPageType } from '../../../database/entities/campaign-page.entity.js';
+import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { campaignsService } from '../../campaigns/campaigns.service.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { createHandleHomeSubscribe } from './transition-home.js';
@@ -6,11 +7,19 @@ import { createHandleConfirm } from './transition-confirm.js';
 import { createHandleOtpContinue } from './transition-otp.js';
 import { createHandleSubscribeRoute } from './transition-subscribe-route.js';
 
+const CG_SUBSCRIBE_ACTIONS = new Set([
+  'SUBSCRIBE',
+  'SUBSCRIBE_ROUTE',
+  'CONFIRM',
+]);
+
 export function createFlowTransition(deps) {
   const {
     getApiConfigRepo,
     resolveCampaign,
     assertTrackingAssignmentAvailable,
+    maybeNullFlowCgRedirect,
+    buildPageResponse,
   } = deps;
 
   const handleHomeSubscribe = createHandleHomeSubscribe(deps);
@@ -52,6 +61,39 @@ export function createFlowTransition(deps) {
 
     const phone = input.phone || '';
     const serviceId = campaign.serviceId || 'default_service';
+
+    // CG_HOME (and NONE if HOME is shown): any subscribe CTA → CG URL + click_id.
+    if (CG_SUBSCRIBE_ACTIONS.has(String(input.action || '').toUpperCase())) {
+      const redirect = await maybeNullFlowCgRedirect(
+        campaign,
+        input.visitId,
+        input,
+        { when: 'subscribe' },
+      );
+      if (redirect) {
+        await analyticsService.updateVisit(
+          input.visitId,
+          VisitStatus.HOME_SHOWN,
+          CampaignPageType.HOME,
+          phone || undefined,
+        );
+        return {
+          ...(await buildPageResponse(
+            campaign,
+            CampaignPageType.HOME,
+            {
+              phone,
+              country: campaign.country,
+              operator: campaign.operator,
+              service_id: serviceId,
+              plan: '',
+            },
+            input.visitId,
+          )),
+          externalRedirect: redirect,
+        };
+      }
+    }
 
     // Single-page subscribe + client-side outcome routing (any funnel page).
     if (input.action === 'SUBSCRIBE_ROUTE') {

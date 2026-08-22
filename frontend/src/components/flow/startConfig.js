@@ -20,7 +20,7 @@ export function isMetaNodeId(id) {
 /** Defaults aligned with verification mode (HE modes run checks; OTP_ONLY skips HE). */
 export function defaultStartConfig(mode) {
   const m = String(mode || 'BOTH').toUpperCase()
-  if (m === 'OTP_ONLY' || m === 'NONE') {
+  if (m === 'OTP_ONLY' || m === 'NONE' || m === 'CG_HOME') {
     return {
       runHe: false,
       runBlocklist: m === 'OTP_ONLY',

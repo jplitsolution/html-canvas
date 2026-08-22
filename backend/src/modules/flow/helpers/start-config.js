@@ -12,7 +12,7 @@ export function defaultStartConfig(mode) {
       runChecksub: true,
     };
   }
-  if (m === 'OTP_ONLY' || m === 'NONE') {
+  if (m === 'OTP_ONLY' || m === 'NONE' || m === 'CG_HOME') {
     return {
       runHe: false,
       runBlocklist: m === 'OTP_ONLY',
