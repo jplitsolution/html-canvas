@@ -29,7 +29,7 @@ export const IMAGE_BANNER_STYLE = {
   display: 'block',
   width: '100%',
   'max-width': '100%',
-  overflow: 'hidden',
+  overflow: 'visible',
   margin: '0 auto',
   'line-height': '0',
 }
@@ -48,14 +48,6 @@ function directChildImageEl(parentEl) {
     if (child?.tagName === 'IMG') return child
   }
   return null
-}
-
-function parentIsLooseAroundImage(parentEl, imgEl) {
-  if (!parentEl || !imgEl || isImageBannerHost(parentEl)) return false
-  const pr = parentEl.getBoundingClientRect?.()
-  const ir = imgEl.getBoundingClientRect?.()
-  if (!pr || !ir || ir.width < 8 || ir.height < 8) return false
-  return pr.height > ir.height * 1.15 || pr.width > ir.width * 1.15
 }
 
 function clampPct(n, min = 0, max = 100) {
@@ -98,10 +90,122 @@ function applyBannerHostStyle(el) {
   el.style.display = 'block'
   el.style.width = '100%'
   el.style.maxWidth = '100%'
-  el.style.overflow = 'hidden'
+  el.style.overflow = 'visible'
   el.style.marginLeft = 'auto'
   el.style.marginRight = 'auto'
   el.style.lineHeight = '0'
+}
+
+function resetLiveBannerImage(img) {
+  if (!img?.style) return
+  img.style.position = 'relative'
+  img.style.top = 'auto'
+  img.style.left = 'auto'
+  img.style.right = 'auto'
+  img.style.bottom = 'auto'
+  img.style.width = '100%'
+  img.style.maxWidth = '100%'
+  img.style.height = 'auto'
+  img.style.display = 'block'
+}
+
+function isBareImgComponent(component) {
+  const tag = (component?.get?.('tagName') || '').toLowerCase()
+  return tag === 'img' || component?.get?.('type') === 'image'
+}
+
+/**
+ * Inner <img> must stay in-flow. Absolute-dragging it collapses the banner
+ * (line-height:0, no in-flow box) and the picture vanishes.
+ * Drag the banner instead; clicks pass through the img to the host.
+ */
+export function configureBannerForEditor(host) {
+  if (!host || !isImageBannerHost(host)) return
+  try {
+    host.set?.({
+      draggable: true,
+      selectable: true,
+      hoverable: true,
+      droppable: true,
+      resizable: true,
+    })
+  } catch (_) {
+    /* noop */
+  }
+  host.addStyle?.(IMAGE_BANNER_STYLE)
+  const kids = host.components?.()
+  const len = kids?.length || 0
+  for (let i = 0; i < len; i++) {
+    const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
+    if (!child || !isBareImgComponent(child)) continue
+    try {
+      child.set?.({ draggable: false, selectable: true, hoverable: true })
+    } catch (_) {
+      /* noop */
+    }
+    resetInnerBannerImage(child)
+    const el = child.getEl?.()
+    if (el) {
+      el.setAttribute('draggable', 'false')
+      el.ondragstart = (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+    }
+  }
+}
+
+/** Snap a banner's inner img back to in-flow so it cannot sit off-canvas. */
+export function resetInnerBannerImage(imgCmp) {
+  if (!imgCmp || !isImageBannerHost(imgCmp.parent?.())) return
+  try {
+    imgCmp.removeStyle?.('top')
+    imgCmp.removeStyle?.('left')
+    imgCmp.removeStyle?.('right')
+    imgCmp.removeStyle?.('bottom')
+    imgCmp.removeStyle?.('margin')
+  } catch (_) {
+    /* noop */
+  }
+  imgCmp.addStyle?.({
+    position: 'relative',
+    width: '100%',
+    'max-width': '100%',
+    height: 'auto',
+    display: 'block',
+    top: 'auto',
+    left: 'auto',
+    right: 'auto',
+    bottom: 'auto',
+  })
+}
+
+/** True when this image lives inside an image-banner host. */
+export function isImgInsideBanner(component) {
+  return isBareImgComponent(component) && isImageBannerHost(component?.parent?.())
+}
+
+function copyHotspotBoxToModel(component) {
+  const el = component.getEl?.()
+  if (!el || !hasPercentGeometry(el)) return
+  try {
+    component.addStyle?.({
+      position: 'absolute',
+      left: el.style.left,
+      top: el.style.top,
+      width: el.style.width,
+      height: el.style.height,
+      display: 'block',
+      'z-index': String(Z_HOTSPOT),
+      'pointer-events': 'auto',
+      cursor: 'pointer',
+      'text-decoration': 'none',
+    })
+    component.removeStyle?.('right')
+    component.removeStyle?.('bottom')
+  } catch (_) {
+    /* noop */
+  }
 }
 
 /** Live DOM: wrap image + hotspot so the hotspot stays glued on resize. */
@@ -110,10 +214,13 @@ export function pinLiveHotspotToImage(hotspotEl) {
   const parent = hotspotEl.parentElement
   if (isImageBannerHost(parent)) {
     applyBannerHostStyle(parent)
+    const img = directChildImageEl(parent)
+    resetLiveBannerImage(img)
+    if (imageBoxIsReady(img)) remapHotspotToAnchor(hotspotEl, img)
     return parent
   }
   const img = directChildImageEl(parent)
-  if (!img || !parentIsLooseAroundImage(parent, img)) return parent
+  if (!img || !imageBoxIsReady(img)) return parent
 
   remapHotspotToAnchor(hotspotEl, img)
 
@@ -133,6 +240,7 @@ export function wrapImageAsBanner(imgCmp) {
   if (!parent) return imgCmp
   if (isImageBannerHost(parent)) {
     parent.addStyle?.(IMAGE_BANNER_STYLE)
+    configureBannerForEditor(parent)
     return parent
   }
   const coll = parent.components?.()
@@ -150,6 +258,7 @@ export function wrapImageAsBanner(imgCmp) {
   if (!host) return parent
   if (typeof host.append === 'function') host.append(imgCmp)
   else host.components?.()?.add?.(imgCmp)
+  configureBannerForEditor(host)
   return host
 }
 
@@ -165,29 +274,53 @@ function findImageSiblingComponent(hotspotCmp) {
   return null
 }
 
+function imageElFromBannerHost(host) {
+  const kids = host?.components?.()
+  const len = kids?.length || 0
+  for (let i = 0; i < len; i++) {
+    const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
+    if (child && isBareImgComponent(child)) return child.getEl?.() || null
+  }
+  return host?.getEl?.()?.querySelector?.(':scope > img') || null
+}
+
+function imageBoxIsReady(imgEl) {
+  if (!imgEl) return false
+  const r = imgEl.getBoundingClientRect?.()
+  return Boolean(r && r.width >= 8 && r.height >= 8)
+}
+
 /** Move hotspot onto the image banner host (Grapes), remapping % to the image. */
 export function pinEditorHotspotToImage(component) {
   if (!isHotspotComponent(component)) return
   const parent = component.parent?.()
   if (!parent) return
+  const hotspotEl = component.getEl?.()
+
   if (isImageBannerHost(parent)) {
     parent.addStyle?.(IMAGE_BANNER_STYLE)
+    configureBannerForEditor(parent)
+    const imgEl = imageElFromBannerHost(parent)
+    if (hotspotEl && imageBoxIsReady(imgEl)) remapHotspotToAnchor(hotspotEl, imgEl)
+    copyHotspotBoxToModel(component)
     return
   }
   const img = findImageSiblingComponent(component)
   if (!img) return
-  const parentEl = parent.getEl?.()
   const imgEl = img.getEl?.()
-  if (!parentIsLooseAroundImage(parentEl, imgEl)) {
+  if (!imageBoxIsReady(imgEl)) {
     parent.addStyle?.({ position: 'relative' })
     return
   }
-  const hotspotEl = component.getEl?.()
   if (hotspotEl && imgEl) remapHotspotToAnchor(hotspotEl, imgEl)
   const host = wrapImageAsBanner(img)
-  if (!host || component.parent?.() === host) return
+  if (!host || component.parent?.() === host) {
+    copyHotspotBoxToModel(component)
+    return
+  }
   if (typeof host.append === 'function') host.append(component)
   else host.components?.()?.add?.(component)
+  copyHotspotBoxToModel(component)
 }
 
 function pct(n, fallback = 0) {
@@ -454,8 +587,9 @@ export function healEditorHotspot(component, editor) {
     }
   }
 
-  // Already % (e.g. load heal) — keep placement; drag:end writes px so still converts
-  if (!coverFull && hasPercentGeometry(el)) {
+  // Already % on the image banner — persist those image-relative values to the model
+  if (!coverFull && hasPercentGeometry(el) && isImageBannerHost(parent)) {
+    copyHotspotBoxToModel(component)
     component.addStyle({
       position: 'absolute',
       display: 'block',
@@ -799,14 +933,19 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
     display: block;
     width: 100%;
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible;
     line-height: 0;
   }
+  /* Hits go to the banner so Grapes drags the whole image+hotspots unit. */
   [data-tc-type="image-banner"] > img {
     width: 100%;
     height: auto;
     display: block;
     max-width: 100%;
+    pointer-events: none;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
   }
 
   img,
@@ -850,7 +989,7 @@ export const OVERLAY_STACKING_CSS = `
     display: block;
     width: 100%;
     max-width: 100%;
-    overflow: hidden;
+    overflow: visible;
     line-height: 0;
   }
   [data-tc-type="image-banner"] > img {
@@ -858,6 +997,11 @@ export const OVERLAY_STACKING_CSS = `
     height: auto;
     display: block;
     max-width: 100%;
+    position: relative !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
   }
 
   img,

@@ -28,7 +28,7 @@ import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
-import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE } from './utils/overlayStacking'
+import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, isImgInsideBanner, resetInnerBannerImage, configureBannerForEditor } from './utils/overlayStacking'
 
 export default function TemplateEditor({
   projectId,
@@ -518,6 +518,14 @@ export default function TemplateEditor({
     // After drag: lift buttons above images (img has z-index:1 in canvas CSS)
     ed.on('component:drag:end', (component) => {
       if (!mounted || !component) return
+      if (isImgInsideBanner(component)) {
+        resetInnerBannerImage(component)
+        configureBannerForEditor(component.parent())
+        return
+      }
+      if (component.getAttributes?.()?.['data-tc-type'] === 'image-banner') {
+        configureBannerForEditor(component)
+      }
       if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
         // px → % + restore data-action / pointer-events (absolute drag leaves junk)
         healEditorHotspot(component, ed)
@@ -644,6 +652,16 @@ export default function TemplateEditor({
           const st = cmp.get('status')
           if (st === 'freezed' || st === 'freezed-selected') {
             cmp.set('status', '')
+          }
+
+          if (isImgInsideBanner(cmp)) {
+            resetInnerBannerImage(cmp)
+            configureBannerForEditor(cmp.parent())
+            cmp.components().forEach(walk)
+            return
+          }
+          if (cmp.getAttributes()?.['data-tc-type'] === 'image-banner') {
+            configureBannerForEditor(cmp)
           }
 
           if (isHotspot) {
