@@ -32,7 +32,7 @@ export function registerSectionBlocks(editor) {
   `)
 
   addSection(editor, 'image-banner-block', 'Image Banner', 'image', `
-    <div data-tc-type="image-banner" style="position:relative;display:inline-block;width:100%;max-width:100%;overflow:hidden;margin:0 auto;">
+    <div data-tc-type="image-banner" style="position:relative;display:block;width:100%;max-width:100%;overflow:visible;height:auto;margin:0 auto;">
       <img data-tc-type="image" src="https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=1200&h=400&fit=crop" alt="Banner Image" style="width:100%;height:auto;display:block;" />
       <div data-gjs-droppable="true" style="position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:20px;box-sizing:border-box;">
         <h2 data-gjs-type="text" style="color:#ffffff;font-size:32px;font-weight:bold;text-shadow:0 2px 4px rgba(0,0,0,0.5);text-align:center;margin:0;">Your Banner Title</h2>

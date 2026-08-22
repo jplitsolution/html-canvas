@@ -5,6 +5,7 @@ import {
   flowRuntimeStylesheetLinks,
 } from '../../editor/services/flowRuntimeCss'
 import { sanitizeSavedPageHtml } from '../../editor/services/wysiwygContract'
+import { pickLivePageData, isMobileViewport } from '../../editor/services/deviceLayouts'
 import { normalizePack } from './flowHelpers'
 
 /**
@@ -12,7 +13,10 @@ import { normalizePack } from './flowHelpers'
  * Uses the same FLOW_RUNTIME_CSS + font/icon links as the GrapesJS canvas
  * (minus editor-only chrome) so Save → Preview matches the builder.
  */
-function mountPageInShadow(shadow, pageData) {
+function mountPageInShadow(shadow, pageData, options = {}) {
+  const mobile =
+    options.mobile != null ? options.mobile : isMobileViewport()
+  pageData = pickLivePageData(pageData, mobile) || pageData
   const { customWidth, customHeight } = pageData.projectData || {}
 
   let inlineStyles = ''
@@ -23,7 +27,8 @@ function mountPageInShadow(shadow, pageData) {
     inlineStyles += `width: ${customWidth}px !important; max-width: min(100%, ${customWidth}px) !important; `
   }
   if (customHeight) {
-    inlineStyles += `height: ${customHeight}px !important; min-height: ${customHeight}px !important; overflow: hidden; position: relative; `
+    // Editor canvas height is a frame, not a crop. Live must grow with the image.
+    inlineStyles += `min-height: ${customHeight}px !important; position: relative; `
   }
 
   // Transform <body> tag to <div> to avoid invalid nested <body> inside Shadow DOM,
@@ -41,6 +46,21 @@ function mountPageInShadow(shadow, pageData) {
     ${flowRuntimeStylesheetLinks()}
     <style>${FLOW_RUNTIME_CSS}</style>
     <style>${cleanCss}</style>
+    <style>
+      /* Grapes canvas frame CSS is injected above — do not let it crop the live image. */
+      .flow-page-inner, .flow-page-inner > *, .page-wrapper,
+      [data-tc-type="image-banner"] {
+        height: auto !important;
+        max-height: none !important;
+        overflow-x: hidden !important;
+        overflow-y: visible !important;
+      }
+      .flow-page-inner img, [data-tc-type="image-banner"] > img {
+        height: auto !important;
+        max-height: none !important;
+        object-fit: contain !important;
+      }
+    </style>
     <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
   `
 

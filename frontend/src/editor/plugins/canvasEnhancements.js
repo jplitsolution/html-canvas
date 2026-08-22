@@ -108,8 +108,7 @@ export function applyDeviceViewport(editor, deviceName) {
     requestAnimationFrame(() => frameBody.classList.remove('tc-device-repaint'))
   }
 
-  // Auto align components & keep images responsive for selected device
-  autoAlignCanvasComponents(editor, deviceName)
+  // Dual desktop/mobile HTML owns layout. Do not rewrite positions on device switch.
 }
 
 /**
@@ -430,7 +429,6 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     setTimeout(() => {
       if (!alive) return
       applyDeviceViewport(editor, deviceName)
-      autoAlignCanvasComponents(editor, deviceName)
       // Device width change → re-measure; floor is keyed per device so Desktop floor stays.
       syncCanvasFrameHeight(editor, { allowShrink: true })
       setTimeout(() => {

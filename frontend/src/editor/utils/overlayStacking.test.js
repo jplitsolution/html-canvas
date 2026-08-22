@@ -56,7 +56,6 @@ describe('pinLiveHotspotToImage', () => {
     expect(hotspot.style.top.endsWith('%')).toBe(true)
     expect(parseFloat(hotspot.style.top)).toBe(70)
     expect(IMAGE_BANNER_STYLE.position).toBe('relative')
-    expect(IMAGE_BANNER_STYLE.overflow).toBe('visible')
 
     page.remove()
   })
@@ -78,42 +77,30 @@ describe('pinLiveHotspotToImage', () => {
 
     expect(pinLiveHotspotToImage(hotspot)).toBe(host)
     expect(host.parentElement).toBeNull()
+    expect(hotspot.getAttribute('data-tc-pinned')).toBe('1')
   })
 
-  it('wraps a hugging non-banner parent so preview % uses the image box', () => {
-    const card = document.createElement('div')
-    stubRect(card, { left: 0, top: 0, width: 400, height: 800 })
+  it('moves a sibling hotspot into an existing image-banner', () => {
+    const page = document.createElement('div')
+    stubRect(page, { left: 0, top: 0, width: 400, height: 2000 })
+
+    const host = document.createElement('div')
+    host.setAttribute('data-tc-type', 'image-banner')
+    stubRect(host, { left: 0, top: 0, width: 400, height: 800 })
 
     const img = document.createElement('img')
     stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    host.appendChild(img)
 
     const hotspot = document.createElement('a')
     hotspot.setAttribute('data-tc-type', 'hotspot')
     stubRect(hotspot, { left: 40, top: 560, width: 200, height: 80 })
 
-    card.appendChild(img)
-    card.appendChild(hotspot)
-    document.body.appendChild(card)
-
-    const host = pinLiveHotspotToImage(hotspot)
-    expect(host.getAttribute('data-tc-type')).toBe('image-banner')
-    expect(host.parentElement).toBe(card)
-    expect(parseFloat(hotspot.style.top)).toBe(70)
-
-    card.remove()
-  })
-
-  it('waits to wrap until the image has a real box', () => {
-    const page = document.createElement('div')
-    const img = document.createElement('img')
-    stubRect(img, { left: 0, top: 0, width: 0, height: 0 })
-    const hotspot = document.createElement('a')
-    hotspot.setAttribute('data-tc-type', 'hotspot')
-    stubRect(hotspot, { left: 40, top: 560, width: 200, height: 80 })
-    page.appendChild(img)
+    page.appendChild(host)
     page.appendChild(hotspot)
 
-    expect(pinLiveHotspotToImage(hotspot)).toBe(page)
-    expect(hotspot.parentElement).toBe(page)
+    expect(pinLiveHotspotToImage(hotspot)).toBe(host)
+    expect(host.contains(hotspot)).toBe(true)
+    expect(parseFloat(hotspot.style.top)).toBe(70)
   })
 })

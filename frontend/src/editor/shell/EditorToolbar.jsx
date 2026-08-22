@@ -30,7 +30,7 @@ export function EditorToolbar({
   onExportCurrent,
   onExportAll,
 }) {
-  const { editor, device, setDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight } = useEditor();
+  const { editor, device, setDevice, switchDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight } = useEditor();
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
 
@@ -108,15 +108,24 @@ export function EditorToolbar({
 
       <div className="flex-1 min-w-2" />
 
-      <div className="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-gray-100/80 border border-gray-200/50 shadow-inner shrink-0" title="Preview size">
+      <div className="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-gray-100/80 border border-gray-200/50 shadow-inner shrink-0" title="Desktop and Phone save separate HTML">
         {devices.map(({ id, icon: Icon, label }) => (
           <button
             key={id}
             type="button"
-            title={label}
+            title={
+              id === 'Mobile'
+                ? 'Phone layout (separate HTML). Save after you edit it.'
+                : id === 'Desktop' || id === 'Custom' || id === 'Tablet'
+                  ? 'Desktop layout (Phone is saved separately)'
+                  : label
+            }
             onClick={() => {
-              editor?.setDevice(id);
-              setDevice(id);
+              if (switchDevice) switchDevice(id)
+              else {
+                editor?.setDevice(id)
+                setDevice(id)
+              }
             }}
             className={`px-2 lg:px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
               device === id 
@@ -150,6 +159,12 @@ export function EditorToolbar({
             />
           </div>
         )}
+        <span
+          className="hidden xl:inline ml-1 mr-1 text-[10px] font-bold text-indigo-600 whitespace-nowrap"
+          title="Desktop and Phone each have their own saved HTML"
+        >
+          {device === 'Mobile' ? 'Phone HTML' : 'Desktop HTML'}
+        </span>
       </div>
 
       <div className="hidden xl:flex items-center gap-1 p-1 rounded-xl bg-gray-50 border border-gray-200/60 shadow-2xs shrink-0">

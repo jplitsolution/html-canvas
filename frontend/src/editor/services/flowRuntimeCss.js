@@ -47,6 +47,12 @@ img, video, iframe, embed, object {
     max-width: 100% !important;
     overflow-x: hidden !important;
   }
+  [data-tc-type="image-banner"],
+  [data-tc-type="image-banner"] img {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
 
   /* Hamburger button — show on mobile */
   .tc-nav-hamburger {
@@ -210,16 +216,25 @@ export const FLOW_HOST_CSS = `
     margin: 0 auto;
     opacity: 1;
     min-height: 100vh;
+    height: auto !important;
+    max-height: none !important;
+    overflow-x: hidden;
+    overflow-y: visible !important;
     box-sizing: border-box;
   }
   .flow-page-inner > * {
     max-width: 100%;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
   }
   .page-wrapper {
     min-height: 100vh;
+    height: auto !important;
     width: 100%;
     position: relative;
     box-sizing: border-box;
+    overflow: visible !important;
   }
   /* Grapes absolute-drag leaves left/top on template cards, which removes them from
      .home-page / .otp-container flex centering → card stuck to one side on large

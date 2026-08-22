@@ -1,7 +1,12 @@
-import { getActivePageSnapshot } from './exportSite'
 import * as campaignsApi from '../../services/api/campaigns'
 import { healEditorHotspot } from '../utils/overlayStacking'
 import { healFlowButtonsInEditor } from '../utils/textSizeAlign'
+import {
+  buildSavePayload,
+  layoutKeyForDevice,
+  parseDeviceLayouts,
+  snapshotLayout,
+} from './deviceLayouts'
 
 function healAllHotspots(editor) {
   const wrapper = editor?.getWrapper?.()
@@ -36,11 +41,21 @@ export async function saveCampaignPage(
   // Strip accidental absolute CTAs before save (keeps in-card OTP/SUBSCRIBE in flow)
   healFlowButtonsInEditor(editor)
 
-  const projectData = editor.getProjectData()
-  if (customWidth) projectData.customWidth = customWidth
-  if (customHeight) projectData.customHeight = customHeight
+  const deviceName = String(editor.Devices?.getSelected?.()?.get?.('name') || 'Desktop')
+  const currentKey = layoutKeyForDevice(deviceName)
+  const currentSnapshot = snapshotLayout(editor, deviceName, customWidth, customHeight)
+  const layouts = editor.__tcLayouts || parseDeviceLayouts({}, currentSnapshot.html, currentSnapshot.css)
+  layouts[currentKey] = currentSnapshot
+  editor.__tcLayouts = layouts
 
-  const { html, css } = getActivePageSnapshot(editor)
+  const { projectData, html, css } = buildSavePayload(
+    editor,
+    layouts,
+    currentKey,
+    currentSnapshot,
+    customWidth,
+    customHeight,
+  )
 
   return campaignsApi.saveCampaignPage(campaignId, pageType, {
     projectData,

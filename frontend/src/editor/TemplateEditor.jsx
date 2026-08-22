@@ -18,6 +18,13 @@ import {
   filterBlockElements,
 } from './plugins/dragAndDrop'
 import { loadIntoEditor } from './services/loadTemplate'
+import {
+  cloneLayout,
+  layoutKeyForDevice,
+  LAYOUT_MOBILE,
+  parseDeviceLayouts,
+  snapshotLayout,
+} from './services/deviceLayouts'
 import { getTemplatePayload } from './services/saveTemplate'
 import { exportAllPagesFromEditor, exportCurrentPageFromEditor } from './services/exportSite'
 import { EditorProvider } from './context/EditorContext'
@@ -28,7 +35,7 @@ import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
-import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, isImgInsideBanner, resetInnerBannerImage, configureBannerForEditor } from './utils/overlayStacking'
+import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE } from './utils/overlayStacking'
 
 export default function TemplateEditor({
   projectId,
@@ -52,6 +59,9 @@ export default function TemplateEditor({
   const editorRef = useRef(null)
   const initializedRef = useRef(false)
   const cleanupExperienceRef = useRef(null)
+  const layoutsRef = useRef(parseDeviceLayouts(initialData?.projectData, initialData?.html, initialData?.css))
+  const layoutSwitchRef = useRef(false)
+  const deviceRef = useRef(initialData?.projectData?.customWidth ? 'Custom' : 'Desktop')
 
   const [editor, setEditor] = useState(null)
   const [isEmpty, setIsEmpty] = useState(true)
@@ -155,6 +165,68 @@ export default function TemplateEditor({
     trackEvent('exports')
   }, [])
 
+  const switchDevice = useCallback((nextName) => {
+    const ed = editorRef.current
+    if (!ed || !nextName) return
+    const prevName = deviceRef.current || 'Desktop'
+    const fromKey = layoutKeyForDevice(prevName)
+    const toKey = layoutKeyForDevice(nextName)
+
+    if (!layoutsRef.current) {
+      layoutsRef.current = { desktop: null, mobile: null }
+    }
+    const { customWidth: cw, customHeight: ch } = callbacksRef.current
+    layoutsRef.current[fromKey] = snapshotLayout(ed, prevName, cw, ch)
+    ed.__tcLayouts = layoutsRef.current
+
+    if (fromKey !== toKey) {
+      let target = layoutsRef.current[toKey]
+      if (!target?.html) {
+        const src = layoutsRef.current[fromKey]
+        target = cloneLayout(src, {
+          customWidth: toKey === LAYOUT_MOBILE ? '375' : cw,
+        })
+        if (target) {
+          layoutsRef.current[toKey] = target
+          setIsDirty(true)
+          callbacksRef.current.onDirtyChange?.(true)
+        }
+      }
+      if (target?.html) {
+        layoutSwitchRef.current = true
+        try {
+          loadIntoEditor(ed, target)
+          healFlowButtonsInEditor(ed)
+          const wrapper = ed.getWrapper()
+          if (wrapper) {
+            const walk = (cmp) => {
+              if (cmp.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+                try {
+                  healEditorHotspot(cmp, ed)
+                } catch (_) {
+                  /* noop */
+                }
+              }
+              cmp.components?.()?.forEach?.(walk)
+            }
+            walk(wrapper)
+          }
+          injectStylesheetsIntoCanvas(ed)
+          ensureAllTextEditable(ed)
+        } finally {
+          window.setTimeout(() => {
+            layoutSwitchRef.current = false
+            syncCanvasFrameHeight(ed, { allowShrink: true })
+          }, 80)
+        }
+      }
+    }
+
+    ed.setDevice(nextName)
+    deviceRef.current = nextName
+    setDevice(nextName)
+  }, [])
+
   useEffect(() => {
     if (import.meta.env.DEV) console.log('[TemplateEditor] useEffect triggered for projectId:', projectId)
     if (!containerRef.current || initializedRef.current) {
@@ -193,6 +265,12 @@ export default function TemplateEditor({
 
     const ed = grapesjs.init(config)
     editorRef.current = ed
+    layoutsRef.current = parseDeviceLayouts(
+      initialData?.projectData,
+      initialData?.html,
+      initialData?.css,
+    )
+    ed.__tcLayouts = layoutsRef.current
     setEditor(ed)
 
     ed.Components.addType('hotspot', {
@@ -518,14 +596,6 @@ export default function TemplateEditor({
     // After drag: lift buttons above images (img has z-index:1 in canvas CSS)
     ed.on('component:drag:end', (component) => {
       if (!mounted || !component) return
-      if (isImgInsideBanner(component)) {
-        resetInnerBannerImage(component)
-        configureBannerForEditor(component.parent())
-        return
-      }
-      if (component.getAttributes?.()?.['data-tc-type'] === 'image-banner') {
-        configureBannerForEditor(component)
-      }
       if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
         // px → % + restore data-action / pointer-events (absolute drag leaves junk)
         healEditorHotspot(component, ed)
@@ -573,7 +643,7 @@ export default function TemplateEditor({
     })
 
     ed.on('change:changesCount', () => {
-      if (!mounted) return
+      if (!mounted || layoutSwitchRef.current) return
       setIsDirty(true)
       callbacksRef.current.onDirtyChange?.(true)
     })
@@ -604,7 +674,12 @@ export default function TemplateEditor({
     })
     ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
     ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
-    ed.on('device:select', (dev) => mounted && setDevice(dev?.get('name') || 'Desktop'))
+    ed.on('device:select', (dev) => {
+      if (!mounted) return
+      const name = dev?.get('name') || 'Desktop'
+      deviceRef.current = name
+      setDevice(name)
+    })
 
     ed.on('component:update', (component) => {
       if (!mounted) return
@@ -652,16 +727,6 @@ export default function TemplateEditor({
           const st = cmp.get('status')
           if (st === 'freezed' || st === 'freezed-selected') {
             cmp.set('status', '')
-          }
-
-          if (isImgInsideBanner(cmp)) {
-            resetInnerBannerImage(cmp)
-            configureBannerForEditor(cmp.parent())
-            cmp.components().forEach(walk)
-            return
-          }
-          if (cmp.getAttributes()?.['data-tc-type'] === 'image-banner') {
-            configureBannerForEditor(cmp)
           }
 
           if (isHotspot) {
@@ -768,7 +833,13 @@ export default function TemplateEditor({
     }
 
     try {
-      loadIntoEditor(ed, initialData)
+      const desktopLayout = layoutsRef.current?.desktop
+      loadIntoEditor(
+        ed,
+        desktopLayout?.html
+          ? { html: desktopLayout.html, css: desktopLayout.css, projectData: initialData.projectData }
+          : initialData,
+      )
     } catch (err) {
       console.error('[TemplateEditor] Error loading template:', err)
       const addToast = useStore.getState().addToast
@@ -827,6 +898,7 @@ export default function TemplateEditor({
     setAdvancedMode,
     setZoom,
     setDevice,
+    switchDevice,
     setCustomWidth,
     setCustomHeight,
     refreshSelection,

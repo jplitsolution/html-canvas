@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { transitionFlow } from '../../services/api/flow'
 import { trackEvent } from '../../utils/analytics'
 import { parseSubscribeRoutes, resolveSubscribeDestination } from '../../editor/utils/subscribeRoutes'
@@ -15,6 +15,7 @@ import { runPriorityChain } from './runPriorityChain'
 import { isDcbFlowContext, setupDcbBindings } from './setupDcbBindings'
 import { setupOtpBindings } from './setupOtpBindings'
 import { getSelectedPackFromShadow, mountPageInShadow, syncPackPicker, syncPhoneDisplay } from './shadowDom'
+import { pickLivePageData } from '../../editor/services/deviceLayouts'
 
 /**
  * Shadow DOM click routing (Layer C + bridge to Layer B).
@@ -55,13 +56,28 @@ function useShadowInteractions({
   pageCacheRef,
   transitionLockRef,
 }) {
+  const [mobileViewport, setMobileViewport] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 767px)').matches : false,
+  )
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined
+    const mql = window.matchMedia('(max-width: 767px)')
+    const onChange = () => setMobileViewport(mql.matches)
+    onChange()
+    mql.addEventListener('change', onChange)
+    return () => mql.removeEventListener('change', onChange)
+  }, [])
+
   useEffect(() => {
     const host = hostRef.current
-    if (!host || !pageData?.html) return undefined
+    if (!host || !pageData) return undefined
+    const resolved = pickLivePageData(pageData, mobileViewport) || pageData
+    if (!resolved.html) return undefined
 
     let shadow = host.shadowRoot
     if (!shadow) shadow = host.attachShadow({ mode: 'open' })
-    mountPageInShadow(shadow, pageData)
+    mountPageInShadow(shadow, pageData, { mobile: mobileViewport })
 
     if (pageData.pageType === 'CONFIRM' || shadow.querySelector('[data-pack]')) {
       syncPackPicker(shadow, selectedPackRef.current)
@@ -414,7 +430,7 @@ function useShadowInteractions({
       shadow.removeEventListener('click', handleAnchorClick)
       if (flowCleanup) flowCleanup()
     }
-  }, [pageData, country, operator, campid, trackingCampid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
+  }, [pageData, mobileViewport, country, operator, campid, trackingCampid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])
 }
 
 export { useShadowInteractions }
