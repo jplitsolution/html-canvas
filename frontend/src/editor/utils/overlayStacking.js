@@ -52,18 +52,19 @@ function directChildImageEl(parentEl) {
   return null
 }
 
-function parentIsLooseAroundImage(parentEl, imgEl) {
-  if (!parentEl || !imgEl || isImageBannerHost(parentEl)) return false
-  const pr = parentEl.getBoundingClientRect?.()
-  const ir = imgEl.getBoundingClientRect?.()
-  if (!pr || !ir || ir.width < 8 || ir.height < 8) return false
-  return pr.height > ir.height * 1.15 || pr.width > ir.width * 1.15
-}
-
 function clampPct(n, min = 0, max = 100) {
   const v = Number(n)
   if (!Number.isFinite(v)) return min
   return Math.max(min, Math.min(max, v))
+}
+
+/** Keep the user's width/height; shift left/top so the box stays on the image. */
+function fitBoxPct(left, top, width, height) {
+  width = clampPct(width, 4, 100)
+  height = clampPct(height, 4, 100)
+  left = clampPct(left, 0, 100 - width)
+  top = clampPct(top, 0, 100 - height)
+  return { left, top, width, height }
 }
 
 /** Rewrite hotspot geometry so % is relative to the image box, not a taller parent. */
@@ -78,12 +79,7 @@ export function remapHotspotToAnchor(hotspotEl, anchorEl) {
   let top = ((er.top - ar.top) / ar.height) * 100
   let width = (er.width / ar.width) * 100
   let height = (er.height / ar.height) * 100
-  left = clampPct(left, 0, 95)
-  top = clampPct(top, 0, 95)
-  width = clampPct(width, 4, 100)
-  height = clampPct(height, 4, 100)
-  if (left + width > 100) width = Math.max(4, 100 - left)
-  if (top + height > 100) height = Math.max(4, 100 - top)
+  ;({ left, top, width, height } = fitBoxPct(left, top, width, height))
   hotspotEl.style.position = 'absolute'
   hotspotEl.style.left = `${left.toFixed(2)}%`
   hotspotEl.style.top = `${top.toFixed(2)}%`
@@ -91,6 +87,20 @@ export function remapHotspotToAnchor(hotspotEl, anchorEl) {
   hotspotEl.style.height = `${height.toFixed(2)}%`
   hotspotEl.style.right = ''
   hotspotEl.style.bottom = ''
+  return true
+}
+
+function imageBoxReady(img) {
+  if (!img) return false
+  const r = img.getBoundingClientRect?.()
+  if (!r || r.width < 8 || r.height < 8) return false
+  if (img.tagName === 'IMG' && img.complete === false) return false
+  if (img.tagName === 'IMG' && img.naturalWidth > 0 && img.naturalHeight > 0) {
+    const expectedH = r.width * (img.naturalHeight / img.naturalWidth)
+    if (expectedH > 8 && Math.abs(r.height - expectedH) > Math.max(12, expectedH * 0.2)) {
+      return false
+    }
+  }
   return true
 }
 
@@ -136,11 +146,10 @@ export function pinLiveHotspotToImage(hotspotEl) {
   const parent = hotspotEl.parentElement
   if (isImageBannerHost(parent)) {
     applyBannerHostStyle(parent)
+    if (hotspotEl.getAttribute('data-tc-pinned') === '1') return parent
     const img = parent.querySelector?.('img')
-    if (img && hotspotEl.getAttribute('data-tc-pinned') !== '1') {
-      if (remapHotspotToAnchor(hotspotEl, img)) {
-        hotspotEl.setAttribute('data-tc-pinned', '1')
-      }
+    if (img && imageBoxReady(img) && remapHotspotToAnchor(hotspotEl, img)) {
+      hotspotEl.setAttribute('data-tc-pinned', '1')
     }
     return parent
   }
@@ -150,6 +159,7 @@ export function pinLiveHotspotToImage(hotspotEl) {
   )
   if (siblingBanner) {
     const img = siblingBanner.querySelector('img') || siblingBanner
+    if (!imageBoxReady(img)) return parent
     remapHotspotToAnchor(hotspotEl, img)
     siblingBanner.appendChild(hotspotEl)
     applyBannerHostStyle(siblingBanner)
@@ -169,7 +179,7 @@ export function pinLiveHotspotToImage(hotspotEl) {
     return imgBanner
   }
 
-  if (img.getBoundingClientRect?.().height < 8) return parent
+  if (!imageBoxReady(img)) return parent
 
   remapHotspotToAnchor(hotspotEl, img)
 
@@ -182,6 +192,25 @@ export function pinLiveHotspotToImage(hotspotEl) {
   wrap.appendChild(hotspotEl)
   hotspotEl.setAttribute('data-tc-pinned', '1')
   return wrap
+}
+
+/** Scale image+hotspots together after pin, so the CTA stays in view without moving the hotspot %. */
+export function fitCreativeToViewport(root) {
+  if (!root?.querySelectorAll) return
+  const win = root.ownerDocument?.defaultView || (typeof window !== 'undefined' ? window : null)
+  if (!win) return
+  const maxH = Math.max(160, Math.round((win.visualViewport?.height || win.innerHeight || 800) - 4))
+  const banners = root.querySelectorAll('[data-tc-type="image-banner"]')
+  banners.forEach((el) => {
+    el.style.transform = 'none'
+    el.style.marginBottom = ''
+    const h = el.scrollHeight || el.offsetHeight || 0
+    if (h <= maxH + 8) return
+    const scale = maxH / h
+    el.style.transformOrigin = 'top center'
+    el.style.transform = `scale(${scale})`
+    el.style.marginBottom = `${Math.round(-h * (1 - scale))}px`
+  })
 }
 
 /** GrapesJS: wrap an <img> in image-banner so hotspot % uses the image box. */
@@ -223,26 +252,61 @@ function findImageSiblingComponent(hotspotCmp) {
   return null
 }
 
+function syncHotspotElToModel(component, el) {
+  if (!component?.addStyle || !el?.style) return
+  const left = el.style.left
+  const top = el.style.top
+  const width = el.style.width
+  const height = el.style.height
+  if (!left && !top) return
+  component.addStyle({
+    position: 'absolute',
+    left,
+    top,
+    width,
+    height,
+    display: 'block',
+    'text-decoration': 'none',
+    'z-index': String(Z_HOTSPOT),
+    'pointer-events': 'auto',
+    cursor: 'pointer',
+  })
+  try {
+    component.removeStyle?.('right')
+    component.removeStyle?.('bottom')
+  } catch (_) {
+    /* noop */
+  }
+}
+
 /** Move hotspot onto the image banner host (Grapes), remapping % to the image. */
 export function pinEditorHotspotToImage(component) {
   if (!isHotspotComponent(component)) return
   const parent = component.parent?.()
   if (!parent) return
+  const hotspotEl = component.getEl?.()
+
   if (isImageBannerHost(parent)) {
     parent.addStyle?.(IMAGE_BANNER_STYLE)
+    const imgEl = parent.getEl?.()?.querySelector?.('img')
+    if (hotspotEl && imgEl && imageBoxReady(imgEl) && remapHotspotToAnchor(hotspotEl, imgEl)) {
+      syncHotspotElToModel(component, hotspotEl)
+    }
     return
   }
+
   const img = findImageSiblingComponent(component)
   if (!img) return
-  const parentEl = parent.getEl?.()
-  const imgEl = img.getEl?.()
-  if (!parentIsLooseAroundImage(parentEl, imgEl)) {
-    parent.addStyle?.({ position: 'relative' })
-    return
+  const imgEl =
+    String(img.get?.('tagName') || '').toLowerCase() === 'img'
+      ? img.getEl?.()
+      : img.getEl?.()?.querySelector?.('img') || img.getEl?.()
+  if (hotspotEl && imgEl && imageBoxReady(imgEl)) {
+    remapHotspotToAnchor(hotspotEl, imgEl)
+    syncHotspotElToModel(component, hotspotEl)
   }
-  const hotspotEl = component.getEl?.()
-  if (hotspotEl && imgEl) remapHotspotToAnchor(hotspotEl, imgEl)
   const host = wrapImageAsBanner(img)
+  if (host) host.addStyle?.(IMAGE_BANNER_STYLE)
   if (!host || component.parent?.() === host) return
   if (typeof host.append === 'function') host.append(component)
   else host.components?.()?.add?.(component)
@@ -344,19 +408,17 @@ export function normalizeHotspotBox(el, parentEl, { coverFull = false } = {}) {
     heightPct = heightPct ?? (er.height / pr.height) * 100
   }
 
-  // Accidental full-bleed stretch without cover flag → shrink, keep center side
-  if (widthPct > 92 && heightPct > 55) {
+  if (widthPct > 98 && heightPct > 98) {
     const cx = (leftPct + widthPct / 2) / 100
     return hotspotChrome({ ...defaultHotspotBox(cx > 0.45) })
   }
 
-  // Clamp to parent — do NOT relocate to template defaults
-  leftPct = Math.max(0, Math.min(95, leftPct))
-  topPct = Math.max(0, Math.min(95, topPct))
-  widthPct = Math.max(4, Math.min(100, widthPct))
-  heightPct = Math.max(4, Math.min(100, heightPct))
-  if (leftPct + widthPct > 100) widthPct = Math.max(4, 100 - leftPct)
-  if (topPct + heightPct > 100) heightPct = Math.max(4, 100 - topPct)
+  ;({ left: leftPct, top: topPct, width: widthPct, height: heightPct } = fitBoxPct(
+    leftPct,
+    topPct,
+    widthPct,
+    heightPct,
+  ))
 
   return hotspotChrome({
     top: pct(topPct),
@@ -512,8 +574,9 @@ export function healEditorHotspot(component, editor) {
     }
   }
 
-  // Already % (e.g. load heal) — keep placement; drag:end writes px so still converts
-  if (!coverFull && hasPercentGeometry(el)) {
+  // Already % of the image banner — persist to the Grapes model so Save matches canvas
+  if (!coverFull && hasPercentGeometry(el) && isImageBannerHost(parent)) {
+    syncHotspotElToModel(component, el)
     component.addStyle({
       position: 'absolute',
       display: 'block',
@@ -616,14 +679,16 @@ export function healLiveHotspots(root, pageType) {
         el.getAttribute('data-tc-cover-full') === 'true'
 
       // Pinned to the image banner — keep % of the image, do not re-base on the page.
-      if (
-        !coverFull &&
-        isImageBannerHost(parent) &&
-        (el.getAttribute('data-tc-pinned') === '1' || hasPercentGeometry(el))
-      ) {
+      if (!coverFull && isImageBannerHost(parent) && hasPercentGeometry(el)) {
         applyHotspotChrome(el)
         el.style.right = ''
         el.style.bottom = ''
+        return
+      }
+
+      // Image not ready yet — do not convert % against the tall page wrapper.
+      if (!coverFull && !isImageBannerHost(parent)) {
+        applyHotspotChrome(el)
         return
       }
 
@@ -918,7 +983,6 @@ export const OVERLAY_STACKING_CSS = `
     max-width: 100%;
     overflow: visible !important;
     height: auto !important;
-    max-height: none !important;
     line-height: 0;
   }
   [data-tc-type="image-banner"] > img {

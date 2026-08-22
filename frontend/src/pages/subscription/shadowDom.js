@@ -1,4 +1,4 @@
-import { healLiveHotspots } from '../../editor/utils/overlayStacking'
+import { healLiveHotspots, fitCreativeToViewport } from '../../editor/utils/overlayStacking'
 import { healLiveFlowButtons } from '../../editor/utils/textSizeAlign'
 import {
   FLOW_RUNTIME_CSS,
@@ -26,8 +26,7 @@ function mountPageInShadow(shadow, pageData, options = {}) {
     inlineStyles += `width: 100% !important; max-width: min(100%, ${customWidth}px) !important; `
   }
   if (customHeight) {
-    // Editor canvas height is a frame, not a crop. Live must grow with the image.
-    inlineStyles += `min-height: ${customHeight}px !important; position: relative; `
+    inlineStyles += `position: relative; `
   }
 
   // Transform <body> tag to <div> to avoid invalid nested <body> inside Shadow DOM,
@@ -46,46 +45,47 @@ function mountPageInShadow(shadow, pageData, options = {}) {
     <style>${FLOW_RUNTIME_CSS}</style>
     <style>${cleanCss}</style>
     <style>
-      .flow-page-inner, .page-wrapper, [data-tc-type="image-banner"] {
+      [data-tc-type="image-banner"] {
+        display: block !important;
         width: 100% !important;
         max-width: 100% !important;
         height: auto !important;
-        max-height: none !important;
         overflow: visible !important;
+        line-height: 0 !important;
+        position: relative !important;
       }
-      .flow-page-inner img, [data-tc-type="image-banner"] > img {
+      [data-tc-type="image-banner"] > img,
+      .page-wrapper > img {
         display: block !important;
         position: relative !important;
         top: auto !important;
         left: auto !important;
-        right: auto !important;
-        bottom: auto !important;
         width: 100% !important;
         max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
         object-fit: contain !important;
-        visibility: visible !important;
-        opacity: 1 !important;
+      }
+      .page-wrapper, .flow-page-inner {
+        overflow: visible !important;
       }
     </style>
     <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
   `
 
-  // Bad editor saves: missing data-action, px boxes, cursor:move — repair for clicks
-  healLiveHotspots(shadow, pageData.pageType)
-  // Accidental absolute CTAs (no data-tc-absolute) break card layout in Preview
-  healLiveFlowButtons(shadow)
-  // Re-run after images give the container real height (first pass can see 0-height parents)
+  function finishLiveLayout() {
+    healLiveHotspots(shadow, pageData.pageType)
+    healLiveFlowButtons(shadow)
+    fitCreativeToViewport(shadow)
+  }
+
+  finishLiveLayout()
   const imgs = shadow.querySelectorAll('img')
   if (imgs.length) {
     let left = imgs.length
     const redo = () => {
       left -= 1
-      if (left <= 0) {
-        healLiveHotspots(shadow, pageData.pageType)
-        healLiveFlowButtons(shadow)
-      }
+      if (left <= 0) finishLiveLayout()
     }
     imgs.forEach((img) => {
       if (img.complete) redo()
@@ -95,10 +95,7 @@ function mountPageInShadow(shadow, pageData, options = {}) {
       }
     })
   } else {
-    requestAnimationFrame(() => {
-      healLiveHotspots(shadow, pageData.pageType)
-      healLiveFlowButtons(shadow)
-    })
+    requestAnimationFrame(finishLiveLayout)
   }
 }
 

@@ -49,9 +49,12 @@ img, video, iframe, embed, object {
     overflow-x: hidden !important;
   }
   .page-wrapper,
-  [data-tc-type="image-banner"],
+  [data-tc-type="image-banner"] {
+    overflow: visible !important;
+    max-width: 100% !important;
+  }
   [data-tc-type="image-banner"] img,
-  .flow-page-inner img {
+  .page-wrapper > img {
     overflow: visible !important;
     display: block !important;
     width: 100% !important;

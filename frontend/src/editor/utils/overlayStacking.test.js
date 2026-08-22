@@ -3,6 +3,7 @@ import {
   remapHotspotToAnchor,
   pinLiveHotspotToImage,
   IMAGE_BANNER_STYLE,
+  fitCreativeToViewport,
 } from './overlayStacking.js'
 
 function stubRect(el, { left, top, width, height }) {
@@ -28,6 +29,17 @@ describe('remapHotspotToAnchor', () => {
     expect(parseFloat(hotspot.style.top)).toBe(70)
     expect(parseFloat(hotspot.style.width)).toBe(50)
     expect(parseFloat(hotspot.style.height)).toBe(10)
+  })
+
+  it('keeps a taller hotspot by moving top up instead of shrinking height', () => {
+    const img = document.createElement('img')
+    const hotspot = document.createElement('a')
+    stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    stubRect(hotspot, { left: 40, top: 640, width: 200, height: 240 })
+
+    expect(remapHotspotToAnchor(hotspot, img)).toBe(true)
+    expect(parseFloat(hotspot.style.height)).toBe(30)
+    expect(parseFloat(hotspot.style.top) + parseFloat(hotspot.style.height)).toBeLessThanOrEqual(100)
   })
 })
 
@@ -102,5 +114,18 @@ describe('pinLiveHotspotToImage', () => {
     expect(pinLiveHotspotToImage(hotspot)).toBe(host)
     expect(host.contains(hotspot)).toBe(true)
     expect(parseFloat(hotspot.style.top)).toBe(70)
+  })
+})
+
+describe('fitCreativeToViewport', () => {
+  it('scales a tall banner instead of shrinking only the image', () => {
+    const banner = document.createElement('div')
+    banner.setAttribute('data-tc-type', 'image-banner')
+    Object.defineProperty(banner, 'scrollHeight', { value: 2000 })
+    Object.defineProperty(banner, 'offsetHeight', { value: 2000 })
+    document.body.appendChild(banner)
+    fitCreativeToViewport(document)
+    expect(banner.style.transform).toMatch(/scale\(/)
+    banner.remove()
   })
 })
