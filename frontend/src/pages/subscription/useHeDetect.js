@@ -12,6 +12,7 @@ import {
   isHeSilentExitMode,
   isHeSuppressedFunnelPage,
   normalizeDetectNextPage,
+  shouldTreatCgAsHeFailRedirect,
 } from './flowHelpers'
 
 /**
@@ -128,6 +129,7 @@ function useHeDetect({
       blockReason: null,
       subscriptionStatus: null,
       isActive: false,
+      verificationMode: null,
     }
 
     const resolveWithTimeout = Promise.race([
@@ -188,12 +190,20 @@ function useHeDetect({
           blockReason: blockReason || null,
           subscriptionStatus: subscriptionStatus || null,
           isActive: Boolean(isActive),
+          verificationMode: String(
+            verificationMode || flowContext?.verificationMode || '',
+          ).toUpperCase() || null,
         }
 
         const detectedNextPage = normalizeDetectNextPage(nextPage)
+        const mode = heMetaRef.current.verificationMode
+        const cgAsHeFail = shouldTreatCgAsHeFailRedirect(mode)
+          ? cgRedirectUrl
+          : ''
 
         // Silent exit only when success URL (phone) or fail/CG URL (no phone).
         // OTP nextPage (packs_on_home BOTH / OTP_ONLY) must not use HE fail/CG exit.
+        // CG_HOME: CG URL is for Subscribe, never landing skip-HOME.
         const silentExit =
           isApiHeProvider(heProvider) &&
           detectedNextPage !== 'OTP' &&
@@ -201,7 +211,8 @@ function useHeDetect({
             phone: resolved,
             successRedirectUrl,
             failRedirectUrl,
-            cgRedirectUrl,
+            cgRedirectUrl: cgAsHeFail,
+            verificationMode: mode,
           })
         if (silentExit) {
           heOnlyModeRef.current = true
@@ -218,7 +229,7 @@ function useHeDetect({
           if (detectedNextPage !== 'OTP') {
             const baseFailUrl = pickHeFailRedirectUrl({
               failRedirectUrl,
-              cgRedirectUrl,
+              cgRedirectUrl: cgAsHeFail,
             })
             if (runHeFailRedirect(baseFailUrl, heError)) {
               return
@@ -466,6 +477,9 @@ function useHeDetect({
       return true
     }
 
+    // CG via HOME / null flow: Subscribe must not be treated as HE-fail.
+    if (!shouldTreatCgAsHeFailRedirect(meta.verificationMode)) return false
+
     // Only gate Token/Custom HE flows (OTP / header paths continue normally).
     if (!isApiHe) return false
 
@@ -501,7 +515,9 @@ function useHeDetect({
 
     const baseFailUrl = pickHeFailRedirectUrl({
       failRedirectUrl: meta.failRedirectUrl,
-      cgRedirectUrl: meta.cgRedirectUrl,
+      cgRedirectUrl: shouldTreatCgAsHeFailRedirect(meta.verificationMode)
+        ? meta.cgRedirectUrl
+        : '',
     })
     const failUrl = baseFailUrl
       ? appendHeAttributionToUrl(baseFailUrl, {

@@ -457,6 +457,7 @@ export function createDetectMsisdn(deps) {
       failRedirectUrl: outboundFailRedirectUrl || null,
       successRedirectUrl: outboundSuccessRedirectUrl || null,
       cgRedirectUrl: campaign?.cgRedirectUrl || null,
+      verificationMode,
       country: input.country || campaign?.country,
       operator: input.operator || campaign?.operator,
       campaignId: campaign?.id || null,

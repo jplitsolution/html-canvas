@@ -218,6 +218,8 @@ function redirectFields(operatorRes) {
       clickId: null,
       rcid: null,
       campaignId: null,
+      verificationMode: null,
+      flowContext: null,
     }
   }
   return {
@@ -229,6 +231,8 @@ function redirectFields(operatorRes) {
     clickId: operatorRes.clickId || null,
     rcid: operatorRes.rcid || null,
     campaignId: operatorRes.campaignId || null,
+    verificationMode: operatorRes.verificationMode || null,
+    flowContext: operatorRes.flowContext || null,
   }
 }
 

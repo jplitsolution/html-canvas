@@ -14,11 +14,21 @@ function isHeSuppressedFunnelPage(page) {
 }
 
 /**
+ * Campaign CG URL is HE-fail fallback only for HE funnels.
+ * CG_HOME uses that URL on Subscribe, not on landing.
+ */
+function shouldTreatCgAsHeFailRedirect(verificationMode) {
+  const mode = String(verificationMode || '').toUpperCase()
+  if (mode === 'CG_HOME' || mode === 'NONE' || mode === 'OTP_ONLY') return false
+  return true
+}
+
+/**
  * Silent exit (skip HOME) vs funnel (show HOME) for token/API HE.
  *
  * Contract:
  * - Success URL set + MSISDN → success redirect (no HOME)
- * - No MSISDN + fail/CG URL → fail redirect (no HOME)
+ * - No MSISDN + fail/CG URL → fail redirect (no HOME) — not for CG_HOME
  * - Success/fail exit empty → HOME funnel after detect
  */
 function isHeSilentExitMode({
@@ -26,10 +36,13 @@ function isHeSilentExitMode({
   successRedirectUrl,
   failRedirectUrl,
   cgRedirectUrl,
+  verificationMode,
 } = {}) {
   const hasPhone = Boolean(String(phone || '').trim())
   if (hasPhone && isHeRedirectUrl(successRedirectUrl)) return true
-  if (!hasPhone && pickHeFailRedirectUrl({ failRedirectUrl, cgRedirectUrl })) {
+  const cg =
+    shouldTreatCgAsHeFailRedirect(verificationMode) ? cgRedirectUrl : ''
+  if (!hasPhone && pickHeFailRedirectUrl({ failRedirectUrl, cgRedirectUrl: cg })) {
     return true
   }
   return false
@@ -144,6 +157,7 @@ export {
   isApiHeProvider,
   isHeSuppressedFunnelPage,
   isHeSilentExitMode,
+  shouldTreatCgAsHeFailRedirect,
   pageForChecksubStatus,
   normalizeDetectNextPage,
   isCampaignPageHref,

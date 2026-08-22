@@ -3,7 +3,7 @@ import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage } from '../../services/
 import { persistPhone, pickHeFailRedirectUrl } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 import { FLOW_FONT, FLOW_PAGE_CACHE_ENABLED, PRELOAD_BY_PAGE } from './constants'
-import { isHeSuppressedFunnelPage, normalizeDetectNextPage } from './flowHelpers'
+import { isHeSuppressedFunnelPage, normalizeDetectNextPage, shouldTreatCgAsHeFailRedirect } from './flowHelpers'
 
 /**
  * Page load/cache/prefetch, boot, URL step sync, and redirect side-effects.
@@ -358,7 +358,9 @@ function useFlowPages({
         detectPage !== 'OTP' &&
         pickHeFailRedirectUrl({
           failRedirectUrl: meta.failRedirectUrl,
-          cgRedirectUrl: meta.cgRedirectUrl,
+          cgRedirectUrl: shouldTreatCgAsHeFailRedirect(meta.verificationMode)
+            ? meta.cgRedirectUrl
+            : '',
         })
       ) {
         return

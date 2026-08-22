@@ -84,6 +84,7 @@ function SubscriptionPage() {
     blockReason: null,
     subscriptionStatus: null,
     isActive: false,
+    verificationMode: null,
   })
   const loadPageRef = useRef(null)
   const detectKeyRef = useRef('')
