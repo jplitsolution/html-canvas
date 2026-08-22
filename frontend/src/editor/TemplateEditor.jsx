@@ -28,7 +28,7 @@ import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
-import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot } from './utils/overlayStacking'
+import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE } from './utils/overlayStacking'
 
 export default function TemplateEditor({
   projectId,
@@ -232,11 +232,23 @@ export default function TemplateEditor({
         }
 
         const targetTag = (target.get?.('tagName') || '').toLowerCase()
-        
-        if (targetTag === 'img') {
-          const parent = target.parent()
-          if (parent) {
-            target = parent
+        const targetTc = target.getAttributes?.()?.['data-tc-type']
+
+        if (targetTc === 'hotspot') {
+          target = target.parent() || target
+        } else if (targetTag === 'img' || targetTc === 'image') {
+          const host = wrapImageAsBanner(target)
+          if (host) target = host
+        } else if (targetTc !== 'image-banner') {
+          const kids = target.components?.()
+          const len = kids?.length || 0
+          for (let i = 0; i < len; i++) {
+            const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
+            if (child && isImageComponent(child)) {
+              const host = wrapImageAsBanner(child)
+              if (host) target = host
+              break
+            }
           }
         }
 
@@ -245,6 +257,7 @@ export default function TemplateEditor({
           return
         }
 
+        target.addStyle?.(IMAGE_BANNER_STYLE)
         const pStyle = target.getStyle?.() || {}
         if (!['absolute', 'relative', 'fixed'].includes(pStyle.position || '')) {
           target.addStyle?.({ position: 'relative' })
@@ -253,8 +266,8 @@ export default function TemplateEditor({
         const hotspotStyle = opts.coverFull
           ? {
               position: 'absolute',
-              top: '0px',
-              left: '0px',
+              top: '0%',
+              left: '0%',
               width: '100%',
               height: '100%',
               display: 'block',
@@ -267,8 +280,7 @@ export default function TemplateEditor({
               top: '40%',
               left: '25%',
               width: '50%',
-              height: '120px',
-              'min-height': '80px',
+              height: '12%',
               display: 'block',
               'z-index': '50',
               cursor: 'pointer',

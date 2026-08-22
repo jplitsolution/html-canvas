@@ -129,6 +129,7 @@ export function autoAlignCanvasComponents(editor, deviceName) {
   // 1. Ensure global image responsiveness inside canvas
   const images = doc.querySelectorAll('img')
   images.forEach((img) => {
+    if (img.closest?.('[data-tc-type="image-banner"]')) return
     img.style.maxWidth = '100%'
     img.style.height = 'auto'
     img.style.objectFit = 'contain'
@@ -140,6 +141,8 @@ export function autoAlignCanvasComponents(editor, deviceName) {
   )
 
   absElements.forEach((el) => {
+    if (el.getAttribute?.('data-tc-type') === 'hotspot') return
+    if (el.closest?.('[data-tc-type="image-banner"]')) return
     if (deviceName === 'Desktop' || deviceName === 'Custom' || targetWidth === 0) {
       // Restore desktop original style
       if (el.dataset.tcDesktopLeft !== undefined) {

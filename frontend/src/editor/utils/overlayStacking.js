@@ -23,6 +23,173 @@ export function isHotspotComponent(component) {
   return component.getAttributes?.()?.['data-tc-type'] === 'hotspot'
 }
 
+/** Tight containing block so hotspot % tracks the image, not the page. */
+export const IMAGE_BANNER_STYLE = {
+  position: 'relative',
+  display: 'block',
+  width: '100%',
+  'max-width': '100%',
+  overflow: 'hidden',
+  margin: '0 auto',
+  'line-height': '0',
+}
+
+export function isImageBannerHost(target) {
+  if (!target) return false
+  if (typeof target.getAttribute === 'function') {
+    return target.getAttribute('data-tc-type') === 'image-banner'
+  }
+  return target.getAttributes?.()?.['data-tc-type'] === 'image-banner'
+}
+
+function directChildImageEl(parentEl) {
+  if (!parentEl?.children) return null
+  for (const child of parentEl.children) {
+    if (child?.tagName === 'IMG') return child
+  }
+  return null
+}
+
+function parentIsLooseAroundImage(parentEl, imgEl) {
+  if (!parentEl || !imgEl || isImageBannerHost(parentEl)) return false
+  const pr = parentEl.getBoundingClientRect?.()
+  const ir = imgEl.getBoundingClientRect?.()
+  if (!pr || !ir || ir.width < 8 || ir.height < 8) return false
+  return pr.height > ir.height * 1.15 || pr.width > ir.width * 1.15
+}
+
+function clampPct(n, min = 0, max = 100) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return min
+  return Math.max(min, Math.min(max, v))
+}
+
+/** Rewrite hotspot geometry so % is relative to the image box, not a taller parent. */
+export function remapHotspotToAnchor(hotspotEl, anchorEl) {
+  if (!hotspotEl || !anchorEl) return false
+  const er = hotspotEl.getBoundingClientRect?.()
+  const ar = anchorEl.getBoundingClientRect?.()
+  if (!er || !ar || ar.width < 8 || ar.height < 8 || er.width < 4 || er.height < 4) {
+    return false
+  }
+  let left = ((er.left - ar.left) / ar.width) * 100
+  let top = ((er.top - ar.top) / ar.height) * 100
+  let width = (er.width / ar.width) * 100
+  let height = (er.height / ar.height) * 100
+  left = clampPct(left, 0, 95)
+  top = clampPct(top, 0, 95)
+  width = clampPct(width, 4, 100)
+  height = clampPct(height, 4, 100)
+  if (left + width > 100) width = Math.max(4, 100 - left)
+  if (top + height > 100) height = Math.max(4, 100 - top)
+  hotspotEl.style.position = 'absolute'
+  hotspotEl.style.left = `${left.toFixed(2)}%`
+  hotspotEl.style.top = `${top.toFixed(2)}%`
+  hotspotEl.style.width = `${width.toFixed(2)}%`
+  hotspotEl.style.height = `${height.toFixed(2)}%`
+  hotspotEl.style.right = ''
+  hotspotEl.style.bottom = ''
+  return true
+}
+
+function applyBannerHostStyle(el) {
+  if (!el?.style) return
+  el.style.position = 'relative'
+  el.style.display = 'block'
+  el.style.width = '100%'
+  el.style.maxWidth = '100%'
+  el.style.overflow = 'hidden'
+  el.style.marginLeft = 'auto'
+  el.style.marginRight = 'auto'
+  el.style.lineHeight = '0'
+}
+
+/** Live DOM: wrap image + hotspot so the hotspot stays glued on resize. */
+export function pinLiveHotspotToImage(hotspotEl) {
+  if (!hotspotEl?.parentElement) return hotspotEl.parentElement
+  const parent = hotspotEl.parentElement
+  if (isImageBannerHost(parent)) {
+    applyBannerHostStyle(parent)
+    return parent
+  }
+  const img = directChildImageEl(parent)
+  if (!img || !parentIsLooseAroundImage(parent, img)) return parent
+
+  remapHotspotToAnchor(hotspotEl, img)
+
+  const wrap = parent.ownerDocument.createElement('div')
+  wrap.setAttribute('data-tc-type', 'image-banner')
+  applyBannerHostStyle(wrap)
+  parent.insertBefore(wrap, img)
+  wrap.appendChild(img)
+  wrap.appendChild(hotspotEl)
+  return wrap
+}
+
+/** GrapesJS: wrap an <img> in image-banner so hotspot % uses the image box. */
+export function wrapImageAsBanner(imgCmp) {
+  if (!imgCmp) return null
+  const parent = imgCmp.parent?.()
+  if (!parent) return imgCmp
+  if (isImageBannerHost(parent)) {
+    parent.addStyle?.(IMAGE_BANNER_STYLE)
+    return parent
+  }
+  const coll = parent.components?.()
+  if (!coll?.add) return parent
+  const idx = typeof imgCmp.index === 'function' ? imgCmp.index() : 0
+  const added = coll.add(
+    {
+      tagName: 'div',
+      attributes: { 'data-tc-type': 'image-banner' },
+      style: { ...IMAGE_BANNER_STYLE },
+    },
+    { at: idx },
+  )
+  const host = Array.isArray(added) ? added[0] : added
+  if (!host) return parent
+  if (typeof host.append === 'function') host.append(imgCmp)
+  else host.components?.()?.add?.(imgCmp)
+  return host
+}
+
+function findImageSiblingComponent(hotspotCmp) {
+  const parent = hotspotCmp?.parent?.()
+  const kids = parent?.components?.()
+  if (!kids) return null
+  const len = kids.length || 0
+  for (let i = 0; i < len; i++) {
+    const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
+    if (child && child !== hotspotCmp && isImageComponent(child)) return child
+  }
+  return null
+}
+
+/** Move hotspot onto the image banner host (Grapes), remapping % to the image. */
+export function pinEditorHotspotToImage(component) {
+  if (!isHotspotComponent(component)) return
+  const parent = component.parent?.()
+  if (!parent) return
+  if (isImageBannerHost(parent)) {
+    parent.addStyle?.(IMAGE_BANNER_STYLE)
+    return
+  }
+  const img = findImageSiblingComponent(component)
+  if (!img) return
+  const parentEl = parent.getEl?.()
+  const imgEl = img.getEl?.()
+  if (!parentIsLooseAroundImage(parentEl, imgEl)) {
+    parent.addStyle?.({ position: 'relative' })
+    return
+  }
+  const hotspotEl = component.getEl?.()
+  if (hotspotEl && imgEl) remapHotspotToAnchor(hotspotEl, imgEl)
+  const host = wrapImageAsBanner(img)
+  if (!host || component.parent?.() === host) return
+  if (typeof host.append === 'function') host.append(component)
+  else host.components?.()?.add?.(component)
+}
+
 function pct(n, fallback = 0) {
   const v = Math.max(0, Math.min(100, n))
   return `${Number.isFinite(v) ? v.toFixed(2) : fallback}%`
@@ -239,6 +406,12 @@ export function healEditorHotspot(component, editor) {
     /* noop */
   }
 
+  try {
+    pinEditorHotspotToImage(component)
+  } catch (_) {
+    /* noop */
+  }
+
   const el = component.getEl?.()
   // Grapes initiates absolute drag via HTML5 dragstart → tlb-move. Must stay true.
   if (el) {
@@ -370,6 +543,8 @@ export function healLiveHotspots(root, pageType) {
       }
       if (!el.getAttribute('href')) el.setAttribute('href', '#')
       el.removeAttribute('draggable')
+
+      pinLiveHotspotToImage(el)
 
       const parent = el.parentElement
       if (!parent) return
@@ -619,6 +794,21 @@ export function promoteOverlayIfNeeded(component) {
  * or they paint UNDER the image.
  */
 export const OVERLAY_STACKING_CANVAS_CSS = `
+  [data-tc-type="image-banner"] {
+    position: relative;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    line-height: 0;
+  }
+  [data-tc-type="image-banner"] > img {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-width: 100%;
+  }
+
   img,
   [data-tc-type="image"] {
     position: relative;
@@ -655,6 +845,21 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
 
 /** Preview / export CSS — force absolute so live page matches canvas. */
 export const OVERLAY_STACKING_CSS = `
+  [data-tc-type="image-banner"] {
+    position: relative !important;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+    line-height: 0;
+  }
+  [data-tc-type="image-banner"] > img {
+    width: 100%;
+    height: auto;
+    display: block;
+    max-width: 100%;
+  }
+
   img,
   [data-tc-type="image"] {
     position: relative;
