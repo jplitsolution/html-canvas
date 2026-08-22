@@ -42,16 +42,23 @@ img, video, iframe, embed, object {
 
 /* ── Mobile breakpoint (≤ 767px) ─────────────────────────────── */
 @media (max-width: 767px) {
-  /* Overflow guard for every structural element */
-  header, nav, section, footer, div, main, article, aside, figure {
+  /* Do not hammer every div — overflow-x:hidden on a collapsing wrapper
+     computes overflow-y to auto and clips the campaign image. */
+  header, nav, section, footer, main, article, aside {
     max-width: 100% !important;
     overflow-x: hidden !important;
   }
+  .page-wrapper,
   [data-tc-type="image-banner"],
-  [data-tc-type="image-banner"] img {
+  [data-tc-type="image-banner"] img,
+  .flow-page-inner img {
     overflow: visible !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
     height: auto !important;
     max-height: none !important;
+    visibility: visible !important;
   }
 
   /* Hamburger button — show on mobile */
@@ -224,9 +231,7 @@ export const FLOW_HOST_CSS = `
   }
   .flow-page-inner > * {
     max-width: 100%;
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
+    min-width: 0;
   }
   .page-wrapper {
     min-height: 100vh;

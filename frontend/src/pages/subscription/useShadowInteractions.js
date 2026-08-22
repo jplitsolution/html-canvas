@@ -77,7 +77,16 @@ function useShadowInteractions({
 
     let shadow = host.shadowRoot
     if (!shadow) shadow = host.attachShadow({ mode: 'open' })
-    mountPageInShadow(shadow, pageData, { mobile: mobileViewport })
+    const mountKey = [
+      resolved.html,
+      resolved.css,
+      resolved.projectData?.customWidth || '',
+      resolved.projectData?.customHeight || '',
+    ].join('\0')
+    if (shadow._tcMountKey !== mountKey) {
+      shadow._tcMountKey = mountKey
+      mountPageInShadow(shadow, pageData, { mobile: mobileViewport })
+    }
 
     if (pageData.pageType === 'CONFIRM' || shadow.querySelector('[data-pack]')) {
       syncPackPicker(shadow, selectedPackRef.current)

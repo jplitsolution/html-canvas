@@ -130,6 +130,7 @@ describe('WYSIWYG contract — CSS + wiring invariants (CI)', () => {
 
   it('live mount caps customWidth with min(100%, …) for small viewports', () => {
     const src = read('src/pages/subscription/shadowDom.js')
+    expect(src).toMatch(/width:\s*100%\s*!important/)
     expect(src).toMatch(/max-width:\s*min\(100%,\s*\$\{customWidth\}px\)/)
   })
 })

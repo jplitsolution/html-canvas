@@ -21,10 +21,9 @@ function mountPageInShadow(shadow, pageData, options = {}) {
 
   let inlineStyles = ''
   if (customWidth) {
-    // Keep authored canvas width, but cap to the viewport so phone/tablet do not
-    // left-align an overflowing fixed box (margin:auto cannot center when wider
-    // than the host). min() beats FLOW_HOST_CSS max-width:100% via !important.
-    inlineStyles += `width: ${customWidth}px !important; max-width: min(100%, ${customWidth}px) !important; `
+    // Shrink with the viewport. A fixed 1200px width + overflow-x:hidden clips
+    // the creative to nothing (or a sliver) when the window is narrowed.
+    inlineStyles += `width: 100% !important; max-width: min(100%, ${customWidth}px) !important; `
   }
   if (customHeight) {
     // Editor canvas height is a frame, not a crop. Live must grow with the image.
@@ -47,18 +46,27 @@ function mountPageInShadow(shadow, pageData, options = {}) {
     <style>${FLOW_RUNTIME_CSS}</style>
     <style>${cleanCss}</style>
     <style>
-      /* Grapes canvas frame CSS is injected above — do not let it crop the live image. */
-      .flow-page-inner, .flow-page-inner > *, .page-wrapper,
-      [data-tc-type="image-banner"] {
+      .flow-page-inner, .page-wrapper, [data-tc-type="image-banner"] {
+        width: 100% !important;
+        max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
-        overflow-x: hidden !important;
-        overflow-y: visible !important;
+        overflow: visible !important;
       }
       .flow-page-inner img, [data-tc-type="image-banner"] > img {
+        display: block !important;
+        position: relative !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        max-width: 100% !important;
         height: auto !important;
         max-height: none !important;
         object-fit: contain !important;
+        visibility: visible !important;
+        opacity: 1 !important;
       }
     </style>
     <div class="flow-page-inner" id="wrapper" style="${inlineStyles}">${cleanedHtml}</div>
