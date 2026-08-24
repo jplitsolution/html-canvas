@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   RefreshCw,
   Search,
@@ -38,6 +38,16 @@ const STATUS_FILTERS = [
   { id: 'skipped', label: 'Skipped' },
 ]
 
+function operatorStatusBadge(status) {
+  const s = String(status || '').toLowerCase()
+  const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
+  if (s === 'active' || s === 'success' || s === 'subscribed') return `${base} bg-emerald-50 text-emerald-700`
+  if (s === 'grace' || s === 'parking') return `${base} bg-amber-50 text-amber-800`
+  if (s.includes('unsub') || s === 'cancel' || s === 'cancelled') return `${base} bg-slate-100 text-slate-600`
+  if (!s) return `${base} bg-slate-100 text-slate-400`
+  return `${base} bg-indigo-50 text-indigo-700`
+}
+
 function statusBadge(status) {
   const s = String(status || '').toLowerCase()
   const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
@@ -70,20 +80,27 @@ function KpiCard({ label, value, icon: Icon, hint }) {
 
 function PostbacksPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
   const [summary, setSummary] = useState(null)
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [status, setStatus] = useState('all')
+  const statusFromUrl = String(searchParams.get('status') || 'all').toLowerCase()
+  const [status, setStatus] = useState(
+    STATUS_FILTERS.some((f) => f.id === statusFromUrl) ? statusFromUrl : 'all',
+  )
+  const [operatorStatus, setOperatorStatus] = useState(
+    () => String(searchParams.get('operatorStatus') || '').trim().toLowerCase(),
+  )
   const [vendorId, setVendorId] = useState('')
   const [q, setQ] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [datePreset, setDatePreset] = useState('month')
+  const [datePreset, setDatePreset] = useState('today')
   const [dateRange, setDateRange] = useState(() =>
-    getDateRangeForPreset('month', timezone),
+    getDateRangeForPreset('today', timezone),
   )
   const [exporting, setExporting] = useState(false)
   const addToast = useStore((s) => s.addToast)
@@ -103,6 +120,7 @@ function PostbacksPage() {
           page,
           limit: PAGE_SIZE,
           status,
+          operatorStatus: operatorStatus || undefined,
           q,
           vendorId: vendorId || undefined,
           ...rangeParams,
@@ -116,7 +134,7 @@ function PostbacksPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, status, q, vendorId, dateRange.from, dateRange.to, timezone])
+  }, [page, status, operatorStatus, q, vendorId, dateRange.from, dateRange.to, timezone])
 
   useEffect(() => {
     load()
@@ -251,6 +269,41 @@ function PostbacksPage() {
           <KpiCard label="Failed" value={summary?.failed} icon={XCircle} />
         </div>
 
+        {summary?.byOperatorStatus?.length > 0 ? (
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-xs">
+            <h2 className="text-sm font-semibold text-gray-800 mb-3">
+              Operator callback mix
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {summary.byOperatorStatus.map((row) => (
+                <button
+                  key={row.status}
+                  type="button"
+                  onClick={() => {
+                    setOperatorStatus(row.status)
+                    setPage(1)
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.set('operatorStatus', row.status)
+                      return next
+                    })
+                  }}
+                  className={`${operatorStatusBadge(row.status)} gap-1.5 ${
+                    operatorStatus === row.status ? 'ring-2 ring-indigo-300' : ''
+                  }`}
+                >
+                  {row.status}
+                  <span className="font-mono tabular-nums">{row.count}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-gray-400">
+              {summary.callbacksReceived || 0} callbacks in range · vendor fire is separate
+              (pending / sent / failed above)
+            </p>
+          </div>
+        ) : null}
+
         {summary?.byVendor?.length > 0 ? (
           <div className="bg-white border border-gray-100 rounded-2xl shadow-xs overflow-hidden">
             <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-gray-50/40">
@@ -382,6 +435,12 @@ function PostbacksPage() {
                   onClick={() => {
                     setStatus(f.id)
                     setPage(1)
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      if (f.id === 'all') next.delete('status')
+                      else next.set('status', f.id)
+                      return next
+                    })
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     status === f.id
@@ -392,6 +451,23 @@ function PostbacksPage() {
                   {f.label}
                 </button>
               ))}
+              {operatorStatus ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOperatorStatus('')
+                    setPage(1)
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.delete('operatorStatus')
+                      return next
+                    })
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200"
+                >
+                  Clear operator status: {operatorStatus}
+                </button>
+              ) : null}
               {vendorId ? (
                 <button
                   type="button"
@@ -444,7 +520,8 @@ function PostbacksPage() {
                   <tr className="text-left text-xs text-gray-500 border-b border-gray-100 bg-gray-50/40">
                     <th className="px-5 py-3 font-medium">Created</th>
                     <th className="px-3 py-3 font-medium">MSISDN</th>
-                    <th className="px-3 py-3 font-medium">Status</th>
+                    <th className="px-3 py-3 font-medium">Callback</th>
+                    <th className="px-3 py-3 font-medium">Postback</th>
                     <th className="px-3 py-3 font-medium">Vendor</th>
                     <th className="px-3 py-3 font-medium">Click ID</th>
                     <th className="px-3 py-3 font-medium">RCID</th>
@@ -463,6 +540,11 @@ function PostbacksPage() {
                         {formatDate(row.createdAt)}
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-gray-800">{row.msisdn || '—'}</td>
+                      <td className="px-3 py-3">
+                        <span className={operatorStatusBadge(row.operatorStatus)}>
+                          {row.operatorStatus || '—'}
+                        </span>
+                      </td>
                       <td className="px-3 py-3">
                         <span className={statusBadge(row.status)}>{row.status}</span>
                       </td>

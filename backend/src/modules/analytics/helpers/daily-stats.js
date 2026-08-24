@@ -21,6 +21,62 @@ export function emptyMetrics() {
   return Object.fromEntries(STAT_METRICS.map((key) => [key, 0]));
 }
 
+export function parseOperatorStatusMap(value) {
+  if (!value) return {};
+  if (typeof value === 'string') {
+    try {
+      return parseOperatorStatusMap(JSON.parse(value));
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) return {};
+  const out = {};
+  for (const [key, amount] of Object.entries(value)) {
+    const status = String(key || 'unknown').trim().toLowerCase().slice(0, 64) || 'unknown';
+    const count = Number(amount) || 0;
+    if (!count) continue;
+    out[status] = (out[status] || 0) + count;
+  }
+  return out;
+}
+
+export function addOperatorStatus(target, extra) {
+  const out = target && typeof target === 'object' && !Array.isArray(target) ? target : {};
+  const src = parseOperatorStatusMap(extra);
+  for (const [status, count] of Object.entries(src)) {
+    out[status] = (Number(out[status]) || 0) + count;
+  }
+  return out;
+}
+
+export function flattenOperatorStatus(rows) {
+  const acc = {};
+  for (const row of rows || []) {
+    addOperatorStatus(acc, row.operatorStatus || row.operatorStatusJson);
+  }
+  return Object.entries(acc)
+    .map(([status, count]) => ({ status, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export function bumpOperatorStatus(map, campaignId, vendorId, status, amount = 1) {
+  if (!amount) return;
+  const key = statsGrainKey(campaignId, vendorId);
+  if (!map.has(key)) {
+    map.set(key, {
+      campaignId: Number(campaignId) || 0,
+      vendorId: Number(vendorId) || 0,
+      ...emptyMetrics(),
+      operatorStatus: {},
+    });
+  }
+  const row = map.get(key);
+  row.operatorStatus = addOperatorStatus(row.operatorStatus, {
+    [String(status || 'unknown').toLowerCase()]: amount,
+  });
+}
+
 export function statsGrainKey(campaignId, vendorId) {
   return `${Number(campaignId) || 0}:${Number(vendorId) || 0}`;
 }
@@ -58,6 +114,7 @@ export function bumpMetric(map, campaignId, vendorId, field, amount = 1) {
       campaignId: Number(campaignId) || 0,
       vendorId: Number(vendorId) || 0,
       ...emptyMetrics(),
+      operatorStatus: {},
     });
   }
   const row = map.get(key);
@@ -92,11 +149,16 @@ export function groupStatsRows(rows, groupBy = 'date') {
         campaignName: row.campaignName || null,
         vendorName: row.vendorName || null,
         vendorCode: row.vendorCode || null,
+        operatorStatus: {},
         ...emptyMetrics(),
       });
     }
     const acc = map.get(key);
     addMetrics(acc, row);
+    acc.operatorStatus = addOperatorStatus(
+      acc.operatorStatus,
+      row.operatorStatus || row.operatorStatusJson,
+    );
     if (mode === 'campaign' || mode === 'campaign_vendor') {
       acc.campaignName = acc.campaignName || row.campaignName || null;
     }

@@ -4,6 +4,10 @@ import {
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { appendPostbackHitSafe } from './postback-day-report-file.js';
+import {
+  parseOperatorStatus,
+  shouldFireVendorPostback,
+} from './operator-callback-status.js';
 
 const maskPhone = (phone) => {
   if (!phone) return undefined;
@@ -58,7 +62,8 @@ export const createPostbackCallback = (deps) => {
   const persistHit = async (query, result = {}) => {
     const skipped = Boolean(result.skipped || result.vendorSkipped);
     const success = result.success === true && !skipped;
-    let statusLabel = 'OK';
+    const operatorStatus = parseOperatorStatus(query);
+    let statusLabel = String(operatorStatus || 'OK').toUpperCase();
     if (skipped) statusLabel = 'SKIPPED';
     else if (result.success === false) statusLabel = 'FAILED';
     await appendHit({
@@ -72,6 +77,8 @@ export const createPostbackCallback = (deps) => {
         success: result.success === true,
         reason: result.reason || result.error || null,
         id: result.id || null,
+        operatorStatus,
+        vendorFired: result.vendorFired === true,
       }),
       responseStatus: 200,
       success,
@@ -86,12 +93,13 @@ export const createPostbackCallback = (deps) => {
   const processOperatorCallbackInner = async (query = {}) => {
     const incomingMsisdn = parseCallbackMsisdn(query);
     const clickId = parseCallbackClickId(query);
-    const status = String(query.status ?? query.result ?? 'active').toLowerCase();
+    const status = parseOperatorStatus(query);
+    const fireVendor = shouldFireVendorPostback(status);
 
-    const findPendingByMsisdn = async (msisdn) => {
+    const findLatestByMsisdn = async (msisdn) => {
       if (!msisdn) return null;
       return getPostbackRepo().findOne({
-        where: { msisdn, status: ConversionPostbackStatus.PENDING },
+        where: { msisdn },
         order: { id: 'DESC' },
       });
     };
@@ -157,7 +165,9 @@ export const createPostbackCallback = (deps) => {
         responseStatus: 200,
         responseBody: null,
         success: matched,
-        statusLabel: matched ? 'RECEIVED' : 'UNMATCHED',
+        statusLabel: matched
+          ? String(status || 'RECEIVED').toUpperCase().slice(0, 32)
+          : 'UNMATCHED',
       });
     };
 
@@ -170,30 +180,45 @@ export const createPostbackCallback = (deps) => {
       return { success: false, skipped: true, reason };
     };
 
-    const okStatuses = new Set([
-      '',
-      'active',
-      'success',
-      'ok',
-      'subscribed',
-      '1',
-      'true',
-    ]);
-    if (status && !okStatuses.has(status)) {
-      return reject(`status=${status} ignored`);
-    }
-
     if (!incomingMsisdn && !clickId) {
       return reject('msisdn or click_id required');
     }
 
     const firePending = async (pending, extra = {}) => {
+      pending.operatorStatus = status;
       if (
+        fireVendor &&
         pending.status !== ConversionPostbackStatus.SENT &&
         pending.status !== ConversionPostbackStatus.RECEIVED
       ) {
         pending.status = ConversionPostbackStatus.RECEIVED;
-        await getPostbackRepo().save(pending);
+      }
+      await getPostbackRepo().save(pending);
+      if (!fireVendor) {
+        await logInbound(
+          pending.visitId,
+          pending.campaignId,
+          pending.clickId,
+          pending.rcid,
+          pending.msisdn,
+          {
+            action: 'hold',
+            vendorFired: false,
+            operatorStatus: status,
+            postbackId: pending.id,
+            vendorId: pending.vendorId,
+            campid: pending.campid,
+            trackingCampid: pending.trackingCampid,
+            ...extra,
+          },
+        );
+        return {
+          success: true,
+          id: pending.id,
+          vendorFired: false,
+          operatorStatus: status,
+          status: pending.status,
+        };
       }
       await logInbound(
         pending.visitId,
@@ -203,13 +228,17 @@ export const createPostbackCallback = (deps) => {
         pending.msisdn,
         {
           action: 'fire',
+          vendorFired: true,
+          operatorStatus: status,
           postbackId: pending.id,
+          vendorId: pending.vendorId,
           campid: pending.campid,
           trackingCampid: pending.trackingCampid,
           ...extra,
         },
       );
-      return firePostback(pending.id);
+      const fired = await firePostback(pending.id);
+      return { ...fired, vendorFired: true, operatorStatus: status };
     };
 
     const registerAndFireFromVisit = async (visit, msisdn, extra = {}) => {
@@ -225,7 +254,12 @@ export const createPostbackCallback = (deps) => {
         visit.clickId || clickId,
         visit.rcid,
         digits || visitPhone || null,
-        extra,
+        {
+          vendorFired: fireVendor,
+          operatorStatus: status,
+          vendorId: visit.vendorId,
+          ...extra,
+        },
       );
 
       const registered = await registerPending({
@@ -239,16 +273,27 @@ export const createPostbackCallback = (deps) => {
         campid: visit.campid || '',
         trackingCampid: visit.trackingCampid || '',
         keepIfSent: true,
-        asReceived: true,
+        asReceived: fireVendor,
+        operatorStatus: status,
       });
       if (registered.skipped && !registered.id) {
-        return { success: false, ...registered };
+        return { success: false, ...registered, operatorStatus: status };
       }
       const id = registered.id;
       if (!id) {
-        return { success: false, skipped: true, reason: 'No pending callback' };
+        return { success: false, skipped: true, reason: 'No pending callback', operatorStatus: status };
       }
-      return firePostback(id);
+      if (!fireVendor) {
+        return {
+          success: true,
+          id,
+          vendorFired: false,
+          operatorStatus: status,
+          status: registered.status,
+        };
+      }
+      const fired = await firePostback(id);
+      return { ...fired, vendorFired: true, operatorStatus: status };
     };
 
     // click_id present: recover if that click exists here (MSISDN optional).
@@ -275,7 +320,7 @@ export const createPostbackCallback = (deps) => {
 
     // msisdn present (alone, or unknown click_id): recover if number is in system.
     if (incomingMsisdn) {
-      const pending = await findPendingByMsisdn(incomingMsisdn);
+      const pending = await findLatestByMsisdn(incomingMsisdn);
       if (pending) {
         return firePending(pending);
       }

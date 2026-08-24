@@ -38,12 +38,14 @@ export const initDatabase = async () => {
   await ensureTrackingCampidColumns(dataSource);
   await ensureUniqueMsisdnOnPostbacks(dataSource);
   await ensureNullableMsisdnOnPostbacks(dataSource);
+  await ensureOperatorStatusOnPostbacks(dataSource);
   await ensureSuccessRedirectModeColumn(dataSource);
   await ensurePostbackRegisterAtColumn(dataSource);
   await ensureChecksubConfigJsonColumn(dataSource);
   await ensureDcbConfigJsonColumn(dataSource);
   await ensureFunnelLayoutColumn(dataSource);
   await ensureDailyStatsTable(dataSource);
+  await ensureOperatorStatusJsonOnDailyStats(dataSource);
   return dataSource;
 };
 
@@ -438,6 +440,36 @@ async function ensureUniqueMsisdnOnPostbacks(ds) {
   }
 }
 
+/** Operator billing status from callback (active, grace, parking, …). */
+async function ensureOperatorStatusOnPostbacks(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "conversion_postbacks"
+        ADD COLUMN IF NOT EXISTS "operator_status" varchar(64)
+      `);
+      await ds.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_postbacks_operator_status"
+        ON "conversion_postbacks" ("operator_status")
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'conversion_postbacks' AND COLUMN_NAME = 'operator_status'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`conversion_postbacks\` ADD COLUMN \`operator_status\` varchar(64) NULL`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureOperatorStatusOnPostbacks:', err.message);
+  }
+}
+
 /** CG / click_id-only callbacks: store conversion row before MSISDN is known. */
 async function ensureNullableMsisdnOnPostbacks(ds) {
   const isPostgres = (ds.options.type || 'postgres') === 'postgres';
@@ -541,6 +573,32 @@ async function ensureDailyStatsTable(ds) {
     `);
   } catch (err) {
     console.warn('ensureDailyStatsTable:', err.message);
+  }
+}
+
+/** Operator callback mix (grace/active/…) rolled into daily_stats from api_call_logs. */
+async function ensureOperatorStatusJsonOnDailyStats(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "daily_stats"
+        ADD COLUMN IF NOT EXISTS "operator_status_json" jsonb
+      `);
+    } else {
+      const rows = await ds.query(
+        `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'daily_stats' AND COLUMN_NAME = 'operator_status_json'`,
+      );
+      const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+      if (!cnt) {
+        await ds.query(
+          `ALTER TABLE \`daily_stats\` ADD COLUMN \`operator_status_json\` json NULL`,
+        );
+      }
+    }
+  } catch (err) {
+    console.warn('ensureOperatorStatusJsonOnDailyStats:', err.message);
   }
 }
 

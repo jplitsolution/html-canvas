@@ -164,13 +164,18 @@ Content-Type: application/json
                     <td className="px-3 py-2.5 font-mono text-fg">status</td>
                     <td className="px-3 py-2.5">No</td>
                     <td className="px-3 py-2.5">
-                      Default <code className="font-mono">active</code>. Accepted:{' '}
+                      Default <code className="font-mono">active</code>. Any value is stored
+                      (e.g. <code className="font-mono">active</code>,{' '}
+                      <code className="font-mono">grace</code>,{' '}
+                      <code className="font-mono">parking</code>, unsub). Vendor CPA postback
+                      fires only for billable values:{' '}
                       <code className="font-mono">active</code>,{' '}
                       <code className="font-mono">success</code>,{' '}
                       <code className="font-mono">ok</code>,{' '}
                       <code className="font-mono">subscribed</code>,{' '}
                       <code className="font-mono">1</code>,{' '}
-                      <code className="font-mono">true</code>. Other values are ignored (no postback).
+                      <code className="font-mono">true</code>. Other statuses are held and shown
+                      on the dashboard without firing the vendor.
                     </td>
                   </tr>
                 </tbody>
@@ -188,10 +193,12 @@ Content-Type: application/json
           <Section icon={Server} title="What we do after the callback">
             <ol className="list-decimal pl-5 space-y-2">
               <li>
-                Check <code className="font-mono text-fg">status</code>. Need{' '}
+                Store the operator <code className="font-mono text-fg">status</code> on the
+                conversion row (grace, active, parking, …). Need{' '}
                 <code className="font-mono text-fg">msisdn</code> or{' '}
                 <code className="font-mono text-fg">click_id</code> /{' '}
-                <code className="font-mono text-fg">ext_id</code>.
+                <code className="font-mono text-fg">ext_id</code>. Vendor CPA fires only for
+                billable statuses.
               </li>
               <li>
                 <strong className="text-fg">click_id + msisdn</strong> — find the visit by{' '}

@@ -89,6 +89,16 @@ export const ConversionPostbackSchema = new EntitySchema({
       length: 32,
       default: ConversionPostbackStatus.PENDING,
     },
+    /**
+     * Latest operator / billing callback status (active, grace, parking, unsub, …).
+     * Independent of vendor CPA fire status (`status` above).
+     */
+    operatorStatus: {
+      name: 'operator_status',
+      type: 'varchar',
+      length: 64,
+      nullable: true,
+    },
     httpStatus: {
       name: 'http_status',
       type: 'int',

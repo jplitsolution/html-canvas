@@ -778,7 +778,8 @@ function PostbackDayLogsPage() {
         <div className="page-header">
           <h1 className="page-header-title">Postback day logs</h1>
           <p className="page-header-description">
-            Daily totals come from a rolled-up stats table (fast, survives archive).
+            Today is live from visits/postbacks; older days come from the daily dump
+            (fast, survives archive).
             Apply campaign / vendor / outcome filters, then drill to every hit or
             every MSISDN. Elasticsearch stays optional for funnel log search — it is
             not the report store.

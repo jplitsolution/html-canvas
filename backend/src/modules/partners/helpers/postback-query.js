@@ -82,6 +82,7 @@ export function createPostbackQuery(deps) {
       id: row.id,
       msisdn: maskPhone(row.msisdn),
       status: row.status,
+      operatorStatus: row.operatorStatus || null,
       clickId: row.clickId,
       rcid: row.rcid,
       campid: row.campid,
@@ -117,10 +118,13 @@ export function createPostbackQuery(deps) {
     msisdnResolved: 0,
     postbacksCreated: 0,
     pending: 0,
+    received: 0,
     sent: 0,
     failed: 0,
     skipped: 0,
     heFailCg: 0,
+    callbacksReceived: 0,
+    byOperatorStatus: [],
     byVendor: [],
     since: daysAgo(30).toISOString(),
   });
@@ -232,6 +236,70 @@ export function createPostbackQuery(deps) {
       else if (status === ConversionPostbackStatus.SKIPPED) byVendorAcc[key].skipped += cnt;
     }
 
+    const opQ = getPostbackRepo()
+      .createQueryBuilder('p')
+      .where('p.createdAt >= :since', { since })
+      .andWhere('p.operatorStatus IS NOT NULL')
+      .andWhere("p.operatorStatus <> ''");
+    if (to) opQ.andWhere('p.createdAt <= :until', { until: to });
+    if (campaignIds.length && vendorIds.length) {
+      opQ.andWhere(
+        '(p.campaignId IN (:...campaignIds) OR p.vendorId IN (:...vendorIds))',
+        { campaignIds, vendorIds },
+      );
+    } else if (campaignIds.length) {
+      opQ.andWhere('p.campaignId IN (:...campaignIds)', { campaignIds });
+    } else {
+      opQ.andWhere('p.vendorId IN (:...vendorIds)', { vendorIds });
+    }
+    const operatorRows = await opQ
+      .select('LOWER(p.operatorStatus)', 'operatorStatus')
+      .addSelect('COUNT(*)', 'cnt')
+      .groupBy('LOWER(p.operatorStatus)')
+      .getRawMany();
+    const latestByOperatorStatus = operatorRows
+      .map((r) => ({
+        status: String(r.operatorStatus || 'unknown'),
+        count: Number(r.cnt) || 0,
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    let callbacksReceived = 0;
+    let byOperatorStatus = latestByOperatorStatus;
+    if (campaignIds.length) {
+      try {
+        const statusExpr =
+          `LOWER(COALESCE(NULLIF((regexp_match(l.request_body, '"status"[[:space:]]*:[[:space:]]*"([^"]+)"'))[1], ''), 'unknown'))`;
+        const cbQ = getApiCallLogRepo()
+          .createQueryBuilder('l')
+          .where('l.callType = :cbType', { cbType: ApiCallType.BILLING_CALLBACK })
+          .andWhere('l.campaignId IN (:...campaignIds)', { campaignIds })
+          .andWhere('l.createdAt >= :since', { since });
+        if (to) cbQ.andWhere('l.createdAt <= :until', { until: to });
+        const cbRows = await cbQ
+          .select(statusExpr, 'operatorStatus')
+          .addSelect('COUNT(*)', 'cnt')
+          .groupBy(statusExpr)
+          .getRawMany();
+        const hits = [];
+        for (const row of cbRows) {
+          const count = Number(row.cnt) || 0;
+          callbacksReceived += count;
+          hits.push({
+            status: String(row.operatorStatus || 'unknown'),
+            count,
+          });
+        }
+        hits.sort((a, b) => b.count - a.count);
+        if (hits.length) byOperatorStatus = hits;
+      } catch (err) {
+        console.warn(`callback status aggregation failed: ${err?.message || err}`);
+        callbacksReceived = latestByOperatorStatus.reduce((n, r) => n + r.count, 0);
+      }
+    } else {
+      callbacksReceived = latestByOperatorStatus.reduce((n, r) => n + r.count, 0);
+    }
+
     return {
       msisdnResolved,
       heFailCg,
@@ -241,6 +309,8 @@ export function createPostbackQuery(deps) {
       sent,
       failed,
       skipped,
+      callbacksReceived,
+      byOperatorStatus,
       byVendor: Object.values(byVendorAcc).sort((a, b) => b.total - a.total),
       since: since.toISOString(),
       until: to ? to.toISOString() : null,
@@ -256,6 +326,7 @@ export function createPostbackQuery(deps) {
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 25));
     const status = String(query.status || '').trim().toLowerCase();
+    const operatorStatus = String(query.operatorStatus || '').trim().toLowerCase();
     const q = String(query.q || '').trim();
     const vendorIdFilter = query.vendorId
       ? parseInt(query.vendorId, 10)
@@ -278,6 +349,9 @@ export function createPostbackQuery(deps) {
       Object.values(ConversionPostbackStatus).includes(status)
     ) {
       qb.andWhere('p.status = :status', { status });
+    }
+    if (operatorStatus) {
+      qb.andWhere('LOWER(p.operatorStatus) = :operatorStatus', { operatorStatus });
     }
     if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
       qb.andWhere('p.vendorId = :vendorIdFilter', { vendorIdFilter });
@@ -403,6 +477,7 @@ export function createPostbackQuery(deps) {
         createdAt: row.createdAt,
         billingReceived,
         billingReceivedAt,
+        operatorStatus: row.operatorStatus || null,
         vendorFired,
         vendorFireStatus: row.status,
         vendorName: vendor?.name || null,

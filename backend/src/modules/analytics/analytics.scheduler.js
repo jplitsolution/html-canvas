@@ -15,7 +15,7 @@ export const startAnalyticsScheduler = () => {
       console.log('Running midnight IST stats rollup + archive job');
       try {
         const rolled = await dailyStatsService.rollupRecent('Asia/Kolkata');
-        console.log('Daily stats rollup', rolled);
+        console.log('Closing yesterday into daily_stats', rolled);
       } catch (err) {
         console.error(`Daily stats rollup failed: ${err.message}`);
       }
@@ -28,7 +28,7 @@ export const startAnalyticsScheduler = () => {
   });
 
   jobs = [midnightArchive];
-  console.log('Analytics scheduler started (rollup + archive at 00:05 IST)');
+  console.log('Analytics scheduler started (close yesterday into daily_stats at 00:05 IST)');
   return jobs;
 };
 

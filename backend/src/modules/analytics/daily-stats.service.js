@@ -14,13 +14,15 @@ import {
 import { todayYmd } from '../partners/helpers/postback-day-report.js';
 import {
   bumpMetric,
+  bumpOperatorStatus,
   eachYmd,
   emptyMetrics,
+  flattenOperatorStatus,
   groupStatsRows,
+  parseOperatorStatusMap,
   totalsFromRows,
 } from './helpers/daily-stats.js';
 
-const TODAY_STALE_MS = 2 * 60 * 1000;
 const MAX_ROLLUP_DAYS = 93;
 
 const EVENT_METRIC = {
@@ -62,7 +64,7 @@ export const createDailyStatsService = () => {
     };
   };
 
-  const rollupDay = async (ymd, timezone = DEFAULT_TIMEZONE) => {
+  const collectDay = async (ymd, timezone = DEFAULT_TIMEZONE, { persist = true } = {}) => {
     const date = String(ymd || '').slice(0, 10);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       return { date, rows: 0 };
@@ -224,18 +226,83 @@ export const createDailyStatsService = () => {
       bumpMetric(map, row.campaignId, row.vendorId, 'billingReceived', n(row.cnt));
     }
 
+    try {
+      const statusExpr =
+        `LOWER(COALESCE(NULLIF((regexp_match(l.request_body, '"status"[[:space:]]*:[[:space:]]*"([^"]+)"'))[1], ''), 'unknown'))`;
+      const statusRows = await getApiCallLogRepo()
+        .createQueryBuilder('l')
+        .leftJoin(Visit, 'v', 'v.id = l.visitId')
+        .select('COALESCE(l.campaignId, v.campaignId)', 'campaignId')
+        .addSelect('v.vendorId', 'vendorId')
+        .addSelect(statusExpr, 'operatorStatus')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('l.createdAt BETWEEN :from AND :to', { from, to })
+        .andWhere('l.callType = :billing', { billing: ApiCallType.BILLING_CALLBACK })
+        .groupBy('l.campaignId')
+        .addGroupBy('v.campaignId')
+        .addGroupBy('v.vendorId')
+        .addGroupBy(statusExpr)
+        .getRawMany();
+      for (const row of statusRows) {
+        bumpOperatorStatus(
+          map,
+          row.campaignId,
+          row.vendorId,
+          row.operatorStatus || 'unknown',
+          n(row.cnt),
+        );
+      }
+    } catch (err) {
+      console.warn(`daily_stats operator status rollup (logs): ${err?.message || err}`);
+      const fallbackRows = await getPostbackRepo()
+        .createQueryBuilder('p')
+        .select('p.campaignId', 'campaignId')
+        .addSelect('p.vendorId', 'vendorId')
+        .addSelect('LOWER(p.operatorStatus)', 'operatorStatus')
+        .addSelect('COUNT(*)', 'cnt')
+        .where('p.updatedAt BETWEEN :from AND :to', { from, to })
+        .andWhere('p.operatorStatus IS NOT NULL')
+        .andWhere("p.operatorStatus <> ''")
+        .groupBy('p.campaignId')
+        .addGroupBy('p.vendorId')
+        .addGroupBy('LOWER(p.operatorStatus)')
+        .getRawMany();
+      for (const row of fallbackRows) {
+        bumpOperatorStatus(
+          map,
+          row.campaignId,
+          row.vendorId,
+          row.operatorStatus || 'unknown',
+          n(row.cnt),
+        );
+      }
+    }
+
+    if (!persist) return { date, timezone: tz, map };
+    return persistDay(date, tz, map);
+  };
+
+  const rollupDay = (ymd, timezone = DEFAULT_TIMEZONE) =>
+    collectDay(ymd, timezone, { persist: true });
+
+  const aggregateDayFromRaw = (ymd, timezone = DEFAULT_TIMEZONE) =>
+    collectDay(ymd, timezone, { persist: false });
+
+  const persistDay = async (date, tz, map) => {
     const rolledAt = new Date();
-    const entities = [...map.values()].map((row) =>
-      getStatRepo().create({
+    const entities = [...map.values()].map((row) => {
+      const { operatorStatus, ...rest } = row;
+      return getStatRepo().create({
         ...emptyMetrics(),
-        ...row,
+        ...rest,
+        operatorStatusJson: parseOperatorStatusMap(operatorStatus),
         statDate: date,
         timezone: tz,
         campaignId: n(row.campaignId),
         vendorId: n(row.vendorId),
         rolledAt,
-      }),
-    );
+      });
+    });
 
     await getStatRepo()
       .createQueryBuilder()
@@ -249,6 +316,17 @@ export const createDailyStatsService = () => {
     }
 
     return { date, timezone: tz, rows: entities.length };
+  };
+
+  const dayNeedsOperatorBackfill = async (ymd, timezone) => {
+    const row = await getStatRepo()
+      .createQueryBuilder('s')
+      .select('COUNT(*)', 'cnt')
+      .where('s.statDate = :date', { date: ymd })
+      .andWhere('s.timezone = :tz', { tz: timezone })
+      .andWhere('s.operatorStatusJson IS NULL')
+      .getRawOne();
+    return n(row?.cnt) > 0;
   };
 
   const lastRolledAt = async (ymd, timezone) => {
@@ -268,18 +346,23 @@ export const createDailyStatsService = () => {
   const ensureDay = async (ymd, timezone = DEFAULT_TIMEZONE, { force = false } = {}) => {
     const tz = normalizeTimezone(timezone);
     const today = todayYmd(tz);
-    const { rolledAt, count } = await lastRolledAt(ymd, tz);
-    if (!force && count > 0) {
-      if (ymd !== today) return { date: ymd, skipped: true, rows: count };
-      if (rolledAt && Date.now() - rolledAt.getTime() < TODAY_STALE_MS) {
-        return { date: ymd, skipped: true, rows: count };
-      }
+    if (ymd === today && !force) {
+      return { date: ymd, skipped: true, rows: 0, reason: 'today_is_raw' };
+    }
+    const { count } = await lastRolledAt(ymd, tz);
+    const needsOperator = count > 0 ? await dayNeedsOperatorBackfill(ymd, tz) : false;
+    if (!force && !needsOperator && count > 0) {
+      return { date: ymd, skipped: true, rows: count };
     }
     return rollupDay(ymd, tz);
   };
 
   const rollupRange = async (fromYmd, toYmd, timezone = DEFAULT_TIMEZONE, opts = {}) => {
-    const days = eachYmd(fromYmd, toYmd).slice(0, MAX_ROLLUP_DAYS);
+    const tz = normalizeTimezone(timezone);
+    const today = todayYmd(tz);
+    const days = eachYmd(fromYmd, toYmd)
+      .slice(0, MAX_ROLLUP_DAYS)
+      .filter((day) => opts.force || day < today);
     const rolled = [];
     for (const day of days) {
       rolled.push(await ensureDay(day, timezone, opts));
@@ -293,15 +376,13 @@ export const createDailyStatsService = () => {
     const yesterdayDate = new Date(`${today}T00:00:00Z`);
     yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
     const yesterday = yesterdayDate.toISOString().slice(0, 10);
-    const results = [];
-    results.push(await rollupDay(yesterday, tz));
-    results.push(await rollupDay(today, tz));
-    return results;
+    return [await rollupDay(yesterday, tz)];
   };
 
   const getReport = async (userId, query = {}) => {
     const timezone = normalizeTimezone(query.timezone || DEFAULT_TIMEZONE);
-    let from = String(query.from || query.date || todayYmd(timezone)).slice(0, 10);
+    const today = todayYmd(timezone);
+    let from = String(query.from || query.date || today).slice(0, 10);
     let to = String(query.to || from).slice(0, 10);
     if (from > to) {
       const swap = from;
@@ -314,78 +395,122 @@ export const createDailyStatsService = () => {
     to = usedDays[usedDays.length - 1] || from;
 
     const groupBy = String(query.groupBy || 'date');
-    await rollupRange(from, to, timezone);
+    const includesToday = from <= today && to >= today;
+    const yesterdayDate = new Date(`${today}T00:00:00Z`);
+    yesterdayDate.setUTCDate(yesterdayDate.getUTCDate() - 1);
+    const yesterday = yesterdayDate.toISOString().slice(0, 10);
+    const statsFrom = from;
+    const statsTo = includesToday ? (from < today ? yesterday : null) : to;
+    if (statsTo && statsFrom <= statsTo) {
+      await rollupRange(statsFrom, statsTo, timezone);
+    }
+
+    const empty = (source) => ({
+      from,
+      to,
+      timezone,
+      groupBy,
+      rangeClamped,
+      source,
+      todayLive: includesToday,
+      totals: emptyMetrics(),
+      rows: [],
+    });
 
     const { campaignIds, vendorIds, campaigns, vendors } = await resolveUserScope(userId);
     if (!campaignIds.length && !vendorIds.length) {
-      return {
-        from,
-        to,
-        timezone,
-        groupBy,
-        rangeClamped,
-        source: 'daily_stats',
-        totals: emptyMetrics(),
-        rows: [],
-      };
+      return empty(includesToday ? 'raw_today' : 'daily_stats');
     }
 
     const campaignId = parseInt(query.campaignId, 10);
     const vendorId = parseInt(query.vendorId, 10);
-    const qb = getStatRepo()
-      .createQueryBuilder('s')
-      .where('s.statDate BETWEEN :from AND :to', { from, to })
-      .andWhere('s.timezone = :timezone', { timezone });
-
-    if (Number.isFinite(campaignId) && campaignId > 0) {
-      if (!campaignIds.includes(campaignId)) {
-        return {
-          from,
-          to,
-          timezone,
-          groupBy,
-          rangeClamped,
-          source: 'daily_stats',
-          totals: emptyMetrics(),
-          rows: [],
-        };
-      }
-      qb.andWhere('s.campaignId = :campaignId', { campaignId });
-    } else if (campaignIds.length) {
-      qb.andWhere('(s.campaignId IN (:...campaignIds) OR s.campaignId = 0)', {
-        campaignIds,
-      });
+    if (Number.isFinite(campaignId) && campaignId > 0 && !campaignIds.includes(campaignId)) {
+      return empty(includesToday ? 'raw_today' : 'daily_stats');
+    }
+    if (Number.isFinite(vendorId) && vendorId > 0 && !vendorIds.includes(vendorId)) {
+      return empty(includesToday ? 'raw_today' : 'daily_stats');
     }
 
-    if (Number.isFinite(vendorId) && vendorId > 0) {
-      if (!vendorIds.includes(vendorId)) {
-        return {
-          from,
-          to,
-          timezone,
-          groupBy,
-          rangeClamped,
-          source: 'daily_stats',
-          totals: emptyMetrics(),
-          rows: [],
-        };
-      }
-      qb.andWhere('s.vendorId = :vendorId', { vendorId });
-    } else if (vendorIds.length) {
-      qb.andWhere('(s.vendorId IN (:...vendorIds) OR s.vendorId = 0)', {
-        vendorIds,
-      });
-    }
-
-    const raw = await qb.orderBy('s.statDate', 'DESC').getMany();
     const campaignMap = Object.fromEntries(campaigns.map((c) => [c.id, c]));
     const vendorMap = Object.fromEntries(vendors.map((v) => [v.id, v]));
-    const named = raw.map((row) => ({
-      ...row,
-      campaignName: campaignMap[row.campaignId]?.name || (row.campaignId ? `Campaign #${row.campaignId}` : 'Unattributed'),
-      vendorName: vendorMap[row.vendorId]?.name || (row.vendorId ? `Vendor #${row.vendorId}` : 'Unattributed'),
-      vendorCode: vendorMap[row.vendorId]?.code || null,
-    }));
+    const nameRow = (row, date = row.statDate) => {
+      const cid = n(row.campaignId);
+      const vid = n(row.vendorId);
+      return {
+        ...emptyMetrics(),
+        ...row,
+        statDate: date,
+        timezone,
+        campaignId: cid,
+        vendorId: vid,
+        operatorStatus: parseOperatorStatusMap(row.operatorStatus || row.operatorStatusJson),
+        campaignName:
+          campaignMap[cid]?.name || (cid ? `Campaign #${cid}` : 'Unattributed'),
+        vendorName: vendorMap[vid]?.name || (vid ? `Vendor #${vid}` : 'Unattributed'),
+        vendorCode: vendorMap[vid]?.code || null,
+      };
+    };
+    const inScope = (row) => {
+      const cid = n(row.campaignId);
+      const vid = n(row.vendorId);
+      if (Number.isFinite(campaignId) && campaignId > 0 && cid !== campaignId) return false;
+      if (
+        !(Number.isFinite(campaignId) && campaignId > 0) &&
+        campaignIds.length &&
+        cid !== 0 &&
+        !campaignIds.includes(cid)
+      ) {
+        return false;
+      }
+      if (Number.isFinite(vendorId) && vendorId > 0 && vid !== vendorId) return false;
+      if (
+        !(Number.isFinite(vendorId) && vendorId > 0) &&
+        vendorIds.length &&
+        vid !== 0 &&
+        !vendorIds.includes(vid)
+      ) {
+        return false;
+      }
+      return true;
+    };
+
+    const named = [];
+    if (statsTo && statsFrom <= statsTo) {
+      const qb = getStatRepo()
+        .createQueryBuilder('s')
+        .where('s.statDate BETWEEN :from AND :to', { from: statsFrom, to: statsTo })
+        .andWhere('s.timezone = :timezone', { timezone });
+      if (Number.isFinite(campaignId) && campaignId > 0) {
+        qb.andWhere('s.campaignId = :campaignId', { campaignId });
+      } else if (campaignIds.length) {
+        qb.andWhere('(s.campaignId IN (:...campaignIds) OR s.campaignId = 0)', {
+          campaignIds,
+        });
+      }
+      if (Number.isFinite(vendorId) && vendorId > 0) {
+        qb.andWhere('s.vendorId = :vendorId', { vendorId });
+      } else if (vendorIds.length) {
+        qb.andWhere('(s.vendorId IN (:...vendorIds) OR s.vendorId = 0)', {
+          vendorIds,
+        });
+      }
+      const stored = await qb.orderBy('s.statDate', 'DESC').getMany();
+      named.push(...stored.map((row) => nameRow(row)));
+    }
+
+    if (includesToday) {
+      const live = await aggregateDayFromRaw(today, timezone);
+      for (const row of live.map.values()) {
+        if (!inScope(row)) continue;
+        named.push(nameRow(row, today));
+      }
+    }
+
+    const source = includesToday
+      ? statsTo && statsFrom <= statsTo
+        ? 'daily_stats+raw_today'
+        : 'raw_today'
+      : 'daily_stats';
     const rows = groupStatsRows(named, groupBy);
     return {
       from,
@@ -393,9 +518,104 @@ export const createDailyStatsService = () => {
       timezone,
       groupBy: STAT_GROUP_BY_SAFE(groupBy),
       rangeClamped,
-      source: 'daily_stats',
+      source,
+      todayLive: includesToday,
       totals: totalsFromRows(named),
       rows,
+    };
+  };
+
+  const getDashboardSummary = async (userId, query = {}) => {
+    const timezone = normalizeTimezone(query.timezone || DEFAULT_TIMEZONE);
+    let from = String(query.from || '').slice(0, 10);
+    let to = String(query.to || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      const span = Math.min(Math.max(Number(query.days) || 30, 1), MAX_ROLLUP_DAYS);
+      to = todayYmd(timezone);
+      const dt = new Date(`${to}T00:00:00Z`);
+      dt.setUTCDate(dt.getUTCDate() - (span - 1));
+      from = dt.toISOString().slice(0, 10);
+    }
+    const dateReport = await getReport(userId, {
+      ...query,
+      from,
+      to,
+      timezone,
+      groupBy: 'date',
+    });
+    const vendorReport = await getReport(userId, {
+      ...query,
+      from,
+      to,
+      timezone,
+      groupBy: 'vendor',
+    });
+    const totals = dateReport.totals || emptyMetrics();
+    const byOperatorStatus = flattenOperatorStatus(dateReport.rows);
+    const callbacksReceived =
+      byOperatorStatus.reduce((sum, row) => sum + (Number(row.count) || 0), 0) ||
+      n(totals.billingReceived) + n(totals.unmatchedCallbacks);
+    const byDateMap = Object.fromEntries(
+      (dateReport.rows || []).map((row) => [row.statDate, row]),
+    );
+    const byDate = eachYmd(dateReport.from, dateReport.to).map((statDate) => {
+      const row = byDateMap[statDate];
+      return {
+        statDate,
+        visits: n(row?.visits),
+        msisdnResolved: n(row?.msisdnResolved),
+        otpSend: n(row?.otpSend),
+        otpVerify: n(row?.otpVerify),
+        subscribeSuccess: n(row?.subscribeSuccess),
+        subscribeFailed: n(row?.subscribeFailed),
+        postbacksQueued: n(row?.postbacksQueued),
+        pending: n(row?.pending),
+        billingReceived: n(row?.billingReceived),
+        vendorSent: n(row?.vendorSent),
+        vendorFailed: n(row?.vendorFailed),
+        skipped: n(row?.skipped),
+        unmatchedCallbacks: n(row?.unmatchedCallbacks),
+        heFailCg: n(row?.heFailCg),
+      };
+    });
+
+    return {
+      visits: n(totals.visits),
+      msisdnResolved: n(totals.msisdnResolved),
+      heFailCg: n(totals.heFailCg),
+      otpSend: n(totals.otpSend),
+      otpVerify: n(totals.otpVerify),
+      subscribeSuccess: n(totals.subscribeSuccess),
+      subscribeFailed: n(totals.subscribeFailed),
+      postbacksCreated: n(totals.postbacksQueued),
+      pending: n(totals.pending),
+      received: n(totals.billingReceived),
+      sent: n(totals.vendorSent),
+      failed: n(totals.vendorFailed),
+      skipped: n(totals.skipped),
+      unmatchedCallbacks: n(totals.unmatchedCallbacks),
+      callbacksReceived,
+      byOperatorStatus,
+      byDate,
+      byVendor: (vendorReport.rows || [])
+        .map((row) => ({
+          vendorId: row.vendorId || null,
+          vendorName: row.vendorName,
+          vendorCode: row.vendorCode,
+          visits: n(row.visits),
+          pending: n(row.pending),
+          received: n(row.billingReceived),
+          sent: n(row.vendorSent),
+          failed: n(row.vendorFailed),
+          skipped: n(row.skipped),
+          total: n(row.postbacksQueued),
+        }))
+        .sort((a, b) => b.total - a.total || b.visits - a.visits),
+      since: dateReport.from,
+      until: dateReport.to,
+      timezone: dateReport.timezone,
+      source: dateReport.source,
+      todayLive: Boolean(dateReport.todayLive),
     };
   };
 
@@ -404,7 +624,9 @@ export const createDailyStatsService = () => {
     rollupRange,
     rollupRecent,
     ensureDay,
+    aggregateDayFromRaw,
     getReport,
+    getDashboardSummary,
   };
 };
 

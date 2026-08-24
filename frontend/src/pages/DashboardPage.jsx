@@ -4,35 +4,24 @@ import {
   ResponsiveContainer,
   AreaChart,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
-  Cell,
 } from 'recharts'
 import {
   LayoutDashboard,
   FolderKanban,
   Store,
   BarChart3,
-  Send,
   TrendingUp,
   CheckCircle2,
-  XCircle,
-  Clock,
   ArrowUpRight,
   Globe,
   Activity,
   Calendar,
   RefreshCw,
-  Users,
-  Zap,
-  Layers,
   ChevronRight,
-  ShieldCheck,
-  Smartphone,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -41,7 +30,7 @@ import useStore from '../store/useStore'
 import { listMarkets } from '../services/api/markets'
 import { listCampaigns } from '../services/api/campaigns'
 import { listVendors, getPostbackSummary } from '../services/api/partners'
-import { getAllCampaignLogAggregations, searchAllCampaignLogs } from '../services/api/logs'
+import { searchAllCampaignLogs } from '../services/api/logs'
 
 const DASHBOARD_DATE_PRESETS = [
   { id: 'today', label: 'Today' },
@@ -52,14 +41,36 @@ const DASHBOARD_DATE_PRESETS = [
 ]
 
 const EVENT_COLOR_MAP = {
-  LANDING_PAGE_VIEW: '#3b82f6',
-  HE_SUCCESS: '#10b981',
-  HE_FAILED: '#ef4444',
-  OTP_SENT: '#f59e0b',
-  OTP_VERIFIED: '#8b5cf6',
-  OTP_FAILED: '#ec4899',
-  SUBSCRIPTION_SUCCESS: '#059669',
-  POSTBACK_SENT: '#6366f1',
+  VISIT: '#3b82f6',
+  OTP_SEND: '#f59e0b',
+  OTP_VERIFY: '#8b5cf6',
+  SUBSCRIBE_SUCCESS: '#059669',
+  SUBSCRIBE_FAILED: '#ef4444',
+}
+
+const FUNNEL_FROM_STATS = [
+  { key: 'VISIT', label: 'Visits', field: 'visits', color: EVENT_COLOR_MAP.VISIT },
+  { key: 'OTP_SEND', label: 'OTP sent', field: 'otpSend', color: EVENT_COLOR_MAP.OTP_SEND },
+  { key: 'OTP_VERIFY', label: 'OTP verified', field: 'otpVerify', color: EVENT_COLOR_MAP.OTP_VERIFY },
+  { key: 'SUBSCRIBE_SUCCESS', label: 'Subscribe success', field: 'subscribeSuccess', color: EVENT_COLOR_MAP.SUBSCRIBE_SUCCESS },
+  { key: 'SUBSCRIBE_FAILED', label: 'Subscribe failed', field: 'subscribeFailed', color: EVENT_COLOR_MAP.SUBSCRIBE_FAILED },
+]
+
+function operatorBarColor(status) {
+  const s = String(status || '').toLowerCase()
+  if (s === 'active' || s === 'success' || s === 'ok' || s === 'subscribed' || s === 'true' || s === '1') {
+    return '#10b981'
+  }
+  if (s === 'grace' || s === 'parking' || s === 'low_balance' || s === 'pending') {
+    return '#f59e0b'
+  }
+  if (s.includes('unsub') || s === 'cancel' || s === 'cancelled' || s === 'inactive') {
+    return '#64748b'
+  }
+  if (s === 'failed' || s === 'false' || s === 'error' || s === 'unmatched') {
+    return '#ef4444'
+  }
+  return '#6366f1'
 }
 
 const getEventTypeBadgeClass = (eventType) => {
@@ -77,6 +88,23 @@ const getEventTypeBadgeClass = (eventType) => {
     return 'bg-indigo-50 text-indigo-700 border-indigo-200/60'
   }
   return 'bg-slate-50 text-slate-700 border-slate-200/60'
+}
+
+const getOperatorStatusBadgeClass = (status) => {
+  const s = String(status || '').toLowerCase()
+  if (s === 'active' || s === 'success' || s === 'ok' || s === 'subscribed' || s === 'true' || s === '1') {
+    return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
+  }
+  if (s === 'grace' || s === 'parking' || s === 'low_balance' || s === 'pending') {
+    return 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
+  }
+  if (s.includes('unsub') || s === 'cancel' || s === 'cancelled' || s === 'inactive') {
+    return 'bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20'
+  }
+  if (s === 'failed' || s === 'false' || s === 'error' || s === 'unmatched') {
+    return 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20'
+  }
+  return 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20'
 }
 
 const getStatusBadgeClass = (status) => {
@@ -132,7 +160,6 @@ function DashboardPage() {
   const [campaigns, setCampaigns] = useState([])
   const [vendors, setVendors] = useState([])
   const [postbackStats, setPostbackStats] = useState(null)
-  const [aggregations, setAggregations] = useState(null)
   const [recentLogs, setRecentLogs] = useState([])
 
   // Resolve preset change
@@ -167,20 +194,19 @@ function DashboardPage() {
         timezone,
       }
 
-      const [marketsRes, campaignsRes, vendorsRes, postbackRes, aggRes, logsRes] = await Promise.allSettled([
-        listMarkets(),
-        listCampaigns(),
-        listVendors(),
-        getPostbackSummary(params),
-        getAllCampaignLogAggregations(params),
-        searchAllCampaignLogs({ ...params, page: 1, size: 10, view: 'sessions' }),
-      ])
+      const [marketsRes, campaignsRes, vendorsRes, postbackRes, logsRes] =
+        await Promise.allSettled([
+          listMarkets(),
+          listCampaigns(),
+          listVendors(),
+          getPostbackSummary(params),
+          searchAllCampaignLogs({ ...params, page: 1, size: 10, view: 'sessions' }),
+        ])
 
       if (marketsRes.status === 'fulfilled') setMarkets(marketsRes.value || [])
       if (campaignsRes.status === 'fulfilled') setCampaigns(campaignsRes.value || [])
       if (vendorsRes.status === 'fulfilled') setVendors(vendorsRes.value || [])
       if (postbackRes.status === 'fulfilled') setPostbackStats(postbackRes.value || null)
-      if (aggRes.status === 'fulfilled') setAggregations(aggRes.value || null)
       if (logsRes.status === 'fulfilled') setRecentLogs(logsRes.value?.items || [])
 
     } catch (err) {
@@ -196,28 +222,11 @@ function DashboardPage() {
     fetchDashboardData()
   }, [fetchDashboardData])
 
-  // Computed metrics
-  const totalVisits = useMemo(() => {
-    if (!aggregations?.timeSeries) return 0
-    return aggregations.timeSeries.reduce((acc, curr) => acc + (curr.count || 0), 0)
-  }, [aggregations])
-
-  const eventBreakdown = useMemo(() => {
-    return aggregations?.byEventType || []
-  }, [aggregations])
-
-  const totalConversions = useMemo(() => {
-    return eventBreakdown.reduce((acc, curr) => {
-      const k = String(curr.key).toUpperCase()
-      if (k.includes('SUBSCRIPTION_SUCCESS') || k.includes('HE_SUCCESS') || k.includes('OTP_SUCCESS') || k.includes('CONFIRM_SUCCESS')) {
-        return acc + (curr.count || 0)
-      }
-      return acc
-    }, 0)
-  }, [eventBreakdown])
+  const totalVisits = Number(postbackStats?.visits) || 0
+  const totalConversions = Number(postbackStats?.subscribeSuccess) || 0
 
   const conversionRate = useMemo(() => {
-    if (!totalVisits || totalVisits === 0) return '0.0%'
+    if (!totalVisits) return '0.0%'
     return `${((totalConversions / totalVisits) * 100).toFixed(1)}%`
   }, [totalVisits, totalConversions])
 
@@ -226,24 +235,34 @@ function DashboardPage() {
   }, [campaigns])
 
   const totalPostbacks = useMemo(() => {
-    return postbackStats?.total || 0
+    return postbackStats?.postbacksCreated || postbackStats?.total || 0
   }, [postbackStats])
 
-  const chartInterval = useMemo(() => {
-    if (preset === 'today' || preset === 'yesterday' || (dateRange.from && dateRange.from === dateRange.to)) {
-      return 'hour'
-    }
-    return 'day'
-  }, [preset, dateRange])
+  const operatorStatusBreakdown = useMemo(() => {
+    return postbackStats?.byOperatorStatus || []
+  }, [postbackStats])
+
+  const callbacksReceived = useMemo(() => {
+    if (postbackStats?.callbacksReceived != null) return postbackStats.callbacksReceived
+    return operatorStatusBreakdown.reduce((n, row) => n + (Number(row.count) || 0), 0)
+  }, [postbackStats, operatorStatusBreakdown])
+
+  const funnelBreakdown = useMemo(() => {
+    return FUNNEL_FROM_STATS
+      .map((item) => ({
+        ...item,
+        count: Number(postbackStats?.[item.field]) || 0,
+      }))
+      .filter((item) => item.count > 0 || item.key === 'VISIT')
+  }, [postbackStats])
 
   const timeSeriesData = useMemo(() => {
-    if (!aggregations?.timeSeries) return []
-    return aggregations.timeSeries.map((item) => ({
-      rawKey: item.key,
-      label: formatChartLabel(item.key, { hourly: chartInterval === 'hour' }),
-      Visits: item.count || 0,
+    return (postbackStats?.byDate || []).map((item) => ({
+      rawKey: item.statDate,
+      label: formatChartLabel(item.statDate, { hourly: false }),
+      Visits: item.visits || 0,
     }))
-  }, [aggregations, chartInterval])
+  }, [postbackStats])
 
   // Helper URL builder for Analytics page navigation
   const buildAnalyticsUrl = (extraParams = {}) => {
@@ -277,7 +296,7 @@ function DashboardPage() {
               </span>
             </div>
             <p className="text-xs text-fg-muted mt-1">
-              Real-time campaign performance, traffic analytics & conversion metrics ({timezone})
+              Today is live from visits/postbacks. Older days are dumped into daily_stats at midnight ({timezone})
             </p>
           </div>
 
@@ -341,11 +360,11 @@ function DashboardPage() {
           
           {/* Card 1: Total Traffic */}
           <Link
-            to={buildAnalyticsUrl()}
+            to="/postbacks/day-logs"
             className="group relative overflow-hidden rounded-2xl border border-border bg-bg-elevated p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-accent/40"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider">Total Traffic</span>
+              <span className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider">Visits</span>
               <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
                 <BarChart3 className="w-4 h-4" />
               </div>
@@ -355,7 +374,7 @@ function DashboardPage() {
                 {loading ? '...' : totalVisits.toLocaleString()}
               </p>
               <p className="text-[11px] text-fg-muted mt-1 flex items-center justify-between">
-                <span>Visits / Events</span>
+                <span>Today live · older days from dump</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-accent opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
             </div>
@@ -363,7 +382,7 @@ function DashboardPage() {
 
           {/* Card 2: Conversions */}
           <Link
-            to={buildAnalyticsUrl({ eventType: 'SUBSCRIPTION_SUCCESS' })}
+            to={buildAnalyticsUrl({ eventType: 'SUBSCRIBE_SUCCESS' })}
             className="group relative overflow-hidden rounded-2xl border border-border bg-bg-elevated p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-emerald-500/40"
           >
             <div className="flex items-center justify-between">
@@ -377,7 +396,7 @@ function DashboardPage() {
                 {loading ? '...' : totalConversions.toLocaleString()}
               </p>
               <p className="text-[11px] text-fg-muted mt-1 flex items-center justify-between">
-                <span>Successful Subs</span>
+                <span>Subscribe success (same source as visits)</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
             </div>
@@ -399,7 +418,7 @@ function DashboardPage() {
                 {loading ? '...' : conversionRate}
               </p>
               <p className="text-[11px] text-fg-muted mt-1 flex items-center justify-between">
-                <span>Traffic vs Subs</span>
+                <span>Success ÷ visits</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-purple-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
             </div>
@@ -455,7 +474,7 @@ function DashboardPage() {
             className="group relative overflow-hidden rounded-2xl border border-border bg-bg-elevated p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-indigo-500/40"
           >
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider">Vendors & Postback</span>
+              <span className="text-[11px] font-semibold text-fg-muted uppercase tracking-wider">Vendors</span>
               <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
                 <Store className="w-4 h-4" />
               </div>
@@ -465,12 +484,129 @@ function DashboardPage() {
                 {loading ? '...' : `${vendors.length} Vendors`}
               </p>
               <p className="text-[11px] text-fg-muted mt-1 flex items-center justify-between">
-                <span>{totalPostbacks} Postbacks</span>
+                <span>Partners (postbacks below)</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
             </div>
           </Link>
 
+        </div>
+
+        {/* Operator HTTP callbacks + vendor queue — not campaign-log event types */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-bg-elevated rounded-2xl border border-border shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-border flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-4 bg-emerald-500 rounded-full" />
+                  <h2 className="text-sm font-bold text-fg">Operator HTTP callbacks</h2>
+                </div>
+                <p className="text-[11px] text-fg-muted mt-1">
+                  Telco webhook hits in this date range — not visit-log CALLBACK_RECEIVED rows
+                </p>
+              </div>
+              <Link
+                to="/postbacks"
+                className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 shrink-0"
+              >
+                Open postbacks <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="p-5">
+              <p className="text-2xl font-black text-fg tracking-tight">
+                {loading ? '...' : callbacksReceived.toLocaleString()}
+              </p>
+              <p className="text-[11px] text-fg-muted mt-1 mb-4">
+                Mix of operator statuses (active, grace, parking, …)
+              </p>
+              {loading ? (
+                <p className="text-xs text-fg-muted animate-pulse">Loading callback mix…</p>
+              ) : operatorStatusBreakdown.length === 0 ? (
+                <p className="text-xs text-fg-muted">No operator callbacks in this window.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {operatorStatusBreakdown.map((row) => {
+                    const pct =
+                      callbacksReceived > 0
+                        ? ((Number(row.count) / callbacksReceived) * 100).toFixed(1)
+                        : 0
+                    const barColor = operatorBarColor(row.status)
+                    return (
+                      <Link
+                        key={row.status}
+                        to={`/postbacks?operatorStatus=${encodeURIComponent(row.status)}`}
+                        className="block group"
+                      >
+                        <div className="flex items-center justify-between text-xs font-semibold gap-2">
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[10px] uppercase tracking-wide ${getOperatorStatusBadgeClass(row.status)}`}
+                          >
+                            {row.status}
+                          </span>
+                          <span className="font-mono text-fg-muted group-hover:text-accent">
+                            {Number(row.count).toLocaleString()} ({pct}%)
+                          </span>
+                        </div>
+                        <div className="w-full bg-bg-muted h-1.5 rounded-full mt-1.5 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(100, Math.max(4, pct))}%`,
+                              backgroundColor: barColor,
+                            }}
+                          />
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-bg-elevated rounded-2xl border border-border shadow-xs overflow-hidden">
+            <div className="p-5 border-b border-border flex items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-4 bg-indigo-500 rounded-full" />
+                  <h2 className="text-sm font-bold text-fg">Vendor fire queue</h2>
+                </div>
+                <p className="text-[11px] text-fg-muted mt-1">
+                  Each conversion row has one status. Created is the total; the rest do not add up with HTTP callbacks.
+                </p>
+              </div>
+              <Link
+                to="/postbacks"
+                className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 shrink-0"
+              >
+                View queue <ChevronRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <div className="p-5 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Created', value: postbackStats?.postbacksCreated ?? totalPostbacks, hint: 'All queue rows', status: 'all' },
+                { label: 'Pending', value: postbackStats?.pending ?? 0, hint: 'Waiting on operator', status: 'pending' },
+                { label: 'Matched', value: postbackStats?.received ?? 0, hint: 'Callback matched, not fired', status: 'received' },
+                { label: 'Sent to vendor', value: postbackStats?.sent ?? 0, hint: 'CPA URL fired', status: 'sent' },
+                { label: 'Failed', value: postbackStats?.failed ?? 0, hint: 'Vendor fire error', status: 'failed' },
+                { label: 'Skipped', value: postbackStats?.skipped ?? 0, hint: 'Not fired', status: 'skipped' },
+              ].map((card) => (
+                <Link
+                  key={card.label}
+                  to={card.status === 'all' ? '/postbacks' : `/postbacks?status=${card.status}`}
+                  className="rounded-xl border border-border bg-bg-subtle/40 p-3 hover:border-accent/40 transition-colors"
+                >
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
+                    {card.label}
+                  </p>
+                  <p className="text-xl font-black text-fg mt-1 tabular-nums">
+                    {loading ? '…' : Number(card.value || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-fg-muted mt-1">{card.hint}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Interactive Charts Row */}
@@ -479,12 +615,17 @@ function DashboardPage() {
           {/* Main Traffic Trend Chart (Spans 2 cols) */}
           <div className="lg:col-span-2 bg-bg-elevated rounded-2xl border border-border shadow-xs overflow-hidden flex flex-col">
             <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-4 bg-accent rounded-full" />
-                <h2 className="text-sm font-bold text-fg">Traffic Trend & Hourly/Daily Volume</h2>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-4 bg-accent rounded-full" />
+                  <h2 className="text-sm font-bold text-fg">Visits by day</h2>
+                </div>
+                <p className="text-[11px] text-fg-muted mt-1">
+                  Same Visits KPI — today from raw tables, past days from dump
+                </p>
               </div>
               <Link
-                to={buildAnalyticsUrl()}
+                to="/postbacks/day-logs"
                 className="text-xs font-semibold text-accent hover:underline flex items-center gap-1"
               >
                 View Full Logs <ChevronRight className="w-3.5 h-3.5" />
@@ -503,7 +644,7 @@ function DashboardPage() {
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={timeSeriesData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={timeSeriesData} margin={{ top: 10, right: 12, left: 0, bottom: 8 }}>
                     <defs>
                       <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
@@ -513,12 +654,22 @@ function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" opacity={0.5} />
                     <XAxis
                       dataKey="label"
+                      interval="preserveStartEnd"
+                      minTickGap={28}
+                      height={36}
+                      tickMargin={8}
                       tickLine={false}
                       axisLine={false}
-                      tick={{ fontSize: 11, fill: 'var(--fg-muted)' }}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
                     />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: 'var(--fg-muted)' }} />
-                    <Tooltip content={<CustomTooltip hourly={chartInterval === 'hour'} />} />
+                    <YAxis
+                      width={36}
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                      tick={{ fontSize: 10, fill: '#64748b' }}
+                    />
+                    <Tooltip content={<CustomTooltip hourly={false} />} />
                     <Area
                       type="monotone"
                       dataKey="Visits"
@@ -537,9 +688,12 @@ function DashboardPage() {
           {/* Event Breakdown / Funnel (1 col - Clickable Bars) */}
           <div className="bg-bg-elevated rounded-2xl border border-border shadow-xs overflow-hidden flex flex-col">
             <div className="p-5 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-4 bg-emerald-500 rounded-full" />
-                <h2 className="text-sm font-bold text-fg">Event Breakdown</h2>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-4 bg-emerald-500 rounded-full" />
+                  <h2 className="text-sm font-bold text-fg">Funnel from stats</h2>
+                </div>
+                <p className="text-[11px] text-fg-muted mt-1">Today live · older days dumped</p>
               </div>
               <span className="text-[11px] text-fg-muted">Click to filter</span>
             </div>
@@ -549,30 +703,30 @@ function DashboardPage() {
                 <div className="h-[260px] flex items-center justify-center text-xs text-fg-muted animate-pulse">
                   Loading events...
                 </div>
-              ) : eventBreakdown.length === 0 ? (
+              ) : funnelBreakdown.length === 0 ? (
                 <div className="h-[260px] flex flex-col items-center justify-center text-center">
                   <Activity className="w-8 h-8 text-fg-muted/40 mb-2" />
                   <p className="text-xs text-fg-muted">No events logged in this window.</p>
                 </div>
               ) : (
-                eventBreakdown.slice(0, 7).map((item) => {
-                  const eventName = String(item.key)
+                funnelBreakdown.map((item) => {
                   const percentage = totalVisits > 0 ? ((item.count / totalVisits) * 100).toFixed(1) : 0
-                  const color = EVENT_COLOR_MAP[eventName] || '#64748b'
+                  const color = item.color || '#64748b'
 
                   return (
                     <Link
-                      key={eventName}
-                      to={buildAnalyticsUrl({ eventType: eventName })}
+                      key={item.key}
+                      to={buildAnalyticsUrl({ eventType: item.key })}
                       className="group block p-2.5 rounded-xl border border-transparent hover:border-border hover:bg-bg-subtle transition-all"
                     >
                       <div className="flex items-center justify-between text-xs font-semibold">
                         <span className="flex items-center gap-2 text-fg truncate">
                           <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                          <span className="truncate">{eventName}</span>
+                          <span className="truncate">{item.label}</span>
                         </span>
                         <span className="font-mono text-fg-muted group-hover:text-accent transition-colors">
-                          {item.count.toLocaleString()} ({percentage}%)
+                          {item.count.toLocaleString()}
+                          {item.key === 'VISIT' ? '' : ` (${percentage}% of visits)`}
                         </span>
                       </div>
                       <div className="w-full bg-bg-muted h-1.5 rounded-full mt-2 overflow-hidden">

@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import {
   addMetrics,
   bumpMetric,
+  bumpOperatorStatus,
   eachYmd,
   emptyMetrics,
+  flattenOperatorStatus,
   groupStatsRows,
   statsGrainKey,
   totalsFromRows,
@@ -87,5 +89,36 @@ describe('daily-stats helpers', () => {
     assert.equal(totals.heFailCg, 1);
     assert.equal(totals.vendorSent, 2);
     assert.equal(addMetrics(emptyMetrics(), { visits: 3 }).visits, 3);
+  });
+
+  it('merges operator callback statuses across grains', () => {
+    const map = new Map();
+    bumpOperatorStatus(map, 1, 2, 'grace', 3);
+    bumpOperatorStatus(map, 1, 2, 'active', 5);
+    bumpOperatorStatus(map, 1, 9, 'grace', 1);
+    const grouped = groupStatsRows(
+      [
+        {
+          statDate: '2026-08-24',
+          campaignId: 1,
+          vendorId: 2,
+          visits: 1,
+          operatorStatus: map.get(statsGrainKey(1, 2)).operatorStatus,
+        },
+        {
+          statDate: '2026-08-24',
+          campaignId: 1,
+          vendorId: 9,
+          visits: 1,
+          operatorStatus: map.get(statsGrainKey(1, 9)).operatorStatus,
+        },
+      ],
+      'date',
+    );
+    const mix = flattenOperatorStatus(grouped);
+    assert.deepEqual(mix, [
+      { status: 'active', count: 5 },
+      { status: 'grace', count: 4 },
+    ]);
   });
 });

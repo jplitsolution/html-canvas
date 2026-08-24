@@ -220,10 +220,54 @@ describe('processOperatorCallback shapes', () => {
     assert.match(String(empty.reason), /msisdn or click_id/);
     assert.ok(statusFalse);
     assert.equal(statusFalse.statusLabel, 'SKIPPED');
-    assert.match(String(statusFalse.reason), /status=false/);
+    assert.match(String(statusFalse.reason), /msisdn or click_id/);
     assert.ok(unknownClick);
     assert.match(String(unknownClick.reason), /No visit for click_id/);
     assert.ok(unknownMsisdn);
     assert.match(String(unknownMsisdn.reason), /msisdn not in system/);
+  });
+
+  it('holds grace (and any non-billable status) without firing vendor postback', async () => {
+    const row = { ...pendingRow };
+    const { deps, calls } = makeDeps({ pending: row });
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const out = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'grace',
+    });
+    assert.equal(out.success, true);
+    assert.equal(out.vendorFired, false);
+    assert.equal(out.operatorStatus, 'grace');
+    assert.equal(row.operatorStatus, 'grace');
+    assert.equal(calls.firePostback.length, 0);
+    assert.equal(calls.logApiCall[0].statusLabel, 'GRACE');
+  });
+
+  it('grace on visit by click_id queues pending and does not fire', async () => {
+    const { deps, calls } = makeDeps({
+      visitByClick: { ...visit, phone: '254711111111' },
+    });
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const out = await processOperatorCallback({
+      click_id: 'clk-he-fail',
+      status: 'GRACE',
+    });
+    assert.equal(out.vendorFired, false);
+    assert.equal(calls.firePostback.length, 0);
+    assert.equal(calls.registerPending[0].asReceived, false);
+    assert.equal(calls.registerPending[0].operatorStatus, 'grace');
+    assert.equal(calls.logApiCall[0].statusLabel, 'GRACE');
+  });
+
+  it('active still fires vendor postback', async () => {
+    const { deps, calls } = makeDeps({ pending: pendingRow });
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const out = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'active',
+    });
+    assert.equal(out.vendorFired, true);
+    assert.deepEqual(calls.firePostback, [77]);
+    assert.equal(calls.logApiCall[0].statusLabel, 'ACTIVE');
   });
 });

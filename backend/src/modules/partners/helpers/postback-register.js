@@ -231,6 +231,9 @@ export const createPostbackRegister = (deps) => {
         existing.sentAt = null;
       }
       if (input.offerCode) existing.offerCode = input.offerCode;
+      if (input.operatorStatus) {
+        existing.operatorStatus = String(input.operatorStatus).slice(0, 64);
+      }
 
       const row = await getPostbackRepo().save(existing);
 
@@ -276,6 +279,9 @@ export const createPostbackRegister = (deps) => {
         offerCode: input.offerCode || null,
         postbackUrl: savedTemplate,
         status: nextStatus,
+        operatorStatus: input.operatorStatus
+          ? String(input.operatorStatus).slice(0, 64)
+          : null,
       }),
     );
 

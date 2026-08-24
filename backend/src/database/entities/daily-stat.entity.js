@@ -47,6 +47,15 @@ export const DailyStatSchema = new EntitySchema({
     vendorFailed: { name: 'vendor_failed', type: 'int', default: 0 },
     skipped: { type: 'int', default: 0 },
     unmatchedCallbacks: { name: 'unmatched_callbacks', type: 'int', default: 0 },
+    /**
+     * Inbound operator callback mix for the day, e.g. {"active":12,"grace":4}.
+     * Filled from api_call_logs billing_callback rows.
+     */
+    operatorStatusJson: {
+      name: 'operator_status_json',
+      type: 'json',
+      nullable: true,
+    },
     rolledAt: {
       name: 'rolled_at',
       type: 'timestamp',

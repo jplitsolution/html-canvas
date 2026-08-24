@@ -139,7 +139,7 @@ function eventDescription(eventType) {
     case 'API_DCB_EXPOSE_STATUS_IN':
       return 'Inbound DCB expose status poll (vendor hit).'
     case 'CALLBACK_RECEIVED':
-      return 'Billing callback hit our server — next we fire the vendor postback.'
+      return 'Billing callback hit our server — operator status is stored; vendor postback fires only for billable statuses (active / success).'
     case 'POSTBACK_PENDING':
       return 'Vendor CPA postback queued, waiting for billing confirmation.'
     case 'POSTBACK_SENT':

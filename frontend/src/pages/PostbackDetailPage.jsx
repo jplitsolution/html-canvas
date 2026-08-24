@@ -123,7 +123,7 @@ function PostbackDetailPage() {
                   }
                 >
                   {life.billingReceived
-                    ? 'Operator hit /api/flow/callback — status received, then vendor fire if URL is set.'
+                    ? `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}. Vendor fire only if billable (active/success).`
                     : 'Still pending — vendor CPA has not been fired from billing yet.'}
                 </Step>
                 <Step
@@ -165,7 +165,10 @@ function PostbackDetailPage() {
                     {data.msisdn}
                   </span>
                 </Field>
-                <Field label="Status">
+                <Field label="Operator callback">
+                  <span className="font-medium">{data.operatorStatus || '—'}</span>
+                </Field>
+                <Field label="Vendor postback">
                   <span className="font-medium">{data.status}</span>
                 </Field>
                 <Field label="Vendor">

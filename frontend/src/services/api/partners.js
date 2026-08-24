@@ -34,6 +34,7 @@ export async function listPostbacks({
   page = 1,
   limit = 25,
   status,
+  operatorStatus,
   q,
   vendorId,
   from,
@@ -44,6 +45,7 @@ export async function listPostbacks({
   params.set('page', String(page))
   params.set('limit', String(limit))
   if (status && status !== 'all') params.set('status', status)
+  if (operatorStatus) params.set('operatorStatus', operatorStatus)
   if (q) params.set('q', q)
   if (vendorId) params.set('vendorId', String(vendorId))
   if (from) params.set('from', from)
