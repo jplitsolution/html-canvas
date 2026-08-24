@@ -79,6 +79,11 @@ function hrefIsNavigationTarget(href) {
   return false
 }
 
+/** Partner/CG leave URL — do not paint the transition HTML before navigating. */
+function isExternalHttpRedirect(url) {
+  return /^https?:\/\//i.test(String(url || '').trim())
+}
+
 function normalizePack(value) {
   const pack = String(value || '')
     .trim()
@@ -162,6 +167,7 @@ export {
   normalizeDetectNextPage,
   isCampaignPageHref,
   hrefIsNavigationTarget,
+  isExternalHttpRedirect,
   normalizePack,
   packSubscribeExtras,
   isPackSubscribeAction,

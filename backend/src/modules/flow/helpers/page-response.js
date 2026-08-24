@@ -9,6 +9,31 @@ import { variableResolverService } from '../../../common/services/variable-resol
 import { flowEngineService } from '../flow-engine.service.js';
 import { getDefaultFunnelPageData } from '../../../database/seed/default-funnel-pages.js';
 
+/** Copy projectData and fill {{placeholders}} in deviceLayouts html (do not mutate the saved template). */
+export function resolveLiveProjectData(projectData, variables) {
+  if (!projectData || typeof projectData !== 'object') return {};
+  const layouts = projectData.deviceLayouts;
+  if (!layouts || typeof layouts !== 'object') {
+    return projectData;
+  }
+  const resolveLayout = (layout) => {
+    if (!layout || typeof layout !== 'object') return layout ?? null;
+    if (typeof layout.html !== 'string') return { ...layout };
+    return {
+      ...layout,
+      html: variableResolverService.replaceVariables(layout.html, variables),
+    };
+  };
+  return {
+    ...projectData,
+    deviceLayouts: {
+      ...layouts,
+      desktop: resolveLayout(layouts.desktop),
+      mobile: resolveLayout(layouts.mobile),
+    },
+  };
+}
+
 export function createFlowPageResponse(deps) {
   const {
     normalizePack,
@@ -78,6 +103,7 @@ export function createFlowPageResponse(deps) {
         variables,
       ),
       css: templateData.css || '',
+      projectData: resolveLiveProjectData(templateData.projectData, variables),
       variables,
       actions: getActions(pageType),
       pack: resolvedPack,

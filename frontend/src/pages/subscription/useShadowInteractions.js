@@ -372,16 +372,16 @@ function useShadowInteractions({
           ...(planId ? { planId } : {}),
           ...packSubscribeExtras(node),
         })
+        if (next.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
+          window.location.assign(next.externalRedirect)
+          return
+        }
         cachePage(next)
         if (next.pageType === 'CONFIRM') {
           selectedPackRef.current = 'daily'
         }
         if (fromPage === 'CONFIRM' && action === 'CONFIRM' && next.pageType === 'THANKYOU') {
           trackEvent('confirm_completed')
-        }
-        if (next.externalRedirect && /^https?:\/\//i.test(next.externalRedirect)) {
-          window.location.assign(next.externalRedirect)
-          return
         }
       } catch (err) {
         setError(err.message || 'Action failed')

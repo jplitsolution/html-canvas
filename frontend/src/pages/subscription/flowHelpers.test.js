@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isHeSilentExitMode, shouldTreatCgAsHeFailRedirect } from './flowHelpers.js'
+import { isHeSilentExitMode, isExternalHttpRedirect, shouldTreatCgAsHeFailRedirect } from './flowHelpers.js'
 
 describe('shouldTreatCgAsHeFailRedirect', () => {
   it('keeps CG as HE-fail fallback for HE funnels', () => {
@@ -36,5 +36,15 @@ describe('isHeSilentExitMode', () => {
         verificationMode: 'HEADER_INJECTION',
       }),
     ).toBe(true)
+  })
+})
+
+describe('isExternalHttpRedirect', () => {
+  it('accepts http(s) leave URLs and rejects empty or relative values', () => {
+    expect(isExternalHttpRedirect('https://cg.example/consent')).toBe(true)
+    expect(isExternalHttpRedirect('http://cg.example/consent')).toBe(true)
+    expect(isExternalHttpRedirect('')).toBe(false)
+    expect(isExternalHttpRedirect('/otp')).toBe(false)
+    expect(isExternalHttpRedirect(null)).toBe(false)
   })
 })

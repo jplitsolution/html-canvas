@@ -8,6 +8,7 @@ import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { variableResolverService } from '../../../common/services/variable-resolver.service.js';
 import { flowEngineService } from '../flow-engine.service.js';
+import { resolveLiveProjectData } from './page-response.js';
 import { redisService } from '../../../common/services/redis.service.js';
 import { flowHasConfirmNode, isPacksOnHome } from './funnel-layout.js';
 
@@ -393,7 +394,7 @@ export function createGetPage(deps) {
       variables,
       actions: getActions(resolvedPageType),
       pack: normalizePack(input.pack),
-      projectData: templateData.projectData || {},
+      projectData: resolveLiveProjectData(templateData.projectData, variables),
       cgRedirectUrl: campaign.cgRedirectUrl || null,
       successRedirectUrl: campaign.successRedirectUrl || null,
       successRedirect,

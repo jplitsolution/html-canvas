@@ -3,7 +3,7 @@ import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage } from '../../services/
 import { persistPhone, pickHeFailRedirectUrl } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 import { FLOW_FONT, FLOW_PAGE_CACHE_ENABLED, PRELOAD_BY_PAGE } from './constants'
-import { isHeSuppressedFunnelPage, normalizeDetectNextPage, shouldTreatCgAsHeFailRedirect } from './flowHelpers'
+import { isHeSuppressedFunnelPage, isExternalHttpRedirect, normalizeDetectNextPage, shouldTreatCgAsHeFailRedirect } from './flowHelpers'
 
 /**
  * Page load/cache/prefetch, boot, URL step sync, and redirect side-effects.
@@ -54,6 +54,17 @@ function useFlowPages({
 
   const cachePage = useCallback(
     (data) => {
+      // CG / partner leave: keep the current (mobile) HTML on screen until navigation.
+      // Transition payloads omit deviceLayouts, so painting them flashes the laptop HTML.
+      const leaveUrl = String(data?.externalRedirect || '').trim()
+      if (isExternalHttpRedirect(leaveUrl)) {
+        if (data.visitId) visitIdRef.current = data.visitId
+        if (data.clickId) clickIdRef.current = String(data.clickId)
+        if (data.rcid) rcidRef.current = String(data.rcid)
+        window.location.assign(leaveUrl)
+        return
+      }
+
       if (!data?.pageType) return
       if (heOnlyModeRef.current && isHeSuppressedFunnelPage(data.pageType)) {
         console.log('[HE] suppressing funnel page render:', data.pageType)
@@ -66,7 +77,7 @@ function useFlowPages({
       if (
         mode === 'immediate' &&
         dest &&
-        /^https?:\/\//i.test(dest) &&
+        isExternalHttpRedirect(dest) &&
         String(data.pageType || '').toUpperCase() === 'THANKYOU'
       ) {
         if (data.visitId) visitIdRef.current = data.visitId
@@ -162,8 +173,8 @@ function useFlowPages({
   // Null-flow CG: backend sends externalRedirect with click_id → leave immediately
   useEffect(() => {
     const dest = pageData?.externalRedirect
-    if (dest && /^https?:\/\//i.test(dest)) {
-      window.location.assign(dest)
+    if (isExternalHttpRedirect(dest)) {
+      window.location.assign(String(dest).trim())
     }
   }, [pageData?.externalRedirect])
 
