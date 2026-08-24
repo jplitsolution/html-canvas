@@ -191,16 +191,19 @@ describe('freezeHotspotToPixels', () => {
 })
 
 describe('coverHotspotFullImage', () => {
-  it('covers the image using pixel size so 100% height is not ignored', () => {
+  it('covers the image with % so the hotspot stays glued when the screen size changes', () => {
     const parent = document.createElement('div')
     parent.setAttribute('data-tc-type', 'image-banner')
     const img = document.createElement('img')
-    stubRect(img, { left: 0, top: 0, width: 400, height: 800 })
+    stubRect(img, { left: 0, top: 0, width: 375, height: 0 })
+    Object.defineProperty(img, 'naturalWidth', { value: 750 })
+    Object.defineProperty(img, 'naturalHeight', { value: 2000 })
     parent.appendChild(img)
     const el = document.createElement('a')
     el.setAttribute('data-tc-type', 'hotspot')
     parent.appendChild(el)
     let attrs = { 'data-tc-type': 'hotspot' }
+    const added = []
     coverHotspotFullImage({
       getAttributes: () => ({ ...attrs }),
       setAttributes: (next) => {
@@ -212,13 +215,19 @@ describe('coverHotspotFullImage', () => {
         getAttributes: () => ({ 'data-tc-type': 'image-banner' }),
         addStyle: vi.fn(),
       }),
-      addStyle: vi.fn(),
+      addStyle: (style) => {
+        added.push(style)
+      },
       removeStyle: vi.fn(),
     })
     expect(attrs['data-tc-cover-full']).toBe('1')
-    expect(el.style.top).toBe('0px')
-    expect(el.style.left).toBe('0px')
-    expect(el.style.width).toBe('400px')
-    expect(el.style.height).toBe('800px')
+    expect(el.getAttribute('data-tc-cover-full')).toBe('1')
+    expect(el.style.top).toBe('0%')
+    expect(el.style.left).toBe('0%')
+    expect(el.style.width).toBe('100%')
+    expect(el.style.height).toBe('100%')
+    expect(added.at(-1)?.width).toBe('100%')
+    expect(added.at(-1)?.height).toBe('100%')
+    expect(img.style.aspectRatio).toBe('750 / 2000')
   })
 })

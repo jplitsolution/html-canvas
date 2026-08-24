@@ -1610,11 +1610,15 @@ export function PropertyPanel() {
                   onClick={() => {
                     coverHotspotFullImage(selected);
                     update();
-                    try {
-                      editor?.Canvas?.refresh?.();
-                    } catch (_) {
-                      /* noop */
-                    }
+                    const refresh = () => {
+                      try {
+                        editor?.Canvas?.refresh?.();
+                      } catch (_) {
+                        /* noop */
+                      }
+                    };
+                    refresh();
+                    requestAnimationFrame(refresh);
                   }}
                   style={{
                     fontSize: '10px',
@@ -1685,7 +1689,7 @@ export function PropertyPanel() {
                 </label>
               </div>
               <p className="text-[10px] text-fg-muted mt-2">
-                Tip: Click <strong>⛶ Cover Full Image</strong> to make the whole image clickable. Or drag the blue handles to move and resize this area.
+                Tip: <strong>⛶ Cover Full Image</strong> stretches this box over the whole picture. It stays glued when the screen size changes. Drag the blue handles if you only want part of the image clickable.
               </p>
             </div>
           </>

@@ -530,11 +530,17 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
       const style = cmp.getStyle?.() || {}
       const w = String(style.width || '')
       const h = String(style.height || '')
-      if (w !== '100%' || h !== '100%') {
+      const stillFull = (w === '100%' || w === 'auto') && (h === '100%' || h === 'auto')
+      if (!stillFull) {
         const attrs = { ...(cmp.getAttributes?.() || {}) }
         if (attrs['data-tc-cover-full']) {
           delete attrs['data-tc-cover-full']
           cmp.setAttributes(attrs)
+          try {
+            cmp.getEl?.()?.removeAttribute?.('data-tc-cover-full')
+          } catch (_) {
+            /* noop */
+          }
         }
       }
       freezeHotspotToPixels(cmp)

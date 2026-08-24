@@ -118,6 +118,47 @@ function applyBannerHostStyle(el) {
   el.style.lineHeight = '0'
 }
 
+/** Keep the image in-flow so a 100% hotspot can hug it at any screen size. */
+function ensureImageLayout(img) {
+  if (!img?.style) return
+  img.style.display = 'block'
+  img.style.width = '100%'
+  img.style.maxWidth = '100%'
+  img.style.height = 'auto'
+  img.style.maxHeight = 'none'
+  img.style.objectFit = 'contain'
+  const nw = Number(img.naturalWidth) || 0
+  const nh = Number(img.naturalHeight) || 0
+  if (nw > 0 && nh > 0) {
+    img.style.aspectRatio = `${nw} / ${nh}`
+  }
+}
+
+function coverFullBox() {
+  return hotspotChrome({
+    top: '0%',
+    left: '0%',
+    width: '100%',
+    height: '100%',
+    right: '0%',
+    bottom: '0%',
+  })
+}
+
+function applyCoverFullToEl(el) {
+  if (!el?.style) return
+  el.style.position = 'absolute'
+  el.style.display = 'block'
+  el.style.top = '0%'
+  el.style.left = '0%'
+  el.style.width = '100%'
+  el.style.height = '100%'
+  el.style.right = '0%'
+  el.style.bottom = '0%'
+  el.style.boxSizing = 'border-box'
+  el.setAttribute('data-tc-cover-full', '1')
+}
+
 function findHotspotImageEl(hotspotEl) {
   const parent = hotspotEl?.parentElement
   if (!parent) return null
@@ -240,6 +281,13 @@ export function wrapImageAsBanner(imgCmp) {
   return host
 }
 
+function isImgLikeComponent(cmp) {
+  if (!cmp || isImageBannerHost(cmp)) return false
+  const tag = String(cmp.get?.('tagName') || '').toLowerCase()
+  const tc = cmp.getAttributes?.()?.['data-tc-type']
+  return tag === 'img' || tc === 'image'
+}
+
 function findImageSiblingComponent(hotspotCmp) {
   const parent = hotspotCmp?.parent?.()
   const kids = parent?.components?.()
@@ -248,6 +296,20 @@ function findImageSiblingComponent(hotspotCmp) {
   for (let i = 0; i < len; i++) {
     const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
     if (child && child !== hotspotCmp && isImageComponent(child)) return child
+  }
+  return null
+}
+
+function findImageComponentDeep(root, skip) {
+  if (!root) return null
+  if (root !== skip && isImgLikeComponent(root)) return root
+  const kids = root.components?.()
+  const len = kids?.length || 0
+  for (let i = 0; i < len; i++) {
+    const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
+    if (!child || child === skip) continue
+    const found = findImageComponentDeep(child, skip)
+    if (found) return found
   }
   return null
 }
@@ -288,23 +350,29 @@ export function pinEditorHotspotToImage(component) {
 
   if (isImageBannerHost(parent)) {
     parent.addStyle?.(IMAGE_BANNER_STYLE)
+    const hostEl = parent.getEl?.()
+    if (hostEl) applyBannerHostStyle(hostEl)
+    ensureImageLayout(hostEl?.querySelector?.('img'))
     // Already on the image box — do not re-measure. Remap on resize/drag-end
     // overwrote Grapes' new px size and snapped the hotspot back.
     return
   }
 
-  const img = findImageSiblingComponent(component)
+  const img = findImageSiblingComponent(component) || findImageComponentDeep(parent, component)
   if (!img) return
   const imgEl =
     String(img.get?.('tagName') || '').toLowerCase() === 'img'
       ? img.getEl?.()
       : img.getEl?.()?.querySelector?.('img') || img.getEl?.()
+  ensureImageLayout(imgEl)
   if (hotspotEl && imgEl && imageBoxReady(imgEl)) {
     remapHotspotToAnchor(hotspotEl, imgEl)
     syncHotspotElToModel(component, hotspotEl)
   }
   const host = wrapImageAsBanner(img)
   if (host) host.addStyle?.(IMAGE_BANNER_STYLE)
+  const hostEl = host?.getEl?.()
+  if (hostEl) applyBannerHostStyle(hostEl)
   if (!host || component.parent?.() === host) return
   if (typeof host.append === 'function') host.append(component)
   else host.components?.()?.add?.(component)
@@ -383,7 +451,10 @@ export function freezeHotspotToPixels(component) {
   syncHotspotElToModel(component, el)
 }
 
-/** Stretch the hotspot to the image box using px in the editor (height:% does not apply). */
+/**
+ * Stretch the hotspot to the image using % (not canvas px) so it stays
+ * glued when the screen / device width changes.
+ */
 export function coverHotspotFullImage(component) {
   if (!isHotspotComponent(component)) return
   try {
@@ -397,42 +468,27 @@ export function coverHotspotFullImage(component) {
   } catch (_) {
     /* noop */
   }
-  const el = component.getEl?.()
-  const parentEl = component.parent?.()?.getEl?.()
-  const img = parentEl?.querySelector?.('img')
-  const anchor = img || parentEl
-  const ar = anchor?.getBoundingClientRect?.()
-  const w = Math.round(ar?.width || 0)
-  const h = Math.round(ar?.height || 0)
-  const width = w >= 8 ? `${w}px` : '100%'
-  const height = h >= 8 ? `${h}px` : '100%'
-  const box = {
-    position: 'absolute',
-    display: 'block',
-    top: '0px',
-    left: '0px',
-    width,
-    height,
-    'z-index': String(Z_HOTSPOT),
-    'pointer-events': 'auto',
-    cursor: 'pointer',
-    'text-decoration': 'none',
-  }
+
+  const parent = component.parent?.()
+  const parentEl = parent?.getEl?.()
+  const img = parentEl?.querySelector?.('img') || findHotspotImageEl(component.getEl?.())
+  if (parent) parent.addStyle?.(IMAGE_BANNER_STYLE)
+  if (parentEl) applyBannerHostStyle(parentEl)
+  ensureImageLayout(img)
+
+  const box = coverFullBox()
   try {
-    component.removeStyle?.('right')
-    component.removeStyle?.('bottom')
     component.addStyle?.(box)
   } catch (_) {
     /* noop */
   }
-  if (!el) return
-  el.style.position = 'absolute'
-  el.style.top = '0px'
-  el.style.left = '0px'
-  el.style.width = width
-  el.style.height = height
-  el.style.right = 'auto'
-  el.style.bottom = 'auto'
+
+  const el = component.getEl?.()
+  applyCoverFullToEl(el)
+
+  if (img && img.tagName === 'IMG' && img.complete === false) {
+    img.addEventListener('load', () => coverHotspotFullImage(component), { once: true })
+  }
 }
 
 function pct(n, fallback = 0) {
@@ -1089,6 +1145,16 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
   [data-tc-type="hotspot"]:active {
     cursor: grabbing;
   }
+  /* Cover-full: fill the image banner at any screen size (not a frozen 375px box). */
+  [data-tc-type="hotspot"][data-tc-cover-full="1"] {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0;
+  }
 
   /* Buttons on images keep content size — never stretch (exclude hotspots) */
   button[data-tc-absolute="1"],
@@ -1140,6 +1206,14 @@ export const OVERLAY_STACKING_CSS = `
     z-index: ${Z_HOTSPOT} !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+  }
+  [data-tc-type="hotspot"][data-tc-cover-full="1"] {
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    width: auto !important;
+    height: auto !important;
   }
 
   button[data-tc-absolute="1"],
