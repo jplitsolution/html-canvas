@@ -380,6 +380,7 @@ export default function TemplateEditor({
           draggable: true,
           droppable: false,
           resizable: HOTSPOT_RESIZABLE,
+          selectable: true,
           hoverable: true,
         })
 

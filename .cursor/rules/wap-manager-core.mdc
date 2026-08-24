@@ -1,0 +1,38 @@
+---
+description: Core product invariants — visit logging is the product; every new flow seeds polished dummy pages
+alwaysApply: true
+---
+
+# WAP Manager — core (never skip)
+
+This repo is **one manager for many operators/campaigns**, not a new project per campaign.
+
+The **main system is tracking**: one visit, every hop visible in Campaign Logs / Session Detail (`api_call_logs`). Pages are the other half: each flow type ships its own dummy funnel so create-campaign looks complete.
+
+## 1. Logging (required on every new flow / API)
+
+Any HTTP we send **or receive** (partner, HE, OTP, DCB, operator callback, vendor postback, internal proxy) must be persisted with **request + response** (URL, body, status, success/error).
+
+- Use `apiCallLogService.record` (`backend/src/modules/flow/api-call-log.service.js`).
+- Add a `callType` in `ApiCallType` (`api-call-log.entity.js`) if none fits (`varchar(32)`).
+- Attach `visitId`, `campaignId`, `clickId`, `rcid`, `msisdn` whenever they exist. Visit is created **before** outbound HE/partner HTTP.
+- Failures must still log (`success: false`, `errorMessage`, body if any). Swallowing a log write is a bug.
+- Do not `console.log` a partner call and skip `api_call_logs`. If it is not in log history, it did not happen for ops.
+
+Pattern: partner HTTP already does this in `partner-api.service.js` / `otp.service.js` / detect helpers. Copy that, do not invent a parallel logger.
+
+Attribution (`click_id`, `rcid`, campids) stays in **our** logs; do not put it on third-party request URLs/bodies.
+
+## 2. Dummy pages (required on every new flow type)
+
+A flow type (e.g. `BOTH`, `OTP_ONLY`, `UNIVERSE_DCB`) is **config**, not a new app. On campaign **create**, every page in `ALL_CAMPAIGN_PAGE_TYPES` must exist with HTML that matches **that** flow — polished dummy, not a blank canvas.
+
+- Seed HTML/CSS in `backend/src/database/seed/default-funnel-pages.js` via `getDefaultFunnelPageData(pageType, { verificationMode })`.
+- Campaign create / `ensureCampaignPages` already auto-creates from that. New flow = new dummy branch there (see `UNIVERSE_DCB` HOME/OTP), not a one-off campaign patch.
+- Keep frontend snippets in sync (`frontend/src/editor/utils/funnelGuide.js`) when defaults change.
+- Dummies must look like a real operator funnel (layout, CTA, placeholders `{{operator}}` / `{{country}}` / packs). Empty `projectData` + no HTML is not done.
+
+## Don't
+
+- New operator/flow = copy-paste a second logging path or a second page seeder.
+- Ship a flow whose Session Detail is missing hops, or whose new campaign pages are blank/classic-only when the mode needs different screens.
