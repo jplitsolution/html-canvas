@@ -167,8 +167,11 @@ Content-Type: application/json
                       Default <code className="font-mono">active</code>. Any value is stored
                       (e.g. <code className="font-mono">active</code>,{' '}
                       <code className="font-mono">grace</code>,{' '}
-                      <code className="font-mono">parking</code>, unsub). Vendor CPA postback
-                      fires only for billable values:{' '}
+                      <code className="font-mono">parking</code>, unsub, or a custom operator
+                      string). Vendor CPA postback fires for the allow-list saved on that
+                      campaign’s vendor assignment. The same vendor can use different statuses
+                      on another campaign. If the assignment is blank, vendor default then
+                      global:{' '}
                       <code className="font-mono">active</code>,{' '}
                       <code className="font-mono">success</code>,{' '}
                       <code className="font-mono">ok</code>,{' '}
@@ -197,8 +200,9 @@ Content-Type: application/json
                 conversion row (grace, active, parking, …). Need{' '}
                 <code className="font-mono text-fg">msisdn</code> or{' '}
                 <code className="font-mono text-fg">click_id</code> /{' '}
-                <code className="font-mono text-fg">ext_id</code>. Vendor CPA fires only for
-                billable statuses.
+                <code className="font-mono text-fg">ext_id</code>. Vendor CPA fires for the
+                statuses saved on that campaign’s vendor assignment (or vendor default /
+                global fallback). Same vendor, different campaign → different list.
               </li>
               <li>
                 <strong className="text-fg">click_id + msisdn</strong> — find the visit by{' '}

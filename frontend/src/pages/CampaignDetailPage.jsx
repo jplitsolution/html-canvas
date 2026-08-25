@@ -33,6 +33,10 @@ import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import CampaignFlowBuilder from '../components/flow/CampaignFlowBuilder'
+import AllowedCallbackStatusesField, {
+  fallbackCallbackStatusesHint,
+  effectiveCallbackStatuses,
+} from '../components/partners/AllowedCallbackStatusesField'
 
 function CompactStatusToggle({ active, onToggle, disabled, activating, blockedReason }) {
   return (
@@ -84,6 +88,7 @@ function CampaignDetailPage() {
   const [copiedId, setCopiedId] = useState(null)
   const [selectedVendorForAdd, setSelectedVendorForAdd] = useState('')
   const [addPayoutPercent, setAddPayoutPercent] = useState(100)
+  const [addAllowedStatuses, setAddAllowedStatuses] = useState('')
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
@@ -150,6 +155,10 @@ function CampaignDetailPage() {
         affiliateId: null,
         active: t.active !== false,
         payoutPercent: clampPayoutPercent(t.payoutPercent ?? 100),
+        allowedCallbackStatuses:
+          typeof t.allowedCallbackStatuses === 'string'
+            ? t.allowedCallbackStatuses.trim() || null
+            : t.allowedCallbackStatuses || null,
       }))
       .filter((t) => t.vendorId)
 
@@ -163,17 +172,23 @@ function CampaignDetailPage() {
       )
 
       if (!currentTrackings.find((t) => t.vendorId === vendorId)) {
+        const vendor = vendors.find((v) => Number(v.id) === vendorId)
         currentTrackings.push({
           vendorId,
           affiliateId: null,
           active: true,
           payoutPercent: clampPayoutPercent(addPayoutPercent),
+          allowedCallbackStatuses:
+            addAllowedStatuses.trim() ||
+            vendor?.allowedCallbackStatuses?.trim() ||
+            null,
         })
         await updateCampaign(campaign.id, { trackings: currentTrackings })
         useStore.getState().addToast('Vendor assigned', 'success')
       }
       setSelectedVendorForAdd('')
       setAddPayoutPercent(100)
+      setAddAllowedStatuses('')
     } finally {
       setAssigningVendor(false)
     }
@@ -235,6 +250,35 @@ function CampaignDetailPage() {
         ),
       })
       useStore.getState().addToast(`Payout set to ${payoutPercent}%`, 'success')
+    } finally {
+      setAssigningVendor(false)
+    }
+  }
+
+  const handleSaveTrackingStatuses = async (vendorId, nextStatuses) => {
+    if (!campaign) return
+    const allowedCallbackStatuses = String(nextStatuses || '').trim() || null
+    const current = serializeTrackings(campaign.trackings)
+    const existing = current.find((t) => t.vendorId === Number(vendorId))
+    if (
+      !existing ||
+      (existing.allowedCallbackStatuses || null) === allowedCallbackStatuses
+    ) {
+      return
+    }
+    setAssigningVendor(true)
+    try {
+      await updateCampaign(campaign.id, {
+        trackings: current.map((t) =>
+          t.vendorId === Number(vendorId) ? { ...t, allowedCallbackStatuses } : t,
+        ),
+      })
+      useStore.getState().addToast(
+        allowedCallbackStatuses
+          ? `This assignment fires on: ${allowedCallbackStatuses}`
+          : 'Cleared — this assignment uses the vendor default',
+        'success',
+      )
     } finally {
       setAssigningVendor(false)
     }
@@ -326,6 +370,10 @@ function CampaignDetailPage() {
         vendorId,
         vendorName: stats?.vendorName || vendor.name || `Vendor #${vendorId}`,
         vendorCode: stats?.vendorCode || vendor.code || null,
+        fireStatuses: effectiveCallbackStatuses(
+          t.allowedCallbackStatuses,
+          vendor,
+        ),
         assignmentActive: t.active !== false,
         totalClicks: stats?.totalClicks ?? 0,
         requestedApi: stats?.requestedApi ?? 0,
@@ -576,6 +624,11 @@ function CampaignDetailPage() {
                         {row.vendorCode ? (
                           <p className="text-[11px] text-fg-muted font-mono">{row.vendorCode}</p>
                         ) : null}
+                        {row.fireStatuses ? (
+                          <p className="text-[11px] text-fg-subtle mt-0.5 font-mono truncate" title={row.fireStatuses}>
+                            Postback: {row.fireStatuses}
+                          </p>
+                        ) : null}
                       </td>
                       <td className="col-num">{row.totalClicks ?? 0}</td>
                       {apiExpose ? (
@@ -605,14 +658,14 @@ function CampaignDetailPage() {
         isOpen={showVendorModal}
         onClose={() => setShowVendorModal(false)}
         title="Vendors"
-        size="lg"
+        size="xl"
       >
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-fg-muted">
-              {apiExpose
-                ? 'Assign a vendor, set payout %, copy or download APIs.'
-                : 'Assign a vendor to generate a tracking URL.'}
+              Statuses are per campaign assignment. The same vendor can fire on{' '}
+              <code className="font-mono">grace</code> here and{' '}
+              <code className="font-mono">active</code> on another campaign.
             </p>
             <Link to="/vendors" className="text-xs text-accent hover:underline shrink-0">
               Manage
@@ -623,7 +676,12 @@ function CampaignDetailPage() {
             <select
               className="flex-1 text-sm border border-border rounded-md px-3 py-1.5 bg-bg-elevated text-fg focus:outline-none focus:ring-2 focus:ring-ring"
               value={selectedVendorForAdd}
-              onChange={(e) => setSelectedVendorForAdd(e.target.value)}
+              onChange={(e) => {
+                const id = e.target.value
+                setSelectedVendorForAdd(id)
+                const vendor = activeVendors.find((v) => String(v.id) === String(id))
+                setAddAllowedStatuses(vendor?.allowedCallbackStatuses || '')
+              }}
               disabled={assigningVendor}
             >
               <option value="">Select vendor…</option>
@@ -658,6 +716,16 @@ function CampaignDetailPage() {
               {assigningVendor ? 'Assigning…' : 'Assign'}
             </Button>
           </div>
+          {selectedVendorForAdd ? (
+            <AllowedCallbackStatusesField
+              compact
+              value={addAllowedStatuses}
+              onChange={(next) => setAddAllowedStatuses(next || '')}
+              disabled={assigningVendor}
+              label="Allowed statuses for this campaign"
+              hint="Saved on this campaign’s vendor assignment only. Change them later without affecting other campaigns."
+            />
+          ) : null}
           {activeVendors.length === 0 && (
             <p className="text-xs text-fg-muted">
               No active vendors.{' '}
@@ -768,6 +836,16 @@ function CampaignDetailPage() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </IconButton>
+                    </div>
+                    <div className="mt-2.5 rounded-lg border border-border bg-bg-muted/15 px-2.5 py-2">
+                      <AllowedCallbackStatusesField
+                        compact
+                        value={t.allowedCallbackStatuses || ''}
+                        onChange={(next) => handleSaveTrackingStatuses(vendorId, next)}
+                        disabled={assigningVendor}
+                        label="Allowed statuses for this campaign"
+                        hint={`This campaign + ${vendor?.name || 'vendor'} only. Other campaigns keep their own list. ${fallbackCallbackStatusesHint(vendor)} Currently fires on: ${effectiveCallbackStatuses(t.allowedCallbackStatuses, vendor)}`}
+                      />
                     </div>
                     <div className="mt-1.5 space-y-0.5">
                       {endpoints.map((row) => (

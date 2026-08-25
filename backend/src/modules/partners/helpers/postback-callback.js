@@ -9,8 +9,8 @@ import { VisitEventType } from '../../../database/entities/visit-event.entity.js
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { appendPostbackHitSafe } from './postback-day-report-file.js';
 import {
+  describeVendorFireDecision,
   parseOperatorStatus,
-  shouldFireVendorPostback,
 } from './operator-callback-status.js';
 
 const maskPhone = (phone) => {
@@ -101,7 +101,6 @@ export const createPostbackCallback = (deps) => {
     const incomingMsisdn = parseCallbackMsisdn(query);
     const clickId = parseCallbackClickId(query);
     const status = parseOperatorStatus(query);
-    const fireVendor = shouldFireVendorPostback(status);
 
     const findLatestByMsisdn = async (msisdn) => {
       if (!msisdn) return null;
@@ -144,16 +143,38 @@ export const createPostbackCallback = (deps) => {
       const matched = extra.matched !== false;
 
       if (visitId) {
-        await logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, {
-          info: matched
-            ? 'Billing / operator callback received — firing vendor postback.'
-            : 'Billing / operator callback received — not matched in our system.',
+        const fired = extra.vendorFired === true;
+        const held = extra.vendorFired === false;
+        const skipInfo = `Vendor postback not sent because received status "${
+          extra.receivedStatus || extra.operatorStatus || status
+        }" is not in allowed statuses [${
+          extra.allowedStatuses || 'active, success, ok, subscribed, 1, true'
+        }].`;
+        const info =
+          extra.info ||
+          (matched
+            ? held
+              ? skipInfo
+              : fired
+                ? 'Billing / operator callback received — firing vendor postback.'
+                : 'Billing / operator callback received.'
+            : 'Billing / operator callback received — not matched in our system.');
+        const payload = {
           msisdn: maskPhone(msisdn),
           clickId: rowClickId || clickId || null,
           status,
           ...extra,
-        });
+          info,
+          reason: held ? info : extra.reason,
+        };
+        await logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, payload);
       }
+      const heldCall = extra.vendorFired === false;
+      const skipInfo = `Vendor postback not sent because received status "${
+        extra.receivedStatus || extra.operatorStatus || status
+      }" is not in allowed statuses [${
+        extra.allowedStatuses || 'active, success, ok, subscribed, 1, true'
+      }].`;
       await logApiCall({
         visitId: visitId || null,
         campaignId: campaignId || null,
@@ -168,6 +189,10 @@ export const createPostbackCallback = (deps) => {
           status,
           query: safeQuery,
           ...extra,
+          info: heldCall
+            ? extra.info || skipInfo
+            : extra.info,
+          reason: heldCall ? extra.info || skipInfo : extra.reason,
         }),
         responseStatus: 200,
         responseBody: null,
@@ -230,7 +255,8 @@ export const createPostbackCallback = (deps) => {
 
     const firePending = async (pending, extra = {}) => {
       const allowedStatuses = await resolveAllowedStatuses(pending.campaignId, pending.vendorId);
-      const fireVendor = shouldFireVendorPostback(status, allowedStatuses);
+      const decision = describeVendorFireDecision(status, allowedStatuses);
+      const fireVendor = decision.shouldFire;
       pending.operatorStatus = status;
       if (
         fireVendor &&
@@ -240,6 +266,17 @@ export const createPostbackCallback = (deps) => {
         pending.status = ConversionPostbackStatus.RECEIVED;
       }
       await getPostbackRepo().save(pending);
+      const fireMeta = {
+        operatorStatus: status,
+        receivedStatus: decision.received,
+        allowedStatuses: decision.allowedLabel,
+        info: decision.info,
+        vendorFired: fireVendor,
+        postbackId: pending.id,
+        vendorId: pending.vendorId,
+        campid: pending.campid,
+        trackingCampid: pending.trackingCampid,
+      };
       if (!fireVendor) {
         await logInbound(
           pending.visitId,
@@ -248,14 +285,10 @@ export const createPostbackCallback = (deps) => {
           pending.rcid,
           pending.msisdn,
           {
-            action: 'hold',
-            vendorFired: false,
-            operatorStatus: status,
-            postbackId: pending.id,
-            vendorId: pending.vendorId,
-            campid: pending.campid,
-            trackingCampid: pending.trackingCampid,
             ...extra,
+            ...fireMeta,
+            action: 'hold',
+            reason: decision.info,
           },
         );
         return {
@@ -264,6 +297,7 @@ export const createPostbackCallback = (deps) => {
           vendorFired: false,
           operatorStatus: status,
           status: pending.status,
+          reason: decision.info,
         };
       }
       await logInbound(
@@ -273,14 +307,9 @@ export const createPostbackCallback = (deps) => {
         pending.rcid,
         pending.msisdn,
         {
-          action: 'fire',
-          vendorFired: true,
-          operatorStatus: status,
-          postbackId: pending.id,
-          vendorId: pending.vendorId,
-          campid: pending.campid,
-          trackingCampid: pending.trackingCampid,
           ...extra,
+          ...fireMeta,
+          action: 'fire',
         },
       );
       const fired = await firePostback(pending.id);
@@ -289,7 +318,8 @@ export const createPostbackCallback = (deps) => {
 
     const registerAndFireFromVisit = async (visit, msisdn, extra = {}) => {
       const allowedStatuses = await resolveAllowedStatuses(visit.campaignId, visit.vendorId);
-      const fireVendor = shouldFireVendorPostback(status, allowedStatuses);
+      const decision = describeVendorFireDecision(status, allowedStatuses);
+      const fireVendor = decision.shouldFire;
       const digits = String(msisdn || '').replace(/\D/g, '') || '';
       const visitPhone = String(visit.phone || '').replace(/\D/g, '');
       if (visit.id && digits && !visitPhone) {
@@ -303,10 +333,15 @@ export const createPostbackCallback = (deps) => {
         visit.rcid,
         digits || visitPhone || null,
         {
+          ...extra,
+          matchPath: extra.reason || null,
           vendorFired: fireVendor,
           operatorStatus: status,
+          receivedStatus: decision.received,
+          allowedStatuses: decision.allowedLabel,
+          info: decision.info,
           vendorId: visit.vendorId,
-          ...extra,
+          reason: fireVendor ? extra.reason : decision.info,
         },
       );
 
@@ -338,6 +373,7 @@ export const createPostbackCallback = (deps) => {
           vendorFired: false,
           operatorStatus: status,
           status: registered.status,
+          reason: decision.info,
         };
       }
       const fired = await firePostback(id);

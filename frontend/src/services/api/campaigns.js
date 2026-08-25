@@ -101,12 +101,16 @@ function mapCampaign(campaign) {
       ).toLowerCase()
       return v === 'packs_on_home' ? 'packs_on_home' : 'classic'
     })(),
+    allowedCallbackStatuses:
+      campaign.allowedCallbackStatuses || campaign.allowed_callback_statuses || null,
     pages,
     requiredComplete,
     flowConfig,
     trackings: (campaign.trackings || []).map((t) => ({
       ...t,
       active: t.active !== false,
+      allowedCallbackStatuses:
+        t.allowedCallbackStatuses || t.allowed_callback_statuses || null,
     })),
     createdAt: campaign.createdAt,
     updatedAt: campaign.updatedAt,

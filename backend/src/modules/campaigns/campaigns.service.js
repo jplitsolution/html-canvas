@@ -787,6 +787,7 @@ export const createCampaignsService = () => {
       successRedirectMode: campaign.successRedirectMode,
       postbackRegisterAt: campaign.postbackRegisterAt,
       funnelLayout: campaign.funnelLayout,
+      allowedCallbackStatuses: campaign.allowedCallbackStatuses || null,
       createdAt: campaign.createdAt,
       updatedAt: campaign.updatedAt,
       pages: campaign.pages || [],

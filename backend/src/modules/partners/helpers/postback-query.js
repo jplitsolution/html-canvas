@@ -20,6 +20,9 @@ import {
   resolveRangeBounds,
 } from '../../../common/zoned-day.js';
 import {
+  describeVendorFireDecision,
+} from './operator-callback-status.js';
+import {
   DAY_REPORT_EVENT_TYPES,
   DAY_REPORT_HE_LOG_TYPES,
   DAY_REPORT_HIT_TYPES,
@@ -44,6 +47,7 @@ export function createPostbackQuery(deps) {
     getCampaignRepo,
     getVisitEventRepo,
     getApiCallLogRepo,
+    getTrackingRepo,
   } = deps;
 
   const resolveUserScope = async (userId) => {
@@ -455,6 +459,45 @@ export function createPostbackQuery(deps) {
       row.status === ConversionPostbackStatus.FAILED ||
       row.status === ConversionPostbackStatus.SKIPPED;
 
+    let allowedConfig = null;
+    try {
+      if (row.campaignId && row.vendorId && getTrackingRepo) {
+        const tracking = await getTrackingRepo().findOne({
+          where: {
+            campaignId: parseInt(row.campaignId, 10),
+            vendorId: parseInt(row.vendorId, 10),
+          },
+        });
+        if (tracking?.allowedCallbackStatuses?.trim()) {
+          allowedConfig = tracking.allowedCallbackStatuses.trim();
+        }
+      }
+      if (!allowedConfig && vendor?.allowedCallbackStatuses?.trim()) {
+        allowedConfig = vendor.allowedCallbackStatuses.trim();
+      }
+      if (!allowedConfig && row.campaignId && getCampaignRepo) {
+        const campaign = await getCampaignRepo().findOne({
+          where: { id: parseInt(row.campaignId, 10) },
+        });
+        if (campaign?.allowedCallbackStatuses?.trim()) {
+          allowedConfig = campaign.allowedCallbackStatuses.trim();
+        }
+      }
+    } catch {
+      allowedConfig = null;
+    }
+    const fireDecision = row.operatorStatus
+      ? describeVendorFireDecision(row.operatorStatus, allowedConfig)
+      : describeVendorFireDecision('', allowedConfig);
+    const vendorFireSkipReason =
+      billingReceived &&
+      !vendorFired &&
+      row.operatorStatus &&
+      fireDecision &&
+      !fireDecision.shouldFire
+        ? fireDecision.info
+        : null;
+
     let relatedLogs = [];
     if (row.visitId) {
       relatedLogs = await getApiCallLogRepo().find({
@@ -478,6 +521,9 @@ export function createPostbackQuery(deps) {
         billingReceived,
         billingReceivedAt,
         operatorStatus: row.operatorStatus || null,
+        allowedStatuses: fireDecision.allowedLabel,
+        receivedStatus: row.operatorStatus || fireDecision.received || null,
+        vendorFireSkipReason,
         vendorFired,
         vendorFireStatus: row.status,
         vendorName: vendor?.name || null,

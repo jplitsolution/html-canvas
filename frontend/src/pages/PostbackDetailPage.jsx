@@ -123,7 +123,8 @@ function PostbackDetailPage() {
                   }
                 >
                   {life.billingReceived
-                    ? `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}. Vendor fire only if billable (active/success).`
+                    ? life.vendorFireSkipReason ||
+                      `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}.`
                     : 'Still pending — vendor CPA has not been fired from billing yet.'}
                 </Step>
                 <Step
@@ -151,7 +152,21 @@ function PostbackDetailPage() {
                         <div className="text-rose-600 whitespace-pre-wrap">{data.errorMessage}</div>
                       ) : null}
                     </div>
-                  ) : null}
+                  ) : life.vendorFireSkipReason ? (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+                      {life.vendorFireSkipReason}
+                      {life.allowedStatuses || life.receivedStatus ? (
+                        <span className="block font-mono mt-1">
+                          allowed: {life.allowedStatuses || '—'} · received:{' '}
+                          {life.receivedStatus || life.operatorStatus || '—'}
+                        </span>
+                      ) : null}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      Waiting for a billable operator status on this assignment.
+                    </p>
+                  )}
                 </Step>
               </div>
             </div>

@@ -40,3 +40,26 @@ export const shouldFireVendorPostback = (status, customAllowedConfig = null) => 
   return VENDOR_FIRE_OPERATOR_STATUSES.has(normalized);
 };
 
+export const GLOBAL_FIRE_STATUSES_LABEL = [...VENDOR_FIRE_OPERATOR_STATUSES]
+  .filter(Boolean)
+  .join(', ');
+
+export const allowedStatusesLabel = (customAllowedConfig = null) => {
+  const customSet = parseAllowedStatuses(customAllowedConfig);
+  if (customSet?.size) return [...customSet].join(', ');
+  return GLOBAL_FIRE_STATUSES_LABEL;
+};
+
+export const describeVendorFireDecision = (
+  status,
+  customAllowedConfig = null,
+) => {
+  const received = String(status || '').trim().toLowerCase() || '(empty)';
+  const allowedLabel = allowedStatusesLabel(customAllowedConfig);
+  const shouldFire = shouldFireVendorPostback(status, customAllowedConfig);
+  const info = shouldFire
+    ? `Operator status "${received}" is in allowed list [${allowedLabel}] — firing vendor postback.`
+    : `Vendor postback not sent because received status "${received}" is not in allowed statuses [${allowedLabel}].`;
+  return { shouldFire, received, allowedLabel, info };
+};
+

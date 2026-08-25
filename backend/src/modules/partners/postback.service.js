@@ -57,6 +57,7 @@ export const createPostbackService = () => {
       getVendorRepo,
       getVisitRepo,
       getCampaignRepo,
+      getTrackingRepo,
       getVisitEventRepo,
       getApiCallLogRepo,
     });

@@ -45,7 +45,7 @@ const pendingRow = {
 };
 
 const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } = {}) => {
-  const calls = { registerPending: [], firePostback: [], logApiCall: [], appendHit: [] };
+  const calls = { registerPending: [], firePostback: [], logApiCall: [], appendHit: [], logEvent: [] };
   const qbState = { whereClick: false };
 
   const getPostbackRepo = () => ({
@@ -78,7 +78,9 @@ const makeDeps = ({ pending = null, visitByClick = null, visitByPhone = null } =
       appendHit: async (input) => {
         calls.appendHit.push(input);
       },
-      logEvent: async () => {},
+      logEvent: async (visitId, type, payload) => {
+        calls.logEvent.push({ visitId, type, payload });
+      },
       setVisitPhone: async () => {},
       registerPending: async (input) => {
         calls.registerPending.push(input);
@@ -241,6 +243,13 @@ describe('processOperatorCallback shapes', () => {
     assert.equal(row.operatorStatus, 'grace');
     assert.equal(calls.firePostback.length, 0);
     assert.equal(calls.logApiCall[0].statusLabel, 'GRACE');
+    const holdBody = JSON.parse(calls.logApiCall[0].requestBody);
+    assert.equal(holdBody.vendorFired, false);
+    assert.equal(holdBody.receivedStatus, 'grace');
+    assert.match(String(holdBody.allowedStatuses), /active/);
+    assert.match(String(holdBody.reason), /not in allowed statuses/);
+    assert.match(String(holdBody.reason), /received status "grace"/);
+    assert.match(String(calls.logEvent[0].payload.info), /not sent/);
   });
 
   it('grace on visit by click_id queues pending and does not fire', async () => {
@@ -257,6 +266,10 @@ describe('processOperatorCallback shapes', () => {
     assert.equal(calls.registerPending[0].asReceived, false);
     assert.equal(calls.registerPending[0].operatorStatus, 'grace');
     assert.equal(calls.logApiCall[0].statusLabel, 'GRACE');
+    const holdBody = JSON.parse(calls.logApiCall[0].requestBody);
+    assert.equal(holdBody.vendorFired, false);
+    assert.match(String(holdBody.reason), /received status "grace"/);
+    assert.match(String(holdBody.reason), /not in allowed statuses/);
   });
 
   it('active still fires vendor postback', async () => {
@@ -301,6 +314,34 @@ describe('processOperatorCallback shapes', () => {
       status: 'unsub',
     });
     assert.equal(outUnsub.vendorFired, false);
+    assert.equal(calls.firePostback.length, 0);
+  });
+
+  it('campaign assignment statuses override vendor default', async () => {
+    const row = { ...pendingRow, vendorId: 5, campaignId: 3 };
+    const { deps, calls } = makeDeps({ pending: row });
+
+    deps.getTrackingRepo = () => ({
+      findOne: async () => ({ allowedCallbackStatuses: 'parking' }),
+    });
+    deps.getVendorRepo = () => ({
+      findOne: async () => ({ id: 5, allowedCallbackStatuses: 'grace, custom_ok' }),
+    });
+
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const outParking = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'parking',
+    });
+    assert.equal(outParking.vendorFired, true);
+    assert.deepEqual(calls.firePostback, [77]);
+
+    calls.firePostback.length = 0;
+    const outGrace = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'grace',
+    });
+    assert.equal(outGrace.vendorFired, false);
     assert.equal(calls.firePostback.length, 0);
   });
 });
