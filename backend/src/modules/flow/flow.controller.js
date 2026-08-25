@@ -331,6 +331,21 @@ export const flowController = {
     res.json(data);
   }),
 
+  dcbExposeScreen: asyncHandler(async (req, res) => {
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const html = await universeDcbExposeService.exposeScreen({
+      campaignId: req.params.campaignId,
+      vendorId: req.params.vendorId,
+      origin,
+      absolute:
+        req.query?.absolute === '1' ||
+        String(req.query?.absolute || '').toLowerCase() === 'true',
+    });
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
+  }),
+
   callback: asyncHandler(async (req, res) => {
     const q = { ...(req.query || {}), ...(req.body || {}) };
     const data = await postbackService.processOperatorCallback(q);

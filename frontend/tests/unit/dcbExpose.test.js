@@ -8,6 +8,7 @@ describe('buildDcbExposeUrls', () => {
       pincodeUrl: 'https://app.example/api/flow/dcb/12/34/pincode',
       confirmUrl: 'https://app.example/api/flow/dcb/12/34/confirm',
       statusUrl: 'https://app.example/api/flow/dcb/12/34/status?msisdn=',
+      screenUrl: 'https://app.example/api/flow/dcb/12/34/screen',
     })
   })
 })

@@ -18,6 +18,7 @@ import {
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
 import { pickDcbExposeRequestId } from './helpers/dcb-expose-fields.js';
+import { buildDcbExposeHtmlScreen } from './helpers/dcb-expose-screen.js';
 import {
   DCB_EXPOSE_INBOUND_CALL_TYPES,
   DCB_EXPOSE_INBOUND_EVENT_TYPES,
@@ -317,8 +318,18 @@ export const createUniverseDcbExposeService = (
     const phone = cleanPhone(input.msisdn);
     const visit = await seedExposeVisit(action, input, clientIp, inboundUrl);
 
+    const persistProviderLog = async (logRecord) => {
+      if (!logRecord) return;
+      try {
+        await callLogger.record(logRecord);
+      } catch (logError) {
+        console.warn(`DCB expose log failed: ${logError.message}`);
+      }
+    };
+
     try {
       const result = await work(visit);
+      // Inbound first (client → us), then outbound (us → DCB) for timeline order.
       await logInboundExpose({
         callType,
         visit: result.visit || visit,
@@ -331,6 +342,7 @@ export const createUniverseDcbExposeService = (
         responseBody: result.payload,
         success: true,
       });
+      await persistProviderLog(result.providerLog);
       return result.payload;
     } catch (err) {
       await logInboundExpose({
@@ -346,6 +358,7 @@ export const createUniverseDcbExposeService = (
         success: false,
         errorMessage: err.message,
       });
+      await persistProviderLog(err.providerLog);
       if (visit?.id && eventType && !err.held) {
         await logVisitEvent(visit.id, eventType, {
           source: 'dcb_expose',
@@ -462,9 +475,8 @@ export const createUniverseDcbExposeService = (
   };
 
   const callProvider = async ({ ctx, callType, action, execute, statusLabel }) => {
-    let response;
     try {
-      response = await execute();
+      const response = await execute();
       let resolvedStatus = statusLabel;
       if (typeof statusLabel === 'function') {
         try {
@@ -473,34 +485,24 @@ export const createUniverseDcbExposeService = (
           resolvedStatus = 'PARSE_ERROR';
         }
       }
-      try {
-        await callLogger.record(
-          buildUniverseDcbLogRecord({
-            ctx,
-            callType,
-            action,
-            response,
-            statusLabel: resolvedStatus,
-          }),
-        );
-      } catch (logError) {
-        console.warn(`DCB expose log failed: ${logError.message}`);
-      }
-      return response;
+      return {
+        response,
+        providerLog: buildUniverseDcbLogRecord({
+          ctx,
+          callType,
+          action,
+          response,
+          statusLabel: resolvedStatus,
+        }),
+      };
     } catch (err) {
-      try {
-        await callLogger.record(
-          buildUniverseDcbLogRecord({
-            ctx,
-            callType,
-            action,
-            error: err,
-            statusLabel: 'FAILED',
-          }),
-        );
-      } catch {
-        // swallow
-      }
+      err.providerLog = buildUniverseDcbLogRecord({
+        ctx,
+        callType,
+        action,
+        error: err,
+        statusLabel: 'FAILED',
+      });
       throw err;
     }
   };
@@ -622,7 +624,7 @@ export const createUniverseDcbExposeService = (
         throw httpError('purchaseTypeId is required', 400, 'PURCHASE_TYPE_REQUIRED');
       }
 
-      const response = await callProvider({
+      const { response, providerLog } = await callProvider({
         ctx,
         callType: ApiCallType.DCB_PINCODE,
         action: 'pincode',
@@ -630,11 +632,13 @@ export const createUniverseDcbExposeService = (
         statusLabel: 'PIN_REQUIRED',
       });
       if (!response.providerRequestId) {
-        throw httpError(
+        const err = httpError(
           'Universe DCB pincode response did not include a request ID',
           502,
           'DCB_PROVIDER_REQUEST_ID_MISSING',
         );
+        err.providerLog = providerLog;
+        throw err;
       }
       await saveCorrelation(
         [
@@ -687,6 +691,7 @@ export const createUniverseDcbExposeService = (
         vendorId: ctx.vendor.id,
         msisdn: ctx.msisdn,
         payload,
+        providerLog,
       };
     });
 
@@ -755,7 +760,7 @@ export const createUniverseDcbExposeService = (
       localConfirmLocks.add(lockKey);
 
       try {
-        await callProvider({
+        const { providerLog } = await callProvider({
           ctx: {
             ...ctx,
             purchaseTypeId: String(correlation.purchaseTypeId || ctx.purchaseTypeId || ''),
@@ -806,6 +811,7 @@ export const createUniverseDcbExposeService = (
           err.statusCode = 400;
           err.code = 'DCB_HELD';
           err.held = true;
+          err.providerLog = providerLog;
           throw err;
         }
 
@@ -828,6 +834,7 @@ export const createUniverseDcbExposeService = (
           vendorId: ctx.vendor.id,
           msisdn: ctx.msisdn,
           payload,
+          providerLog,
         };
       } catch (err) {
         throw err;
@@ -846,7 +853,7 @@ export const createUniverseDcbExposeService = (
         transactionChannel: input.transactionChannel || 'Wifi',
         existingVisit,
       });
-      const response = await callProvider({
+      const { response, providerLog } = await callProvider({
         ctx,
         callType: ApiCallType.DCB_SUBSCRIPTIONS,
         action: 'status',
@@ -873,13 +880,38 @@ export const createUniverseDcbExposeService = (
         vendorId: ctx.vendor.id,
         msisdn: ctx.msisdn,
         payload,
+        providerLog,
       };
     });
+
+  const exposeScreen = async ({ campaignId, vendorId, origin, absolute = false }) => {
+    const cId = parseInt(campaignId, 10);
+    if (!cId) throw httpError('campaignId is required', 400, 'CAMPAIGN_REQUIRED');
+    const campaign = await getCampaignRepo().findOne({ where: { id: cId } });
+    if (!campaign) throw httpError('Campaign not found', 404, 'CAMPAIGN_NOT_FOUND');
+    const mode = flowEngineService.normalizeMode(campaign.verificationMode);
+    const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
+    if (mode !== 'UNIVERSE_DCB' || !flowEngineService.isApiExposeFlow(flowConfig)) {
+      throw httpError(
+        'This campaign does not expose DCB billing APIs. Set Universe Telecom DCB → API expose in Subscription flow.',
+        400,
+        'DCB_EXPOSE_REQUIRED',
+      );
+    }
+    const { vendor } = await resolveAssignedVendor(campaign, vendorId);
+    return buildDcbExposeHtmlScreen({
+      origin,
+      campaignId: campaign.id,
+      vendorId: vendor.id,
+      absolute: Boolean(absolute),
+    });
+  };
 
   return {
     exposePincode,
     exposeConfirm,
     exposeStatus,
+    exposeScreen,
   };
 };
 

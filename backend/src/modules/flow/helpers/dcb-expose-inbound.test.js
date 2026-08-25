@@ -47,4 +47,14 @@ describe('DCB expose inbound logging', () => {
     assert.equal(DCB_EXPOSE_VISIT_POLICY.mintClickId, false);
     assert.equal(DCB_EXPOSE_VISIT_POLICY.confirmUsesPincodeVisit, true);
   });
+
+  it('timeline hops are inbound expose then provider DCB', () => {
+    assert.deepEqual(
+      [
+        ApiCallType.DCB_EXPOSE_PINCODE_IN,
+        ApiCallType.DCB_PINCODE,
+      ],
+      ['dcb_expose_pincode_in', 'dcb_pincode'],
+    );
+  });
 });

@@ -12,6 +12,7 @@ export function buildDcbExposeUrls(origin, campaignId, vendorId) {
     pincodeUrl: `${base}/pincode`,
     confirmUrl: `${base}/confirm`,
     statusUrl: `${base}/status?msisdn=`,
+    screenUrl: `${base}/screen`,
   }
 }
 

@@ -24,7 +24,10 @@ export const createApp = async () => {
   app.use(
     cors({
       origin: (origin, cb) => {
-        if (!origin || origin.startsWith('http://localhost:')) {
+        if (
+          !origin ||
+          /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin)
+        ) {
           return cb(null, true);
         }
         if (corsOrigins.some((allowed) => origin === allowed)) {

@@ -48,6 +48,11 @@ router.post(
   publicRateLimit,
   flowController.dcbExposeStatus,
 );
+router.get(
+  '/dcb/:campaignId/:vendorId/screen',
+  publicRateLimit,
+  flowController.dcbExposeScreen,
+);
 router.post('/dcb/pincode', publicRateLimit, flowController.dcbPincode);
 router.post('/dcb/confirm', publicRateLimit, flowController.dcbConfirm);
 router.get('/dcb/status', publicRateLimit, flowController.dcbStatus);
