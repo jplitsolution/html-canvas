@@ -112,7 +112,11 @@ function useShadowInteractions({
 
     const handleAnchorClick = (event) => {
       const path = event.composedPath?.() || []
-      const anchor = path.find((node) => node instanceof HTMLAnchorElement)
+      const anchor = path.find(
+        (node) =>
+          node instanceof HTMLElement &&
+          (node instanceof HTMLAnchorElement || node.hasAttribute('href'))
+      )
       if (!anchor) return
       // Flow hotspots use href="#" + data-action — let handleClick own those.
       if (anchor.getAttribute('data-action') || anchor.hasAttribute('data-actions')) return

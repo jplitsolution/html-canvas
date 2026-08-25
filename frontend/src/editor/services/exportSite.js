@@ -289,6 +289,18 @@ export function inlineCssInHtml(html, css, wrapperStyle = '') {
  * canvas and SubscriptionPage stay in sync without bloating DB rows.
  */
 export function getActivePageSnapshot(editor) {
+  if (editor) {
+    try {
+      if (editor.Commands?.isActive?.('core:rte')) {
+        editor.Commands.stop('core:rte')
+      }
+    } catch (_) {}
+    try {
+      if (editor.rte?.end) {
+        editor.rte.end()
+      }
+    } catch (_) {}
+  }
   const selected = editor.Pages.getSelected()
   const main = selected?.getMainComponent() || editor.getWrapper()
   if (!main) return { html: '', css: '' }

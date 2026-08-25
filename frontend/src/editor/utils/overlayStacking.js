@@ -60,8 +60,8 @@ function clampPct(n, min = 0, max = 100) {
 
 /** Keep the user's width/height; shift left/top so the box stays on the image. */
 function fitBoxPct(left, top, width, height) {
-  width = clampPct(width, 4, 100)
-  height = clampPct(height, 4, 100)
+  width = clampPct(width, 1, 100)
+  height = clampPct(height, 1, 100)
   left = clampPct(left, 0, 100 - width)
   top = clampPct(top, 0, 100 - height)
   return { left, top, width, height }
@@ -276,6 +276,13 @@ export function wrapImageAsBanner(imgCmp) {
   )
   const host = Array.isArray(added) ? added[0] : added
   if (!host) return parent
+  if (parent?.components) {
+    try {
+      parent.components().remove(imgCmp, { temporary: true })
+    } catch (_) {
+      try { parent.components().remove(imgCmp) } catch (_) {}
+    }
+  }
   if (typeof host.append === 'function') host.append(imgCmp)
   else host.components?.()?.add?.(imgCmp)
   return host
@@ -374,6 +381,13 @@ export function pinEditorHotspotToImage(component) {
   const hostEl = host?.getEl?.()
   if (hostEl) applyBannerHostStyle(hostEl)
   if (!host || component.parent?.() === host) return
+  if (parent?.components) {
+    try {
+      parent.components().remove(component, { temporary: true })
+    } catch (_) {
+      try { parent.components().remove(component) } catch (_) {}
+    }
+  }
   if (typeof host.append === 'function') host.append(component)
   else host.components?.()?.add?.(component)
 }
@@ -388,7 +402,7 @@ export const HOTSPOT_RESIZABLE = {
   bl: 1,
   bc: 1,
   br: 1,
-  minDim: 24,
+  minDim: 10,
   ratioDefault: 0,
   unitWidth: 'px',
   unitHeight: 'px',
@@ -439,8 +453,8 @@ export function freezeHotspotToPixels(component) {
   if (!ar || !er || ar.width < 8 || ar.height < 8) return
   const left = Math.round(er.left - ar.left)
   const top = Math.round(er.top - ar.top)
-  const width = Math.max(24, Math.round(er.width))
-  const height = Math.max(24, Math.round(er.height))
+  const width = Math.max(10, Math.round(er.width))
+  const height = Math.max(10, Math.round(er.height))
   el.style.position = 'absolute'
   el.style.left = `${left}px`
   el.style.top = `${top}px`
@@ -448,6 +462,8 @@ export function freezeHotspotToPixels(component) {
   el.style.height = `${height}px`
   el.style.right = 'auto'
   el.style.bottom = 'auto'
+  el.style.minHeight = '0px'
+  el.style.minWidth = '0px'
   syncHotspotElToModel(component, el)
 }
 
@@ -531,24 +547,22 @@ function styleToPct(raw, parentSize) {
   return (n / parentSize) * 100
 }
 
+
+
+
+
 /**
  * Absolute drag leaves px + cursor:move; conflicting class rules break
  * responsive preview and make hotspots unclickable / undraggable.
  * Convert the live box to % of parent and wipe drag leftovers.
- *
- * CRITICAL: never snap to template defaults when the user placed a box —
- * that made canvas placement disagree with preview (e.g. bottom hotspots
- * with top>88% were forced back to left:8%).
  */
 export function normalizeHotspotBox(el, parentEl, { coverFull = false } = {}) {
   if (!el || !parentEl) return null
 
   // Prefer layout sizes (stable) over getBoundingClientRect (flex/transform drift)
-  // offsetParent box can be taller than the image; use the larger of client vs rect
   const rect = parentEl.getBoundingClientRect?.() || { width: 0, height: 0 }
   const pw = Math.max(parentEl.clientWidth || 0, parentEl.offsetWidth || 0, rect.width || 0)
   const ph = Math.max(parentEl.clientHeight || 0, parentEl.offsetHeight || 0, rect.height || 0)
-  // Parent not laid out yet (images still loading) — skip so we don't corrupt %
   if (pw < 40 || ph < 40) return null
 
   if (coverFull) {
@@ -562,34 +576,43 @@ export function normalizeHotspotBox(el, parentEl, { coverFull = false } = {}) {
     })
   }
 
-  // Prefer explicit inline styles (what the editor saved) over live rects.
-  // Grapes absolute drag writes px; width/height are often already %.
-  let leftPct = styleToPct(el.style.left, pw)
-  let topPct = styleToPct(el.style.top, ph)
-  let widthPct = styleToPct(el.style.width, pw)
-  let heightPct = styleToPct(el.style.height, ph)
+  let leftPct = String(el.style?.left || '').endsWith('%') ? parseFloat(el.style.left) : null
+  let topPct = String(el.style?.top || '').endsWith('%') ? parseFloat(el.style.top) : null
+  let widthPct = String(el.style?.width || '').endsWith('%') ? parseFloat(el.style.width) : null
+  let heightPct = String(el.style?.height || '').endsWith('%') ? parseFloat(el.style.height) : null
 
-  const pr = parentEl.getBoundingClientRect()
-  const er = el.getBoundingClientRect()
-  const hasRect = pr.width > 0 && pr.height > 0 && er.width > 8 && er.height > 8
+  const pr = parentEl.getBoundingClientRect?.() || { width: 0, height: 0, left: 0, top: 0 }
+  const er = el.getBoundingClientRect?.() || { width: 0, height: 0, left: 0, top: 0 }
+  const hasRect = pr.width > 0 && pr.height > 0 && er.width > 2 && er.height > 2
 
-  if (leftPct == null || topPct == null || widthPct == null || heightPct == null) {
-    if (!hasRect) {
-      // No usable geometry — only then fall back to starter defaults
-      if (leftPct == null && topPct == null && widthPct == null && heightPct == null) {
-        return hotspotChrome({ ...defaultHotspotBox(false) })
-      }
-      return null
+  if (hasRect) {
+    if (leftPct == null || !Number.isFinite(leftPct)) {
+      leftPct = ((er.left - pr.left) / pr.width) * 100
     }
-    leftPct = leftPct ?? ((er.left - pr.left) / pr.width) * 100
-    topPct = topPct ?? ((er.top - pr.top) / pr.height) * 100
-    widthPct = widthPct ?? (er.width / pr.width) * 100
-    heightPct = heightPct ?? (er.height / pr.height) * 100
+    if (topPct == null || !Number.isFinite(topPct)) {
+      topPct = ((er.top - pr.top) / pr.height) * 100
+    }
+    if (widthPct == null || !Number.isFinite(widthPct)) {
+      widthPct = (er.width / pr.width) * 100
+    }
+    if (heightPct == null || !Number.isFinite(heightPct)) {
+      heightPct = (er.height / pr.height) * 100
+    }
+  } else {
+    leftPct = leftPct ?? styleToPct(el.style?.left, pw)
+    topPct = topPct ?? styleToPct(el.style?.top, ph)
+    widthPct = widthPct ?? styleToPct(el.style?.width, pw)
+    heightPct = heightPct ?? styleToPct(el.style?.height, ph)
   }
 
-  if (widthPct > 98 && heightPct > 98) {
-    const cx = (leftPct + widthPct / 2) / 100
-    return hotspotChrome({ ...defaultHotspotBox(cx > 0.45) })
+  if (leftPct == null || topPct == null || widthPct == null || heightPct == null) {
+    if (!hasRect && leftPct == null && topPct == null && widthPct == null && heightPct == null) {
+      return hotspotChrome({ ...defaultHotspotBox(false) })
+    }
+    leftPct = leftPct ?? 25
+    topPct = topPct ?? 40
+    widthPct = widthPct ?? 50
+    heightPct = heightPct ?? 14
   }
 
   ;({ left: leftPct, top: topPct, width: widthPct, height: heightPct } = fitBoxPct(
@@ -798,6 +821,16 @@ export function healEditorHotspot(component, editor, { geometry = 'percent' } = 
     } catch (_) {
       /* noop */
     }
+  }
+
+  if (el?.style && box) {
+    el.style.position = 'absolute'
+    el.style.left = box.left
+    el.style.top = box.top
+    el.style.width = box.width
+    el.style.height = box.height
+    el.style.right = coverFull ? '0%' : ''
+    el.style.bottom = coverFull ? '0%' : ''
   }
 }
 
@@ -1140,7 +1173,6 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
     cursor: grab;
     box-sizing: border-box;
     line-height: normal;
-    min-height: 24px;
   }
   [data-tc-type="hotspot"]:active {
     cursor: grabbing;
@@ -1203,9 +1235,12 @@ export const OVERLAY_STACKING_CSS = `
     z-index: ${Z_OVERLAY} !important;
   }
   [data-tc-type="hotspot"] {
+    position: absolute !important;
+    display: block !important;
     z-index: ${Z_HOTSPOT} !important;
     pointer-events: auto !important;
     cursor: pointer !important;
+    text-decoration: none !important;
   }
   [data-tc-type="hotspot"][data-tc-cover-full="1"] {
     top: 0 !important;

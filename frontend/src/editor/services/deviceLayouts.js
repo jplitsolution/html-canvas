@@ -114,7 +114,7 @@ export function pickLivePageData(pageData, mobile = false) {
   return {
     ...pageData,
     html: chosen.html,
-    css: chosen.css,
+    css: chosen.css || pageData.css || '',
     projectData: {
       ...(pageData.projectData || {}),
       customWidth: chosen.customWidth || (mobile ? MOBILE_LAYOUT_WIDTH : pageData.projectData?.customWidth),

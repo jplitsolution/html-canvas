@@ -12,12 +12,38 @@ function healAllHotspots(editor) {
   const wrapper = editor?.getWrapper?.()
   if (!wrapper) return
   const walk = (cmp) => {
-    if (cmp.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
-      try {
-        healEditorHotspot(cmp, editor)
-      } catch (_) {
-        /* noop */
+    const children = cmp.components?.()
+    if (children?.length) {
+      const hotspots = []
+      const len = children.length || 0
+      for (let i = 0; i < len; i++) {
+        const child = typeof children.at === 'function' ? children.at(i) : children.models?.[i]
+        if (child?.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+          hotspots.push(child)
+        }
       }
+      if (hotspots.length > 1) {
+        const customPlaced = hotspots.filter((h) => {
+          const st = h.getStyle?.() || {}
+          return st.top !== '40%' || st.left !== '25%' || st.width !== '50%'
+        })
+        if (customPlaced.length > 0) {
+          hotspots.forEach((h) => {
+            if (!customPlaced.includes(h)) {
+              try { children.remove(h) } catch (_) {}
+            }
+          })
+        }
+      }
+      children.forEach((child) => {
+        if (child?.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+          try {
+            healEditorHotspot(child, editor)
+          } catch (_) {
+            /* noop */
+          }
+        }
+      })
     }
     cmp.components?.()?.forEach?.(walk)
   }
@@ -45,7 +71,14 @@ export async function saveCampaignPage(
   const currentKey = layoutKeyForDevice(deviceName)
   const currentSnapshot = snapshotLayout(editor, deviceName, customWidth, customHeight)
   const layouts = editor.__tcLayouts || parseDeviceLayouts({}, currentSnapshot.html, currentSnapshot.css)
+  
   layouts[currentKey] = currentSnapshot
+  if (!layouts.desktop) {
+    layouts.desktop = currentSnapshot
+  }
+  if (!layouts.mobile) {
+    layouts.mobile = cloneLayout(currentSnapshot, { customWidth: '375' })
+  }
   editor.__tcLayouts = layouts
 
   const { projectData, html, css } = buildSavePayload(

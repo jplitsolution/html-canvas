@@ -105,7 +105,11 @@ export function getComponentKind(component) {
 export function getStyleProp(component, prop) {
   if (!component || typeof component.getStyle !== 'function') return ''
   const style = component.getStyle() || {}
-  const val = style[prop]
+  let val = style[prop]
+  if (val == null || val === '') {
+    const el = component.getEl?.()
+    if (el?.style) val = el.style[prop]
+  }
   if (typeof val === 'string') return val
   if (val !== null && val !== undefined && typeof val !== 'object') return String(val)
   return ''
@@ -114,6 +118,10 @@ export function getStyleProp(component, prop) {
 export function setStyleProp(component, prop, value) {
   const style = { ...component.getStyle(), [prop]: value }
   component.setStyle(style)
+  if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
+    const el = component.getEl?.()
+    if (el?.style) el.style[prop] = value
+  }
   if (prop === 'width' || prop === 'height') {
     applyTextSizeAlignment(component)
   }

@@ -136,7 +136,7 @@ function findActionTarget(event) {
       }
       continue
     }
-    if (!node.matches('[data-action], [data-actions], button, a, [data-tc-type="hotspot"]')) continue
+    if (!node.matches('[data-action], [data-actions], [href], button, a, [data-tc-type="hotspot"]')) continue
 
     const explicit =
       node.getAttribute('data-action') ||

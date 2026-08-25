@@ -240,6 +240,14 @@ export const FLOW_HOST_CSS = `
     position: relative;
     box-sizing: border-box;
     overflow: visible !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+  }
+  .page-wrapper > * {
+    max-width: 100%;
+    box-sizing: border-box;
   }
   /* Grapes absolute-drag leaves left/top on template cards, which removes them from
      .home-page / .otp-container flex centering → card stuck to one side on large

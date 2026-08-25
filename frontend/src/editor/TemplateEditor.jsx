@@ -112,9 +112,24 @@ export default function TemplateEditor({
     }
   }, [customWidth])
 
+  const commitActiveRte = (ed) => {
+    if (!ed) return
+    try {
+      if (ed.Commands?.isActive?.('core:rte')) {
+        ed.Commands.stop('core:rte')
+      }
+    } catch (_) {}
+    try {
+      if (ed.rte?.end) {
+        ed.rte.end()
+      }
+    } catch (_) {}
+  }
+
   const handleSave = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
+    commitActiveRte(ed)
     setSaving(true)
     try {
       const { projectId: id, projectTitle: name, projectCreatedAt: createdAt, projectMetadata: metadata, onSave: saveCb, onDirtyChange: dirtyCb, saveHandler: customSave, customWidth: cw, customHeight: ch } =
@@ -136,6 +151,7 @@ export default function TemplateEditor({
   const handlePreview = useCallback(async () => {
     const ed = editorRef.current
     if (!ed) return
+    commitActiveRte(ed)
     const { projectTitle: name, onPreview: previewCb } = callbacksRef.current
     // Auto-save so Preview matches what you see on the canvas (WYSIWYG)
     if (isDirty) {
@@ -154,6 +170,7 @@ export default function TemplateEditor({
   const handleExportCurrent = useCallback(() => {
     const ed = editorRef.current
     if (!ed) return
+    commitActiveRte(ed)
     exportCurrentPageFromEditor(ed, callbacksRef.current.projectTitle)
     trackEvent('exports')
   }, [])
@@ -161,6 +178,7 @@ export default function TemplateEditor({
   const handleExportAll = useCallback(() => {
     const ed = editorRef.current
     if (!ed) return
+    commitActiveRte(ed)
     exportAllPagesFromEditor(ed, callbacksRef.current.projectTitle)
     trackEvent('exports')
   }, [])
@@ -168,6 +186,7 @@ export default function TemplateEditor({
   const switchDevice = useCallback((nextName) => {
     const ed = editorRef.current
     if (!ed || !nextName) return
+    commitActiveRte(ed)
     const prevName = deviceRef.current || 'Desktop'
     const fromKey = layoutKeyForDevice(prevName)
     const toKey = layoutKeyForDevice(nextName)
@@ -176,14 +195,14 @@ export default function TemplateEditor({
       layoutsRef.current = { desktop: null, mobile: null }
     }
     const { customWidth: cw, customHeight: ch } = callbacksRef.current
-    layoutsRef.current[fromKey] = snapshotLayout(ed, prevName, cw, ch)
-    ed.__tcLayouts = layoutsRef.current
+    const currentSnapshot = snapshotLayout(ed, prevName, cw, ch)
+    layoutsRef.current[fromKey] = currentSnapshot
 
     if (fromKey !== toKey) {
+      // Preserve existing device layout if present; only clone if target layout does not exist yet
       let target = layoutsRef.current[toKey]
-      if (!target?.html) {
-        const src = layoutsRef.current[fromKey]
-        target = cloneLayout(src, {
+      if (!target || !target.html) {
+        target = cloneLayout(currentSnapshot, {
           customWidth: toKey === LAYOUT_MOBILE ? '375' : cw,
         })
         if (target) {
@@ -192,6 +211,7 @@ export default function TemplateEditor({
           callbacksRef.current.onDirtyChange?.(true)
         }
       }
+      ed.__tcLayouts = layoutsRef.current
       if (target?.html) {
         layoutSwitchRef.current = true
         try {
@@ -220,6 +240,8 @@ export default function TemplateEditor({
           }, 80)
         }
       }
+    } else {
+      ed.__tcLayouts = layoutsRef.current
     }
 
     ed.setDevice(nextName)
@@ -542,12 +564,12 @@ export default function TemplateEditor({
 
             if (isFlowLayoutButton(component) && !droppedOnImage) {
               // In-card CTA stays in document flow
-            } else if (isButton) {
+            } else if (isButton && droppedOnImage) {
               markAsAbsoluteOverlay(component, {
                 top: `${Math.max(0, Math.min(95, topPct)).toFixed(2)}%`,
                 left: `${Math.max(0, Math.min(95, leftPct)).toFixed(2)}%`,
               })
-            } else {
+            } else if (droppedOnImage) {
               const pStyle = parent.getStyle() || {}
               if (!['absolute', 'relative', 'fixed'].includes(String(pStyle.position || ''))) {
                 parent.addStyle({ position: 'relative' })
@@ -602,12 +624,15 @@ export default function TemplateEditor({
       }
       // Lock Canva absolute placements so flow-button heal cannot snap them back
       const style = component.getStyle?.() || {}
-      const isAbs = String(style.position || '').toLowerCase() === 'absolute'
-      if (
-        isAbs &&
-        (isButtonLikeComponent(component) || isFlowLayoutButton(component)) &&
-        (style.top != null || style.left != null)
-      ) {
+      const el = typeof component.getEl === 'function' ? component.getEl() : null
+      const pos = String(style.position || el?.style?.position || '').toLowerCase()
+      const hasTopLeft =
+        (style.top != null && style.top !== '') ||
+        (style.left != null && style.left !== '') ||
+        (el?.style?.top && el.style.top !== '') ||
+        (el?.style?.left && el.style.left !== '')
+
+      if (pos === 'absolute' || pos === 'fixed' || hasTopLeft) {
         markAsAbsoluteOverlay(component)
       }
       // Any absolute button/link over or near an image → mark overlay + z-index 40

@@ -35,7 +35,12 @@ function isMarkedOverlay(el) {
   if (!el) return true
   if (el.getAttribute('data-tc-type') === 'hotspot') return true
   const abs = el.getAttribute('data-tc-absolute')
-  return abs === '1' || abs === 'true'
+  if (abs === '1' || abs === 'true') return true
+  const pos = String(el.style?.position || '').toLowerCase()
+  if (pos === 'absolute' && (el.closest?.('[data-tc-type="image-banner"]') || el.parentElement?.querySelector?.('img'))) {
+    return true
+  }
+  return false
 }
 
 function stripAbsoluteInline(el) {
@@ -81,6 +86,21 @@ function stripAbsoluteLayoutCard(el) {
   return true
 }
 
+function stripAbsoluteText(el) {
+  if (!el?.style) return false
+  const pos = String(el.style.position || '').toLowerCase()
+  const hasGeo = !!(el.style.top || el.style.left || el.style.right || el.style.bottom)
+  if (pos !== 'absolute' && pos !== 'fixed' && !hasGeo) return false
+
+  el.style.position = 'relative'
+  el.style.top = ''
+  el.style.left = ''
+  el.style.right = ''
+  el.style.bottom = ''
+  el.style.zIndex = ''
+  return true
+}
+
 /**
  * Belt-and-suspenders: after Grapes getHtml(), strip accidental absolute
  * geometry from in-card CTAs and template cards so DB HTML cannot diverge from
@@ -107,6 +127,10 @@ export function sanitizeSavedPageHtml(html) {
     doc.body.querySelectorAll(FLOW_LAYOUT_CARD_SELECTOR).forEach((el) => {
       if (isMarkedOverlay(el)) return
       if (stripAbsoluteLayoutCard(el)) changed = true
+    })
+    doc.body.querySelectorAll('p, span, h1, h2, h3, h4, h5, h6, [data-gjs-type="text"]').forEach((el) => {
+      if (isMarkedOverlay(el)) return
+      if (stripAbsoluteText(el)) changed = true
     })
     if (!changed) return html
     return doc.body.innerHTML

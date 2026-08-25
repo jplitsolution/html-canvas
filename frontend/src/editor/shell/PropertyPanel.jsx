@@ -619,7 +619,11 @@ function isLockedSystemAction(attrs = {}) {
 function getClickActionType(attrs = {}) {
   if (attrs['data-action'] === 'CHAIN' || attrs['data-actions']) return 'chain'
   if (attrs['data-action'] === 'SUBSCRIBE_ROUTE') return 'subscribeRoute'
-  const href = attrs.href || ''
+  const href = attrs.href
+  if (href === undefined || href === null || href === '') {
+    if (attrs['data-action']) return 'flow'
+    return 'none'
+  }
   // Prefer real navigation targets over a leftover SUBSCRIBE (save heal used to re-add it)
   if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('mailto:') || href.startsWith('tel:')) {
     return 'external'
@@ -752,7 +756,19 @@ function ClickActionEditor({
   })()
 
   const setClickType = (next) => {
-    if (next === 'chain') {
+    if (next === 'none') {
+      selected.removeAttributes('data-action')
+      selected.removeAttributes('data-actions')
+      selected.removeAttributes('data-subscribe-routes')
+      selected.removeAttributes('href')
+      selected.removeAttributes('target')
+      const currentStyle = selected.getStyle() || {}
+      if (currentStyle.cursor === 'pointer') {
+        const nextStyle = { ...currentStyle }
+        delete nextStyle.cursor
+        selected.setStyle(nextStyle)
+      }
+    } else if (next === 'chain') {
       selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({
         'data-action': 'CHAIN',
@@ -775,6 +791,7 @@ function ClickActionEditor({
         ]),
         href: '#',
       })
+      setStyleProp(selected, 'cursor', 'pointer')
       setChainOpenSignal((n) => n + 1)
     } else if (next === 'subscribeRoute') {
       selected.removeAttributes('data-actions')
@@ -784,6 +801,7 @@ function ClickActionEditor({
         href: '#',
       })
       selected.removeAttributes('target')
+      setStyleProp(selected, 'cursor', 'pointer')
       setSubscribeOpenSignal((n) => n + 1)
     } else if (next === 'flow') {
       selected.removeAttributes('data-actions')
@@ -795,22 +813,26 @@ function ClickActionEditor({
         prev === 'CONFIRM' || page === 'CONFIRM' ? 'CONFIRM' : 'SUBSCRIBE'
       selected.addAttributes({ 'data-action': flowAction, href: '#' })
       selected.removeAttributes('target')
+      setStyleProp(selected, 'cursor', 'pointer')
     } else if (next === 'anchor') {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
       selected.removeAttributes('data-subscribe-routes')
       const anchors = listSectionAnchorsOnPage(editor, selected)
       selected.addAttributes({ href: anchors.length > 0 ? `#${anchors[0]}` : '#' })
+      setStyleProp(selected, 'cursor', 'pointer')
     } else if (next === 'page') {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
       selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({ href: 'OTP' })
+      setStyleProp(selected, 'cursor', 'pointer')
     } else {
       selected.removeAttributes('data-action')
       selected.removeAttributes('data-actions')
       selected.removeAttributes('data-subscribe-routes')
       selected.addAttributes({ href: 'https://' })
+      setStyleProp(selected, 'cursor', 'pointer')
     }
     update()
   }
@@ -823,6 +845,7 @@ function ClickActionEditor({
           value={type}
           onChange={(e) => setClickType(e.target.value)}
         >
+          <option value="none">None (No link / action)</option>
           <option value="flow">
             {String(funnelPageType || '').toUpperCase() === 'CONFIRM' ||
             attrs['data-action'] === 'CONFIRM'
@@ -1315,6 +1338,7 @@ export function PropertyPanel() {
               />
               <p className="text-xs text-fg-muted pt-0.5">Tip: double-click text on the page to edit it directly.</p>
             </Field>
+            <ClickActionEditor selected={selected} editor={editor} update={update} />
             <TypographyControls selected={selected} update={update} showAlign />
             <PositionControls selected={selected} update={update} />
           </>
@@ -1481,14 +1505,12 @@ export function PropertyPanel() {
             >
               Change photo
             </button>
+            <ClickActionEditor selected={selected} editor={editor} update={update} />
             <button
               type="button"
               onClick={() => {
-                if (editor) {
-                  const parent = selected.parent() || editor.getWrapper();
-                  if (parent) {
-                    editor.runCommand('tc-add-hotspot', { target: parent });
-                  }
+                if (editor && selected) {
+                  editor.runCommand('tc-add-hotspot', { target: selected });
                 }
               }}
               className="w-full mt-2 py-2.5 text-sm font-semibold rounded-lg border border-indigo-200 bg-indigo-50/20 text-indigo-700 hover:bg-indigo-50/50 hover:border-indigo-300 transition-colors flex items-center justify-center gap-2"
@@ -1697,6 +1719,7 @@ export function PropertyPanel() {
 
         {(kind === 'section' || kind === 'generic') && (
           <>
+            <ClickActionEditor selected={selected} editor={editor} update={update} />
             <Field label="Section label (for builder dropdown)">
               <input
                 className={inputClass}

@@ -9,7 +9,7 @@ import {
   wasIntentionallyAbsolute,
   TEXT_SIZE_ALIGN_CANVAS_CSS,
 } from '../utils/textSizeAlign'
-import { OVERLAY_STACKING_CANVAS_CSS, freezeHotspotToPixels } from '../utils/overlayStacking'
+import { OVERLAY_STACKING_CANVAS_CSS, freezeHotspotToPixels, markAsAbsoluteOverlay } from '../utils/overlayStacking'
 
 function getCanvasFrameEl(editor) {
   if (!editor?.Canvas?.getFrameEl) return null
@@ -429,6 +429,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     setTimeout(() => {
       if (!alive) return
       applyDeviceViewport(editor, deviceName)
+      autoAlignCanvasComponents(editor, deviceName)
       // Device width change → re-measure; floor is keyed per device so Desktop floor stays.
       syncCanvasFrameHeight(editor, { allowShrink: true })
       setTimeout(() => {
@@ -525,27 +526,42 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   editor.on('component:resize:end', (component) => {
     if (!alive) return
     const cmp = resolveComponent(component)
-    if (cmp?.getAttributes?.()?.['data-tc-type'] !== 'hotspot') return
-    try {
-      const style = cmp.getStyle?.() || {}
-      const w = String(style.width || '')
-      const h = String(style.height || '')
-      const stillFull = (w === '100%' || w === 'auto') && (h === '100%' || h === 'auto')
-      if (!stillFull) {
-        const attrs = { ...(cmp.getAttributes?.() || {}) }
-        if (attrs['data-tc-cover-full']) {
-          delete attrs['data-tc-cover-full']
-          cmp.setAttributes(attrs)
-          try {
-            cmp.getEl?.()?.removeAttribute?.('data-tc-cover-full')
-          } catch (_) {
-            /* noop */
+    if (!cmp) return
+    const tcType = cmp.getAttributes?.()?.['data-tc-type']
+    if (tcType === 'hotspot') {
+      try {
+        const style = cmp.getStyle?.() || {}
+        const w = String(style.width || '')
+        const h = String(style.height || '')
+        const stillFull = (w === '100%' || w === 'auto') && (h === '100%' || h === 'auto')
+        if (!stillFull) {
+          const attrs = { ...(cmp.getAttributes?.() || {}) }
+          if (attrs['data-tc-cover-full']) {
+            delete attrs['data-tc-cover-full']
+            cmp.setAttributes(attrs)
+            try {
+              cmp.getEl?.()?.removeAttribute?.('data-tc-cover-full')
+            } catch (_) {
+              /* noop */
+            }
           }
         }
+        freezeHotspotToPixels(cmp)
+      } catch (_) {
+        /* noop */
       }
-      freezeHotspotToPixels(cmp)
-    } catch (_) {
-      /* noop */
+    } else {
+      const style = cmp.getStyle?.() || {}
+      const el = typeof cmp.getEl === 'function' ? cmp.getEl() : null
+      const pos = String(style.position || el?.style?.position || '').toLowerCase()
+      const hasTopLeft =
+        (style.top != null && style.top !== '') ||
+        (style.left != null && style.left !== '') ||
+        (el?.style?.top && el.style.top !== '') ||
+        (el?.style?.left && el.style.left !== '')
+      if (pos === 'absolute' || hasTopLeft) {
+        markAsAbsoluteOverlay(cmp)
+      }
     }
   })
   editor.on('component:styleUpdate', (component) => {

@@ -65,19 +65,7 @@ export function isFlowLayoutButton(component) {
   const attrs = component.getAttributes?.() || {}
   if (attrs['data-tc-type'] === 'hotspot') return false
 
-  const action = String(attrs['data-action'] || '').toUpperCase()
-  if (FLOW_ACTIONS.has(action)) return true
-
-  const otp = String(attrs['data-otp-action'] || '').toLowerCase()
-  if (FLOW_OTP.has(otp)) return true
-
-  const el = typeof component.getEl === 'function' ? component.getEl() : null
-  if (el?.classList?.contains('flow-btn')) return true
-
-  const classes = String(attrs.class || attrs.className || '')
-  if (/\bflow-btn\b/.test(classes)) return true
-
-  return false
+  return true
 }
 
 /**
@@ -269,6 +257,26 @@ export function keepFlowButtonInFlow(component) {
     if (prev[key] != null && prev[key] !== '') style[key] = prev[key]
   }
 
+  // Ensure button styling is preserved across device viewports
+  if (!style['background-color'] && !style.background) {
+    style['background-color'] = '#2563eb'
+  }
+  if (!style.color) {
+    style.color = '#ffffff'
+  }
+  if (!style['border-radius']) {
+    style['border-radius'] = '8px'
+  }
+  if (!style.padding) {
+    style.padding = '12px 24px'
+  }
+  if (!style['font-weight']) {
+    style['font-weight'] = '600'
+  }
+  if (!style['text-decoration']) {
+    style['text-decoration'] = 'none'
+  }
+
   component.setStyle(style)
   try {
     component.removeStyle?.('top')
@@ -453,6 +461,18 @@ export function healFlowButtonsInEditor(editor) {
         configureFlowButtonResizable(cmp)
         healed += 1
       }
+    } else if (isTextSizedComponent(cmp) && !wasIntentionallyAbsolute(cmp)) {
+      stripAbsoluteStyleAttribute(cmp)
+      const st = cmp.getStyle?.() || {}
+      if (st.position === 'absolute' || st.position === 'fixed' || st.top != null || st.left != null) {
+        cmp.addStyle({ position: 'relative' })
+        cmp.removeStyle?.('top')
+        cmp.removeStyle?.('left')
+        cmp.removeStyle?.('right')
+        cmp.removeStyle?.('bottom')
+        cmp.removeStyle?.('z-index')
+        healed += 1
+      }
     }
     cmp.components?.()?.forEach?.(walk)
   }
@@ -461,14 +481,14 @@ export function healFlowButtonsInEditor(editor) {
 }
 
 /**
- * Live funnel / Preview: strip accidental absolute px boxes on in-card CTAs.
+ * Live funnel / Preview: strip accidental absolute px boxes on in-card CTAs and text blocks.
  * Real image overlays keep data-tc-absolute="1" and are left alone.
  */
 export function healLiveFlowButtons(root) {
   if (!root?.querySelectorAll) return 0
   let healed = 0
   const nodes = root.querySelectorAll(
-    'button.flow-btn, .flow-btn, button[data-action], a[data-action], button[data-otp-action], [data-otp-action]',
+    'button, a, p, span, h1, h2, h3, h4, h5, h6, [data-action], [data-otp-action]',
   )
   nodes.forEach((el) => {
     try {
@@ -479,8 +499,11 @@ export function healLiveFlowButtons(root) {
       ) {
         return
       }
-      const cs = el.ownerDocument?.defaultView?.getComputedStyle?.(el)
       const inlinePos = String(el.style?.position || '').toLowerCase()
+      if (inlinePos === 'absolute' && (el.closest?.('[data-tc-type="image-banner"]') || el.parentElement?.querySelector?.('img'))) {
+        return
+      }
+      const cs = el.ownerDocument?.defaultView?.getComputedStyle?.(el)
       const computedPos = String(cs?.position || '').toLowerCase()
       const isAbs = inlinePos === 'absolute' || inlinePos === 'fixed' || computedPos === 'absolute'
       if (!isAbs && !el.style.top && !el.style.left) return
@@ -491,15 +514,17 @@ export function healLiveFlowButtons(root) {
       el.style.right = ''
       el.style.bottom = ''
       el.style.zIndex = ''
-      el.style.width = '100%'
-      el.style.maxWidth = '100%'
-      el.style.minWidth = '0'
-      el.style.display = el.style.display || 'inline-flex'
-      el.style.alignItems = el.style.alignItems || 'center'
-      el.style.justifyContent = el.style.justifyContent || 'center'
-      el.style.alignSelf = 'stretch'
-      el.style.boxSizing = 'border-box'
-      if (!el.style.minHeight) el.style.minHeight = `${MIN_BTN_HEIGHT}px`
+      if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.getAttribute('data-action')) {
+        el.style.width = el.style.width || '100%'
+        el.style.maxWidth = '100%'
+        el.style.minWidth = '0'
+        el.style.display = el.style.display || 'inline-flex'
+        el.style.alignItems = el.style.alignItems || 'center'
+        el.style.justifyContent = el.style.justifyContent || 'center'
+        el.style.alignSelf = 'stretch'
+        el.style.boxSizing = 'border-box'
+        if (!el.style.minHeight) el.style.minHeight = `${MIN_BTN_HEIGHT}px`
+      }
       healed += 1
     } catch (_) {
       /* noop */

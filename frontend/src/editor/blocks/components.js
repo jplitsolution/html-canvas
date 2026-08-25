@@ -78,6 +78,6 @@ export function registerComponentBlocks(editor) {
     'Clickable Area',
     'component',
     'button',
-    `<a data-tc-type="hotspot" data-action="SUBSCRIBE" href="#" style="position:absolute;top:40%;left:25%;width:50%;height:120px;min-height:80px;display:block;z-index:50;pointer-events:auto;cursor:pointer;text-decoration:none;"></a>`
+    `<a data-tc-type="hotspot" data-action="SUBSCRIBE" href="#" style="position:absolute;top:40%;left:25%;width:50%;height:120px;display:block;z-index:50;pointer-events:auto;cursor:pointer;text-decoration:none;"></a>`
   )
 }
