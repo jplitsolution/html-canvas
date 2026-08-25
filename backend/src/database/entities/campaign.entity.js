@@ -89,6 +89,11 @@ export const CampaignSchema = new EntitySchema({
       length: 32,
       default: 'classic',
     },
+    allowedCallbackStatuses: {
+      name: 'allowed_callback_statuses',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

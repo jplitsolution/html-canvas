@@ -16,6 +16,9 @@ import Button from '../components/ui/Button'
 import Input from '../components/ui/Input'
 import EmptyState from '../components/ui/EmptyState'
 import Modal from '../components/common/Modal'
+import AllowedCallbackStatusesField, {
+  GLOBAL_CALLBACK_STATUSES,
+} from '../components/partners/AllowedCallbackStatusesField'
 import useStore from '../store/useStore'
 
 function ActiveSwitch({ active, onToggle, disabled, label }) {
@@ -80,12 +83,14 @@ function PostbackUrlField({ value, onSave, placeholder, saving }) {
 function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
+  const [allowedStatuses, setAllowedStatuses] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!vendor || !isOpen) return
     setName(vendor.name || '')
     setCode(vendor.code || '')
+    setAllowedStatuses(vendor.allowedCallbackStatuses || '')
   }, [vendor, isOpen])
 
   const handleSave = async () => {
@@ -95,6 +100,7 @@ function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
       await onSave(vendor.id, {
         name: name.trim(),
         code: code.trim(),
+        allowedCallbackStatuses: allowedStatuses.trim() || null,
       })
       onClose()
     } catch {
@@ -125,6 +131,15 @@ function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
             className="font-mono"
           />
         </div>
+        <div>
+          <AllowedCallbackStatusesField
+            value={allowedStatuses}
+            onChange={(next) => setAllowedStatuses(next || '')}
+            disabled={saving}
+            label="Allowed Callback Statuses"
+            hint={`Default for new campaign assignments only. Each campaign stores its own list after you assign this vendor. Blank uses global (${GLOBAL_CALLBACK_STATUSES}).`}
+          />
+        </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-border">
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
@@ -153,6 +168,7 @@ function VendorsPage() {
   const [vendorName, setVendorName] = useState('')
   const [vendorCode, setVendorCode] = useState('')
   const [vendorPostback, setVendorPostback] = useState('')
+  const [vendorAllowedStatuses, setVendorAllowedStatuses] = useState('')
   const [creatingVendor, setCreatingVendor] = useState(false)
   const [togglingId, setTogglingId] = useState(null)
   const [savingUrlId, setSavingUrlId] = useState(null)
@@ -179,10 +195,12 @@ function VendorsPage() {
         name: vendorName.trim(),
         code: vendorCode.trim(),
         postbackUrl: vendorPostback.trim() || null,
+        allowedCallbackStatuses: vendorAllowedStatuses.trim() || null,
       })
       setVendorName('')
       setVendorCode('')
       setVendorPostback('')
+      setVendorAllowedStatuses('')
     } catch {
       // toast in slice
     } finally {
@@ -227,7 +245,9 @@ function VendorsPage() {
         <div className="page-header">
           <h1 className="page-header-title">Vendors</h1>
           <p className="page-header-description">
-            Manage traffic partners and CPA postback URLs, then assign them on campaign detail pages.
+            Manage traffic partners and CPA postback URLs, then assign them on campaign
+            detail pages. Statuses on a vendor are only a default — after assign, that
+            campaign stores its own allow-list (same vendor can differ per campaign).
             Placeholders:{' '}
             <code className="font-mono">{'{{click_id}}'}</code>,{' '}
             <code className="font-mono">{'{rcid}'}</code>,{' '}
@@ -272,6 +292,14 @@ function VendorsPage() {
               placeholder="Postback URL (optional) — https://partner.com/pb?click={{click_id}}&msisdn={{msisdn}}"
               value={vendorPostback}
               onChange={(e) => setVendorPostback(e.target.value)}
+            />
+            <AllowedCallbackStatusesField
+              compact
+              value={vendorAllowedStatuses}
+              onChange={(next) => setVendorAllowedStatuses(next || '')}
+              disabled={creatingVendor}
+              label="Default for new assignments"
+              hint={`Copied onto a campaign when you assign this vendor. Change it later on that campaign without affecting others. Blank uses global: ${GLOBAL_CALLBACK_STATUSES}.`}
             />
           </form>
         </div>
@@ -336,6 +364,11 @@ function VendorsPage() {
                           <span className="badge badge-muted flex items-center gap-1">
                             <Link2 className="w-3 h-3" />
                             Postback
+                          </span>
+                        ) : null}
+                        {vendor.allowedCallbackStatuses ? (
+                          <span className="badge badge-subtle flex items-center gap-1 font-mono text-[10px]" title="Allowed callback statuses">
+                            Default: {vendor.allowedCallbackStatuses}
                           </span>
                         ) : null}
                       </div>

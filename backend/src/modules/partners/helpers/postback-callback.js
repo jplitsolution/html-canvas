@@ -1,3 +1,7 @@
+import { getRepository } from '../../../database/index.js';
+import { Vendor } from '../../../database/entities/vendor.entity.js';
+import { Campaign } from '../../../database/entities/campaign.entity.js';
+import { CampaignTracking } from '../../../database/entities/campaign-tracking.entity.js';
 import {
   ConversionPostbackStatus,
 } from '../../../database/entities/conversion-postback.entity.js';
@@ -5,8 +9,8 @@ import { VisitEventType } from '../../../database/entities/visit-event.entity.js
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { appendPostbackHitSafe } from './postback-day-report-file.js';
 import {
+  describeVendorFireDecision,
   parseOperatorStatus,
-  shouldFireVendorPostback,
 } from './operator-callback-status.js';
 
 const maskPhone = (phone) => {
@@ -44,6 +48,9 @@ export const createPostbackCallback = (deps) => {
   const {
     getPostbackRepo,
     getVisitRepo,
+    getVendorRepo = () => getRepository(Vendor),
+    getCampaignRepo = () => getRepository(Campaign),
+    getTrackingRepo = () => getRepository(CampaignTracking),
     logApiCall,
     registerPending,
     firePostback,
@@ -94,7 +101,6 @@ export const createPostbackCallback = (deps) => {
     const incomingMsisdn = parseCallbackMsisdn(query);
     const clickId = parseCallbackClickId(query);
     const status = parseOperatorStatus(query);
-    const fireVendor = shouldFireVendorPostback(status);
 
     const findLatestByMsisdn = async (msisdn) => {
       if (!msisdn) return null;
@@ -137,16 +143,38 @@ export const createPostbackCallback = (deps) => {
       const matched = extra.matched !== false;
 
       if (visitId) {
-        await logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, {
-          info: matched
-            ? 'Billing / operator callback received — firing vendor postback.'
-            : 'Billing / operator callback received — not matched in our system.',
+        const fired = extra.vendorFired === true;
+        const held = extra.vendorFired === false;
+        const skipInfo = `Vendor postback not sent because received status "${
+          extra.receivedStatus || extra.operatorStatus || status
+        }" is not in allowed statuses [${
+          extra.allowedStatuses || 'active, success, ok, subscribed, 1, true'
+        }].`;
+        const info =
+          extra.info ||
+          (matched
+            ? held
+              ? skipInfo
+              : fired
+                ? 'Billing / operator callback received — firing vendor postback.'
+                : 'Billing / operator callback received.'
+            : 'Billing / operator callback received — not matched in our system.');
+        const payload = {
           msisdn: maskPhone(msisdn),
           clickId: rowClickId || clickId || null,
           status,
           ...extra,
-        });
+          info,
+          reason: held ? info : extra.reason,
+        };
+        await logEvent(visitId, VisitEventType.CALLBACK_RECEIVED, payload);
       }
+      const heldCall = extra.vendorFired === false;
+      const skipInfo = `Vendor postback not sent because received status "${
+        extra.receivedStatus || extra.operatorStatus || status
+      }" is not in allowed statuses [${
+        extra.allowedStatuses || 'active, success, ok, subscribed, 1, true'
+      }].`;
       await logApiCall({
         visitId: visitId || null,
         campaignId: campaignId || null,
@@ -161,6 +189,10 @@ export const createPostbackCallback = (deps) => {
           status,
           query: safeQuery,
           ...extra,
+          info: heldCall
+            ? extra.info || skipInfo
+            : extra.info,
+          reason: heldCall ? extra.info || skipInfo : extra.reason,
         }),
         responseStatus: 200,
         responseBody: null,
@@ -184,7 +216,47 @@ export const createPostbackCallback = (deps) => {
       return reject('msisdn or click_id required');
     }
 
+    const resolveAllowedStatuses = async (campaignId, vendorId) => {
+      try {
+        if (campaignId && vendorId && deps.getTrackingRepo) {
+          const repo = deps.getTrackingRepo();
+          if (repo?.findOne) {
+            const tracking = await repo.findOne({
+              where: { campaignId: parseInt(campaignId, 10), vendorId: parseInt(vendorId, 10) },
+            });
+            if (tracking?.allowedCallbackStatuses?.trim()) {
+              return tracking.allowedCallbackStatuses.trim();
+            }
+          }
+        }
+        if (vendorId && deps.getVendorRepo) {
+          const repo = deps.getVendorRepo();
+          if (repo?.findOne) {
+            const vendor = await repo.findOne({ where: { id: parseInt(vendorId, 10) } });
+            if (vendor?.allowedCallbackStatuses?.trim()) {
+              return vendor.allowedCallbackStatuses.trim();
+            }
+          }
+        }
+        if (campaignId && deps.getCampaignRepo) {
+          const repo = deps.getCampaignRepo();
+          if (repo?.findOne) {
+            const campaign = await repo.findOne({ where: { id: parseInt(campaignId, 10) } });
+            if (campaign?.allowedCallbackStatuses?.trim()) {
+              return campaign.allowedCallbackStatuses.trim();
+            }
+          }
+        }
+      } catch {
+        // Safe fallback if repos not mocked/initialized in unit tests
+      }
+      return null;
+    };
+
     const firePending = async (pending, extra = {}) => {
+      const allowedStatuses = await resolveAllowedStatuses(pending.campaignId, pending.vendorId);
+      const decision = describeVendorFireDecision(status, allowedStatuses);
+      const fireVendor = decision.shouldFire;
       pending.operatorStatus = status;
       if (
         fireVendor &&
@@ -194,6 +266,17 @@ export const createPostbackCallback = (deps) => {
         pending.status = ConversionPostbackStatus.RECEIVED;
       }
       await getPostbackRepo().save(pending);
+      const fireMeta = {
+        operatorStatus: status,
+        receivedStatus: decision.received,
+        allowedStatuses: decision.allowedLabel,
+        info: decision.info,
+        vendorFired: fireVendor,
+        postbackId: pending.id,
+        vendorId: pending.vendorId,
+        campid: pending.campid,
+        trackingCampid: pending.trackingCampid,
+      };
       if (!fireVendor) {
         await logInbound(
           pending.visitId,
@@ -202,14 +285,10 @@ export const createPostbackCallback = (deps) => {
           pending.rcid,
           pending.msisdn,
           {
-            action: 'hold',
-            vendorFired: false,
-            operatorStatus: status,
-            postbackId: pending.id,
-            vendorId: pending.vendorId,
-            campid: pending.campid,
-            trackingCampid: pending.trackingCampid,
             ...extra,
+            ...fireMeta,
+            action: 'hold',
+            reason: decision.info,
           },
         );
         return {
@@ -218,6 +297,7 @@ export const createPostbackCallback = (deps) => {
           vendorFired: false,
           operatorStatus: status,
           status: pending.status,
+          reason: decision.info,
         };
       }
       await logInbound(
@@ -227,14 +307,9 @@ export const createPostbackCallback = (deps) => {
         pending.rcid,
         pending.msisdn,
         {
-          action: 'fire',
-          vendorFired: true,
-          operatorStatus: status,
-          postbackId: pending.id,
-          vendorId: pending.vendorId,
-          campid: pending.campid,
-          trackingCampid: pending.trackingCampid,
           ...extra,
+          ...fireMeta,
+          action: 'fire',
         },
       );
       const fired = await firePostback(pending.id);
@@ -242,6 +317,9 @@ export const createPostbackCallback = (deps) => {
     };
 
     const registerAndFireFromVisit = async (visit, msisdn, extra = {}) => {
+      const allowedStatuses = await resolveAllowedStatuses(visit.campaignId, visit.vendorId);
+      const decision = describeVendorFireDecision(status, allowedStatuses);
+      const fireVendor = decision.shouldFire;
       const digits = String(msisdn || '').replace(/\D/g, '') || '';
       const visitPhone = String(visit.phone || '').replace(/\D/g, '');
       if (visit.id && digits && !visitPhone) {
@@ -255,10 +333,15 @@ export const createPostbackCallback = (deps) => {
         visit.rcid,
         digits || visitPhone || null,
         {
+          ...extra,
+          matchPath: extra.reason || null,
           vendorFired: fireVendor,
           operatorStatus: status,
+          receivedStatus: decision.received,
+          allowedStatuses: decision.allowedLabel,
+          info: decision.info,
           vendorId: visit.vendorId,
-          ...extra,
+          reason: fireVendor ? extra.reason : decision.info,
         },
       );
 
@@ -290,6 +373,7 @@ export const createPostbackCallback = (deps) => {
           vendorFired: false,
           operatorStatus: status,
           status: registered.status,
+          reason: decision.info,
         };
       }
       const fired = await firePostback(id);

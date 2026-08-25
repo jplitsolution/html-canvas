@@ -24,6 +24,10 @@ import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { getVisitDetail } from '../services/api/logs'
 import { formatDate } from '../utils/date'
+import {
+  GLOBAL_CALLBACK_STATUSES,
+  vendorFireSkipCopy,
+} from '../components/partners/AllowedCallbackStatusesField'
 
 function getEventIcon(eventType) {
   const t = String(eventType || '').toUpperCase()
@@ -67,6 +71,28 @@ function eventPack(metadata) {
   if (!metadata || typeof metadata !== 'object') return ''
   const raw = metadata.pack || metadata.planId
   return String(raw || '').trim().toLowerCase()
+}
+
+function parseJsonish(value) {
+  if (value == null || value === '') return null
+  if (typeof value === 'object') return value
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
+}
+
+function billingSkipFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null
+  if (payload.vendorFired !== false) return null
+  const received =
+    payload.receivedStatus || payload.operatorStatus || payload.status
+  if (!received) return null
+  return vendorFireSkipCopy(
+    received,
+    payload.allowedStatuses || GLOBAL_CALLBACK_STATUSES,
+  )
 }
 
 function eventChip(metadata, key) {
@@ -141,7 +167,7 @@ function eventDescription(eventType) {
     case 'API_DCB_EXPOSE_STATUS_IN':
       return 'Inbound DCB expose status poll (vendor hit).'
     case 'CALLBACK_RECEIVED':
-      return 'Billing callback hit our server — operator status is stored; vendor postback fires only for billable statuses (active / success).'
+      return 'Billing / operator callback received.'
     case 'POSTBACK_PENDING':
       return 'Vendor CPA postback queued, waiting for billing confirmation.'
     case 'POSTBACK_SENT':
@@ -520,6 +546,23 @@ function SessionDetailPage() {
                           : visit?.visitStatus
                     const desc = eventDescription(item.eventType)
                     const pack = eventPack(item.metadata)
+                    const billingBody = parseJsonish(apiCall?.requestBody)
+                    const skipCopy =
+                      billingSkipFromPayload(item.metadata) ||
+                      billingSkipFromPayload(billingBody) ||
+                      (item.eventType === 'CALLBACK_RECEIVED'
+                        ? billingSkipFromPayload(
+                            parseJsonish(
+                              (detail?.apiCalls || []).find(
+                                (c) => c.callType === 'billing_callback',
+                              )?.requestBody,
+                            ),
+                          )
+                        : null)
+                    const rawInfo = item.kind === 'event' ? item.metadata?.info : ''
+                    const hideFiringInfo =
+                      String(rawInfo).includes('firing vendor postback') && skipCopy
+                    const eventInfo = skipCopy || (hideFiringInfo ? '' : rawInfo)
                     const serviceId = eventChip(item.metadata, 'serviceId')
                     const subServiceId = eventChip(item.metadata, 'subServiceId')
                     return (
@@ -577,9 +620,35 @@ function SessionDetailPage() {
                               subscriptionStatus={apiCall.summary.subscriptionStatus || '—'}
                             </p>
                           )}
-                          {item.kind === 'event' && item.metadata?.info && (
-                            <p className="text-xs text-gray-600 mt-1">{item.metadata.info}</p>
+                          {item.kind === 'event' && eventInfo && (
+                            <p
+                              className={`text-xs mt-1 ${
+                                skipCopy
+                                  ? 'text-amber-800 font-medium'
+                                  : 'text-gray-600'
+                              }`}
+                            >
+                              {eventInfo}
+                            </p>
                           )}
+                          {skipCopy && item.kind === 'api' && (
+                            <p className="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+                              {skipCopy}
+                            </p>
+                          )}
+                          {item.kind === 'event' &&
+                            item.metadata?.vendorFired === false &&
+                            (item.metadata.allowedStatuses ||
+                              item.metadata.receivedStatus) && (
+                              <p className="text-[11px] font-mono text-amber-900 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-1.5">
+                                allowed: {item.metadata.allowedStatuses || '—'}
+                                {' · '}
+                                received:{' '}
+                                {item.metadata.receivedStatus ||
+                                  item.metadata.status ||
+                                  '—'}
+                              </p>
+                            )}
                           {item.kind === 'event' && item.metadata?.url && (
                             <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
                               {item.metadata.url}
@@ -605,7 +674,24 @@ function SessionDetailPage() {
                           {item.kind === 'api' && apiCall?.requestBody != null && (
                             <JsonBlock
                               label="Request"
-                              value={apiCall.requestBody}
+                              value={
+                                skipCopy && billingBody
+                                  ? {
+                                      ...billingBody,
+                                      reason: skipCopy,
+                                      matchPath:
+                                        billingBody.matchPath ||
+                                        (String(billingBody.reason || '').includes(
+                                          'click_id',
+                                        ) ||
+                                        String(billingBody.reason || '').includes(
+                                          'msisdn',
+                                        )
+                                          ? billingBody.reason
+                                          : undefined),
+                                    }
+                                  : apiCall.requestBody
+                              }
                             />
                           )}
                           {item.kind === 'api' && apiCall?.responseBody != null && (

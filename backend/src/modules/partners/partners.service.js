@@ -41,6 +41,7 @@ export const createPartnersService = () => {
       userId,
       active: dto.active ?? true,
       postbackUrl: dto.postbackUrl?.trim() || null,
+      allowedCallbackStatuses: dto.allowedCallbackStatuses?.trim() || null,
     });
     return getVendorRepo().save(vendor);
   };
@@ -65,6 +66,9 @@ export const createPartnersService = () => {
     if (dto.active !== undefined) vendor.active = dto.active;
     if (dto.postbackUrl !== undefined) {
       vendor.postbackUrl = dto.postbackUrl?.trim() || null;
+    }
+    if (dto.allowedCallbackStatuses !== undefined) {
+      vendor.allowedCallbackStatuses = dto.allowedCallbackStatuses?.trim() || null;
     }
     return getVendorRepo().save(vendor);
   };

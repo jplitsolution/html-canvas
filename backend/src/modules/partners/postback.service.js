@@ -5,6 +5,7 @@ import { Visit } from '../../database/entities/visit.entity.js';
 import { VisitEvent } from '../../database/entities/visit-event.entity.js';
 import { ApiCallLog } from '../../database/entities/api-call-log.entity.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
+import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
 import {
   createPostbackRegister,
   fillTemplate,
@@ -22,10 +23,11 @@ export const createPostbackService = () => {
   const getVendorRepo = () => getRepository(Vendor);
   const getVisitRepo = () => getRepository(Visit);
   const getCampaignRepo = () => getRepository(Campaign);
+  const getTrackingRepo = () => getRepository(CampaignTracking);
   const getVisitEventRepo = () => getRepository(VisitEvent);
   const getApiCallLogRepo = () => getRepository(ApiCallLog);
 
-  const repoDeps = { getPostbackRepo, getVendorRepo, getVisitRepo };
+  const repoDeps = { getPostbackRepo, getVendorRepo, getVisitRepo, getCampaignRepo, getTrackingRepo };
   const registerDeps = { ...repoDeps, firePostback: null };
 
   const {
@@ -55,6 +57,7 @@ export const createPostbackService = () => {
       getVendorRepo,
       getVisitRepo,
       getCampaignRepo,
+      getTrackingRepo,
       getVisitEventRepo,
       getApiCallLogRepo,
     });
