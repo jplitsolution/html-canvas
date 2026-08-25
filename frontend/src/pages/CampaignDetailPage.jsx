@@ -780,6 +780,7 @@ function CampaignDetailPage() {
                 const payout = clampPayoutPercent(t.payoutPercent ?? 100)
                 const endpoints = dcbApiExpose
                   ? [
+                      { key: `${copyKey}-config`, method: 'GET', label: 'Config', url: dcbUrls.configUrl },
                       { key: `${copyKey}-pin`, method: 'POST', label: 'PIN', url: dcbUrls.pincodeUrl },
                       { key: `${copyKey}-confirm`, method: 'POST', label: 'Confirm', url: dcbUrls.confirmUrl },
                       { key: `${copyKey}-status`, method: 'GET', label: 'Status', url: dcbUrls.statusUrl },

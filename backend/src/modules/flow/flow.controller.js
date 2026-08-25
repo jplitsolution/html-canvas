@@ -269,6 +269,20 @@ export const flowController = {
     res.json(await universeDcbService.status(dcbInput(req, 'poll')));
   }),
 
+  dcbExposeConfig: asyncHandler(async (req, res) => {
+    const data = await universeDcbExposeService.exposeConfig(
+      {
+        campaignId: req.params.campaignId,
+        vendorId: req.params.vendorId,
+      },
+      req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+      {
+        requestUrl: `${req.protocol}://${req.get('host')}${req.originalUrl}`,
+      },
+    );
+    res.json(data);
+  }),
+
   dcbExposePincode: asyncHandler(async (req, res) => {
     const values = { ...(req.query || {}), ...(req.body || {}) };
     const data = await universeDcbExposeService.exposePincode(
@@ -277,6 +291,7 @@ export const flowController = {
         vendorId: req.params.vendorId,
         msisdn: values.msisdn || values.phone,
         purchaseTypeId: values.purchaseTypeId || values.purchase_type_id,
+        pack: values.pack || values.packKey || values.pack_key,
         transactionChannel:
           values.transactionChannel || values.transaction_channel || 'Wifi',
         serviceId: values.serviceId || values.service_id,

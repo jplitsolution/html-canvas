@@ -14,6 +14,7 @@ import { redisService } from '../../common/services/redis.service.js';
 import { searchService } from '../search/search.service.js';
 import {
   DCB_OUTCOMES,
+  getNestedValue,
   normalizeUniverseDcbResponse,
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
@@ -24,6 +25,11 @@ import {
   DCB_EXPOSE_INBOUND_EVENT_TYPES,
   serializeDcbExposeInboundBody,
 } from './helpers/dcb-expose-inbound.js';
+import {
+  mergePurchaseTypeMappings,
+  resolvePurchaseTypeId,
+  toVendorPurchaseTypes,
+} from './helpers/universe-dcb-purchase-types.js';
 import {
   HELD_OTP_MESSAGE,
   parsePayoutPercent,
@@ -435,6 +441,7 @@ export const createUniverseDcbExposeService = (
   };
 
   const seedExposeVisit = async (action, input, clientIp, landingUrl) => {
+    if (action === 'config') return null;
     if (action === 'confirm') {
       const linked = await loadVisitFromRequestId(input);
       if (linked) return linked;
@@ -512,6 +519,7 @@ export const createUniverseDcbExposeService = (
     vendorId,
     msisdn,
     purchaseTypeId,
+    pack,
     transactionChannel,
     serviceId,
     requestId,
@@ -597,9 +605,10 @@ export const createUniverseDcbExposeService = (
       serviceId: String(
         serviceId || correlation?.serviceId || config.serviceId || campaign.serviceId || '',
       ).trim(),
-      purchaseTypeId: String(
-        purchaseTypeId || correlation?.purchaseTypeId || '',
-      ).trim(),
+      purchaseTypeId: resolvePurchaseTypeId(config, {
+        purchaseTypeId: purchaseTypeId || correlation?.purchaseTypeId || '',
+        pack,
+      }),
       transactionChannel: channel,
       source: 'dcb_expose',
     };
@@ -612,6 +621,75 @@ export const createUniverseDcbExposeService = (
     transactionChannel: ctx.transactionChannel,
   });
 
+  const exposeConfig = async (input, clientIp, meta = {}) =>
+    runExpose('config', input, clientIp, meta, async () => {
+      const cId = parseInt(input.campaignId, 10);
+      if (!cId) throw httpError('campaignId is required', 400, 'CAMPAIGN_REQUIRED');
+      const campaign = await getCampaignRepo().findOne({ where: { id: cId } });
+      assertDcbApiExpose(campaign);
+      const { vendor } = await resolveAssignedVendor(campaign, input.vendorId);
+
+      const apiConfig = await getApiConfigRepo().findOne({
+        where: { campaignId: cId },
+      });
+      const config = parseConfig(apiConfig?.dcbConfigJson);
+      const ctx = {
+        campaign,
+        vendor,
+        config,
+        visit: null,
+        visitId: null,
+        msisdn: null,
+        serviceId: String(config.serviceId || campaign.serviceId || '').trim(),
+        purchaseTypeId: '',
+        transactionChannel: '',
+        source: 'dcb_expose',
+      };
+
+      const { response, providerLog } = await callProvider({
+        ctx,
+        callType: ApiCallType.DCB_CONFIG,
+        action: 'config',
+        execute: () => provider.getPublicConfig(ctx.config, {}),
+        statusLabel: 'SUCCESS',
+      });
+      const envelopePath = ctx.config.responsePaths?.envelope;
+      const providerConfig = envelopePath
+        ? getNestedValue(response.data, envelopePath)
+        : response.data;
+      if (!Array.isArray(providerConfig?.purchaseTypes)) {
+        const err = httpError(
+          'Universe DCB public configuration is malformed',
+          502,
+          'DCB_PUBLIC_CONFIG_INVALID',
+        );
+        err.providerLog = providerLog;
+        throw err;
+      }
+
+      const purchaseTypes = toVendorPurchaseTypes(
+        mergePurchaseTypeMappings(
+          ctx.config.purchaseTypeMappings,
+          providerConfig.purchaseTypes,
+        ),
+      );
+      const payload = {
+        campaignId: ctx.campaign.id,
+        vendorId: vendor.id,
+        purchaseTypes,
+        pollIntervalMs: Math.max(250, Number(ctx.config.pollIntervalMs) || 2000),
+        pollTimeoutMs: Math.max(1000, Number(ctx.config.pollTimeoutMs) || 60000),
+      };
+      return {
+        visit: null,
+        campaignId: ctx.campaign.id,
+        vendorId: vendor.id,
+        msisdn: null,
+        payload,
+        providerLog,
+      };
+    });
+
   const exposePincode = async (input, clientIp, meta = {}) =>
     runExpose('pincode', input, clientIp, meta, async (existingVisit) => {
       const ctx = await loadExposeContext({
@@ -621,7 +699,11 @@ export const createUniverseDcbExposeService = (
         existingVisit,
       });
       if (!ctx.purchaseTypeId) {
-        throw httpError('purchaseTypeId is required', 400, 'PURCHASE_TYPE_REQUIRED');
+        throw httpError(
+          'purchaseTypeId or pack is required. GET /config for allowed packs.',
+          400,
+          'PURCHASE_TYPE_REQUIRED',
+        );
       }
 
       const { response, providerLog } = await callProvider({
@@ -908,6 +990,7 @@ export const createUniverseDcbExposeService = (
   };
 
   return {
+    exposeConfig,
     exposePincode,
     exposeConfirm,
     exposeStatus,

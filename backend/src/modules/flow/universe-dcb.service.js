@@ -13,6 +13,7 @@ import {
   normalizeUniverseDcbResponse,
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
+import { mergePurchaseTypeMappings } from './helpers/universe-dcb-purchase-types.js';
 
 const localCorrelations = new Map();
 const localConfirmLocks = new Set();
@@ -260,22 +261,10 @@ export const createUniverseDcbService = (
         'DCB_PUBLIC_CONFIG_INVALID',
       );
     }
-    const providerPurchaseTypes = safeProviderConfig.purchaseTypes;
-    const providerById = new Map(
-      providerPurchaseTypes.map((item) => [String(item?.id ?? ''), item]),
+    const purchaseTypeMappings = mergePurchaseTypeMappings(
+      ctx.config.purchaseTypeMappings,
+      safeProviderConfig.purchaseTypes,
     );
-    const configuredMappings = Array.isArray(ctx.config.purchaseTypeMappings)
-      ? ctx.config.purchaseTypeMappings
-      : [];
-    const purchaseTypeMappings = configuredMappings
-      .filter((mapping) =>
-        providerById.has(String(mapping?.purchaseTypeId ?? '')),
-      )
-      .map((mapping) => ({
-        ...mapping,
-        purchaseTypeId: String(mapping.purchaseTypeId),
-        code: providerById.get(String(mapping.purchaseTypeId))?.code,
-      }));
     return {
       ...(safeProviderConfig &&
       typeof safeProviderConfig === 'object' &&

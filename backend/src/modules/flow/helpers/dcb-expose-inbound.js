@@ -2,12 +2,14 @@ import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 
 export const DCB_EXPOSE_INBOUND_CALL_TYPES = {
+  config: ApiCallType.DCB_EXPOSE_CONFIG_IN,
   pincode: ApiCallType.DCB_EXPOSE_PINCODE_IN,
   confirm: ApiCallType.DCB_EXPOSE_CONFIRM_IN,
   status: ApiCallType.DCB_EXPOSE_STATUS_IN,
 };
 
 export const DCB_EXPOSE_INBOUND_EVENT_TYPES = {
+  config: null,
   pincode: VisitEventType.OTP_SEND,
   confirm: VisitEventType.OTP_VERIFY,
   status: null,
@@ -24,6 +26,7 @@ export function serializeDcbExposeInboundBody(input = {}) {
   return JSON.stringify({
     msisdn: input.msisdn || input.phone || null,
     purchaseTypeId: input.purchaseTypeId || null,
+    pack: input.pack || input.packKey || null,
     transactionChannel: input.transactionChannel || null,
     serviceId: input.serviceId || null,
     requestId: input.requestId || input.request_id || null,

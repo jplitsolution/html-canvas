@@ -9,6 +9,7 @@ export function buildDcbExposeUrls(origin, campaignId, vendorId) {
   const base = `${host}/api/flow/dcb/${cid}/${vid}`
   return {
     base,
+    configUrl: `${base}/config`,
     pincodeUrl: `${base}/pincode`,
     confirmUrl: `${base}/confirm`,
     statusUrl: `${base}/status?msisdn=`,
@@ -26,12 +27,29 @@ export function buildDcbExposeApiPayload({ origin, campaign, vendor, vendorId } 
   return [
     {
       comment:
+        'Step 0 — list allowed packs. Use purchaseTypeId (or pack key) on pincode. Weekly in this sample is 3.',
+      method: 'GET',
+      url: urls.configUrl,
+      request: {},
+      response: {
+        purchaseTypes: [
+          { packKey: 'daily', label: 'Daily', purchaseTypeId: '2', code: 'RenewalDaily' },
+          { packKey: 'weekly', label: 'Weekly', purchaseTypeId: '3', code: 'RenewalWeekly' },
+          { packKey: 'monthly', label: 'Monthly', purchaseTypeId: '4', code: 'RenewalMonthly' },
+        ],
+        pollIntervalMs: 2000,
+        pollTimeoutMs: 60000,
+      },
+    },
+    {
+      comment:
         'Step 1 — send billing PIN to this MSISDN. Save requestId from the response; confirm needs it.',
       method: 'POST',
       url: urls.pincodeUrl,
       request: {
         msisdn: SAMPLE_MSISDN,
         purchaseTypeId: 3,
+        pack: 'weekly',
         transactionChannel: 'Wifi',
       },
       response: {
@@ -83,7 +101,7 @@ export function buildDcbExposeApiGuide(opts = {}) {
   return JSON.stringify(
     {
       comment:
-        'Vendor DCB billing APIs. Call in order: pincode → confirm → status. GET or POST. Query or JSON body.',
+        'Vendor DCB billing APIs. Call in order: config → pincode → confirm → status. GET or POST. Query or JSON body.',
       apis: buildDcbExposeApiPayload(opts),
     },
     null,

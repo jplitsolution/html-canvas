@@ -17,7 +17,17 @@ router.post(
   publicRateLimit,
   flowController.dcbManualCheck,
 );
-// Vendor-scoped DCB API expose (billing PIN send/confirm) — before generic /dcb/*
+// Vendor-scoped DCB API expose (config / billing PIN send/confirm) — before generic /dcb/*
+router.get(
+  '/dcb/:campaignId/:vendorId/config',
+  publicRateLimit,
+  flowController.dcbExposeConfig,
+);
+router.post(
+  '/dcb/:campaignId/:vendorId/config',
+  publicRateLimit,
+  flowController.dcbExposeConfig,
+);
 router.post(
   '/dcb/:campaignId/:vendorId/pincode',
   publicRateLimit,

@@ -20,6 +20,7 @@ export const ApiCallType = {
   DCB_SUBSCRIPTIONS: 'dcb_subscriptions',
   DCB_PINCODE: 'dcb_pincode',
   DCB_CONFIRM: 'dcb_confirm',
+  DCB_EXPOSE_CONFIG_IN: 'dcb_expose_config_in',
   DCB_EXPOSE_PINCODE_IN: 'dcb_expose_pincode_in',
   DCB_EXPOSE_CONFIRM_IN: 'dcb_expose_confirm_in',
   DCB_EXPOSE_STATUS_IN: 'dcb_expose_status_in',

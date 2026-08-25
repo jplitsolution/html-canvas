@@ -132,6 +132,8 @@ function eventDescription(eventType) {
       return 'Outbound Universe DCB PIN request to the operator.'
     case 'API_DCB_CONFIRM':
       return 'Outbound Universe DCB PIN confirm to the operator.'
+    case 'API_DCB_EXPOSE_CONFIG_IN':
+      return 'Inbound DCB expose pack list (vendor hit).'
     case 'API_DCB_EXPOSE_PINCODE_IN':
       return 'Inbound DCB expose PIN request (vendor hit).'
     case 'API_DCB_EXPOSE_CONFIRM_IN':

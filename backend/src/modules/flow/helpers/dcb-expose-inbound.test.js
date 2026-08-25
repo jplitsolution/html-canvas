@@ -14,12 +14,17 @@ describe('DCB expose inbound logging', () => {
       assert.ok(String(callType).length <= 32, callType);
     }
     assert.equal(
+      DCB_EXPOSE_INBOUND_CALL_TYPES.config,
+      ApiCallType.DCB_EXPOSE_CONFIG_IN,
+    );
+    assert.equal(
       DCB_EXPOSE_INBOUND_CALL_TYPES.pincode,
       ApiCallType.DCB_EXPOSE_PINCODE_IN,
     );
   });
 
   it('maps pincode/confirm hits to visit events so campaign sessions show failures', () => {
+    assert.equal(DCB_EXPOSE_INBOUND_EVENT_TYPES.config, null);
     assert.equal(DCB_EXPOSE_INBOUND_EVENT_TYPES.pincode, 'OTP_SEND');
     assert.equal(DCB_EXPOSE_INBOUND_EVENT_TYPES.confirm, 'OTP_VERIFY');
   });
@@ -33,11 +38,13 @@ describe('DCB expose inbound logging', () => {
         pin: '1234',
         requestId: '16726123',
         purchaseTypeId: 3,
+        pack: 'weekly',
       }),
     );
     assert.equal(body.msisdn, '566891023');
     assert.equal(body.pin, '1234');
     assert.equal(body.requestId, '16726123');
+    assert.equal(body.pack, 'weekly');
     assert.equal(body.campaignId, 22);
     assert.equal(body.vendorId, 2);
   });
@@ -51,10 +58,17 @@ describe('DCB expose inbound logging', () => {
   it('timeline hops are inbound expose then provider DCB', () => {
     assert.deepEqual(
       [
+        ApiCallType.DCB_EXPOSE_CONFIG_IN,
+        ApiCallType.DCB_CONFIG,
         ApiCallType.DCB_EXPOSE_PINCODE_IN,
         ApiCallType.DCB_PINCODE,
       ],
-      ['dcb_expose_pincode_in', 'dcb_pincode'],
+      [
+        'dcb_expose_config_in',
+        'dcb_config',
+        'dcb_expose_pincode_in',
+        'dcb_pincode',
+      ],
     );
   });
 });

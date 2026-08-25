@@ -1,6 +1,6 @@
 /**
- * Vendor-facing DCB billing HTML: number → PIN → poll status.
- * Same contract as the downloaded API JSON (pincode → confirm → status).
+ * Vendor-facing DCB billing HTML: packs → number → PIN → poll status.
+ * Same contract as the downloaded API JSON (config → pincode → confirm → status).
  */
 
 export function buildDcbExposeScreenUrls(origin, campaignId, vendorId) {
@@ -10,6 +10,7 @@ export function buildDcbExposeScreenUrls(origin, campaignId, vendorId) {
   const base = `${host}/api/flow/dcb/${cid}/${vid}`;
   return {
     base,
+    configUrl: `${base}/config`,
     pincodeUrl: `${base}/pincode`,
     confirmUrl: `${base}/confirm`,
     statusUrl: `${base}/status`,
@@ -32,10 +33,11 @@ export function buildDcbExposeHtmlScreen({
   const host = absolute ? String(origin || '').replace(/\/$/, '') : '';
   const base = `${host}/api/flow/dcb/${cid}/${vid}`;
   const cfg = jsLiteral({
+    configUrl: `${base}/config`,
     pincodeUrl: `${base}/pincode`,
     confirmUrl: `${base}/confirm`,
     statusUrl: `${base}/status`,
-    purchaseTypeId: '3',
+    purchaseTypeId: '',
     transactionChannel: 'Wifi',
     pollMs: 2000,
     timeoutMs: 60000,
@@ -141,16 +143,13 @@ export function buildDcbExposeHtmlScreen({
   <script>
   (function () {
     var CFG = ${cfg};
-    var PACKS = [
-      { id: '2', period: 'Daily', name: 'Daily access', desc: '24 hours of premium access' },
-      { id: '3', period: 'Weekly', name: 'Weekly access', desc: '7 days of premium access' },
-      { id: '4', period: 'Monthly', name: 'Monthly access', desc: '30 days of premium access' }
-    ];
+    var PACKS = [];
+    var packsLoaded = false;
     var state = {
       view: 'number',
       msisdn: '',
       pin: '',
-      purchaseTypeId: CFG.purchaseTypeId || '3',
+      purchaseTypeId: CFG.purchaseTypeId || '',
       requestId: '',
       error: '',
       status: '',
@@ -191,6 +190,14 @@ export function buildDcbExposeHtmlScreen({
         throw new Error(data.message || data.error || 'Request failed');
       }
       return data;
+    }
+
+    function renderLoading() {
+      el(
+        '<div class="spin"></div>' +
+        '<h1>Loading packs…</h1>' +
+        '<p class="sub">Fetching billing plans for this campaign.</p>'
+      );
     }
 
     function renderNumber() {
@@ -306,6 +313,7 @@ export function buildDcbExposeHtmlScreen({
     }
 
     function render() {
+      if (!packsLoaded) return renderLoading();
       if (state.view === 'pin') return renderPin();
       if (state.view === 'poll') return renderPoll();
       if (state.view === 'success') return renderSuccess();
@@ -317,6 +325,7 @@ export function buildDcbExposeHtmlScreen({
     async function sendPin() {
       state.msisdn = digits(document.getElementById('msisdn') && document.getElementById('msisdn').value || state.msisdn);
       if (!state.msisdn) { setError('Enter a mobile number'); return; }
+      if (!state.purchaseTypeId) { setError('Choose a pack'); return; }
       setError('');
       setStatus('Sending PIN…');
       setBusy(true);
@@ -327,6 +336,7 @@ export function buildDcbExposeHtmlScreen({
           body: JSON.stringify({
             msisdn: state.msisdn,
             purchaseTypeId: Number(state.purchaseTypeId),
+            pack: (PACKS.find(function (pack) { return String(pack.id) === String(state.purchaseTypeId); }) || {}).packKey || undefined,
             transactionChannel: CFG.transactionChannel
           })
         });
@@ -408,7 +418,38 @@ export function buildDcbExposeHtmlScreen({
       pollTimer = setTimeout(function () { pollStatus(startedAt); }, CFG.pollMs);
     }
 
-    render();
+    async function loadPacks() {
+      try {
+        var data = await api(CFG.configUrl, { method: 'GET' });
+        var list = data.purchaseTypes || data.purchaseTypeMappings || [];
+        PACKS = list.map(function (item) {
+          var id = String(item.purchaseTypeId || item.id || '');
+          var label = item.label || item.packKey || item.code || ('Pack ' + id);
+          return {
+            id: id,
+            packKey: item.packKey || '',
+            period: label,
+            name: label,
+            desc: item.code || item.packKey || ''
+          };
+        }).filter(function (pack) { return pack.id; });
+        if (!PACKS.length) throw new Error('No packs are mapped for this campaign');
+        var selected = PACKS.some(function (pack) {
+          return String(pack.id) === String(state.purchaseTypeId);
+        });
+        if (!selected) state.purchaseTypeId = PACKS[0].id;
+        if (data.pollIntervalMs) CFG.pollMs = Number(data.pollIntervalMs) || CFG.pollMs;
+        if (data.pollTimeoutMs) CFG.timeoutMs = Number(data.pollTimeoutMs) || CFG.timeoutMs;
+      } catch (err) {
+        state.view = 'error';
+        state.error = 'Could not load packs';
+        state.status = err.message || 'Config request failed';
+      }
+      packsLoaded = true;
+      render();
+    }
+
+    loadPacks();
   })();
   </script>
 </body>
