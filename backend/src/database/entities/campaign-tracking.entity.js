@@ -35,6 +35,11 @@ export const CampaignTrackingSchema = new EntitySchema({
       type: 'int',
       default: 100,
     },
+    allowedCallbackStatuses: {
+      name: 'allowed_callback_statuses',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

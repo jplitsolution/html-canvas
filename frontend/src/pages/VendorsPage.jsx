@@ -80,12 +80,14 @@ function PostbackUrlField({ value, onSave, placeholder, saving }) {
 function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
   const [name, setName] = useState('')
   const [code, setCode] = useState('')
+  const [allowedStatuses, setAllowedStatuses] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (!vendor || !isOpen) return
     setName(vendor.name || '')
     setCode(vendor.code || '')
+    setAllowedStatuses(vendor.allowedCallbackStatuses || '')
   }, [vendor, isOpen])
 
   const handleSave = async () => {
@@ -95,6 +97,7 @@ function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
       await onSave(vendor.id, {
         name: name.trim(),
         code: code.trim(),
+        allowedCallbackStatuses: allowedStatuses.trim() || null,
       })
       onClose()
     } catch {
@@ -124,6 +127,18 @@ function EditVendorModal({ isOpen, vendor, onClose, onSave }) {
             placeholder="CODE"
             className="font-mono"
           />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-fg mb-1.5">Allowed Callback Statuses</label>
+          <Input
+            value={allowedStatuses}
+            onChange={(e) => setAllowedStatuses(e.target.value)}
+            placeholder="e.g. active, grace, parking, custom_ok (leave blank for default billable)"
+            className="font-mono text-xs"
+          />
+          <p className="text-[11px] text-fg-subtle mt-1">
+            Comma-separated statuses that trigger CPA postback fire for this vendor.
+          </p>
         </div>
         <div className="flex justify-end gap-3 pt-2 border-t border-border">
           <Button variant="outline" onClick={onClose} disabled={saving}>
@@ -336,6 +351,11 @@ function VendorsPage() {
                           <span className="badge badge-muted flex items-center gap-1">
                             <Link2 className="w-3 h-3" />
                             Postback
+                          </span>
+                        ) : null}
+                        {vendor.allowedCallbackStatuses ? (
+                          <span className="badge badge-subtle flex items-center gap-1 font-mono text-[10px]" title="Allowed callback statuses">
+                            Statuses: {vendor.allowedCallbackStatuses}
                           </span>
                         ) : null}
                       </div>

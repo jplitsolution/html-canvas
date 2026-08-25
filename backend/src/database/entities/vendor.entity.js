@@ -31,6 +31,11 @@ export const VendorSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
+    allowedCallbackStatuses: {
+      name: 'allowed_callback_statuses',
+      type: 'text',
+      nullable: true,
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

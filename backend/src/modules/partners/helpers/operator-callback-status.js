@@ -15,5 +15,28 @@ export const parseOperatorStatus = (query = {}) => {
   return String(raw).trim().toLowerCase().slice(0, 64);
 };
 
-export const shouldFireVendorPostback = (status) =>
-  VENDOR_FIRE_OPERATOR_STATUSES.has(String(status || '').toLowerCase());
+export const parseAllowedStatuses = (config) => {
+  if (!config) return null;
+  if (Array.isArray(config)) {
+    const list = config.map((s) => String(s).trim().toLowerCase()).filter(Boolean);
+    return list.length ? new Set(list) : null;
+  }
+  if (typeof config === 'string') {
+    const list = config
+      .split(',')
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+    return list.length ? new Set(list) : null;
+  }
+  return null;
+};
+
+export const shouldFireVendorPostback = (status, customAllowedConfig = null) => {
+  const normalized = String(status || '').toLowerCase();
+  const customSet = parseAllowedStatuses(customAllowedConfig);
+  if (customSet) {
+    return customSet.has(normalized);
+  }
+  return VENDOR_FIRE_OPERATOR_STATUSES.has(normalized);
+};
+

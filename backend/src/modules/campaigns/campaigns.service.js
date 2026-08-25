@@ -490,6 +490,12 @@ export const createCampaignsService = () => {
       }
     }
     if (dto.active !== undefined) campaign.active = dto.active;
+    if (dto.allowedCallbackStatuses !== undefined) {
+      campaign.allowedCallbackStatuses =
+        typeof dto.allowedCallbackStatuses === 'string'
+          ? dto.allowedCallbackStatuses.trim() || null
+          : null;
+    }
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });
       if (dto.trackings && dto.trackings.length > 0) {
@@ -501,6 +507,10 @@ export const createCampaignsService = () => {
             active:
               t.active === undefined || t.active === null ? true : !!t.active,
             payoutPercent: parsePayoutPercent(t.payoutPercent),
+            allowedCallbackStatuses:
+              typeof t.allowedCallbackStatuses === 'string'
+                ? t.allowedCallbackStatuses.trim() || null
+                : null,
           })),
         );
       }

@@ -270,4 +270,37 @@ describe('processOperatorCallback shapes', () => {
     assert.deepEqual(calls.firePostback, [77]);
     assert.equal(calls.logApiCall[0].statusLabel, 'ACTIVE');
   });
+
+  it('fires postback on custom status (e.g. grace, custom_ok) when allowed on vendor/campaign', async () => {
+    const row = { ...pendingRow, vendorId: 5, campaignId: 3 };
+    const { deps, calls } = makeDeps({ pending: row });
+
+    deps.getVendorRepo = () => ({
+      findOne: async () => ({ id: 5, allowedCallbackStatuses: 'grace, custom_ok' }),
+    });
+
+    const { processOperatorCallback } = createPostbackCallback(deps);
+    const outGrace = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'grace',
+    });
+    assert.equal(outGrace.vendorFired, true);
+    assert.deepEqual(calls.firePostback, [77]);
+
+    calls.firePostback.length = 0;
+    const outCustom = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'custom_ok',
+    });
+    assert.equal(outCustom.vendorFired, true);
+    assert.deepEqual(calls.firePostback, [77]);
+
+    calls.firePostback.length = 0;
+    const outUnsub = await processOperatorCallback({
+      msisdn: '254700000001',
+      status: 'unsub',
+    });
+    assert.equal(outUnsub.vendorFired, false);
+    assert.equal(calls.firePostback.length, 0);
+  });
 });
