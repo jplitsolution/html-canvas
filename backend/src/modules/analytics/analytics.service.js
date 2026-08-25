@@ -337,6 +337,27 @@ export const createAnalyticsService = () => {
         `COALESCE(SUM(CASE WHEN event.eventType = 'SUBSCRIBE_SUCCESS' THEN 1 ELSE 0 END), 0)`,
         'subscribeSuccess',
       )
+      // PIN legs for API expose: every attempt, plus distinct MSISDN per leg.
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_SEND' THEN 1 ELSE 0 END), 0)`,
+        'pinRequest',
+      )
+      .addSelect(
+        `COUNT(DISTINCT CASE WHEN event.eventType = 'OTP_SEND' AND ${successTrue} THEN visit.phone END)`,
+        'uniquePinSend',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_VERIFY' THEN 1 ELSE 0 END), 0)`,
+        'pinValRequest',
+      )
+      .addSelect(
+        `COUNT(DISTINCT CASE WHEN event.eventType = 'OTP_VERIFY' THEN visit.phone END)`,
+        'uniquePinValRequest',
+      )
+      .addSelect(
+        `COUNT(DISTINCT CASE WHEN event.eventType = 'OTP_VERIFY' AND ${successTrue} THEN visit.phone END)`,
+        'uniquePinVal',
+      )
       .where('visit.campaignId = :cId', { cId })
       .groupBy('visit.vendorId')
       .getRawMany();
@@ -366,6 +387,11 @@ export const createAnalyticsService = () => {
       subscribeSuccess: 0,
       postbacksMatched: 0,
       postbacksSent: 0,
+      pinRequest: 0,
+      uniquePinSend: 0,
+      pinValRequest: 0,
+      uniquePinValRequest: 0,
+      uniquePinVal: 0,
     });
     const ensure = (vendorId) => {
       const key = Number(vendorId) || 0;
@@ -383,6 +409,11 @@ export const createAnalyticsService = () => {
       prev.held = Number(row.held) || 0;
       prev.failedApi = (Number(row.failedSend) || 0) + (Number(row.failedVerify) || 0);
       prev.subscribeSuccess = Number(row.subscribeSuccess) || 0;
+      prev.pinRequest = Number(row.pinRequest) || 0;
+      prev.uniquePinSend = Number(row.uniquePinSend) || 0;
+      prev.pinValRequest = Number(row.pinValRequest) || 0;
+      prev.uniquePinValRequest = Number(row.uniquePinValRequest) || 0;
+      prev.uniquePinVal = Number(row.uniquePinVal) || 0;
     }
     for (const row of postbackRows) {
       const prev = ensure(row.vendorId);

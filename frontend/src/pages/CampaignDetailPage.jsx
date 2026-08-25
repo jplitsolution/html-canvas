@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Check,
   Download,
+  FileCode,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -65,6 +66,34 @@ function CompactStatusToggle({ active, onToggle, disabled, activating, blockedRe
 function relativeUrl(url) {
   if (!url || typeof window === 'undefined') return url
   return url.replace(window.location.origin, '')
+}
+
+/**
+ * API expose funnel, counts only. We never hold the money, so there are no
+ * advertiser / publisher / profit amount columns here.
+ */
+const PIN_COLUMNS = [
+  { key: 'pinRequest', label: 'Pin Request', hint: 'PIN send API calls received' },
+  { key: 'pinSendSuccess', label: 'Pin_Send Success', hint: 'PIN sent by the operator' },
+  { key: 'uniquePinSend', label: 'Unique Pin_Send', hint: 'Distinct MSISDN with a PIN sent', tint: 'bg-accent-muted/40' },
+  { key: 'pinValRequest', label: 'Pin_Val Request', hint: 'PIN validate API calls received' },
+  { key: 'uniquePinValRequest', label: 'Unique Pin_Val Request', hint: 'Distinct MSISDN attempting validation', tint: 'bg-accent-muted/40' },
+  { key: 'pinValSuccess', label: 'Pin_Val Success', hint: 'PIN validated by the operator' },
+  { key: 'uniquePinVal', label: 'Unique Pin_Val', hint: 'Distinct MSISDN validated', tint: 'bg-accent-muted/40' },
+  { key: 'sendConversion', label: 'Send Conversion', hint: 'Validations forwarded to the vendor after the payout cut', tint: 'bg-success-muted/50' },
+]
+
+function sumPinColumns(rows) {
+  const totals = Object.fromEntries(PIN_COLUMNS.map((col) => [col.key, 0]))
+  for (const row of rows) {
+    for (const col of PIN_COLUMNS) totals[col.key] += Number(row?.[col.key]) || 0
+  }
+  const cr = (num) => (totals.pinRequest > 0 ? (num / totals.pinRequest) * 100 : 0)
+  return {
+    ...totals,
+    advCrPercent: cr(totals.pinValSuccess),
+    pubCrPercent: cr(totals.sendConversion),
+  }
 }
 
 function CampaignDetailPage() {
@@ -279,6 +308,30 @@ function CampaignDetailPage() {
     useStore.getState().addToast('API payload downloaded', 'success')
   }
 
+  const downloadVendorHtmlScreen = async (t, vendor) => {
+    const vendorId = vendor?.id || t.vendor?.id
+    const urls = buildDcbExposeUrls(window.location.origin, campaign.id, vendorId)
+    const safeName = String(vendor?.code || vendor?.name || vendorId || 'vendor')
+      .replace(/[^a-zA-Z0-9_-]+/g, '-')
+      .toLowerCase()
+    try {
+      const res = await fetch(`${urls.screenUrl}?absolute=1`)
+      const html = await res.text()
+      if (!res.ok) {
+        useStore.getState().addToast('Could not download HTML screen', 'error')
+        return
+      }
+      downloadTextFile(
+        `dcb-billing-screen-campaign-${campaign.id}-vendor-${safeName}.html`,
+        html,
+        'text/html;charset=utf-8',
+      )
+      useStore.getState().addToast('HTML screen downloaded', 'success')
+    } catch {
+      useStore.getState().addToast('Could not download HTML screen', 'error')
+    }
+  }
+
   const handleToggleActive = async () => {
     if (!campaign) return
     setActivating(true)
@@ -327,17 +380,30 @@ function CampaignDetailPage() {
         vendorName: stats?.vendorName || vendor.name || `Vendor #${vendorId}`,
         vendorCode: stats?.vendorCode || vendor.code || null,
         assignmentActive: t.active !== false,
+        payoutPercent: Number(stats?.payoutPercent ?? t.payoutPercent ?? 100),
         totalClicks: stats?.totalClicks ?? 0,
         requestedApi: stats?.requestedApi ?? 0,
         verifiedApi: stats?.verifiedApi ?? 0,
         failedApi: stats?.failedApi ?? 0,
         convPercent: stats?.convPercent ?? 0,
         pubConvPercent: stats?.pubConvPercent ?? 0,
+        pinRequest: stats?.pinRequest ?? 0,
+        pinSendSuccess: stats?.pinSendSuccess ?? 0,
+        uniquePinSend: stats?.uniquePinSend ?? 0,
+        pinValRequest: stats?.pinValRequest ?? 0,
+        uniquePinValRequest: stats?.uniquePinValRequest ?? 0,
+        pinValSuccess: stats?.pinValSuccess ?? 0,
+        uniquePinVal: stats?.uniquePinVal ?? 0,
+        sendConversion: stats?.sendConversion ?? 0,
+        advCrPercent: stats?.advCrPercent ?? 0,
+        pubCrPercent: stats?.pubCrPercent ?? 0,
       }
     })
     for (const leftover of byId.values()) rows.push(leftover)
     return rows
   }, [vendorTrackings, vendorStats.vendors])
+
+  const pinTotals = useMemo(() => sumPinColumns(vendorRows), [vendorRows])
 
   if (loading) {
     return (
@@ -523,7 +589,7 @@ function CampaignDetailPage() {
               <h2 className="text-sm font-semibold text-fg">Vendors</h2>
               <p className="text-[11px] text-fg-muted mt-0.5">
                 {apiExpose
-                  ? 'Requested / verified / failed API counts. Conv % is verified ÷ requested. Pub conv % is after payout hold.'
+                  ? 'PIN send and PIN validate legs, with unique MSISDN per leg. Send conversion is what the vendor gets after the payout cut. Adv CR is Pin_Val success ÷ Pin request; Pub CR is send conversion ÷ Pin request. Traffic counts only — we do not hold any amount.'
                   : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
               </p>
             </div>
@@ -551,17 +617,24 @@ function CampaignDetailPage() {
                 <thead>
                   <tr>
                     <th className="col-text">Vendor</th>
-                    <th className="col-num">Total clicks</th>
                     {apiExpose ? (
                       <>
-                        <th className="col-num">Requested API</th>
-                        <th className="col-num">Verified API</th>
-                        <th className="col-num">Failed API</th>
-                        <th className="col-num">Conv %</th>
-                        <th className="col-num">Pub conv %</th>
+                        <th className="col-num">Cut</th>
+                        {PIN_COLUMNS.map((col) => (
+                          <th key={col.key} className={`col-num ${col.tint || ''}`} title={col.hint}>
+                            {col.label}
+                          </th>
+                        ))}
+                        <th className="col-num" title="Pin_Val success ÷ Pin request">
+                          Adv CR
+                        </th>
+                        <th className="col-num" title="Send conversion ÷ Pin request">
+                          Pub CR
+                        </th>
                       </>
                     ) : (
                       <>
+                        <th className="col-num">Total clicks</th>
                         <th className="col-num">Conv %</th>
                         <th className="col-num">Pub conv %</th>
                       </>
@@ -577,17 +650,22 @@ function CampaignDetailPage() {
                           <p className="text-[11px] text-fg-muted font-mono">{row.vendorCode}</p>
                         ) : null}
                       </td>
-                      <td className="col-num">{row.totalClicks ?? 0}</td>
                       {apiExpose ? (
                         <>
-                          <td className="col-num">{row.requestedApi ?? 0}</td>
-                          <td className="col-num">{row.verifiedApi ?? 0}</td>
-                          <td className="col-num">{row.failedApi ?? 0}</td>
-                          <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
-                          <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
+                          <td className="col-num text-fg-muted">
+                            {100 - Number(row.payoutPercent ?? 100)}%
+                          </td>
+                          {PIN_COLUMNS.map((col) => (
+                            <td key={col.key} className={`col-num ${col.tint || ''}`}>
+                              {row[col.key] ?? 0}
+                            </td>
+                          ))}
+                          <td className="col-num">{Number(row.advCrPercent || 0).toFixed(1)}%</td>
+                          <td className="col-num">{Number(row.pubCrPercent || 0).toFixed(1)}%</td>
                         </>
                       ) : (
                         <>
+                          <td className="col-num">{row.totalClicks ?? 0}</td>
                           <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
                           <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
                         </>
@@ -595,6 +673,21 @@ function CampaignDetailPage() {
                     </tr>
                   ))}
                 </tbody>
+                {apiExpose && vendorRows.length > 1 && (
+                  <tfoot>
+                    <tr className="bg-bg-subtle font-medium">
+                      <td className="col-text">Total</td>
+                      <td className="col-num text-fg-muted">–</td>
+                      {PIN_COLUMNS.map((col) => (
+                        <td key={col.key} className={`col-num ${col.tint || ''}`}>
+                          {pinTotals[col.key]}
+                        </td>
+                      ))}
+                      <td className="col-num">{pinTotals.advCrPercent.toFixed(1)}%</td>
+                      <td className="col-num">{pinTotals.pubCrPercent.toFixed(1)}%</td>
+                    </tr>
+                  </tfoot>
+                )}
               </table>
             </div>
           )}
@@ -690,6 +783,7 @@ function CampaignDetailPage() {
                       { key: `${copyKey}-pin`, method: 'POST', label: 'PIN', url: dcbUrls.pincodeUrl },
                       { key: `${copyKey}-confirm`, method: 'POST', label: 'Confirm', url: dcbUrls.confirmUrl },
                       { key: `${copyKey}-status`, method: 'GET', label: 'Status', url: dcbUrls.statusUrl },
+                      { key: `${copyKey}-screen`, method: 'GET', label: 'Screen', url: dcbUrls.screenUrl },
                     ]
                   : apiExpose
                     ? [
@@ -750,6 +844,22 @@ function CampaignDetailPage() {
                           title="Download API payload"
                         >
                           <Download className="w-3.5 h-3.5" />
+                        </IconButton>
+                      )}
+                      {dcbApiExpose && (
+                        <IconButton
+                          onClick={() => downloadVendorHtmlScreen(t, vendor)}
+                          title="Download HTML screen"
+                        >
+                          <FileCode className="w-3.5 h-3.5" />
+                        </IconButton>
+                      )}
+                      {dcbApiExpose && (
+                        <IconButton
+                          onClick={() => window.open(dcbUrls.screenUrl, '_blank')}
+                          title="Open HTML screen"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
                         </IconButton>
                       )}
                       {!apiExpose && (
