@@ -14,6 +14,7 @@ export const analyticsController = {
     const data = await analyticsService.getCampaignVendorStats(
       req.params.campaignId,
       req.user.id,
+      req.query,
     );
     res.json(data);
   }),

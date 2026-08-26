@@ -1,4 +1,4 @@
-import { memo, useEffect, useState, useMemo } from 'react'
+import { memo, useEffect, useState, useMemo, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -14,6 +14,8 @@ import {
   Check,
   Download,
   FileCode,
+  Calendar,
+  RefreshCw,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -33,6 +35,16 @@ import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbE
 import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/verificationModes'
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
+import { formatDate, getDateRangeForPreset, DEFAULT_TIMEZONE, shiftDateString } from '../utils/date'
+
+const VENDOR_DATE_PRESETS = [
+  { id: 'all', label: 'All Time' },
+  { id: 'today', label: 'Today' },
+  { id: 'yesterday', label: 'Yesterday' },
+  { id: 'week', label: 'Last 7 Days' },
+  { id: 'month', label: 'Last 30 Days' },
+  { id: 'custom', label: 'Custom' },
+]
 import CampaignFlowBuilder from '../components/flow/CampaignFlowBuilder'
 import AllowedCallbackStatusesField, {
   fallbackCallbackStatusesHint,
@@ -121,31 +133,85 @@ function CampaignDetailPage() {
   const [editingName, setEditingName] = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [savingName, setSavingName] = useState(false)
+  const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
+  const addToast = useStore((s) => s.addToast)
+
+  const [vendorPreset, setVendorPreset] = useState('today')
+  const [vendorCustomRange, setVendorCustomRange] = useState({ from: '', to: '' })
+  const [vendorDateRange, setVendorDateRange] = useState(() => getDateRangeForPreset('today', timezone))
   const [vendorStats, setVendorStats] = useState({ apiExpose: false, vendors: [] })
   const [vendorStatsLoading, setVendorStatsLoading] = useState(false)
+
+  const handleVendorPresetChange = (newPreset) => {
+    setVendorPreset(newPreset)
+    if (newPreset === 'all') {
+      setVendorDateRange({ from: '', to: '' })
+    } else if (newPreset === 'yesterday') {
+      const todayStr = getDateRangeForPreset('today', timezone).from
+      const yestStr = shiftDateString(todayStr, -1)
+      setVendorDateRange({ from: yestStr, to: yestStr })
+    } else if (newPreset !== 'custom') {
+      const range = getDateRangeForPreset(newPreset, timezone)
+      setVendorDateRange(range)
+    }
+  }
+
+  const handleVendorCustomDateApply = () => {
+    if (!vendorCustomRange.from || !vendorCustomRange.to) {
+      if (addToast) addToast('Please select both From and To dates', 'warning')
+      return
+    }
+    setVendorDateRange({ from: vendorCustomRange.from, to: vendorCustomRange.to })
+  }
 
   useEffect(() => {
     fetchVendors().catch(() => {})
   }, [fetchVendors])
 
-  useEffect(() => {
+  const loadVendorStats = useCallback(() => {
     if (!id) return
-    let cancelled = false
     setVendorStatsLoading(true)
-    getCampaignVendorStats(id)
+    getCampaignVendorStats(id, {
+      from: vendorDateRange.from,
+      to: vendorDateRange.to,
+      timezone,
+    })
+      .then((data) => {
+        setVendorStats(data || { apiExpose: false, vendors: [] })
+      })
+      .catch((err) => {
+        console.error('Failed to load vendor stats:', err)
+        setVendorStats({ apiExpose: false, vendors: [] })
+      })
+      .finally(() => {
+        setVendorStatsLoading(false)
+      })
+  }, [id, vendorDateRange, timezone])
+
+  useEffect(() => {
+    let cancelled = false
+    if (!id) return
+    setVendorStatsLoading(true)
+    getCampaignVendorStats(id, {
+      from: vendorDateRange.from,
+      to: vendorDateRange.to,
+      timezone,
+    })
       .then((data) => {
         if (!cancelled) setVendorStats(data || { apiExpose: false, vendors: [] })
       })
-      .catch(() => {
+      .catch((err) => {
+        console.error('Failed to fetch vendor stats:', err)
         if (!cancelled) setVendorStats({ apiExpose: false, vendors: [] })
       })
       .finally(() => {
         if (!cancelled) setVendorStatsLoading(false)
       })
+
     return () => {
       cancelled = true
     }
-  }, [id, campaign?.trackings])
+  }, [id, vendorDateRange.from, vendorDateRange.to, timezone, campaign?.trackings])
 
   useEffect(() => {
     setNameDraft(campaign?.name || '')
@@ -632,7 +698,7 @@ function CampaignDetailPage() {
         </div>
 
         <div className="surface-card overflow-hidden mt-5">
-          <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+          <div className="px-4 py-3 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-semibold text-fg">Vendors</h2>
               <p className="text-[11px] text-fg-muted mt-0.5">
@@ -641,11 +707,63 @@ function CampaignDetailPage() {
                   : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
-              <Store className="w-4 h-4" />
-              Manage
-            </Button>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <div className="flex items-center bg-bg-base p-1 rounded-xl border border-border">
+                {VENDOR_DATE_PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => handleVendorPresetChange(p.id)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                      vendorPreset === p.id
+                        ? 'bg-accent text-accent-fg shadow-xs font-semibold'
+                        : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadVendorStats}
+                disabled={vendorStatsLoading}
+                title="Refresh vendor stats"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${vendorStatsLoading ? 'animate-spin' : ''}`} />
+              </Button>
+
+              <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
+                <Store className="w-4 h-4" />
+                Manage
+              </Button>
+            </div>
           </div>
+
+          {vendorPreset === 'custom' && (
+            <div className="px-4 py-2.5 bg-bg-muted/40 border-b border-border flex flex-wrap items-center gap-3 animate-fade-in">
+              <Calendar className="w-4 h-4 text-accent" />
+              <span className="text-xs font-medium text-fg">Custom Range:</span>
+              <input
+                type="date"
+                value={vendorCustomRange.from}
+                onChange={(e) => setVendorCustomRange((r) => ({ ...r, from: e.target.value }))}
+                className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
+              />
+              <span className="text-xs text-fg-muted">to</span>
+              <input
+                type="date"
+                value={vendorCustomRange.to}
+                onChange={(e) => setVendorCustomRange((r) => ({ ...r, to: e.target.value }))}
+                className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
+              />
+              <Button size="xs" variant="primary" onClick={handleVendorCustomDateApply}>
+                Apply
+              </Button>
+            </div>
+          )}
           {vendorStatsLoading && vendorRows.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-fg-muted">Loading vendor stats…</p>
           ) : vendorRows.length === 0 ? (

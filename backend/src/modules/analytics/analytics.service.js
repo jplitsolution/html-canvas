@@ -11,6 +11,7 @@ import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { campaignVendorPerf } from '../otp/helpers/conversion.js';
 import getConfig from '../../config/configuration.js';
+import { resolveRangeBounds } from '../../common/zoned-day.js';
 
 export const createAnalyticsService = () => {
   const getVisitRepo = () => getRepository(Visit);
@@ -293,7 +294,7 @@ export const createAnalyticsService = () => {
     return `JSON_EXTRACT(${columnJsonPath}, '$.${jsonKey}') IN (true, 1, 'true')`;
   };
 
-  const getCampaignVendorStats = async (campaignId, userId) => {
+  const getCampaignVendorStats = async (campaignId, userId, options = {}) => {
     const campaign = await campaignsService.findOne(campaignId, userId);
     const { flowConfig } = await campaignsService.getFlow(campaignId, userId);
     const apiExpose = flowEngineService.isApiExposeFlow(flowConfig);
@@ -301,15 +302,18 @@ export const createAnalyticsService = () => {
     const successTrue = jsonBoolSql('event.metadata', 'success');
     const heldTrue = jsonBoolSql('event.metadata', 'held');
 
-    const clickRows = await getVisitRepo()
+    const { from, to } = resolveRangeBounds(options);
+
+    const clickQB = getVisitRepo()
       .createQueryBuilder('visit')
       .select('visit.vendorId', 'vendorId')
       .addSelect('COUNT(*)', 'clicks')
-      .where('visit.campaignId = :cId', { cId })
-      .groupBy('visit.vendorId')
-      .getRawMany();
+      .where('visit.campaignId = :cId', { cId });
+    if (from) clickQB.andWhere('visit.createdAt >= :since', { since: from });
+    if (to) clickQB.andWhere('visit.createdAt <= :until', { until: to });
+    const clickRows = await clickQB.groupBy('visit.vendorId').getRawMany();
 
-    const eventRows = await getVisitEventRepo()
+    const eventQB = getVisitEventRepo()
       .createQueryBuilder('event')
       .innerJoin('event.visit', 'visit')
       .select('visit.vendorId', 'vendorId')
@@ -358,11 +362,12 @@ export const createAnalyticsService = () => {
         `COUNT(DISTINCT CASE WHEN event.eventType = 'OTP_VERIFY' AND ${successTrue} THEN visit.phone END)`,
         'uniquePinVal',
       )
-      .where('visit.campaignId = :cId', { cId })
-      .groupBy('visit.vendorId')
-      .getRawMany();
+      .where('visit.campaignId = :cId', { cId });
+    if (from) eventQB.andWhere('event.createdAt >= :since', { since: from });
+    if (to) eventQB.andWhere('event.createdAt <= :until', { until: to });
+    const eventRows = await eventQB.groupBy('visit.vendorId').getRawMany();
 
-    const postbackRows = await getPostbackRepo()
+    const postbackQB = getPostbackRepo()
       .createQueryBuilder('p')
       .select('p.vendorId', 'vendorId')
       .addSelect(
@@ -373,9 +378,10 @@ export const createAnalyticsService = () => {
         `COALESCE(SUM(CASE WHEN p.status = '${ConversionPostbackStatus.SENT}' THEN 1 ELSE 0 END), 0)`,
         'postbacksSent',
       )
-      .where('p.campaignId = :cId', { cId })
-      .groupBy('p.vendorId')
-      .getRawMany();
+      .where('p.campaignId = :cId', { cId });
+    if (from) postbackQB.andWhere('p.createdAt >= :since', { since: from });
+    if (to) postbackQB.andWhere('p.createdAt <= :until', { until: to });
+    const postbackRows = await postbackQB.groupBy('p.vendorId').getRawMany();
 
     const statsByVendor = new Map();
     const emptyStats = () => ({

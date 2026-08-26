@@ -276,8 +276,13 @@ export async function saveCampaignFlow(campaignId, payload) {
   })
 }
 
-export async function getCampaignVendorStats(campaignId) {
-  return apiClient(`/analytics/campaign/${campaignId}/vendor-stats`)
+export async function getCampaignVendorStats(campaignId, params = {}) {
+  const query = new URLSearchParams()
+  if (params.from) query.append('from', params.from)
+  if (params.to) query.append('to', params.to)
+  if (params.timezone) query.append('timezone', params.timezone)
+  const qStr = query.toString() ? `?${query.toString()}` : ''
+  return apiClient(`/analytics/campaign/${campaignId}/vendor-stats${qStr}`)
 }
 
 export async function getCampaignActivityLogs(campaignId, params = {}) {
