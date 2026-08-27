@@ -208,6 +208,14 @@ export const createAnalyticsService = () => {
     return true;
   };
 
+  const hasVisitEvent = async (visitId, eventType) => {
+    if (!visitId || !eventType) return false;
+    const row = await getVisitEventRepo().findOne({
+      where: { visitId, eventType },
+    });
+    return Boolean(row);
+  };
+
   const logEvent = async (visitId, eventType, metadata) => {
     const eventPayload = { visitId, eventType, metadata };
 
@@ -847,6 +855,7 @@ export const createAnalyticsService = () => {
     ensureVisitCampids,
     ensureVisitAttribution,
     abandonOrphanVisit,
+    hasVisitEvent,
     logEvent,
     getCampaignAnalytics,
     getCampaignVendorStats,

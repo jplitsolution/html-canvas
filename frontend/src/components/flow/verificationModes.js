@@ -58,6 +58,16 @@ export function isNullIdentityMode(mode) {
   return m === 'NONE' || m === 'CG_HOME'
 }
 
+/** Landing goes straight to CG (no HOME). */
+export function isLandingCgMode(mode) {
+  return normalizeModeId(mode) === 'NONE'
+}
+
+/** HOME first, then Subscribe CTA → CG. */
+export function isCgHomeMode(mode) {
+  return normalizeModeId(mode) === 'CG_HOME'
+}
+
 const OUTCOME_NODES = [
   { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 880, y: 40 } },
   { id: 'INPROGRESS', pageType: 'INPROGRESS', position: { x: 880, y: 160 } },

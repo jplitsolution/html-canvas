@@ -74,6 +74,7 @@ function mapDetectResponse(res) {
     failRedirectUrl: res.failRedirectUrl || null,
     successRedirectUrl: res.successRedirectUrl || null,
     cgRedirectUrl: res.cgRedirectUrl || null,
+    externalRedirect: res.externalRedirect || null,
     visitId: res.visitId || null,
     clickId: res.clickId || null,
     rcid: res.rcid || null,

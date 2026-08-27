@@ -32,7 +32,12 @@ import { getCampaignPreviewUrl, getCampaignVendorStats } from '../services/api/c
 import { buildTrackingUrl } from '../services/api/partners'
 import { buildOtpExposeApiGuide, buildOtpExposeUrls, clampPayoutPercent } from '../services/api/otp'
 import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbExpose'
-import { isApiExposeCampaign, isDcbApiExposeCampaign, isNullIdentityMode } from '../components/flow/verificationModes'
+import {
+  isApiExposeCampaign,
+  isCgHomeMode,
+  isDcbApiExposeCampaign,
+  isLandingCgMode,
+} from '../components/flow/verificationModes'
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import { formatDate, getDateRangeForPreset, DEFAULT_TIMEZONE, shiftDateString } from '../utils/date'
@@ -559,7 +564,8 @@ function CampaignDetailPage() {
   const trackings = vendorTrackings
   const apiExpose = isApiExposeCampaign(campaign)
   const dcbApiExpose = isDcbApiExposeCampaign(campaign)
-  const cgHomeFlow = isNullIdentityMode(campaign.verificationMode)
+  const landingCgFlow = isLandingCgMode(campaign.verificationMode)
+  const cgHomeFlow = isCgHomeMode(campaign.verificationMode)
 
   const pageActions = (
     <>
@@ -708,9 +714,11 @@ function CampaignDetailPage() {
               <p className="text-[11px] text-fg-muted mt-0.5">
                 {apiExpose
                   ? 'PIN send and PIN validate legs, with unique MSISDN per leg. Send conversion is what the vendor gets after the payout cut. Adv CR is Pin_Val success ÷ Pin request; Pub CR is send conversion ÷ Pin request. Traffic counts only — we do not hold any amount.'
-                  : cgHomeFlow
-                    ? 'Landings = visits. Home shown = HOME page loaded. Banner clicks = subscribe CTA. CG redirects = users sent to the operator CG URL. Conv % is matched operator callbacks ÷ clicks.'
-                    : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
+                  : landingCgFlow
+                    ? 'Landings = visits. CG redirects = users sent to the operator CG on landing (no HOME). Conv % is matched operator callbacks ÷ clicks.'
+                    : cgHomeFlow
+                      ? 'Landings = visits. Home shown = HOME page loaded. Banner clicks = subscribe CTA. CG redirects = users sent to the operator CG URL. Conv % is matched operator callbacks ÷ clicks.'
+                      : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -807,6 +815,14 @@ function CampaignDetailPage() {
                     ) : (
                       <>
                         <th className="col-num">Total clicks</th>
+                        {landingCgFlow ? (
+                          <th
+                            className="col-num"
+                            title="Redirected to operator CG on landing"
+                          >
+                            CG redirects
+                          </th>
+                        ) : null}
                         {cgHomeFlow ? (
                           <>
                             <th className="col-num" title="HOME page loaded">
@@ -856,6 +872,9 @@ function CampaignDetailPage() {
                       ) : (
                         <>
                           <td className="col-num">{row.totalClicks ?? 0}</td>
+                          {landingCgFlow ? (
+                            <td className="col-num">{row.cgRedirect ?? 0}</td>
+                          ) : null}
                           {cgHomeFlow ? (
                             <>
                               <td className="col-num">{row.homeView ?? 0}</td>

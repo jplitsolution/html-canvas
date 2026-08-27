@@ -9,6 +9,7 @@ import {
 } from '../../services/flow/resolvePhoneNumber'
 import {
   isApiHeProvider,
+  isExternalHttpRedirect,
   isHeSilentExitMode,
   isHeSuppressedFunnelPage,
   normalizeDetectNextPage,
@@ -193,6 +194,17 @@ function useHeDetect({
           verificationMode: String(
             verificationMode || flowContext?.verificationMode || '',
           ).toUpperCase() || null,
+        }
+
+        const landingCgUrl = result?.externalRedirect
+        if (isExternalHttpRedirect(landingCgUrl)) {
+          heOnlyModeRef.current = true
+          setHeFunnelSuppressed(true)
+          heExitPendingRef.current = true
+          setHeExitPending(true)
+          console.log('[CG] landing redirect (skip HOME)', landingCgUrl)
+          window.location.replace(landingCgUrl)
+          return
         }
 
         const detectedNextPage = normalizeDetectNextPage(nextPage)

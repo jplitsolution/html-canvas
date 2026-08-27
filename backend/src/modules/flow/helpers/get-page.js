@@ -208,6 +208,35 @@ export function createGetPage(deps) {
       });
       visitId = landing.visitId;
 
+      const cgOnCreate = await maybeNullFlowCgRedirect(campaign, visitId, input);
+      if (cgOnCreate) {
+        await recordCgRedirectHop({
+          visitId,
+          campaign,
+          redirectUrl: cgOnCreate,
+          trigger: 'landing',
+        });
+        const pageAttrEarly = await loadVisitAttribution(visitId, input);
+        return {
+          campaignId: campaign.id,
+          visitId,
+          pageType: CampaignPageType.HOME,
+          entryPage,
+          templateId: null,
+          html: '',
+          css: '',
+          variables,
+          actions: [],
+          pack: normalizePack(input.pack),
+          projectData: {},
+          cgRedirectUrl: campaign.cgRedirectUrl || null,
+          subscriptionUrl: null,
+          externalRedirect: cgOnCreate,
+          clickId: pageAttrEarly.clickId || null,
+          rcid: pageAttrEarly.rcid || null,
+        };
+      }
+
       let eventType = VisitEventType.HOME_VIEW;
       if (resolvedPageType === CampaignPageType.OTP) {
         eventType = VisitEventType.OTP_VIEW;

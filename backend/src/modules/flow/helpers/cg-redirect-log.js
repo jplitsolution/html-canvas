@@ -31,6 +31,10 @@ export async function recordCgRedirectHop({
     });
   }
 
+  if (await analyticsService.hasVisitEvent(visitId, VisitEventType.CG_REDIRECT)) {
+    return;
+  }
+
   await analyticsService.logEvent(visitId, VisitEventType.CG_REDIRECT, {
     url: redirectUrl,
     trigger,

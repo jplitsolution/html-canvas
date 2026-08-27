@@ -14,6 +14,7 @@ import {
   isPacksOnHome,
   resolvePacksOnHomeNoPhone,
 } from './funnel-layout.js';
+import { recordCgRedirectHop } from './cg-redirect-log.js';
 
 export function createDetectMsisdn(deps) {
   const {
@@ -24,6 +25,7 @@ export function createDetectMsisdn(deps) {
     resolveSuccessRedirect,
     ensureVisitForDetect,
     applyHeRedirectVars,
+    maybeNullFlowCgRedirect,
   } = deps;
 
   const detectMsisdn = async (input) => {
@@ -84,6 +86,62 @@ export function createDetectMsisdn(deps) {
 
     const verificationMode =
       flowEngineService.normalizeMode(campaign?.verificationMode) || 'BOTH';
+
+    // NONE: leave to CG on detect so Session Detail has CG_REDIRECT even if
+    // /page never runs, and the browser never paints HOME.
+    if (
+      campaign &&
+      visitCtx.visitId &&
+      typeof maybeNullFlowCgRedirect === 'function' &&
+      flowEngineService.isLandingCgRedirectMode(verificationMode)
+    ) {
+      const landingCg = await maybeNullFlowCgRedirect(
+        campaign,
+        visitCtx.visitId,
+        input,
+        { when: 'landing' },
+      );
+      if (landingCg) {
+        await recordCgRedirectHop({
+          visitId: visitCtx.visitId,
+          campaign,
+          redirectUrl: landingCg,
+          trigger: 'landing',
+        });
+        const result = {
+          phone: '',
+          hasMsisdn: false,
+          subscribed: false,
+          isActive: false,
+          subscriptionStatus: null,
+          blocked: false,
+          blockReason: null,
+          heProvider: 'none',
+          heError: null,
+          nextPage: null,
+          failRedirectUrl: null,
+          successRedirectUrl: null,
+          cgRedirectUrl: campaign.cgRedirectUrl || null,
+          externalRedirect: landingCg,
+          verificationMode,
+          country: input.country || campaign.country,
+          operator: input.operator || campaign.operator,
+          campaignId: campaign.id || null,
+          visitId: visitCtx.visitId,
+          clickId: visitCtx.clickId,
+          rcid: visitCtx.rcid,
+        };
+        if (isFlowCacheEnabled()) {
+          await redisService.set(
+            `flow:detect:result:${visitCtx.visitId}`,
+            result,
+            60,
+          );
+        }
+        return result;
+      }
+    }
+
     const flowConfigForStart = campaign
       ? flowEngineService.parseFlowConfig(campaign.flowConfig)
       : null;
