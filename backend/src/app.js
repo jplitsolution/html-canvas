@@ -7,6 +7,7 @@ import swaggerUi from 'swagger-ui-express';
 import getConfig from './config/configuration.js';
 import { registerRoutes } from './routes/index.js';
 import { errorHandler } from './common/middleware/error.middleware.js';
+import { createDailyAccessLogStream } from './common/access-log.js';
 
 export const createApp = async () => {
   const config = getConfig();
@@ -38,6 +39,16 @@ export const createApp = async () => {
       methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
       credentials: true,
     }),
+  );
+
+  // Server file: every inbound HTTP hit, all environments, one file per IST day.
+  const accessLogsDir =
+    config.accessLogs?.dir || join(process.cwd(), 'logs', 'access');
+  app.use(
+    morgan(
+      ':date[iso] :method :url :status :response-time ms :remote-addr :res[content-length] ":user-agent"',
+      { stream: createDailyAccessLogStream({ dir: accessLogsDir }) },
+    ),
   );
 
   // Terminal: only failed HTTP requests. Successful traffic stays quiet.

@@ -25,6 +25,7 @@ const start = async () => {
 
     app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Express Server running on http://localhost:${port}/api`);
+      console.log(`📝 Daily access logs: ${config.accessLogs.dir}`);
       if (config.environment !== 'production') {
         console.log(
           `📚 Swagger Docs available at http://localhost:${port}/api/docs`,

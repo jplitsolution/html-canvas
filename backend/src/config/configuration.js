@@ -82,4 +82,10 @@ export default () => ({
       process.env.POSTBACK_LOG_DIR ||
       path.join(process.cwd(), 'logs', 'postbacks'),
   },
+  // Daily HTTP access logs (every inbound API hit, all environments).
+  accessLogs: {
+    dir:
+      process.env.ACCESS_LOG_DIR ||
+      path.join(process.cwd(), 'logs', 'access'),
+  },
 });
