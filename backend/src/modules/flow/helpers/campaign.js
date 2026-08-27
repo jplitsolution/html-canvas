@@ -9,6 +9,7 @@ import {
   splitDualCampids,
 } from '../../markets/helpers/tracking-id.util.js';
 import { shouldRegisterPostbackAt as shouldRegisterPostbackAtPure } from './funnel-layout.js';
+import { wapBlockedError } from '../flows/index.js';
 
 export function createFlowCampaignFns(deps) {
   const { isFlowCacheEnabled, getFlowCacheTtl, buildCgRedirectUrl } = deps;
@@ -247,14 +248,9 @@ export function createFlowCampaignFns(deps) {
     }
     const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
     if (flowEngineService.isApiExposeFlow(flowConfig)) {
-      const mode = flowEngineService.normalizeMode(campaign.verificationMode);
-      const err = new Error(
-        mode === 'UNIVERSE_DCB'
-          ? 'This campaign exposes DCB billing APIs only. Use GET /api/flow/dcb/:campaignId/:vendorId/config then /pincode and /confirm — no WAP subscription pages.'
-          : 'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/:vendorId/send and /verify — no WAP subscription pages.',
+      throw wapBlockedError(
+        flowEngineService.normalizeMode(campaign.verificationMode),
       );
-      err.statusCode = 400;
-      throw err;
     }
     return {
       campaignId: campaign.id,

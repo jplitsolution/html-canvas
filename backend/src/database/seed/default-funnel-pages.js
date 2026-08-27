@@ -1,4 +1,5 @@
 import { CampaignPageType } from '../entities/campaign-page.entity.js';
+import { resolveFlow } from '../../modules/flow/flows/index.js';
 
 const ff = 'Inter, system-ui, -apple-system, sans-serif';
 
@@ -476,8 +477,9 @@ function pageRecord(page) {
 
 export function getDefaultFunnelPageData(pageType, options = {}) {
   const mode = String(options.verificationMode || options.mode || '').toUpperCase();
+  const flow = resolveFlow(mode);
   const page =
-    (mode === 'UNIVERSE_DCB' && dcbPages[pageType]) || defaultPages[pageType];
+    (flow?.useDcbDummyPages && dcbPages[pageType]) || defaultPages[pageType];
   if (!page) {
     return { editor: 'grapesjs', projectData: {}, html: '', css: '' };
   }

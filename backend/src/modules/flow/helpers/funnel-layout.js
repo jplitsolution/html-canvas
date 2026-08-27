@@ -1,4 +1,5 @@
 import { CampaignPageType } from '../../../database/entities/campaign-page.entity.js';
+import { resolveFlow } from '../flows/index.js';
 
 /**
  * Campaign funnel_layout: classic vs packs_on_home.
@@ -69,13 +70,12 @@ export function resolvePacksOnHomeNoPhone(verificationMode) {
   const mode = String(verificationMode || 'BOTH')
     .trim()
     .toUpperCase();
-  if (mode === 'HEADER_INJECTION' || mode === 'MSISDN_ONLY') {
-    return { nextPage: 'ERROR', useFailRedirect: true };
-  }
-  if (mode === 'OTP_ONLY' || mode === 'BOTH') {
-    return { nextPage: 'OTP', useFailRedirect: false };
-  }
-  return { nextPage: null, useFailRedirect: false };
+  return (
+    resolveFlow(mode)?.packsOnHomeNoPhone || {
+      nextPage: null,
+      useFailRedirect: false,
+    }
+  );
 }
 
 /**

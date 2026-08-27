@@ -1,29 +1,19 @@
+import { resolveFlow } from '../flows/index.js';
+
 /**
  * Shared startConfig helpers for detect-msisdn (Layer A).
  * Mirrors frontend/src/components/flow/startConfig.js defaults.
  */
 
+const HE_FALLBACK = {
+  runHe: true,
+  runBlocklist: true,
+  runChecksub: true,
+};
+
 export function defaultStartConfig(mode) {
-  const m = String(mode || 'BOTH').toUpperCase();
-  if (m === 'UNIVERSE_DCB') {
-    return {
-      runHe: true,
-      runBlocklist: true,
-      runChecksub: true,
-    };
-  }
-  if (m === 'OTP_ONLY' || m === 'NONE' || m === 'CG_HOME') {
-    return {
-      runHe: false,
-      runBlocklist: m === 'OTP_ONLY',
-      runChecksub: m === 'OTP_ONLY',
-    };
-  }
-  return {
-    runHe: true,
-    runBlocklist: true,
-    runChecksub: true,
-  };
+  const flow = resolveFlow(mode);
+  return { ...(flow?.startConfig || HE_FALLBACK) };
 }
 
 export function normalizeStartConfig(raw, mode) {

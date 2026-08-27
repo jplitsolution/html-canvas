@@ -4,6 +4,7 @@ import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
 import { recordCgRedirectHop } from './cg-redirect-log.js';
+import { resolveFlowOrBoth } from '../flows/index.js';
 
 export function createHandleHomeSubscribe(deps) {
   const {
@@ -35,12 +36,13 @@ export function createHandleHomeSubscribe(deps) {
 
     const mode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
+    const flow = resolveFlowOrBoth(mode);
     const flowConfig = flowEngineService.parseFlowConfig(campaign.flowConfig);
 
     let nextPage;
     let resolvedPhone = phone || visitPhone;
 
-    if (mode === 'NONE' || mode === 'CG_HOME') {
+    if (flow.isNullIdentity) {
       nextPage = CampaignPageType.HOME;
       const redirect = await maybeNullFlowCgRedirect(
         campaign,
@@ -97,7 +99,7 @@ export function createHandleHomeSubscribe(deps) {
     }
 
     let subscribeAttr = null;
-    if (mode !== 'NONE' && mode !== 'CG_HOME' && resolvedPhone) {
+    if (!flow.isNullIdentity && resolvedPhone) {
       subscribeAttr = await loadVisitAttribution(input.visitId, input);
       const blockResult = await checkBlocklist(apiConfig, {
         phone: resolvedPhone,

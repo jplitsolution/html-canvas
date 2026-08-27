@@ -10,6 +10,7 @@ import {
   continueFunnelPageAfterOtp,
   flowHasConfirmNode,
 } from './funnel-layout.js';
+import { resolveFlowOrBoth } from '../flows/index.js';
 
 export function createFlowRouting(deps) {
   const {
@@ -34,26 +35,21 @@ export function createFlowRouting(deps) {
     apiConfig,
     ctx,
   ) => {
+    const flow = resolveFlowOrBoth(mode);
     const fromGraph = (condition, fallback) =>
       flowEngineService.nextPage(flowConfig, CampaignPageType.HOME, condition) ||
       fallback;
-  
-    if (mode === 'NONE' || mode === 'CG_HOME') {
-      return {
-        nextPage: CampaignPageType.HOME,
-        resolvedPhone: ctx.phone || ctx.visitPhone || '',
-      };
+
+    if (flow.subscribeStayHome) {
+      return flow.resolveHomeSubscribeNext({ ctx });
     }
-  
+
     let resolvedPhone = (ctx.phone || ctx.visitPhone || '').trim();
-  
-    if (mode === 'OTP_ONLY') {
-      return {
-        nextPage: fromGraph('DEFAULT', CampaignPageType.OTP),
-        resolvedPhone,
-      };
+
+    if (!flow.needsIspResolve) {
+      return flow.resolveHomeSubscribeNext({ fromGraph, resolvedPhone, ctx });
     }
-  
+
     let resolved = Boolean(resolvedPhone);
     if (!resolved) {
       const isp = await partnerApiService.resolveMsisdn(apiConfig, {
@@ -67,31 +63,19 @@ export function createFlowRouting(deps) {
         await analyticsService.setVisitPhone(ctx.visitId, isp);
       }
     }
-  
+
     const clampConfirm = (page) =>
       page === CampaignPageType.CONFIRM && !flowHasConfirmNode(campaign)
         ? CampaignPageType.HOME
         : page;
 
-    if (mode === 'HEADER_INJECTION') {
-      return {
-        nextPage: clampConfirm(
-          resolved
-            ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
-            : fromGraph('HEADER_UNRESOLVED', CampaignPageType.ERROR),
-        ),
-        resolvedPhone,
-      };
-    }
-  
-    return {
-      nextPage: clampConfirm(
-        resolved
-          ? fromGraph('HEADER_RESOLVED', CampaignPageType.HOME)
-          : fromGraph('HEADER_UNRESOLVED', CampaignPageType.OTP),
-      ),
+    return flow.resolveHomeSubscribeNext({
+      fromGraph,
+      clampConfirm,
       resolvedPhone,
-    };
+      resolved,
+      ctx,
+    });
   };
 
   const checkBlocklist = async (apiConfig, partnerCtx) =>

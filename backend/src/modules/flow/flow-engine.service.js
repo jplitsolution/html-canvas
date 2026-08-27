@@ -11,11 +11,11 @@
  */
 import { CampaignPageType } from '../../database/entities/campaign-page.entity.js';
 import {
-  defaultStartConfig,
   normalizeStartConfig,
   stripMetaFlowNodes,
   isMetaPageType,
 } from './helpers/start-config.js';
+import { resolveFlow, resolveFlowOrBoth } from './flows/index.js';
 
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',
@@ -70,18 +70,18 @@ export const createFlowEngineService = () => {
     return VERIFICATION_MODES.includes(upper) ? upper : null;
   };
 
+  const flowFlags = (mode) =>
+    resolveFlow(normalizeMode(mode) || String(mode || '').toUpperCase());
+
   /** No HE/OTP — CG URL carries click_id. */
-  const isNullIdentityMode = (mode) => {
-    const m = normalizeMode(mode) || String(mode || '').toUpperCase();
-    return m === 'NONE' || m === 'CG_HOME';
-  };
+  const isNullIdentityMode = (mode) => Boolean(flowFlags(mode)?.isNullIdentity);
 
   /** Landing immediately leaves to CG (existing null flow). */
-  const isLandingCgRedirectMode = (mode) =>
-    (normalizeMode(mode) || String(mode || '').toUpperCase()) === 'NONE';
+  const isLandingCgRedirectMode = (mode) => Boolean(flowFlags(mode)?.isLandingCg);
 
   /** Subscribe / pack CTA leaves to CG with click_id. */
-  const isSubscribeCgRedirectMode = (mode) => isNullIdentityMode(mode);
+  const isSubscribeCgRedirectMode = (mode) =>
+    Boolean(flowFlags(mode)?.isSubscribeCg);
 
   /** OTP_ONLY campaign that exposes public send/verify APIs (no WAP funnel). */
   const isApiExposeFlow = (config) =>
@@ -178,167 +178,10 @@ export const createFlowEngineService = () => {
   };
 
   const getDefaultFlowConfig = (mode = 'BOTH', options = {}) => {
-    const node = (pageType, x, y) => ({
-      id: pageType,
-      pageType,
-      position: { x, y },
-    });
-
-    const edge = (source, target, condition) => ({
-      id: `${source}-${condition}-${target}`,
-      source,
-      target,
-      condition,
-    });
-
-    if (mode === 'NONE' || mode === 'CG_HOME') {
-      return {
-        version: 1,
-        entryPage: CampaignPageType.HOME,
-        startConfig: defaultStartConfig(mode),
-        nodes: [node(CampaignPageType.HOME, 40, 160)],
-        edges: [],
-      };
-    }
-
-    const outcomeNode = (pageType, y) => node(pageType, 880, y);
-    const outcomeEdgesFrom = (source) => [
-      edge(source, CampaignPageType.THANKYOU, 'SUBSCRIBED'),
-      edge(source, CampaignPageType.INPROGRESS, 'PENDING'),
-      edge(source, CampaignPageType.LOW_BALANCE, 'LOW_BALANCE'),
-      edge(source, CampaignPageType.BLOCKED, 'BLOCKED'),
-      edge(source, CampaignPageType.ERROR, 'ERROR'),
-    ];
-
-    // HE: HOME is the subscribe canvas. Confirm is optional (add from Pages).
-    if (mode === 'HEADER_INJECTION') {
-      return applyFunnelLayoutToFlowConfig(
-        {
-          version: 1,
-          entryPage: CampaignPageType.HOME,
-          startConfig: defaultStartConfig(mode),
-          nodes: [
-            node(CampaignPageType.HOME, 40, 160),
-            outcomeNode(CampaignPageType.THANKYOU, 40),
-            outcomeNode(CampaignPageType.INPROGRESS, 160),
-            outcomeNode(CampaignPageType.LOW_BALANCE, 280),
-            outcomeNode(CampaignPageType.BLOCKED, 400),
-            outcomeNode(CampaignPageType.ERROR, 520),
-          ],
-          edges: [
-            edge(
-              CampaignPageType.HOME,
-              CampaignPageType.ERROR,
-              'HEADER_UNRESOLVED',
-            ),
-            ...outcomeEdgesFrom(CampaignPageType.HOME),
-          ],
-        },
-        options.funnelLayout,
-        mode,
-      );
-    }
-
-    if (mode === 'UNIVERSE_DCB') {
-      return {
-        version: 1,
-        entryPage: CampaignPageType.HOME,
-        startConfig: defaultStartConfig(mode),
-        nodes: [
-          node(CampaignPageType.HOME, 360, 220),
-          node(CampaignPageType.OTP, 360, 20),
-          outcomeNode(CampaignPageType.THANKYOU, 40),
-          outcomeNode(CampaignPageType.INPROGRESS, 160),
-          outcomeNode(CampaignPageType.LOW_BALANCE, 280),
-          outcomeNode(CampaignPageType.BLOCKED, 400),
-          outcomeNode(CampaignPageType.ERROR, 520),
-        ],
-        edges: [
-          edge(
-            CampaignPageType.OTP,
-            CampaignPageType.HOME,
-            'MSISDN_CHECKED',
-          ),
-          edge(CampaignPageType.HOME, CampaignPageType.OTP, 'PIN_REQUESTED'),
-          edge(
-            CampaignPageType.HOME,
-            CampaignPageType.THANKYOU,
-            'ENTITLED',
-          ),
-          edge(
-            CampaignPageType.HOME,
-            CampaignPageType.LOW_BALANCE,
-            'LOW_BALANCE',
-          ),
-          edge(CampaignPageType.HOME, CampaignPageType.BLOCKED, 'BLOCKED'),
-          edge(CampaignPageType.HOME, CampaignPageType.ERROR, 'ERROR'),
-          edge(
-            CampaignPageType.OTP,
-            CampaignPageType.INPROGRESS,
-            'PIN_CONFIRMED',
-          ),
-          edge(
-            CampaignPageType.INPROGRESS,
-            CampaignPageType.THANKYOU,
-            'ACTIVATED',
-          ),
-          edge(
-            CampaignPageType.INPROGRESS,
-            CampaignPageType.LOW_BALANCE,
-            'LOW_BALANCE',
-          ),
-          edge(CampaignPageType.INPROGRESS, CampaignPageType.ERROR, 'ERROR'),
-        ],
-      };
-    }
-
-    const nodes = [
-      node(CampaignPageType.HOME, 40, 160),
-      node(CampaignPageType.CONFIRM, 600, 160),
-      outcomeNode(CampaignPageType.THANKYOU, 40),
-      outcomeNode(CampaignPageType.INPROGRESS, 160),
-      outcomeNode(CampaignPageType.LOW_BALANCE, 280),
-      outcomeNode(CampaignPageType.BLOCKED, 400),
-      outcomeNode(CampaignPageType.ERROR, 520),
-    ];
-
-    const edges = [];
-
-    if (mode === 'OTP_ONLY') {
-      nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
-      edges.push(edge(CampaignPageType.HOME, CampaignPageType.OTP, 'DEFAULT'));
-      edges.push(
-        edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'),
-      );
-    } else {
-      nodes.splice(1, 0, node(CampaignPageType.OTP, 320, 60));
-      edges.push(
-        edge(
-          CampaignPageType.HOME,
-          CampaignPageType.CONFIRM,
-          'HEADER_RESOLVED',
-        ),
-      );
-      edges.push(
-        edge(CampaignPageType.HOME, CampaignPageType.OTP, 'HEADER_UNRESOLVED'),
-      );
-      edges.push(
-        edge(CampaignPageType.OTP, CampaignPageType.CONFIRM, 'OTP_VERIFIED'),
-      );
-    }
-
-    edges.push(...outcomeEdgesFrom(CampaignPageType.CONFIRM));
-
-    return applyFunnelLayoutToFlowConfig(
-      {
-        version: 1,
-        entryPage: CampaignPageType.HOME,
-        startConfig: defaultStartConfig(mode),
-        nodes,
-        edges,
-      },
-      options.funnelLayout,
-      mode,
+    const flow = resolveFlowOrBoth(mode);
+    return flow.getDefaultFlowConfig(
+      { applyFunnelLayoutToFlowConfig },
+      options,
     );
   };
 
@@ -446,7 +289,7 @@ export const createFlowEngineService = () => {
 
   const validate = (config, mode) => {
     if (isApiExposeFlow(config)) {
-      if (mode && mode !== 'OTP_ONLY' && mode !== 'UNIVERSE_DCB') {
+      if (mode && !resolveFlowOrBoth(mode).allowsApiExpose) {
         return {
           ok: false,
           errors: [
@@ -469,14 +312,12 @@ export const createFlowEngineService = () => {
       );
     }
 
-    if (
-      (mode === 'OTP_ONLY' || mode === 'BOTH') &&
-      !pageTypes.has(CampaignPageType.OTP)
-    ) {
+    const flow = resolveFlow(mode);
+    if (flow?.requiresOtpNode && !pageTypes.has(CampaignPageType.OTP)) {
       errors.push(`Verification mode ${mode} requires an OTP page node.`);
     }
 
-    if (mode === 'NONE' || mode === 'CG_HOME') {
+    if (flow?.skipReachableValidate) {
       return { ok: errors.length === 0, errors };
     }
 

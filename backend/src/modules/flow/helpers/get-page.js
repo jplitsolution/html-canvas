@@ -12,6 +12,7 @@ import { resolveLiveProjectData } from './page-response.js';
 import { redisService } from '../../../common/services/redis.service.js';
 import { flowHasConfirmNode, isPacksOnHome } from './funnel-layout.js';
 import { recordCgRedirectHop } from './cg-redirect-log.js';
+import { resolveFlowOrBoth, wapBlockedError } from '../flows/index.js';
 
 export function createGetPage(deps) {
   const {
@@ -49,14 +50,9 @@ export function createGetPage(deps) {
 
     const flowConfigEarly = flowEngineService.parseFlowConfig(campaign.flowConfig);
     if (flowEngineService.isApiExposeFlow(flowConfigEarly)) {
-      const mode = flowEngineService.normalizeMode(campaign.verificationMode);
-      const err = new Error(
-        mode === 'UNIVERSE_DCB'
-          ? 'This campaign exposes DCB billing APIs only. Use GET /api/flow/dcb/:campaignId/:vendorId/config then /pincode and /confirm — no WAP subscription pages.'
-          : 'This campaign exposes OTP APIs only. Use GET/POST /api/otp/:campaignId/:vendorId/send and /verify — no WAP subscription pages.',
+      throw wapBlockedError(
+        flowEngineService.normalizeMode(campaign.verificationMode),
       );
-      err.statusCode = 400;
-      throw err;
     }
 
     await assertTrackingAssignmentAvailable(
@@ -109,6 +105,7 @@ export function createGetPage(deps) {
 
     const guardMode =
       flowEngineService.normalizeMode(campaign.verificationMode) || 'BOTH';
+    const flow = resolveFlowOrBoth(guardMode);
 
     // Direct page-link navigation (href="CONFIRM" from the builder) should render
     // the chosen page. Funnel guards still apply to normal ?step= / prefetch loads
@@ -123,7 +120,8 @@ export function createGetPage(deps) {
     if (
       !input.direct &&
       (resolvedPageType === CampaignPageType.CONFIRM ||
-        resolvedPageType === CampaignPageType.THANKYOU)
+        resolvedPageType === CampaignPageType.THANKYOU) &&
+      flow.guardConfirmThankYou
     ) {
       const isVerified = await hasVerifiedOtp(visitId, phone);
       const hasPhone = Boolean(phone);
@@ -137,68 +135,18 @@ export function createGetPage(deps) {
         campaignId: campaign.id,
       };
 
-      if (guardMode === 'OTP_ONLY') {
-        if (!isVerified) {
-          const sub = await partnerApiService
-            .checkSubscription(apiConfig, guardPartnerCtx)
-            .catch(() => null);
-
-          if (sub?.shouldSkipSubscribe) {
-            resolvedPageType =
-              (sub.go === 'page' && sub.page ? sub.page : null) ||
-              pageTypeForSubscriptionStatus(sub.status, sub.isActive) ||
-              CampaignPageType.THANKYOU;
-          } else {
-            resolvedPageType = phone ? CampaignPageType.OTP : entryPage;
-          }
-        }
-      } else if (guardMode === 'BOTH') {
-        if (!isVerified && !hasPhone) {
-          resolvedPageType = CampaignPageType.OTP;
-        } else if (
-          resolvedPageType === CampaignPageType.THANKYOU &&
-          !isVerified
-        ) {
-          const sub = await partnerApiService
-            .checkSubscription(apiConfig, guardPartnerCtx)
-            .catch(() => null);
-          if (!sub?.shouldSkipSubscribe) {
-            if (!hasPhone) {
-              resolvedPageType = CampaignPageType.OTP;
-            } else if (flowHasConfirmNode(campaign) && !isPacksOnHome(campaign)) {
-              resolvedPageType = CampaignPageType.CONFIRM;
-            } else if (isPacksOnHome(campaign)) {
-              resolvedPageType = CampaignPageType.HOME;
-            }
-          }
-        }
-      } else if (guardMode === 'HEADER_INJECTION') {
-        if (resolvedPageType === CampaignPageType.CONFIRM && !hasPhone) {
-          resolvedPageType = entryPage;
-        }
-        if (resolvedPageType === CampaignPageType.THANKYOU) {
-          if (
-            apiConfig?.subscriptionApi &&
-            apiConfig.subscriptionApi.trim() !== ''
-          ) {
-            const sub = await partnerApiService
-              .checkSubscription(apiConfig, guardPartnerCtx)
-              .catch(() => null);
-            if (!sub?.shouldSkipSubscribe) {
-              if (!hasPhone) {
-                resolvedPageType = entryPage;
-              } else if (
-                flowHasConfirmNode(campaign) &&
-                !isPacksOnHome(campaign)
-              ) {
-                resolvedPageType = CampaignPageType.CONFIRM;
-              } else if (isPacksOnHome(campaign)) {
-                resolvedPageType = CampaignPageType.HOME;
-              }
-            }
-          }
-        }
-      }
+      resolvedPageType = await flow.guardConfirmThankYou({
+        resolvedPageType,
+        isVerified,
+        hasPhone,
+        phone,
+        entryPage,
+        apiConfig,
+        guardPartnerCtx,
+        flowHasConfirmNode: flowHasConfirmNode(campaign),
+        isPacksOnHome: isPacksOnHome(campaign),
+        pageTypeForSubscriptionStatus,
+      });
     }
 
     if (!visitId) {
