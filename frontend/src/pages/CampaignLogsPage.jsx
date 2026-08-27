@@ -12,6 +12,7 @@ import {
   YAxis,
   Tooltip,
   CartesianGrid,
+  Legend,
 } from 'recharts'
 import {
   RefreshCw,
@@ -47,6 +48,38 @@ import {
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
+const LOGS_DATE_PRESETS = [
+  ...DATE_PRESETS.filter((p) => p.id !== 'custom'),
+  { id: 'all', label: 'All' },
+  { id: 'custom', label: 'Custom' },
+]
+
+const COMPARE_COLORS = ['#3b82f6', '#f59e0b', '#14b8a6', '#8b5cf6']
+const MAX_COMPARE_EVENTS = 4
+const COMPARE_PRESETS = [
+  { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
+  { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
+  { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
+]
+
+function eventLabel(type) {
+  const labels = {
+    VISIT: 'Visit',
+    HOME_VIEW: 'Home shown',
+    SUBSCRIBE_CLICK: 'Banner click',
+    CG_REDIRECT: 'CG redirect',
+    API_CG_REDIRECT: 'CG redirect (API)',
+    OTP_SEND: 'OTP send',
+    OTP_VERIFY: 'OTP verify',
+    SUBSCRIBE_SUCCESS: 'Subscribe success',
+    CONFIRM_CLICK: 'Confirm click',
+  }
+  return labels[type] || type.replace(/_/g, ' ')
+}
+
+function seriesColor(index) {
+  return COMPARE_COLORS[index % COMPARE_COLORS.length]
+}
 
 const STANDARD_EVENT_TYPES = [
   'VISIT',
@@ -58,6 +91,7 @@ const STANDARD_EVENT_TYPES = [
   'OTP_VERIFY',
   'OTP_SHOWN',
   'SUBSCRIBE_CLICK',
+  'CG_REDIRECT',
   'CONFIRM_CLICK',
   'SUBSCRIBE_SUCCESS',
   'SUBSCRIBE_FAILED',
@@ -70,6 +104,7 @@ const STANDARD_EVENT_TYPES = [
   'API_HE_MSISDN',
   'API_HE_RESOLVE',
   'API_HE_REDIRECT',
+  'API_CG_REDIRECT',
   'API_DCB_CONFIG',
   'API_DCB_SUBSCRIPTIONS',
   'API_DCB_PINCODE',
@@ -96,6 +131,7 @@ const STANDARD_EVENT_TYPES = [
 
 
 function resolveInterval(preset, from, to) {
+  if (preset === 'all') return 'day'
   if (preset === 'today') return 'hour'
   if (from && to && from === to) return 'hour'
   return 'day'
@@ -146,15 +182,20 @@ const CustomTooltip = ({ active, payload, label, hourly }) => {
     return (
       <div className="rounded-xl border border-gray-800 bg-gray-900/95 p-3 text-white shadow-xl backdrop-blur-md">
         <p className="text-[10px] font-semibold text-gray-300">{displayLabel}</p>
-        <p className="text-xs font-bold mt-1.5 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full bg-indigo-400" />
-          {payload[0].name || 'Events'}: <span className="font-mono text-indigo-300">{payload[0].value}</span>
-        </p>
+        <div className="mt-1.5 space-y-1">
+          {payload.map((entry) => (
+            <p key={entry.dataKey || entry.name} className="text-xs font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full" style={{ background: entry.color }} />
+              {entry.name || 'Events'}:{' '}
+              <span className="font-mono text-indigo-300">{entry.value ?? 0}</span>
+            </p>
+          ))}
+        </div>
       </div>
-    );
+    )
   }
-  return null;
-};
+  return null
+}
 
 function getEventBadgeClass(type) {
   const t = String(type).toUpperCase();
@@ -164,7 +205,7 @@ function getEventBadgeClass(type) {
   if (t.includes('FAILED') || t.includes('LIMIT') || t.includes('BRUTE') || t.includes('BLOCKED')) {
     return 'bg-rose-50 text-rose-700 border-rose-200/50';
   }
-  if (t.includes('API_SUBSCRIBE') || t === 'SUBSCRIBE' || t.includes('SUBSCRIBE_CLICK')) {
+  if (t.includes('API_SUBSCRIBE') || t === 'SUBSCRIBE' || t.includes('SUBSCRIBE_CLICK') || t.includes('CG_REDIRECT')) {
     return 'bg-indigo-50 text-indigo-700 border-indigo-200/50';
   }
   if (t.includes('OTP_VERIFY') || t.includes('API_OTP_VERIFY') || t.includes('OTP_EXPOSE_VERIFY')) {
@@ -247,6 +288,7 @@ function CampaignLogsPage() {
   }, [navigate])
 
   const [datePreset, setDatePreset] = useState(paramPreset || (paramFrom && paramTo ? 'custom' : 'today'))
+  const [compareEvents, setCompareEvents] = useState(['VISIT', 'CG_REDIRECT'])
   const [filters, setFilters] = useState(() => {
     const range = getDateRangeForPreset(paramPreset || 'today', timezone)
     return {
@@ -292,7 +334,7 @@ function CampaignLogsPage() {
 
   // Keep Today/Week/Month ranges aligned when profile timezone changes
   useEffect(() => {
-    if (datePreset === 'custom' || !timezone) return
+    if (datePreset === 'custom' || datePreset === 'all' || !timezone) return
     const range = getDateRangeForPreset(datePreset, timezone)
     setFilters((f) => {
       if (f.from === range.from && f.to === range.to) return f
@@ -305,8 +347,19 @@ function CampaignLogsPage() {
     setLoading(true)
     try {
       const interval = resolveInterval(datePreset, filters.from, filters.to)
-      const aggParams = { ...filters, interval, timezone }
+      const aggParams = {
+        ...filters,
+        interval,
+        timezone,
+        compareEvents: compareEvents.join(','),
+      }
       const params = { ...filters, page, size: PAGE_SIZE, timezone, view: 'sessions' }
+      if (datePreset === 'all') {
+        delete aggParams.from
+        delete aggParams.to
+        delete params.from
+        delete params.to
+      }
       const isAll = selectedId === 'all'
       const [aggRes, logRes] = await Promise.all([
         isAll ? getAllCampaignLogAggregations(aggParams) : getCampaignLogAggregations(selectedId, aggParams),
@@ -319,7 +372,7 @@ function CampaignLogsPage() {
     } finally {
       setLoading(false)
     }
-  }, [selectedId, filters, page, addToast, datePreset, timezone])
+  }, [selectedId, filters, page, addToast, datePreset, timezone, compareEvents])
 
   useEffect(() => {
     fetchData()
@@ -362,6 +415,55 @@ function CampaignLogsPage() {
     }))
     // dateFormat/timezone intentionally included so labels refresh with profile prefs
   }, [aggs, isHourly, dateFormat, timezone])
+
+  const funnelCompareData = useMemo(() => {
+    const series = aggs?.timeSeriesByEvent || []
+    return series.map((row) => ({
+      ...row,
+      label: formatChartLabel(row.key, { hourly: isHourly }),
+    }))
+  }, [aggs, isHourly, dateFormat, timezone])
+
+  const selectedSeries = useMemo(
+    () =>
+      compareEvents.map((key, index) => ({
+        key,
+        label: eventLabel(key),
+        color: seriesColor(index),
+      })),
+    [compareEvents],
+  )
+
+  const funnelTotals = aggs?.funnelTotals || {}
+  const funnelBarData = selectedSeries.map((s) => ({
+    key: s.label,
+    count: Number(funnelTotals[s.key]) || 0,
+    fill: s.color,
+  }))
+  const firstCount = Number(funnelTotals[compareEvents[0]]) || 0
+  const lastCount = Number(funnelTotals[compareEvents[compareEvents.length - 1]]) || 0
+  const compareRatio =
+    compareEvents.length >= 2 && firstCount > 0
+      ? `${((lastCount / firstCount) * 100).toFixed(1)}%`
+      : '—'
+  const compareRatioHint =
+    compareEvents.length >= 2
+      ? `${eventLabel(compareEvents[compareEvents.length - 1])} ÷ ${eventLabel(compareEvents[0])}`
+      : 'Pick 2 events'
+
+  const toggleCompareEvent = (type) => {
+    setCompareEvents((prev) => {
+      if (prev.includes(type)) {
+        if (prev.length <= 1) return prev
+        return prev.filter((key) => key !== type)
+      }
+      if (prev.length >= MAX_COMPARE_EVENTS) {
+        addToast(`Pick up to ${MAX_COMPARE_EVENTS} events`, 'warning')
+        return prev
+      }
+      return [...prev, type]
+    })
+  }
 
   const updateFilter = (key, value) => {
     setPage(1)
@@ -430,7 +532,7 @@ function CampaignLogsPage() {
           <div className="mb-4">
             <label className="block text-xs font-bold text-gray-500 mb-1.5">Date Range</label>
             <div className="flex flex-wrap gap-2">
-              {DATE_PRESETS.map((preset) => (
+              {LOGS_DATE_PRESETS.map((preset) => (
                 <button
                   key={preset.id}
                   type="button"
@@ -445,13 +547,18 @@ function CampaignLogsPage() {
                 </button>
               ))}
             </div>
-            {datePreset !== 'custom' && filters.from && filters.to && (
+            {datePreset === 'all' ? (
+              <p className="mt-2 text-[11px] text-gray-400 font-medium">
+                Showing all time · daily
+                {timezone === 'Asia/Kolkata' || timezone === 'Asia/Calcutta' ? ' · IST' : timezone ? ` · ${timezone}` : ''}
+              </p>
+            ) : datePreset !== 'custom' && filters.from && filters.to ? (
               <p className="mt-2 text-[11px] text-gray-400 font-medium">
                 Showing {formatChartLabel(filters.from)} → {formatChartLabel(filters.to)}
                 {isHourly ? ' · hourly' : ' · daily'}
                 {timezone === 'Asia/Kolkata' || timezone === 'Asia/Calcutta' ? ' · IST' : timezone ? ` · ${timezone}` : ''}
               </p>
-            )}
+            ) : null}
           </div>
 
           <div
@@ -549,6 +656,160 @@ function CampaignLogsPage() {
               </div>
             </div>
           </div>
+        </div>
+
+        <SectionCard
+          className="mb-4"
+          title="Compare events"
+          actions={
+            <span className="text-[11px] text-gray-400 font-medium">
+              Pick 2–4 events · {datePreset === 'all' ? 'all time' : 'selected dates'}
+            </span>
+          }
+        >
+          <div className="flex flex-wrap gap-2 mb-3">
+            {COMPARE_PRESETS.map((preset) => {
+              const active =
+                preset.events.length === compareEvents.length &&
+                preset.events.every((e, i) => e === compareEvents[i])
+              return (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setCompareEvents(preset.events)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all ${
+                    active
+                      ? 'bg-indigo-600 text-white border-indigo-600'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              )
+            })}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedSeries.map((s) => (
+              <button
+                key={s.key}
+                type="button"
+                onClick={() => toggleCompareEvent(s.key)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold text-white"
+                style={{ background: s.color }}
+                title="Remove from graph"
+              >
+                {s.label}
+                <span className="opacity-80">×</span>
+              </button>
+            ))}
+            {compareEvents.length < MAX_COMPARE_EVENTS ? (
+              <select
+                className="text-[11px] font-semibold border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700"
+                value=""
+                onChange={(e) => {
+                  const next = e.target.value
+                  if (next) toggleCompareEvent(next)
+                }}
+              >
+                <option value="">+ Add event</option>
+                {eventTypeOptions
+                  .filter((type) => !compareEvents.includes(type))
+                  .map((type) => (
+                    <option key={type} value={type}>
+                      {eventLabel(type)}
+                    </option>
+                  ))}
+              </select>
+            ) : (
+              <span className="text-[11px] text-gray-400">Max {MAX_COMPARE_EVENTS} events</span>
+            )}
+          </div>
+        </SectionCard>
+
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-4">
+          {selectedSeries.map((s) => (
+            <StatCard
+              key={s.key}
+              label={s.label}
+              value={Number(funnelTotals[s.key]) || 0}
+              icon={s.key.includes('VISIT') ? Database : s.key.includes('CG') ? Activity : Users}
+              colorClass="from-indigo-500 to-blue-500"
+            />
+          ))}
+          {compareEvents.length >= 2 ? (
+            <StatCard
+              label={`${eventLabel(compareEvents[compareEvents.length - 1])} / ${eventLabel(compareEvents[0])}`}
+              value={compareRatio}
+              hint={compareRatioHint}
+              icon={Percent}
+              colorClass="from-indigo-500 to-purple-500"
+            />
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          <SectionCard
+            title={
+              datePreset === 'all'
+                ? `${selectedSeries.map((s) => s.label).join(' vs ')} (all time)`
+                : isHourly
+                  ? `${selectedSeries.map((s) => s.label).join(' vs ')} (by hour)`
+                  : `${selectedSeries.map((s) => s.label).join(' vs ')} (by day)`
+            }
+          >
+            {funnelCompareData.length === 0 ? (
+              <p className="text-sm text-gray-400 py-16 text-center">No events in this range for the selected types.</p>
+            ) : (
+              <div style={{ width: '100%', height: 280 }}>
+                <ResponsiveContainer>
+                  <AreaChart data={funnelCompareData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis
+                      dataKey="key"
+                      stroke="#94a3b8"
+                      tick={{ fontSize: 10, fontWeight: 500 }}
+                      tickFormatter={(v) => formatChartLabel(v, { hourly: isHourly })}
+                      interval={isHourly ? 'preserveStartEnd' : 0}
+                      minTickGap={isHourly ? 28 : 8}
+                    />
+                    <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip hourly={isHourly} />} />
+                    <Legend wrapperStyle={{ fontSize: 11, fontWeight: 600 }} />
+                    {selectedSeries.map((s) => (
+                      <Area
+                        key={s.key}
+                        type="monotone"
+                        name={s.label}
+                        dataKey={s.key}
+                        stroke={s.color}
+                        fill={s.color}
+                        fillOpacity={0.12}
+                        strokeWidth={2}
+                      />
+                    ))}
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title={datePreset === 'all' ? 'Totals (all time)' : 'Totals (selected range)'}>
+            <div style={{ width: '100%', height: 280 }}>
+              <ResponsiveContainer>
+                <BarChart data={funnelBarData} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} />
+                  <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="count" name="Count" radius={[6, 6, 0, 0]}>
+                    {funnelBarData.map((row) => (
+                      <Cell key={row.key} fill={row.fill} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </SectionCard>
         </div>
 
         {/* KPI Summary Widgets */}

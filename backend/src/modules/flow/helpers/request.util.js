@@ -1,4 +1,5 @@
 import getConfig from '../../../config/configuration.js';
+import { filledTrackingValue } from './placeholder-macro.js';
 
 export function extractHeaderMsisdn(headers) {
   if (!headers) return '';
@@ -61,8 +62,10 @@ export function resolveRequestMsisdn(headers, query = {}) {
  */
 export function resolveAttributionParams(q = {}) {
   const hasVisit = Boolean(q.visitId);
-  const rcid = String(q.rcid || (!hasVisit ? q.click_id || q.clickId || '' : '') || '').trim();
-  const clickId = String(q.clickId || q.click_id || '').trim();
+  const rcid = filledTrackingValue(
+    q.rcid || (!hasVisit ? q.click_id || q.clickId || '' : '') || '',
+  );
+  const clickId = filledTrackingValue(q.clickId || q.click_id || '');
   return {
     rcid: rcid || undefined,
     clickId: clickId || undefined,
@@ -71,13 +74,18 @@ export function resolveAttributionParams(q = {}) {
 
 /** Vendor campid + our tracking_campid from query/body. */
 export function resolveCampidParams(q = {}) {
+  const campid =
+    q.campid != null ? filledTrackingValue(q.campid) : undefined;
+  const trackingRaw =
+    q.tracking_campid != null
+      ? q.tracking_campid
+      : q.trackingCampid != null
+        ? q.trackingCampid
+        : undefined;
+  const trackingCampid =
+    trackingRaw != null ? filledTrackingValue(trackingRaw) : undefined;
   return {
-    campid: q.campid != null ? String(q.campid) : undefined,
-    trackingCampid:
-      q.tracking_campid != null
-        ? String(q.tracking_campid)
-        : q.trackingCampid != null
-          ? String(q.trackingCampid)
-          : undefined,
+    campid: campid || undefined,
+    trackingCampid: trackingCampid || undefined,
   };
 }

@@ -14,6 +14,7 @@ import { useFlowSession } from './useFlowSession'
 import { useDcbStatusPoll } from './useDcbStatusPoll'
 import { useHeDetect } from './useHeDetect'
 import { useShadowInteractions } from './useShadowInteractions'
+import { filledTrackingValue } from '../../services/flow/trackingMacros'
 
 function deriveOverlayFlags({ phoneResolving, heExitPending, heFunnelSuppressed, pageData, booting, error }) {
   const hideHomeForHe =
@@ -36,8 +37,10 @@ function SubscriptionPage() {
   // - campid = vendor/network (postback {campid})
   // - tracking_campid = ours (BF-OBF-11) for resolve
   // Legacy: only campid that looks like our tracking id → treat as tracking.
-  const urlCampidRaw = searchParams.get('campid') || ''
-  const urlTrackingRaw = searchParams.get('tracking_campid') || searchParams.get('trackingCampid') || ''
+  const urlCampidRaw = filledTrackingValue(searchParams.get('campid') || '')
+  const urlTrackingRaw = filledTrackingValue(
+    searchParams.get('tracking_campid') || searchParams.get('trackingCampid') || '',
+  )
   const looksLikeOurs = /^[A-Z0-9]+-[A-Z0-9]+-\d+$/i.test(urlCampidRaw.trim()) || /^\d+$/.test(urlCampidRaw.trim())
   let trackingCampid = urlTrackingRaw
   let campid = urlCampidRaw
@@ -47,8 +50,8 @@ function SubscriptionPage() {
   }
   const vid = searchParams.get('vid') || ''
   const affId = searchParams.get('aff_id') || ''
-  const urlRcid = searchParams.get('rcid') || ''
-  const urlClickId = searchParams.get('click_id') || ''
+  const urlRcid = filledTrackingValue(searchParams.get('rcid') || '')
+  const urlClickId = filledTrackingValue(searchParams.get('click_id') || '')
 
   const [phone, setPhone] = useState('')
   const [phoneResolving, setPhoneResolving] = useState(true)

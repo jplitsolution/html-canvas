@@ -47,7 +47,7 @@ function getEventIcon(eventType) {
   ) {
     return <Phone className="w-4 h-4 text-amber-500" />
   }
-  if (t.includes('CLICK')) return <MousePointerClick className="w-4 h-4 text-indigo-500" />
+  if (t.includes('CLICK') || t.includes('CG_REDIRECT')) return <MousePointerClick className="w-4 h-4 text-indigo-500" />
   if (t.includes('VISIT')) return <Compass className="w-4 h-4 text-blue-500" />
   if (t.includes('VIEW') || t.includes('SHOWN')) return <Eye className="w-4 h-4 text-gray-500" />
   return <Clock className="w-4 h-4 text-gray-400" />
@@ -107,7 +107,9 @@ function eventDescription(eventType) {
     case 'HOME_VIEW':
       return 'Home page displayed to user.'
     case 'SUBSCRIBE_CLICK':
-      return 'User clicked a subscribe / billing button.'
+      return 'User clicked a subscribe / banner button.'
+    case 'CG_REDIRECT':
+      return 'User redirected to the operator CG page with click_id.'
     case 'CONFIRM_CLICK':
       return 'User confirmed a pack and hit the billing subscribe API.'
     case 'OTP_VIEW':
@@ -138,6 +140,8 @@ function eventDescription(eventType) {
       return 'HE custom MSISDN resolve.'
     case 'API_HE_REDIRECT':
       return 'HE success/fail redirect decision.'
+    case 'API_CG_REDIRECT':
+      return 'CG redirect URL issued (HOME CTA or landing).'
     case 'API_BILLING_CALLBACK':
       return 'Billing / operator callback received on our endpoint.'
     case 'API_VENDOR_POSTBACK':

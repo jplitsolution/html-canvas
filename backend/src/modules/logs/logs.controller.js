@@ -13,6 +13,7 @@ const buildParams = (campaignId, query) => {
     from: query.from,
     to: query.to,
     eventType: query.eventType,
+    compareEvents: query.compareEvents,
     vendorId: query.vendorId ? Number(query.vendorId) : undefined,
     affiliateId: query.affiliateId ? Number(query.affiliateId) : undefined,
     clickId: query.clickId,
@@ -71,6 +72,12 @@ export const logsController = {
         byVendor: [],
         byAffiliate: [],
         byStatus: [],
+        timeSeriesByEvent: [],
+        compareEvents: ['VISIT', 'CG_REDIRECT'],
+        funnelTotals: {
+          VISIT: 0,
+          CG_REDIRECT: 0,
+        },
         otpStats: {
           requested: 0,
           verifiedLive: 0,

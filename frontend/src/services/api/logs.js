@@ -20,6 +20,7 @@ function buildQuery(params = {}) {
     'interval',
     'timezone',
     'view',
+    'compareEvents',
   ]
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null && params[key] !== '') {

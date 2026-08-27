@@ -9,6 +9,11 @@ import {
   resolveRangeBounds,
 } from '../../common/zoned-day.js';
 import { otpConversionStats } from '../otp/helpers/conversion.js';
+import {
+  funnelTotalsFromRows,
+  parseCompareEvents,
+  pivotFunnelTimeSeries,
+} from './helpers/funnel-compare.js';
 
 export const createSearchService = () => {
   const config = getConfig();
@@ -554,6 +559,45 @@ export const createSearchService = () => {
     });
   };
 
+  const buildEventDateSelect = (interval, timeZone) => {
+    const dbType = getDataSource().options.type;
+    const offset = getUtcOffsetString(timeZone);
+    if (dbType === 'postgres') {
+      const fmt = interval === 'hour' ? 'YYYY-MM-DD"T"HH24:00:00' : 'YYYY-MM-DD';
+      return `TO_CHAR(timezone('${timeZone.replace(/'/g, "''")}', event.createdAt AT TIME ZONE 'UTC'), '${fmt}')`;
+    }
+    if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
+      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+      return `strftime('${fmt}', event.createdAt)`;
+    }
+    const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
+    return `DATE_FORMAT(CONVERT_TZ(event.createdAt, '+00:00', '${offset}'), '${fmt}')`;
+  };
+
+  const funnelCompareFromDb = async (params, interval, timeZone) => {
+    const compareEvents = parseCompareEvents(params.compareEvents);
+    const dateSelect = buildEventDateSelect(interval, timeZone);
+    const qb = getRepository(VisitEvent)
+      .createQueryBuilder('event')
+      .leftJoin('event.visit', 'visit')
+      .select(dateSelect, 'groupkey')
+      .addSelect('event.eventType', 'eventType')
+      .addSelect('COUNT(event.id)', 'count');
+    applyDbFilters(qb, params, { ignoreEventType: true });
+    qb.andWhere('event.eventType IN (:...funnelEvents)', {
+      funnelEvents: compareEvents,
+    })
+      .groupBy('groupkey')
+      .addGroupBy('event.eventType')
+      .orderBy('groupkey', 'ASC');
+    const raw = await qb.getRawMany();
+    return {
+      compareEvents,
+      timeSeriesByEvent: pivotFunnelTimeSeries(raw, compareEvents),
+      funnelTotals: funnelTotalsFromRows(raw, compareEvents),
+    };
+  };
+
   const aggregationsFromDb = async (
     params,
     interval = 'day',
@@ -593,19 +637,7 @@ export const createSearchService = () => {
       .limit(20)
       .getRawMany();
 
-    const dbType = getDataSource().options.type;
-    const offset = getUtcOffsetString(timeZone);
-    let dateSelect;
-    if (dbType === 'postgres') {
-      const fmt = interval === 'hour' ? 'YYYY-MM-DD"T"HH24:00:00' : 'YYYY-MM-DD';
-      dateSelect = `TO_CHAR(timezone('${timeZone.replace(/'/g, "''")}', event.createdAt AT TIME ZONE 'UTC'), '${fmt}')`;
-    } else if (dbType === 'sqlite' || dbType === 'better-sqlite3') {
-      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
-      dateSelect = `strftime('${fmt}', event.createdAt)`;
-    } else {
-      const fmt = interval === 'hour' ? '%Y-%m-%dT%H:00:00' : '%Y-%m-%d';
-      dateSelect = `DATE_FORMAT(CONVERT_TZ(event.createdAt, '+00:00', '${offset}'), '${fmt}')`;
-    }
+    const dateSelect = buildEventDateSelect(interval, timeZone);
 
     const timeSeriesRaw = await buildBaseQuery(dateSelect)
       .groupBy('groupkey')
@@ -618,6 +650,8 @@ export const createSearchService = () => {
         count: Number(row.count),
       }));
 
+    const funnel = await funnelCompareFromDb(params, interval, timeZone);
+
     return {
       enabled: true,
       interval,
@@ -626,6 +660,9 @@ export const createSearchService = () => {
       byVendor: formatBuckets(byVendorRaw),
       byAffiliate: formatBuckets(byAffiliateRaw),
       byStatus: formatBuckets(byStatusRaw),
+      timeSeriesByEvent: funnel.timeSeriesByEvent,
+      funnelTotals: funnel.funnelTotals,
+      compareEvents: funnel.compareEvents,
       otpStats: await otpStatsFromDb(params),
     };
   };
@@ -664,6 +701,7 @@ export const createSearchService = () => {
             key: b.key_as_string ?? b.key,
             count: b.doc_count,
           }));
+        const funnel = await funnelCompareFromDb(params, interval, timeZone);
         return {
           enabled: true,
           interval,
@@ -672,6 +710,9 @@ export const createSearchService = () => {
           byVendor: buckets('byVendor'),
           byAffiliate: buckets('byAffiliate'),
           byStatus: buckets('byStatus'),
+          timeSeriesByEvent: funnel.timeSeriesByEvent,
+          funnelTotals: funnel.funnelTotals,
+          compareEvents: funnel.compareEvents,
           otpStats: await otpStatsFromDb(params),
         };
       } catch (err) {

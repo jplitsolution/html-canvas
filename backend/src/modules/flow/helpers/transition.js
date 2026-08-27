@@ -6,6 +6,7 @@ import { createHandleHomeSubscribe } from './transition-home.js';
 import { createHandleConfirm } from './transition-confirm.js';
 import { createHandleOtpContinue } from './transition-otp.js';
 import { createHandleSubscribeRoute } from './transition-subscribe-route.js';
+import { recordCgRedirectHop } from './cg-redirect-log.js';
 
 const CG_SUBSCRIBE_ACTIONS = new Set([
   'SUBSCRIBE',
@@ -71,6 +72,14 @@ export function createFlowTransition(deps) {
         { when: 'subscribe' },
       );
       if (redirect) {
+        await recordCgRedirectHop({
+          visitId: input.visitId,
+          campaign,
+          redirectUrl: redirect,
+          trigger: 'subscribe',
+          planId: input.planId,
+          logSubscribeClick: true,
+        });
         await analyticsService.updateVisit(
           input.visitId,
           VisitStatus.HOME_SHOWN,

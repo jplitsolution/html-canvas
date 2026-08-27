@@ -6,6 +6,7 @@ import { CampaignPageType } from '../../../database/entities/campaign-page.entit
 import { redisService } from '../../../common/services/redis.service.js';
 import { splitDualCampids } from '../../markets/helpers/tracking-id.util.js';
 import { heService } from '../he.service.js';
+import { filledTrackingValue } from './placeholder-macro.js';
 
 export function createFlowVisit(deps) {
   // deps reserved for future wiring; visit helpers use imported services directly
@@ -30,7 +31,7 @@ export function createFlowVisit(deps) {
    */
   const resolveOrCreateLandingVisit = async (campaign, input = {}) => {
     const networkRcid =
-      String(input.rcid || input.clickId || '').trim() || null;
+      filledTrackingValue(input.rcid || input.clickId || '') || null;
     const dualIds = splitDualCampids(input);
 
     const attrCacheKey = `flow:attr:${input.vid || ''}`;

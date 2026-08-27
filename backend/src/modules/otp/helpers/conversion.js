@@ -91,6 +91,9 @@ export const campaignVendorPerf = ({
   pinValRequest = 0,
   uniquePinValRequest = 0,
   uniquePinVal = 0,
+  homeView = 0,
+  subscribeClick = 0,
+  cgRedirect = 0,
 } = {}) => {
   const totalClicks = Math.max(0, Number(clicks) || 0);
   const matched = Math.max(0, Number(postbacksMatched) || 0);
@@ -115,6 +118,9 @@ export const campaignVendorPerf = ({
     verifiedApi: otp.verifiedLive,
     failedApi: Math.max(0, Number(failedApi) || 0),
     pubConvPercent: apiExpose ? otp.vendorConvPercent : pct(sent, totalClicks),
+    homeView: Math.max(0, Number(homeView) || 0),
+    subscribeClick: Math.max(0, Number(subscribeClick) || 0),
+    cgRedirect: Math.max(0, Number(cgRedirect) || 0),
     ...pin,
   };
 };

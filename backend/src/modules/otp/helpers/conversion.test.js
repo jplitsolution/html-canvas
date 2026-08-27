@@ -62,6 +62,22 @@ describe('campaignVendorPerf', () => {
     assert.equal(row.conversions, 8);
     assert.equal(row.convPercent, 8);
     assert.equal(row.pubConvPercent, 6);
+    assert.equal(row.homeView, 0);
+    assert.equal(row.cgRedirect, 0);
+  });
+
+  it('CG HOME rows carry home shown, banner click, and CG redirect counts', () => {
+    const row = campaignVendorPerf({
+      clicks: 100,
+      homeView: 80,
+      subscribeClick: 40,
+      cgRedirect: 38,
+      postbacksMatched: 5,
+    });
+    assert.equal(row.homeView, 80);
+    assert.equal(row.subscribeClick, 40);
+    assert.equal(row.cgRedirect, 38);
+    assert.equal(row.totalClicks, 100);
   });
 
   it('WAP uses the larger of subscribe success and matched callbacks', () => {

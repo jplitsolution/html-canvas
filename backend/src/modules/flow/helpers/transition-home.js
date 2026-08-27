@@ -3,6 +3,7 @@ import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitStatus } from '../../../database/entities/visit.entity.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { flowEngineService } from '../flow-engine.service.js';
+import { recordCgRedirectHop } from './cg-redirect-log.js';
 
 export function createHandleHomeSubscribe(deps) {
   const {
@@ -54,6 +55,13 @@ export function createHandleHomeSubscribe(deps) {
         { when: 'subscribe' },
       );
       if (redirect) {
+        await recordCgRedirectHop({
+          visitId: input.visitId,
+          campaign,
+          redirectUrl: redirect,
+          trigger: 'subscribe',
+          planId: input.planId,
+        });
         await analyticsService.updateVisit(
           input.visitId,
           VisitStatus.HOME_SHOWN,

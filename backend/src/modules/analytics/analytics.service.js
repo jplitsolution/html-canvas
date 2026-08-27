@@ -11,6 +11,7 @@ import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { campaignVendorPerf } from '../otp/helpers/conversion.js';
 import getConfig from '../../config/configuration.js';
+import { filledTrackingValue } from '../flow/helpers/placeholder-macro.js';
 import { resolveRangeBounds } from '../../common/zoned-day.js';
 
 export const createAnalyticsService = () => {
@@ -107,7 +108,7 @@ export const createAnalyticsService = () => {
    */
   const findRecentVisitByRcid = async (campaignId, rcid, withinMs = 120000) => {
     const cId = parseInt(campaignId, 10);
-    const key = String(rcid || '').trim();
+    const key = filledTrackingValue(rcid);
     if (!cId || !key) return null;
 
     const withinSec = Math.max(1, Math.ceil(Number(withinMs) / 1000) || 120);
@@ -341,6 +342,18 @@ export const createAnalyticsService = () => {
         `COALESCE(SUM(CASE WHEN event.eventType = 'SUBSCRIBE_SUCCESS' THEN 1 ELSE 0 END), 0)`,
         'subscribeSuccess',
       )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'HOME_VIEW' THEN 1 ELSE 0 END), 0)`,
+        'homeView',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'SUBSCRIBE_CLICK' THEN 1 ELSE 0 END), 0)`,
+        'subscribeClick',
+      )
+      .addSelect(
+        `COALESCE(SUM(CASE WHEN event.eventType = 'CG_REDIRECT' THEN 1 ELSE 0 END), 0)`,
+        'cgRedirect',
+      )
       // PIN legs for API expose: every attempt, plus distinct MSISDN per leg.
       .addSelect(
         `COALESCE(SUM(CASE WHEN event.eventType = 'OTP_SEND' THEN 1 ELSE 0 END), 0)`,
@@ -398,6 +411,9 @@ export const createAnalyticsService = () => {
       pinValRequest: 0,
       uniquePinValRequest: 0,
       uniquePinVal: 0,
+      homeView: 0,
+      subscribeClick: 0,
+      cgRedirect: 0,
     });
     const ensure = (vendorId) => {
       const key = Number(vendorId) || 0;
@@ -420,6 +436,9 @@ export const createAnalyticsService = () => {
       prev.pinValRequest = Number(row.pinValRequest) || 0;
       prev.uniquePinValRequest = Number(row.uniquePinValRequest) || 0;
       prev.uniquePinVal = Number(row.uniquePinVal) || 0;
+      prev.homeView = Number(row.homeView) || 0;
+      prev.subscribeClick = Number(row.subscribeClick) || 0;
+      prev.cgRedirect = Number(row.cgRedirect) || 0;
     }
     for (const row of postbackRows) {
       const prev = ensure(row.vendorId);

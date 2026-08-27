@@ -11,6 +11,7 @@ import { flowEngineService } from '../flow-engine.service.js';
 import { resolveLiveProjectData } from './page-response.js';
 import { redisService } from '../../../common/services/redis.service.js';
 import { flowHasConfirmNode, isPacksOnHome } from './funnel-layout.js';
+import { recordCgRedirectHop } from './cg-redirect-log.js';
 
 export function createGetPage(deps) {
   const {
@@ -343,6 +344,12 @@ export function createGetPage(deps) {
     const pageAttr = await loadVisitAttribution(visitId, input);
 
     if (cgRedirect) {
+      await recordCgRedirectHop({
+        visitId,
+        campaign,
+        redirectUrl: cgRedirect,
+        trigger: 'landing',
+      });
       return {
         campaignId: campaign.id,
         visitId,

@@ -1,3 +1,5 @@
+import { filledTrackingValue } from '../../flow/helpers/placeholder-macro.js';
+
 export function buildTrackingId(
   countryCode,
   operatorCode,
@@ -32,10 +34,10 @@ export function isNumericCampid(campid) {
  * Legacy: only campid present and it looks like our tracking id → treat as ours.
  */
 export function splitDualCampids(input = {}) {
-  let trackingCampid = String(
+  let trackingCampid = filledTrackingValue(
     input.trackingCampid || input.tracking_campid || '',
-  ).trim();
-  let vendorCampid = String(input.campid || '').trim();
+  );
+  let vendorCampid = filledTrackingValue(input.campid || '');
 
   if (
     !trackingCampid &&
