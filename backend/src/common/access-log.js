@@ -16,6 +16,27 @@ export function accessLogDay(timezone = DEFAULT_TIMEZONE, now = new Date()) {
   }).format(now);
 }
 
+/** Public URL the client hit (scheme + host + path + query). */
+export function requestFullUrl(req) {
+  const forwardedProto = String(req.get?.('x-forwarded-proto') || '')
+    .split(',')[0]
+    .trim();
+  const proto = forwardedProto || req.protocol || 'http';
+  const forwardedHost = String(req.get?.('x-forwarded-host') || '')
+    .split(',')[0]
+    .trim();
+  const host = forwardedHost || req.get?.('host') || req.headers?.host || '';
+  const path = req.originalUrl || req.url || '';
+  return host ? `${proto}://${host}${path}` : path;
+}
+
+export const ACCESS_LOG_FORMAT =
+  ':date[iso] :method :full-url :status :response-time ms :remote-addr :res[content-length] ":user-agent"';
+
+export function registerAccessLogTokens(morganLib) {
+  morganLib.token('full-url', requestFullUrl);
+}
+
 /**
  * Writable stream for morgan: one file per IST calendar day.
  * Midnight rollover opens `access-YYYY-MM-DD.log` automatically.

@@ -7,6 +7,7 @@ import {
   accessLogFilename,
   accessLogDay,
   createDailyAccessLogStream,
+  requestFullUrl,
 } from './access-log.js';
 
 function writeLine(stream, line) {
@@ -33,6 +34,41 @@ describe('accessLogDay', () => {
   it('uses Asia/Kolkata calendar day', () => {
     const justAfterMidnightIst = new Date('2026-08-26T18:40:00.000Z');
     assert.equal(accessLogDay('Asia/Kolkata', justAfterMidnightIst), '2026-08-27');
+  });
+});
+
+describe('requestFullUrl', () => {
+  it('rebuilds scheme + host + path + query', () => {
+    const req = {
+      protocol: 'https',
+      originalUrl:
+        '/api/flow/page?country=Kenya&operator=safaricom&page=HOME',
+      get(name) {
+        if (name === 'host') return 'wap.example.com';
+        return '';
+      },
+    };
+    assert.equal(
+      requestFullUrl(req),
+      'https://wap.example.com/api/flow/page?country=Kenya&operator=safaricom&page=HOME',
+    );
+  });
+
+  it('prefers forwarded proto and host behind a proxy', () => {
+    const req = {
+      protocol: 'http',
+      originalUrl: '/api/flow/page?click_id=abc',
+      get(name) {
+        if (name === 'x-forwarded-proto') return 'https';
+        if (name === 'x-forwarded-host') return 'offer.example.com';
+        if (name === 'host') return '127.0.0.1:3000';
+        return '';
+      },
+    };
+    assert.equal(
+      requestFullUrl(req),
+      'https://offer.example.com/api/flow/page?click_id=abc',
+    );
   });
 });
 
