@@ -39,7 +39,7 @@ export function registerComponentBlocks(editor) {
     'Button',
     'component',
     'button',
-    `<a data-tc-type="button" href="#" style="display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;background-color:#2563eb;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:Inter,sans-serif;font-size:15px;line-height:1.25;">Click me</a>`
+    `<a data-tc-type="button" href="#" style="display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;background-color:#2563eb;color:#ffffff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-family:Inter,sans-serif;font-size:15px;line-height:1.25;width:auto;max-width:100%;">Click me</a>`
   )
 
   addBlock(

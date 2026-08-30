@@ -13,8 +13,16 @@ export function isTextLikeComponent(component) {
   return shouldConfigureAsText(component);
 }
 
-function hasComponentChildren(component) {
-  return component.components().length > 0;
+function hasNonTextChildren(component) {
+  const children = component.components();
+  if (!children || children.length === 0) return false;
+  return children.models.some((child) => {
+    const childTag = (child.get('tagName') || '').toLowerCase();
+    const childType = child.get('type') || '';
+    if (childType === 'textnode') return false;
+    if (['span', 'strong', 'em', 'b', 'i', 'small'].includes(childTag)) return false;
+    return true;
+  });
 }
 
 export function shouldConfigureAsText(component) {
@@ -24,10 +32,10 @@ export function shouldConfigureAsText(component) {
 
   if (type === 'wrapper' || type === 'image' || tag === 'img') return false;
   if (CONTAINER_TAGS.has(tag)) return false;
-  if (hasComponentChildren(component)) return false;
+  if (hasNonTextChildren(component)) return false;
 
   if (type === 'text' || attrs['data-gjs-type'] === 'text') return true;
-  if (INLINE_TEXT_TAGS.has(tag)) return true;
+  if (INLINE_TEXT_TAGS.has(tag) || tag === 'button' || tag === 'a') return true;
 
   return false;
 }

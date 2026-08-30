@@ -1198,12 +1198,12 @@ export function PropertyPanel() {
       ? KIND_LABELS[kind] || 'Element'
       : 'Properties';
     return (
-      <aside className="tc-properties w-10 shrink-0 border-l border-border bg-bg-elevated flex flex-col items-center py-3 gap-2">
+      <aside className="tc-properties w-12 shrink-0 border-l border-slate-800 bg-[#0e131f] flex flex-col items-center py-4 gap-3 z-20 shadow-lg select-none">
         <button
           type="button"
           onClick={toggleCollapsed}
           title="Show properties"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
         >
           <PanelRightOpen className="w-4 h-4" />
         </button>
@@ -1214,7 +1214,7 @@ export function PropertyPanel() {
           className="flex-1 w-full flex items-start justify-center pt-2"
         >
           <span
-            className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted whitespace-nowrap select-none"
+            className="text-[10px] font-bold uppercase tracking-widest text-slate-400 whitespace-nowrap select-none"
             style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}
           >
             {label}
@@ -1224,7 +1224,7 @@ export function PropertyPanel() {
           type="button"
           onClick={toggleCollapsed}
           title="Show properties"
-          className="w-8 h-8 flex items-center justify-center rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -1235,11 +1235,11 @@ export function PropertyPanel() {
   if (!editor) {
     return (
       <aside
-        className="tc-properties shrink-0 border-l border-border bg-bg-elevated p-4 relative"
+        className="tc-properties shrink-0 border-l border-slate-200 bg-white p-4 relative shadow-xl z-20 select-none"
         style={panelStyle}
       >
         {resizeHandle}
-        <p className="text-sm text-fg-muted">Loading...</p>
+        <p className="text-xs font-semibold text-slate-400">Loading inspector...</p>
       </aside>
     );
   }
@@ -1251,24 +1251,28 @@ export function PropertyPanel() {
   if (!selected || kind === 'none') {
     return (
       <aside
-        className="tc-properties shrink-0 border-l border-border bg-bg-elevated flex flex-col relative"
+        className="tc-properties shrink-0 border-l border-slate-200 bg-white flex flex-col relative shadow-xl z-20 select-none"
         style={panelStyle}
       >
         {resizeHandle}
-        <div className="p-3 border-b border-border flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-fg">Edit selection</h2>
+        <div className="p-3.5 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/50">
+          <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Inspector</h2>
           <button
             type="button"
             onClick={toggleCollapsed}
             title="Hide properties"
-            className="p-1.5 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            className="p-1 rounded-lg text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
           >
             <PanelRightClose className="w-4 h-4" />
           </button>
         </div>
-        <div className="flex-1 flex items-center justify-center p-6 text-center">
-          <p className="text-sm text-fg-muted">
-            Click any text, button, or image on the page to change it here.
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center mb-3">
+            <Pencil className="w-5 h-5" />
+          </div>
+          <p className="text-xs font-semibold text-slate-700">No element selected</p>
+          <p className="text-[11px] text-slate-400 mt-1 max-w-[200px]">
+            Click any section, text, or button on the artboard to inspect and tweak styling.
           </p>
         </div>
       </aside>

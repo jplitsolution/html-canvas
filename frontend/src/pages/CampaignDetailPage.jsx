@@ -557,14 +557,39 @@ function CampaignDetailPage() {
   const apiExpose = isApiExposeCampaign(campaign)
   const dcbApiExpose = isDcbApiExposeCampaign(campaign)
 
+  const [activeStudioTab, setActiveStudioTab] = useState('canvas')
+  const [showVendorDrawer, setShowVendorDrawer] = useState(false)
+
   const pageActions = (
-    <>
+    <div className="flex items-center gap-2">
+      <div className="flex items-center bg-bg-base p-0.5 rounded-lg border border-border mr-2">
+        <button
+          type="button"
+          onClick={() => setActiveStudioTab('canvas')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            activeStudioTab === 'canvas'
+              ? 'bg-accent text-accent-fg shadow-xs'
+              : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
+          }`}
+        >
+          Flow Canvas
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveStudioTab('vendors')}
+          className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+            activeStudioTab === 'vendors'
+              ? 'bg-accent text-accent-fg shadow-xs'
+              : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
+          }`}
+        >
+          Vendor Stats {trackings.length > 0 && `(${trackings.length})`}
+        </button>
+      </div>
+
       <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
         <Store className="w-4 h-4" />
         Vendors
-        {trackings.length > 0 && (
-          <span className="ml-0.5 tabular-nums text-fg-muted">({trackings.length})</span>
-        )}
       </Button>
       <Button variant="outline" size="sm" onClick={() => setShowApiConfig(true)}>
         <Settings className="w-4 h-4" />
@@ -587,279 +612,338 @@ function CampaignDetailPage() {
         <ExternalLink className="w-4 h-4" />
         Preview
       </Button>
-    </>
+    </div>
   )
 
   return (
     <AppShell actions={pageActions}>
-      <div className="page-container">
-        <button
-          type="button"
-          onClick={() => navigate(backToMarket)}
-          className="inline-flex items-center gap-1.5 text-sm text-fg-muted hover:text-fg mb-3 transition-colors"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          Back to market
-        </button>
-
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs text-fg-subtle mb-1">
-              <Link to="/markets" className="hover:text-fg">
-                Markets
-              </Link>
-              {' / '}
-              <Link to={backToMarket} className="hover:text-fg">
-                {campaign.country} / {campaign.operator}
-              </Link>
-            </p>
-            <div className="flex flex-wrap items-center gap-2.5">
-              {editingName ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    value={nameDraft}
-                    onChange={(e) => setNameDraft(e.target.value)}
-                    className="max-w-md"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSaveName()
-                      if (e.key === 'Escape') {
+      <div className="flex flex-col min-h-screen bg-bg-canvas overflow-y-auto">
+        {/* Studio Top Header */}
+        <div className="px-4 py-2.5 bg-bg-elevated border-b border-border flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              onClick={() => navigate(backToMarket)}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted hover:text-fg transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+            <div className="h-4 w-px bg-border hidden sm:block" />
+            <div className="min-w-0">
+              <p className="text-[11px] text-fg-subtle truncate">
+                <Link to="/markets" className="hover:text-fg">
+                  Markets
+                </Link>
+                {' / '}
+                <Link to={backToMarket} className="hover:text-fg font-medium">
+                  {campaign.country} / {campaign.operator}
+                </Link>
+              </p>
+              <div className="flex items-center gap-2">
+                {editingName ? (
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={nameDraft}
+                      onChange={(e) => setNameDraft(e.target.value)}
+                      className="max-w-xs text-xs py-1"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveName()
+                        if (e.key === 'Escape') {
+                          setNameDraft(campaign.name || '')
+                          setEditingName(false)
+                        }
+                      }}
+                    />
+                    <Button
+                      variant="primary"
+                      size="xs"
+                      onClick={handleSaveName}
+                      disabled={savingName || !nameDraft.trim()}
+                    >
+                      {savingName ? 'Saving...' : 'Save'}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      onClick={() => {
                         setNameDraft(campaign.name || '')
                         setEditingName(false)
+                      }}
+                      disabled={savingName}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-sm font-bold text-fg truncate">{campaign.name}</h1>
+                    <button
+                      type="button"
+                      className="p-1 text-fg-muted hover:text-accent rounded hover:bg-bg-subtle transition-colors"
+                      title="Edit campaign name"
+                      onClick={() => setEditingName(true)}
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 shrink-0">
+            <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
+              {campaign.active ? 'Active' : 'Draft'}
+            </span>
+            {!canActivate && !campaign.active && (
+              <span className="text-[11px] text-warning flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" />
+                Pages incomplete
+              </span>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-fg-muted hidden sm:inline">
+                {campaign.active ? 'Live' : 'Offline'}
+              </span>
+              <CompactStatusToggle
+                active={!!campaign.active}
+                onToggle={handleToggleActive}
+                disabled={!campaign.active && !canActivate}
+                activating={activating}
+                blockedReason={activateBlockedReason}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Studio Body Workspace */}
+        <div className="flex-1 relative flex flex-col overflow-y-auto bg-dot-grid p-4 sm:p-6 pb-20">
+          {activeStudioTab === 'canvas' ? (
+            <div id="flow" className="flex-1 w-full relative">
+              <CampaignFlowBuilder
+                campaignId={campaign.id}
+                countryCode={countryCode}
+                operatorCode={operatorCode}
+                embeddedStudio
+              />
+
+              {/* Bottom Docked Button Handle */}
+              <div className="flex justify-center mt-2 mb-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowVendorDrawer((prev) => {
+                      const next = !prev
+                      if (next) {
+                        setTimeout(() => {
+                          document.getElementById('vendor-stats-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }, 50)
                       }
-                    }}
-                  />
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={handleSaveName}
-                    disabled={savingName || !nameDraft.trim()}
-                  >
-                    {savingName ? 'Saving...' : 'Save'}
-                  </Button>
+                      return next
+                    })
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 rounded-full border border-border bg-bg-elevated/95 backdrop-blur shadow-md text-xs font-semibold text-fg hover:border-accent hover:bg-bg-subtle transition-all cursor-pointer"
+                >
+                  <Store className="w-4 h-4 text-accent" />
+                  <span>{showVendorDrawer ? 'Hide Vendor Stats' : 'Vendor Stats & Traffic'}</span>
+                  {trackings.length > 0 && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-accent-muted text-accent text-[10px]">
+                      {trackings.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Inline Vendor Drawer Panel */}
+          {(activeStudioTab === 'vendors' || showVendorDrawer) && (
+            <div
+              id="vendor-stats-section"
+              className={`surface-card overflow-hidden transition-all duration-300 flex flex-col rounded-2xl border border-border shadow-lg ${
+                activeStudioTab === 'vendors' ? 'flex-1 min-h-0' : 'mt-2 shrink-0'
+              }`}
+            >
+              <div className="px-4 py-3 border-b border-border bg-bg-elevated flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-sm font-semibold text-fg">Vendor Traffic & Postbacks</h2>
+                    {showVendorDrawer && activeStudioTab === 'canvas' && (
+                      <button
+                        type="button"
+                        onClick={() => setShowVendorDrawer(false)}
+                        className="text-xs text-fg-muted hover:text-fg underline ml-2"
+                      >
+                        Close
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-fg-muted mt-0.5">
+                    {apiExpose
+                      ? 'PIN send and PIN validate legs, with unique MSISDN per leg.'
+                      : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks.'}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <div className="flex items-center bg-bg-base p-1 rounded-xl border border-border">
+                    {VENDOR_DATE_PRESETS.map((p) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => handleVendorPresetChange(p.id)}
+                        className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
+                          vendorPreset === p.id
+                            ? 'bg-accent text-accent-fg shadow-xs font-semibold'
+                            : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => {
-                      setNameDraft(campaign.name || '')
-                      setEditingName(false)
-                    }}
-                    disabled={savingName}
+                    onClick={loadVendorStats}
+                    disabled={vendorStatsLoading}
+                    title="Refresh vendor stats"
                   >
-                    Cancel
+                    <RefreshCw className={`w-3.5 h-3.5 ${vendorStatsLoading ? 'animate-spin' : ''}`} />
+                  </Button>
+
+                  <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
+                    <Store className="w-4 h-4" />
+                    Manage
                   </Button>
                 </div>
-              ) : (
-                <>
-                  <h1 className="page-header-title">{campaign.name}</h1>
-                  <button
-                    type="button"
-                    className="p-1.5 text-fg-muted hover:text-accent rounded-md hover:bg-accent-muted transition-colors"
-                    title="Edit campaign name"
-                    onClick={() => setEditingName(true)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </button>
-                </>
-              )}
-              <span className={`badge ${campaign.active ? 'badge-success' : 'badge-muted'}`}>
-                {campaign.active ? 'Active' : 'Draft'}
-              </span>
-              {!canActivate && !campaign.active && (
-                <span className="text-[11px] text-warning flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  Pages incomplete
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2.5 shrink-0">
-            <span className="text-xs text-fg-muted">
-              {campaign.active ? 'Live' : 'Offline'}
-            </span>
-            <CompactStatusToggle
-              active={!!campaign.active}
-              onToggle={handleToggleActive}
-              disabled={!campaign.active && !canActivate}
-              activating={activating}
-              blockedReason={activateBlockedReason}
-            />
-          </div>
-        </div>
-
-        <div id="flow" className="scroll-mt-4">
-          <CampaignFlowBuilder
-            campaignId={campaign.id}
-            countryCode={countryCode}
-            operatorCode={operatorCode}
-            embedded
-          />
-        </div>
-
-        <div className="surface-card overflow-hidden mt-5">
-          <div className="px-4 py-3 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold text-fg">Vendors</h2>
-              <p className="text-[11px] text-fg-muted mt-0.5">
-                {apiExpose
-                  ? 'PIN send and PIN validate legs, with unique MSISDN per leg. Send conversion is what the vendor gets after the payout cut. Adv CR is Pin_Val success ÷ Pin request; Pub CR is send conversion ÷ Pin request. Traffic counts only — we do not hold any amount.'
-                  : 'Clicks from landings. Conv % is matched operator callbacks ÷ clicks. Pub conv % is vendor postbacks sent ÷ clicks.'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <div className="flex items-center bg-bg-base p-1 rounded-xl border border-border">
-                {VENDOR_DATE_PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => handleVendorPresetChange(p.id)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-all ${
-                      vendorPreset === p.id
-                        ? 'bg-accent text-accent-fg shadow-xs font-semibold'
-                        : 'text-fg-muted hover:text-fg hover:bg-bg-subtle'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
-                ))}
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadVendorStats}
-                disabled={vendorStatsLoading}
-                title="Refresh vendor stats"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${vendorStatsLoading ? 'animate-spin' : ''}`} />
-              </Button>
+              {vendorPreset === 'custom' && (
+                <div className="px-4 py-2.5 bg-bg-muted/40 border-b border-border flex flex-wrap items-center gap-3 shrink-0 animate-fade-in">
+                  <Calendar className="w-4 h-4 text-accent" />
+                  <span className="text-xs font-medium text-fg">Custom Range:</span>
+                  <input
+                    type="date"
+                    value={vendorCustomRange.from}
+                    onChange={(e) => setVendorCustomRange((r) => ({ ...r, from: e.target.value }))}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
+                  />
+                  <span className="text-xs text-fg-muted">to</span>
+                  <input
+                    type="date"
+                    value={vendorCustomRange.to}
+                    onChange={(e) => setVendorCustomRange((r) => ({ ...r, to: e.target.value }))}
+                    className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
+                  />
+                  <Button size="xs" variant="primary" onClick={handleVendorCustomDateApply}>
+                    Apply
+                  </Button>
+                </div>
+              )}
 
-              <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
-                <Store className="w-4 h-4" />
-                Manage
-              </Button>
-            </div>
-          </div>
-
-          {vendorPreset === 'custom' && (
-            <div className="px-4 py-2.5 bg-bg-muted/40 border-b border-border flex flex-wrap items-center gap-3 animate-fade-in">
-              <Calendar className="w-4 h-4 text-accent" />
-              <span className="text-xs font-medium text-fg">Custom Range:</span>
-              <input
-                type="date"
-                value={vendorCustomRange.from}
-                onChange={(e) => setVendorCustomRange((r) => ({ ...r, from: e.target.value }))}
-                className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
-              />
-              <span className="text-xs text-fg-muted">to</span>
-              <input
-                type="date"
-                value={vendorCustomRange.to}
-                onChange={(e) => setVendorCustomRange((r) => ({ ...r, to: e.target.value }))}
-                className="px-2.5 py-1 text-xs rounded-lg border border-border bg-bg-base text-fg focus:outline-none focus:border-accent"
-              />
-              <Button size="xs" variant="primary" onClick={handleVendorCustomDateApply}>
-                Apply
-              </Button>
-            </div>
-          )}
-          {vendorStatsLoading && vendorRows.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-fg-muted">Loading vendor stats…</p>
-          ) : vendorRows.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-fg-muted">
-              No vendors assigned.{' '}
-              <button
-                type="button"
-                className="text-accent hover:underline"
-                onClick={() => setShowVendorModal(true)}
-              >
-                Assign a vendor
-              </button>
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th className="col-text">Vendor</th>
-                    {apiExpose ? (
-                      <>
-                        <th className="col-num">Cut</th>
-                        {PIN_COLUMNS.map((col) => (
-                          <th key={col.key} className={`col-num ${col.tint || ''}`} title={col.hint}>
-                            {col.label}
-                          </th>
-                        ))}
-                        <th className="col-num" title="Pin_Val success ÷ Pin request">
-                          Adv CR
-                        </th>
-                        <th className="col-num" title="Send conversion ÷ Pin request">
-                          Pub CR
-                        </th>
-                      </>
-                    ) : (
-                      <>
-                        <th className="col-num">Total clicks</th>
-                        <th className="col-num">Conv %</th>
-                        <th className="col-num">Pub conv %</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {vendorRows.map((row) => (
-                    <tr key={row.vendorId} className={row.assignmentActive === false ? 'opacity-70' : ''}>
-                      <td className="col-text">
-                        <p className="font-medium text-fg">{row.vendorName}</p>
-                        {row.vendorCode ? (
-                          <p className="text-[11px] text-fg-muted font-mono">{row.vendorCode}</p>
-                        ) : null}
-                        {row.fireStatuses ? (
-                          <p className="text-[11px] text-fg-subtle mt-0.5 font-mono truncate" title={row.fireStatuses}>
-                            Postback: {row.fireStatuses}
-                          </p>
-                        ) : null}
-                      </td>
-                      {apiExpose ? (
-                        <>
-                          <td className="col-num text-fg-muted">
-                            {100 - Number(row.payoutPercent ?? 100)}%
-                          </td>
-                          {PIN_COLUMNS.map((col) => (
-                            <td key={col.key} className={`col-num ${col.tint || ''}`}>
-                              {row[col.key] ?? 0}
+              <div className="flex-1 overflow-auto min-h-0">
+                {vendorStatsLoading && vendorRows.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-fg-muted">Loading vendor stats…</p>
+                ) : vendorRows.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-fg-muted">
+                    No vendors assigned.{' '}
+                    <button
+                      type="button"
+                      className="text-accent hover:underline"
+                      onClick={() => setShowVendorModal(true)}
+                    >
+                      Assign a vendor
+                    </button>
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th className="col-text">Vendor</th>
+                          {apiExpose ? (
+                            <>
+                              <th className="col-num">Cut</th>
+                              {PIN_COLUMNS.map((col) => (
+                                <th key={col.key} className={`col-num ${col.tint || ''}`} title={col.hint}>
+                                  {col.label}
+                                </th>
+                              ))}
+                              <th className="col-num" title="Pin_Val success ÷ Pin request">
+                                Adv CR
+                              </th>
+                              <th className="col-num" title="Send conversion ÷ Pin request">
+                                Pub CR
+                              </th>
+                            </>
+                          ) : (
+                            <>
+                              <th className="col-num">Total clicks</th>
+                              <th className="col-num">Conv %</th>
+                              <th className="col-num">Pub conv %</th>
+                            </>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {vendorRows.map((row) => (
+                          <tr key={row.vendorId} className={row.assignmentActive === false ? 'opacity-70' : ''}>
+                            <td className="col-text">
+                              <p className="font-medium text-fg">{row.vendorName}</p>
+                              {row.vendorCode ? (
+                                <p className="text-[11px] text-fg-muted font-mono">{row.vendorCode}</p>
+                              ) : null}
+                              {row.fireStatuses ? (
+                                <p className="text-[11px] text-fg-subtle mt-0.5 font-mono truncate" title={row.fireStatuses}>
+                                  Postback: {row.fireStatuses}
+                                </p>
+                              ) : null}
                             </td>
-                          ))}
-                          <td className="col-num">{Number(row.advCrPercent || 0).toFixed(1)}%</td>
-                          <td className="col-num">{Number(row.pubCrPercent || 0).toFixed(1)}%</td>
-                        </>
-                      ) : (
-                        <>
-                          <td className="col-num">{row.totalClicks ?? 0}</td>
-                          <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
-                          <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
-                        </>
+                            {apiExpose ? (
+                              <>
+                                <td className="col-num text-fg-muted">
+                                  {100 - Number(row.payoutPercent ?? 100)}%
+                                </td>
+                                {PIN_COLUMNS.map((col) => (
+                                  <td key={col.key} className={`col-num ${col.tint || ''}`}>
+                                    {row[col.key] ?? 0}
+                                  </td>
+                                ))}
+                                <td className="col-num">{Number(row.advCrPercent || 0).toFixed(1)}%</td>
+                                <td className="col-num">{Number(row.pubCrPercent || 0).toFixed(1)}%</td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="col-num">{row.totalClicks ?? 0}</td>
+                                <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
+                                <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
+                              </>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                      {apiExpose && vendorRows.length > 1 && (
+                        <tfoot>
+                          <tr className="bg-bg-subtle font-medium">
+                            <td className="col-text">Total</td>
+                            <td className="col-num text-fg-muted">–</td>
+                            {PIN_COLUMNS.map((col) => (
+                              <td key={col.key} className={`col-num ${col.tint || ''}`}>
+                                {pinTotals[col.key]}
+                              </td>
+                            ))}
+                            <td className="col-num">{pinTotals.advCrPercent.toFixed(1)}%</td>
+                            <td className="col-num">{pinTotals.pubCrPercent.toFixed(1)}%</td>
+                          </tr>
+                        </tfoot>
                       )}
-                    </tr>
-                  ))}
-                </tbody>
-                {apiExpose && vendorRows.length > 1 && (
-                  <tfoot>
-                    <tr className="bg-bg-subtle font-medium">
-                      <td className="col-text">Total</td>
-                      <td className="col-num text-fg-muted">–</td>
-                      {PIN_COLUMNS.map((col) => (
-                        <td key={col.key} className={`col-num ${col.tint || ''}`}>
-                          {pinTotals[col.key]}
-                        </td>
-                      ))}
-                      <td className="col-num">{pinTotals.advCrPercent.toFixed(1)}%</td>
-                      <td className="col-num">{pinTotals.pubCrPercent.toFixed(1)}%</td>
-                    </tr>
-                  </tfoot>
+                    </table>
+                  </div>
                 )}
-              </table>
+              </div>
             </div>
           )}
         </div>

@@ -29,13 +29,13 @@ import { getFunnelPageGuide } from '../utils/funnelGuide'
 import useStore from '../../store/useStore'
 
 const TABS = [
-  { id: 'flow', label: 'Required parts', hint: 'Re-add flow buttons & fields the page needs', icon: ShieldCheck },
-  { id: 'layouts', label: 'Ready layouts', hint: 'Start with a full page design', icon: LayoutTemplate },
-  { id: 'sections', label: 'Sections', hint: 'Drag big blocks onto the page', icon: Layers },
-  { id: 'parts', label: 'Parts', hint: 'Buttons, text, images & more', icon: Puzzle },
-  { id: 'photos', label: 'Your photos', hint: 'Upload and add images', icon: ImageIcon },
-  { id: 'structure', label: 'Page outline', hint: 'See everything on the page', icon: Boxes },
-  { id: 'code', label: 'Code', hint: 'Edit raw HTML and CSS of the entire page', icon: Code2 },
+  { id: 'layouts', label: 'Design', hint: 'Start with a full page design template', icon: LayoutTemplate },
+  { id: 'flow', label: 'Funnel Logic', hint: 'Re-add required OTP & subscription buttons', icon: ShieldCheck },
+  { id: 'sections', label: 'Elements', hint: 'Drag big layout blocks and cards', icon: Layers },
+  { id: 'parts', label: 'Text & Buttons', hint: 'Buttons, headings, images & inputs', icon: Puzzle },
+  { id: 'photos', label: 'Uploads', hint: 'Upload and manage custom photos', icon: ImageIcon },
+  { id: 'structure', label: 'Layers', hint: 'DOM structure and element tree', icon: Boxes },
+  { id: 'code', label: 'Code', hint: 'Edit raw HTML and CSS of the page', icon: Code2 },
 ]
 
 function findHeadingInSection(section) {
@@ -102,17 +102,18 @@ export function EditorSidebar() {
   }, [])
 
   const selectTab = useCallback((id) => {
+    if (tab === id && !collapsed) {
+      toggleCollapsed()
+      return
+    }
     setTab(id)
-    setCollapsed((prev) => {
-      if (!prev) return prev
-      try {
-        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '0')
-      } catch {
-        /* ignore */
-      }
-      return false
-    })
-  }, [])
+    setCollapsed(false)
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, '0')
+    } catch {
+      /* ignore */
+    }
+  }, [tab, collapsed, toggleCollapsed])
 
   const refreshAssets = useCallback(() => {
     if (!editor) return
@@ -265,55 +266,59 @@ export function EditorSidebar() {
 
   return (
     <>
-      <aside className="tc-sidebar shrink-0 flex border-r border-gray-100 bg-white min-h-0 relative overflow-hidden">
-        <nav className="w-12 shrink-0 flex flex-col items-center py-3 gap-1.5 bg-slate-50/50">
+      <aside className="tc-sidebar shrink-0 flex min-h-0 relative z-20 select-none">
+        {/* Primary Vertical Canva Dock */}
+        <nav className="w-16 shrink-0 flex flex-col items-center py-3 gap-2 bg-white text-slate-500 border-r border-slate-200 shadow-sm z-10">
           {TABS.filter(
             (t) => !(t.id === 'flow' && !hasFlowParts),
-          ).map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => selectTab(id)}
-              title={label}
-              aria-pressed={tab === id && !collapsed}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200 ${
-                tab === id && !collapsed
-                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-500/20'
-                  : tab === id && collapsed
-                  ? 'bg-indigo-100 text-indigo-700'
-                  : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100/80'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-            </button>
-          ))}
+          ).map(({ id, label, icon: Icon }) => {
+            const isActive = tab === id && !collapsed;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => selectTab(id)}
+                title={label}
+                aria-pressed={isActive}
+                className={`w-12 h-12 flex flex-col items-center justify-center gap-1 rounded-xl transition-all duration-150 group ${
+                  isActive
+                    ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                    : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+              >
+                <Icon className="w-5 h-5 shrink-0 transition-transform group-hover:scale-105" />
+                <span className="text-[9px] font-semibold tracking-tight uppercase leading-none">{label.split(' ')[0]}</span>
+              </button>
+            );
+          })}
           <div className="flex-1" />
           <button
             type="button"
             onClick={toggleCollapsed}
-            title={collapsed ? 'Show panel' : 'Hide panel'}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-colors"
+            title={collapsed ? 'Expand Drawer' : 'Collapse Drawer'}
+            className="w-10 h-10 flex items-center justify-center rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
           </button>
         </nav>
 
+        {/* Secondary Sliding Drawer Panel */}
         <div
-          className={`flex flex-col min-h-0 min-w-0 bg-white overflow-hidden transition-[width] duration-200 ease-out ${
-            collapsed ? 'w-0 border-0' : 'w-60 border-l border-gray-100'
+          className={`flex flex-col min-h-0 min-w-0 bg-white border-r border-slate-200 shadow-xl overflow-hidden transition-[width] duration-300 ease-in-out ${
+            collapsed ? 'w-0 border-0 opacity-0' : 'w-72 opacity-100'
           }`}
           aria-hidden={collapsed}
         >
-          <div className="px-3 py-3 border-b border-gray-100 shrink-0 flex items-start justify-between gap-2">
+          <div className="px-4 py-3.5 border-b border-slate-100 shrink-0 flex items-start justify-between gap-2 bg-slate-50/50">
             <div className="min-w-0">
-              <h2 className="text-xs font-bold text-gray-800 uppercase tracking-wider truncate">{activeTab?.label}</h2>
+              <h2 className="text-xs font-bold text-slate-800 uppercase tracking-wider truncate">{activeTab?.label}</h2>
               <p className="text-[11px] text-slate-400 mt-0.5 leading-snug line-clamp-2">{activeTab?.hint}</p>
             </div>
             <button
               type="button"
               onClick={toggleCollapsed}
-              title="Hide panel"
-              className="shrink-0 p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              title="Close panel"
+              className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>

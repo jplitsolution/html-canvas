@@ -3,8 +3,9 @@ import { EditorToolbar } from './EditorToolbar';
 import { EditorSidebar } from './EditorSidebar';
 import { PropertyPanelConnected } from './PropertyPanel';
 import { FunnelGuideBanner } from './FunnelGuideBanner';
+import { ContextualFormatBar } from './ContextualFormatBar';
 import { useEditor } from '../context/EditorContext';
-import { LayoutTemplate, Sparkles, PenTool } from 'lucide-react';
+import { LayoutTemplate, Sparkles, PenTool, Monitor, Smartphone, Tablet } from 'lucide-react';
 import { STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES } from '../templates/starterTemplates';
 import { applyStarterHtml, applyStarterTemplate } from '../utils/blockActions';
 import useStore from '../../store/useStore';
@@ -65,26 +66,25 @@ export function EditorShell({
   };
 
   const deviceFrameStyle = isMobile
-    ? { maxWidth: '375px', width: '375px' }
+    ? { width: '375px', maxWidth: '375px', height: '812px', minHeight: '812px' }
     : isTablet
-    ? { maxWidth: '768px', width: '768px' }
+    ? { width: '768px', maxWidth: '768px', height: '1024px', minHeight: '1024px' }
     : isCustom
     ? { 
-        maxWidth: '100%', 
-        width: customWidth ? `${customWidth}px` : '100%',
-        height: customHeight ? `${customHeight}px` : 'auto',
-        minHeight: customHeight ? `${customHeight}px` : '400px'
+        width: customWidth ? `${customWidth}px` : '1000px',
+        maxWidth: '100%',
+        height: customHeight ? `${customHeight}px` : '750px',
+        minHeight: customHeight ? `${customHeight}px` : '750px'
       }
-    : { width: '100%', maxWidth: '100%', minHeight: '720px' };
-
-  const scrollWrapperClass = isConstrained
-    ? 'flex-1 min-h-0 overflow-auto p-6 md:p-8 bg-dot-grid flex justify-center items-start'
-    : 'flex-1 min-h-0 overflow-auto p-6 md:p-8 bg-dot-grid';
+    : { width: '1200px', maxWidth: '100%', height: '750px', minHeight: '750px' };
 
   const quickTemplates = STARTER_TEMPLATES.slice(0, 3);
 
+  const deviceLabel = isMobile ? 'Mobile View (375 × 812)' : isTablet ? 'Tablet View (768 × 1024)' : isCustom ? `Custom (${customWidth || 1000} × ${customHeight || 750})` : 'Desktop View (1200 × 750)';
+  const DeviceIcon = isMobile ? Smartphone : isTablet ? Tablet : Monitor;
+
   return (
-    <div className="tc-builder flex flex-col h-full min-h-0 bg-bg-canvas">
+    <div className="tc-builder flex flex-col h-full min-h-0 bg-slate-50 text-slate-800">
       <EditorToolbar
         projectTitle={projectTitle}
         breadcrumbLabel={breadcrumbLabel}
@@ -98,97 +98,106 @@ export function EditorShell({
         onExportAll={onExportAll}
       />
 
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative overflow-hidden">
         <EditorSidebar />
 
-        <main className="tc-canvas-area flex-1 min-w-0 flex flex-col relative overflow-hidden">
+        <main className="tc-canvas-area flex-1 min-w-0 flex flex-col relative overflow-hidden bg-[#e2e8f0]">
           <FunnelGuideBanner pageType={funnelPageType} />
-          <div className={scrollWrapperClass} style={{ scrollBehavior: 'smooth' }}>
+
+          {/* Canva Contextual Format Bar */}
+          <ContextualFormatBar />
+
+          <div className="flex-1 min-h-0 overflow-auto p-6 md:p-10 flex flex-col items-center justify-start relative" style={{ scrollBehavior: 'smooth' }}>
+            {/* Artboard Frame Header Badge */}
+            <div className="mb-3 px-3.5 py-1 rounded-full bg-white border border-slate-300 text-[11px] font-semibold text-slate-700 flex items-center gap-2 shadow-sm shrink-0">
+              <DeviceIcon className="w-3.5 h-3.5 text-purple-600" />
+              <span>{deviceLabel}</span>
+            </div>
+
             <div
-              className="relative max-w-full"
+              className="relative w-full max-w-full flex justify-center"
               style={isCustom ? {
-                width: customWidth ? `${customWidth}px` : '100%',
+                width: customWidth ? `${customWidth}px` : '1000px',
                 maxWidth: '100%',
-                minHeight: customHeight ? `${customHeight}px` : '400px',
+                height: customHeight ? `${customHeight}px` : '750px',
               } : {}}
             >
-            <div
-              className={`tc-page-frame tc-drop-zone rounded-xl shadow-lg border bg-white relative ${
-                dragDebug.isOverCanvas ? 'tc-drop-zone--over' : ''
-              } ${dragDebug.isDragging ? 'tc-drop-zone--dragging' : ''}`}
-              style={{
-                ...deviceFrameStyle,
-                overflow: isCustom ? 'hidden' : 'visible',
-                transition: isCustom ? 'none' : 'max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-              }}
-            >
               <div
-                ref={canvasRef}
-                className="gjs-editor-host absolute inset-0"
+                className={`tc-page-frame tc-drop-zone rounded-2xl shadow-2xl shadow-black/50 border border-slate-700/60 bg-white relative overflow-hidden ${
+                  dragDebug.isOverCanvas ? 'tc-drop-zone--over' : ''
+                } ${dragDebug.isDragging ? 'tc-drop-zone--dragging' : ''}`}
                 style={{
-                  pointerEvents: 'auto',
-                  overflow: 'visible',
-                  borderRadius: 'inherit',
+                  ...deviceFrameStyle,
+                  transition: 'none',
                 }}
-              />
+              >
+                <div
+                  ref={canvasRef}
+                  className="gjs-editor-host absolute inset-0 w-full h-full"
+                  style={{
+                    pointerEvents: 'auto',
+                    overflow: 'hidden',
+                    borderRadius: 'inherit',
+                  }}
+                />
 
-              {isEmpty && !dragDebug.isDragging && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 z-10">
-                  <div className="p-4 rounded-2xl bg-accent-muted text-accent">
-                    <LayoutTemplate className="w-8 h-8" />
-                  </div>
-                  <div className="text-center max-w-md">
-                    <p className="text-base font-semibold text-fg">
-                      {funnelPageType ? `Start building your ${funnelPageType} page` : 'Start building your page'}
-                    </p>
-                    <p className="text-sm text-fg-muted mt-1">
-                      Choose to start with a ready-made template or create a custom layout from scratch.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-col gap-3 pointer-events-auto w-full max-w-lg mt-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {(() => {
-                        let templatesToUse = quickTemplates;
-                        if (funnelPageType === 'HOME') templatesToUse = HOME_STARTER_TEMPLATES.slice(0, 2);
-                        else if (funnelPageType === 'OTP') templatesToUse = OTP_STARTER_TEMPLATES.slice(0, 2);
-                        else if (funnelPageType === 'CONFIRM') templatesToUse = CONFIRM_STARTER_TEMPLATES.slice(0, 2);
-
-                        return templatesToUse.map((t) => (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() =>
-                              editor &&
-                              applyStarterTemplate(editor, t, {
-                                campaignId,
-                                updateCampaign,
-                              })
-                            }
-                            className="flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-lg border border-border bg-bg-elevated hover:border-accent hover:bg-accent-muted/50 transition-colors shadow-sm text-center"
-                          >
-                            <div className="flex items-center gap-1.5 font-medium text-fg text-sm">
-                              <Sparkles className="w-4 h-4 text-accent shrink-0" />
-                              Use {t.name}
-                            </div>
-                            <div className="text-xs text-fg-muted">Ready-made layout</div>
-                          </button>
-                        ));
-                      })()}
+                {isEmpty && !dragDebug.isDragging && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8 z-10 bg-slate-50/95 backdrop-blur-sm rounded-2xl">
+                    <div className="p-4 rounded-3xl bg-purple-100 text-purple-600 shadow-md">
+                      <LayoutTemplate className="w-8 h-8" />
                     </div>
-                    
-                    <button
-                      type="button"
-                      onClick={() => editor && applyStarterHtml(editor, '<div style="padding:40px;text-align:center;">Empty Custom Page</div>', '')}
-                      className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-border bg-transparent hover:border-fg hover:bg-bg-muted transition-colors text-sm font-medium text-fg"
-                    >
-                      <PenTool className="w-4 h-4 shrink-0" />
-                      Create Custom (Start from scratch)
-                    </button>
+                    <div className="text-center max-w-md">
+                      <p className="text-base font-bold text-slate-800">
+                        {funnelPageType ? `Start building your ${funnelPageType} page` : 'Start building your page'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Choose a ready-made Canva Studio template or start with a blank custom artboard.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col gap-3 pointer-events-auto w-full max-w-lg mt-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {(() => {
+                          let templatesToUse = quickTemplates;
+                          if (funnelPageType === 'HOME') templatesToUse = HOME_STARTER_TEMPLATES.slice(0, 2);
+                          else if (funnelPageType === 'OTP') templatesToUse = OTP_STARTER_TEMPLATES.slice(0, 2);
+                          else if (funnelPageType === 'CONFIRM') templatesToUse = CONFIRM_STARTER_TEMPLATES.slice(0, 2);
+
+                          return templatesToUse.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() =>
+                                editor &&
+                                applyStarterTemplate(editor, t, {
+                                  campaignId,
+                                  updateCampaign,
+                                })
+                              }
+                              className="flex flex-col items-center justify-center gap-1 px-4 py-3 rounded-2xl border border-slate-200 bg-white hover:border-purple-500 hover:bg-purple-50/50 transition-all shadow-sm text-center group"
+                            >
+                              <div className="flex items-center gap-1.5 font-bold text-slate-800 text-xs group-hover:text-purple-700">
+                                <Sparkles className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                                Use {t.name}
+                              </div>
+                              <div className="text-[10px] text-slate-400">Ready-made layout</div>
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={() => editor && applyStarterHtml(editor, '<div style="padding:40px;text-align:center;">Empty Custom Page</div>', '')}
+                        className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl border border-dashed border-slate-300 bg-white hover:border-slate-500 hover:bg-slate-100/50 transition-all text-xs font-bold text-slate-700"
+                      >
+                        <PenTool className="w-4 h-4 shrink-0 text-slate-500" />
+                        Create Custom (Start from scratch)
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
 
               {isCustom && (
                 <>
@@ -223,3 +232,4 @@ export function EditorShell({
 }
 
 export default EditorShell;
+
