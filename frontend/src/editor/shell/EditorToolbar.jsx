@@ -12,6 +12,10 @@ import {
   Download,
   ChevronDown,
   Maximize,
+  Sparkles,
+  Home,
+  CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -53,211 +57,220 @@ export function EditorToolbar({
 
   const devices = [
     { id: 'Desktop', icon: Monitor, label: 'Desktop' },
-    { id: 'Tablet', icon: Tablet, label: 'Tablet' },
     { id: 'Mobile', icon: Smartphone, label: 'Phone' },
+    { id: 'Tablet', icon: Tablet, label: 'Tablet' },
     { id: 'Custom', icon: Maximize, label: 'Custom' },
   ];
 
-  const saveStatus = saving ? 'Saving…' : isDirty ? 'Unsaved' : 'Saved';
-  const saveStatusTitle = saving
-    ? 'Saving your page...'
-    : isDirty
-    ? 'You have unsaved changes'
-    : 'All changes saved';
-
   return (
-    <header className="tc-toolbar shrink-0 h-12 flex items-center gap-1.5 px-2 sm:px-3 border-b border-border bg-bg-elevated/95 backdrop-blur-sm overflow-hidden">
-      {breadcrumbHref ? (
+    <header className="tc-toolbar shrink-0 h-14 flex items-center justify-between gap-3 px-4 bg-white text-slate-800 border-b border-slate-200 shadow-sm relative z-30 select-none">
+      {/* Left Section: Back, Studio Brand & Project Name */}
+      <div className="flex items-center gap-3 min-w-0">
         <Link
-          to={breadcrumbHref}
-          className="inline-flex items-center gap-1.5 p-1.5 rounded-lg text-sm text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors shrink-0 max-w-[120px] lg:max-w-[180px]"
-          title="Back to campaign"
-        >
-          <ArrowLeft className="w-4 h-4 shrink-0" />
-          <span className="truncate hidden md:inline text-xs">{breadcrumbLabel}</span>
-        </Link>
-      ) : (
-        <Link
-          to="/markets"
-          className="p-1.5 rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors shrink-0"
-          title="Back to markets"
+          to={breadcrumbHref || "/markets"}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all text-xs font-semibold shrink-0"
+          title="Back"
         >
           <ArrowLeft className="w-4 h-4" />
+          <Home className="w-3.5 h-3.5 hidden sm:inline" />
         </Link>
-      )}
 
-      <div className="h-5 w-px bg-border shrink-0 hidden sm:block" />
+        <div className="h-5 w-px bg-slate-200 shrink-0" />
 
-      <div className="min-w-0 max-w-[140px] lg:max-w-[200px] shrink overflow-hidden">
-        <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-sm font-semibold text-fg truncate">{projectTitle}</h1>
-          <span
-            className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
-              saving
-                ? 'bg-amber-50 text-amber-700'
-                : isDirty
-                ? 'bg-amber-50 text-amber-700'
-                : 'bg-emerald-50 text-emerald-700'
-            }`}
-            title={saveStatusTitle}
-          >
-            {saveStatus}
-          </span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-purple-500/20 shrink-0">
+            <Sparkles className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-sm font-bold text-slate-800 truncate tracking-tight">{projectTitle || 'Untitled Studio Project'}</h1>
+              <span
+                className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                  saving
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300 animate-pulse'
+                    : isDirty
+                    ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                    : 'bg-emerald-100 text-emerald-700 border border-emerald-300'
+                }`}
+              >
+                {saving ? (
+                  <>
+                    <Clock className="w-2.5 h-2.5" /> Saving…
+                  </>
+                ) : isDirty ? (
+                  'Unsaved'
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-2.5 h-2.5" /> Saved
+                  </>
+                )}
+              </span>
+            </div>
+            <span className="text-[10px] text-slate-500 font-medium">Canva Studio Funnel Editor</span>
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 min-w-2" />
+      {/* Center Section: Device Switcher & Zoom Controls */}
+      <div className="hidden lg:flex items-center gap-3">
+        {/* Device Switcher Pills */}
+        <div className="flex items-center gap-1.5">
+          {devices.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                if (switchDevice) switchDevice(id);
+                else {
+                  editor?.setDevice(id);
+                  setDevice(id);
+                }
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
+                device === id
+                  ? 'bg-indigo-50/80 border-2 border-indigo-600 text-indigo-700 shadow-sm font-bold'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              <span>{label}</span>
+            </button>
+          ))}
 
-      <div className="hidden md:flex items-center gap-0.5 p-1 rounded-xl bg-gray-100/80 border border-gray-200/50 shadow-inner shrink-0" title="Desktop and Phone save separate HTML">
-        {devices.map(({ id, icon: Icon, label }) => (
+          {device === 'Custom' && (
+            <div className="flex items-center gap-1 ml-1 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-sm">
+              <input
+                type="number"
+                value={customWidth}
+                onChange={(e) => setCustomWidth(e.target.value)}
+                className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
+                placeholder="W"
+                title="Width (px)"
+              />
+              <span className="text-slate-400 text-xs">×</span>
+              <input
+                type="number"
+                value={customHeight}
+                onChange={(e) => setCustomHeight(e.target.value)}
+                className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
+                placeholder="H"
+                title="Height (px)"
+              />
+            </div>
+          )}
+        </div>
+
+        {/* Zoom Control */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-white border border-slate-200 shadow-sm">
           <button
-            key={id}
             type="button"
-            title={
-              id === 'Mobile'
-                ? 'Phone layout (separate HTML). Save after you edit it.'
-                : id === 'Desktop' || id === 'Custom' || id === 'Tablet'
-                  ? 'Desktop layout (Phone is saved separately)'
-                  : label
-            }
-            onClick={() => {
-              if (switchDevice) switchDevice(id)
-              else {
-                editor?.setDevice(id)
-                setDevice(id)
-              }
-            }}
-            className={`px-2 lg:px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
-              device === id 
-                ? 'bg-white text-indigo-600 shadow-xs border border-gray-200/40 font-bold scale-[1.02]' 
-                : 'text-gray-500 hover:text-gray-900 hover:bg-white/40'
-            }`}
+            onClick={() => handleZoom(-10)}
+            className="p-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            title="Zoom out"
           >
-            <Icon className="w-3.5 h-3.5" />
-            <span className="hidden xl:inline">{label}</span>
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
-        ))}
-        
-        {device === 'Custom' && (
-          <div className="flex items-center gap-1 ml-2 mr-1">
-            <input 
-              type="number" 
-              value={customWidth} 
-              onChange={(e) => setCustomWidth(e.target.value)} 
-              className="w-16 px-2 py-1 text-xs rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-white text-center" 
-              placeholder="W" 
-              title="Width (px)"
-            />
-            <span className="text-gray-400 text-xs">x</span>
-            <input 
-              type="number" 
-              value={customHeight} 
-              onChange={(e) => setCustomHeight(e.target.value)} 
-              className="w-16 px-2 py-1 text-xs rounded border border-gray-300 focus:outline-none focus:border-indigo-500 bg-white text-center" 
-              placeholder="H" 
-              title="Height (px)"
-            />
-          </div>
-        )}
-        <span
-          className="hidden xl:inline ml-1 mr-1 text-[10px] font-bold text-indigo-600 whitespace-nowrap"
-          title="Desktop and Phone each have their own saved HTML"
-        >
-          {device === 'Mobile' ? 'Phone HTML' : 'Desktop HTML'}
-        </span>
+          <span className="text-xs font-semibold text-slate-700 w-9 text-center font-mono">{zoom}%</span>
+          <button
+            type="button"
+            onClick={() => handleZoom(10)}
+            className="p-1 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
 
-      <div className="hidden xl:flex items-center gap-1 p-1 rounded-xl bg-gray-50 border border-gray-200/60 shadow-2xs shrink-0">
-        <button type="button" onClick={() => handleZoom(-10)} className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Zoom out">
-          <ZoomOut className="w-3.5 h-3.5" />
-        </button>
-        <span className="text-xs font-semibold text-gray-600 w-10 text-center font-mono">{zoom}%</span>
-        <button type="button" onClick={() => handleZoom(10)} className="p-1 rounded-md text-gray-500 hover:text-gray-900 hover:bg-gray-100" title="Zoom in">
-          <ZoomIn className="w-3.5 h-3.5" />
-        </button>
-      </div>
+      {/* Right Section: Undo/Redo, Export, Save, Save & Preview CTA */}
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-0.5 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => editor?.UndoManager.undo()}
+            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            title="Undo"
+          >
+            <Undo2 className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => editor?.UndoManager.redo()}
+            className="p-1.5 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors"
+            title="Redo"
+          >
+            <Redo2 className="w-4 h-4" />
+          </button>
+        </div>
 
-      <div className="h-5 w-px bg-gray-200 shrink-0 hidden sm:block" />
-
-      <div className="flex items-center gap-0.5 shrink-0">
-        <button type="button" onClick={() => editor?.UndoManager.undo()} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors" title="Undo">
-          <Undo2 className="w-4 h-4" />
-        </button>
-        <button type="button" onClick={() => editor?.UndoManager.redo()} className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-50 transition-colors" title="Redo">
-          <Redo2 className="w-4 h-4" />
-        </button>
-      </div>
-
-      <button
-        type="button"
-        onClick={onPreview}
-        className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-700 border border-gray-200 bg-white hover:bg-gray-50 shrink-0 transition-all duration-200"
-        title="See how your page looks"
-      >
-        <Eye className="w-3.5 h-3.5 text-gray-500" />
-        <span className="hidden lg:inline">Preview</span>
-      </button>
-
-      <div className="relative hidden sm:block shrink-0" ref={exportRef}>
         <button
           type="button"
-          onClick={() => setExportOpen((v) => !v)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-700 border border-gray-200 bg-white hover:bg-gray-50 transition-all duration-200"
-          title="Download HTML file"
+          onClick={onPreview}
+          className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"
         >
-          <Download className="w-3.5 h-3.5 text-gray-500" />
-          <span className="hidden lg:inline">Export</span>
-          <ChevronDown className="w-3 h-3 opacity-60" />
+          <Eye className="w-3.5 h-3.5 text-slate-500" />
+          <span>Preview</span>
         </button>
-        {exportOpen && (
-          <div className="absolute right-0 top-full mt-1.5 z-50 min-w-[200px] py-1.5 rounded-xl border border-gray-100 bg-white shadow-lg overflow-hidden animate-in fade-in slide-in-from-top-1 duration-150">
-            <button
-              type="button"
-              className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-              onClick={() => {
-                setExportOpen(false);
-                onExportCurrent();
-              }}
-            >
-              This page (.html)
-            </button>
-            <button
-              type="button"
-              className="w-full text-left px-4 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-              onClick={() => {
-                setExportOpen(false);
-                onExportAll();
-              }}
-            >
-              All pages (.zip)
-            </button>
-          </div>
-        )}
+
+        <div className="relative hidden sm:block" ref={exportRef}>
+          <button
+            type="button"
+            onClick={() => setExportOpen((v) => !v)}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Export</span>
+            <ChevronDown className="w-3 h-3 opacity-60" />
+          </button>
+          {exportOpen && (
+            <div className="absolute right-0 top-full mt-2 z-50 min-w-[200px] py-2 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
+              <button
+                type="button"
+                className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                onClick={() => {
+                  setExportOpen(false);
+                  onExportCurrent();
+                }}
+              >
+                Current page (.html)
+              </button>
+              <button
+                type="button"
+                className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
+                onClick={() => {
+                  setExportOpen(false);
+                  onExportAll();
+                }}
+              >
+                All pages (.zip)
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm disabled:opacity-50"
+        >
+          <Save className="w-3.5 h-3.5 text-slate-500" />
+          <span className="hidden sm:inline">Save</span>
+        </button>
+
+        {/* Canva Signature Indigo CTA */}
+        <button
+          type="button"
+          onClick={onPublish}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm border border-indigo-600 transition-all active:scale-[0.98]"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span>Save &amp; preview</span>
+        </button>
       </div>
-
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={saving}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-700 border border-gray-200 bg-white hover:bg-gray-50 shrink-0 transition-all duration-200 disabled:opacity-50"
-        title="Save your work"
-      >
-        <Save className="w-3.5 h-3.5 text-gray-500" />
-        <span className="hidden sm:inline">Save</span>
-      </button>
-
-      <button
-        type="button"
-        onClick={onPublish}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 shadow-sm border border-indigo-700/25 shrink-0 transition-all duration-200"
-        title="Save and open preview"
-      >
-        <Eye className="w-3.5 h-3.5" />
-        <span className="hidden lg:inline">Save &amp; preview</span>
-        <span className="lg:hidden hidden sm:inline">Publish</span>
-      </button>
     </header>
   );
 }
 
 export default EditorToolbar;
+

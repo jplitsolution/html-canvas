@@ -131,9 +131,9 @@ function stripAbsoluteStyleAttribute(component) {
 /** Prefer an explicit resized width; default full-bleed CTA stays 100%. */
 function resolveFlowButtonWidth(style = {}, el = null) {
   const raw = String(style.width || '').trim()
-  if (!raw || raw === 'auto' || /^100(\.0+)?%$/.test(raw)) return '100%'
+  if (!raw || raw === 'auto') return 'auto'
+  if (/^100(\.0+)?%$/.test(raw)) return '100%'
 
-  // Grapes may leave a % width after drag; commit to px so further shrink/grow is stable.
   const px = parsePx(raw)
   if (px != null && String(raw).includes('%') && el && el.offsetWidth > 0) {
     return `${Math.max(MIN_BTN_WIDTH, Math.round(el.offsetWidth))}px`

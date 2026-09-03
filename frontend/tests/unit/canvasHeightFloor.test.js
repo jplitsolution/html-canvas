@@ -21,7 +21,7 @@ describe('resolveStableCanvasHeight — fixed canvas on remove', () => {
   })
 
   it('allows shrink when explicitly requested (page/device change)', () => {
-    expect(resolveStableCanvasHeight(500, 1600, { allowShrink: true })).toBe(DEFAULT_CANVAS_MIN_HEIGHT)
+    expect(resolveStableCanvasHeight(200, 1600, { allowShrink: true })).toBe(DEFAULT_CANVAS_MIN_HEIGHT)
     expect(resolveStableCanvasHeight(900, 1600, { allowShrink: true })).toBe(900)
   })
 })

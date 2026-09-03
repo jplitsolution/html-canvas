@@ -52,7 +52,7 @@ describe('wasIntentionallyAbsolute / keepFlowButtonInFlow (canvas drag)', () => 
     expect(cmp.setStyle).toHaveBeenCalled()
     const next = cmp.setStyle.mock.calls[0][0]
     expect(next.position).toBe('relative')
-    expect(next.width).toBe('100%')
+    expect(next.width).toBe('auto')
   })
 
   it('still heals in-flow SUBSCRIBE buttons without absolute placement', () => {

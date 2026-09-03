@@ -434,17 +434,53 @@ export default function TemplateEditor({
     let lastDragEvent = null
     let isDraggingBlock = false
 
+    const handleDragMove = (e) => {
+      if (!isDraggingBlock) return
+      const clientX = e.clientX ?? e.touches?.[0]?.clientX
+      const clientY = e.clientY ?? e.touches?.[0]?.clientY
+      if (clientX != null && clientY != null) {
+        lastDragEvent = { clientX, clientY }
+      }
+    }
+
+    const attachFrameDragListeners = () => {
+      try {
+        const frameEl = ed.Canvas?.getFrameEl?.()
+        const frameDoc = frameEl?.contentDocument
+        if (!frameDoc || frameDoc.__tcDragTrackAttached) return
+        frameDoc.__tcDragTrackAttached = true
+
+        const onFrameMove = (e) => {
+          if (!isDraggingBlock) return
+          const fr = frameEl.getBoundingClientRect()
+          const zoom = (ed.Canvas?.getZoom?.() || 100) / 100
+          lastDragEvent = {
+            clientX: fr.left + e.clientX * zoom,
+            clientY: fr.top + e.clientY * zoom,
+          }
+        }
+        frameDoc.addEventListener('mousemove', onFrameMove, true)
+        frameDoc.addEventListener('pointermove', onFrameMove, true)
+      } catch (_) {
+        /* noop */
+      }
+    }
+
     ed.on('block:drag:start', () => {
       isDraggingBlock = true
+      attachFrameDragListeners()
+      window.addEventListener('mousemove', handleDragMove, true)
+      window.addEventListener('pointermove', handleDragMove, true)
     })
 
     ed.on('block:drag:stop', () => {
       isDraggingBlock = false
-      lastDragEvent = null
+      window.removeEventListener('mousemove', handleDragMove, true)
+      window.removeEventListener('pointermove', handleDragMove, true)
     })
 
     ed.on('canvas:dragover', (e) => {
-      lastDragEvent = e
+      if (e && e.clientX !== undefined) lastDragEvent = e
     })
 
     ed.on('component:add', (component) => {
@@ -547,49 +583,88 @@ export default function TemplateEditor({
         const isButton = isButtonLikeComponent(component) || isFlowLayoutButton(component)
         const parent = component.parent()
 
-        // Absolute placement ONLY for real user drops / click-add onto images.
-        // Never run on setComponents (starter templates) — that was stacking every
-        // text/div as absolute and breaking layout + editability.
         if (parent && isDraggingBlock && lastDragEvent && lastDragEvent.clientX !== undefined) {
           const parentEl = parent.getEl ? parent.getEl() : null
-          if (parentEl) {
-            const rect = parentEl.getBoundingClientRect()
-            const topPct = ((lastDragEvent.clientY - rect.top) / rect.height) * 100
-            const leftPct = ((lastDragEvent.clientX - rect.left) / rect.width) * 100
-            const droppedOnImage = dropPointHitsImage(
-              parentEl,
-              lastDragEvent.clientX,
-              lastDragEvent.clientY
-            )
+          const frameEl = ed.Canvas?.getFrameEl?.()
+          const frameDoc = frameEl?.contentDocument
+          const frameRect = frameEl ? frameEl.getBoundingClientRect() : null
+          const zoom = (ed.Canvas?.getZoom?.() || 100) / 100
 
-            if (isFlowLayoutButton(component) && !droppedOnImage) {
-              // In-card CTA stays in document flow
-            } else if (isButton && droppedOnImage) {
-              markAsAbsoluteOverlay(component, {
-                top: `${Math.max(0, Math.min(95, topPct)).toFixed(2)}%`,
-                left: `${Math.max(0, Math.min(95, leftPct)).toFixed(2)}%`,
+          let iframeX = lastDragEvent.clientX
+          let iframeY = lastDragEvent.clientY
+          if (frameRect) {
+            iframeX = (lastDragEvent.clientX - frameRect.left) / zoom
+            iframeY = (lastDragEvent.clientY - frameRect.top) / zoom
+          }
+
+          let droppedOnImage = false
+          if (frameDoc && frameDoc.elementsFromPoint) {
+            const hitElements = frameDoc.elementsFromPoint(iframeX, iframeY) || []
+            droppedOnImage = hitElements.some(
+              (el) =>
+                el.tagName === 'IMG' ||
+                el.getAttribute?.('data-tc-type') === 'image-banner' ||
+                el.closest?.('[data-tc-type="image-banner"]')
+            )
+          }
+          if (!droppedOnImage && parentEl) {
+            droppedOnImage = dropPointHitsImage(parentEl, lastDragEvent.clientX, lastDragEvent.clientY)
+          }
+
+          if (parentEl && (droppedOnImage || isImageComponent(parent))) {
+            const rect = parentEl.getBoundingClientRect()
+            const topPct = Math.max(0, Math.min(95, ((lastDragEvent.clientY - rect.top) / rect.height) * 100))
+            const leftPct = Math.max(0, Math.min(95, ((lastDragEvent.clientX - rect.left) / rect.width) * 100))
+
+            markAsAbsoluteOverlay(component, {
+              top: `${topPct.toFixed(2)}%`,
+              left: `${leftPct.toFixed(2)}%`,
+              'z-index': '40',
+            })
+          } else if (parent && parent.components) {
+            // Target insertion at closest child Y position within the container
+            const kids = parent.components().models || []
+            if (kids.length > 1) {
+              let closestChild = null
+              let minDiff = Infinity
+              let insertAfter = true
+
+              kids.forEach((childCmp) => {
+                if (childCmp === component) return
+                const childEl = childCmp.getEl ? childCmp.getEl() : null
+                if (!childEl || typeof childEl.getBoundingClientRect !== 'function') return
+                const cRect = childEl.getBoundingClientRect()
+                const childMidY = cRect.top + cRect.height / 2
+                const diff = Math.abs(iframeY - childMidY)
+                if (diff < minDiff) {
+                  minDiff = diff
+                  closestChild = childCmp
+                  insertAfter = iframeY >= childMidY
+                }
               })
-            } else if (droppedOnImage) {
-              const pStyle = parent.getStyle() || {}
-              if (!['absolute', 'relative', 'fixed'].includes(String(pStyle.position || ''))) {
-                parent.addStyle({ position: 'relative' })
+
+              if (closestChild && typeof closestChild.index === 'function') {
+                const targetIdx = closestChild.index() + (insertAfter ? 1 : 0)
+                const currentIdx = component.index()
+                if (targetIdx !== currentIdx && targetIdx >= 0) {
+                  parent.components().remove(component, { temporary: true })
+                  parent.components().add(component, { at: Math.min(targetIdx, parent.components().length) })
+                }
               }
-              component.addStyle({
-                position: 'absolute',
-                top: `${Math.max(0, Math.min(95, topPct)).toFixed(2)}%`,
-                left: `${Math.max(0, Math.min(95, leftPct)).toFixed(2)}%`,
-                margin: '0',
-              })
             }
           }
-        } else if (
-          parent &&
-          isButton &&
-          !isFlowLayoutButton(component) &&
-          isImageComponent(parent)
-        ) {
-          // Sidebar click-add of a freeform button into an image/banner wrapper
-          markAsAbsoluteOverlay(component, { top: '40%', left: '25%' })
+        } else if (parent && isImageComponent(parent)) {
+          // Click-add into an image/banner wrapper -> overlay with z-index 40
+          markAsAbsoluteOverlay(component, { top: '40%', left: '25%', 'z-index': '40' })
+        }
+
+        // Ensure non-overlay components near images have z-index 10 so they don't fall behind z-index 1 images
+        const currentStyle = component.getStyle() || {}
+        if (!currentStyle['z-index'] && currentStyle.position !== 'absolute') {
+          const pTc = parent?.getAttributes?.()?.['data-tc-type']
+          if (pTc === 'image-banner' || isImageComponent(parent)) {
+            component.addStyle({ position: 'relative', 'z-index': '10' })
+          }
         }
 
         // In-card funnel CTAs stay in flow; overlays on images do not
@@ -607,7 +682,6 @@ export default function TemplateEditor({
           component.set('resizable', HOTSPOT_RESIZABLE)
           freezeHotspotToPixels(component)
         } else {
-          // Sections / blocks / divs — corner+edge handles (min-height in flow)
           configureBlockResizable(component)
         }
       }, 50)

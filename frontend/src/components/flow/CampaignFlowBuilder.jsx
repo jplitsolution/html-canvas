@@ -111,6 +111,7 @@ function CampaignFlowBuilder({
   countryCode,
   operatorCode,
   embedded = false,
+  embeddedStudio = false,
 }) {
   const navigate = useNavigate()
   const addToast = useStore((s) => s.addToast)
@@ -552,7 +553,7 @@ function CampaignFlowBuilder({
     return node ? node.data.label : nodeId
   }
 
-  const canvasHeight = embedded ? '56vh' : '72vh'
+  const canvasHeight = embeddedStudio ? '480px' : embedded ? '500px' : '520px'
   const showApiExpose = (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') && isApiExposeEntry(entryPage)
 
   return (

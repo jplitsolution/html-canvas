@@ -184,7 +184,7 @@ export function autoAlignCanvasComponents(editor, deviceName) {
 let heightSyncTimer = null
 
 /** Baseline floor so an empty/short page does not collapse the editor frame. */
-export const DEFAULT_CANVAS_MIN_HEIGHT = 720
+export const DEFAULT_CANVAS_MIN_HEIGHT = 400
 
 /** Per page+device high-water mark — delete/remove must not shrink the canvas. */
 const canvasHeightFloorByKey = new Map()
@@ -226,13 +226,54 @@ export function resetCanvasHeightFloor(editor) {
   canvasHeightFloorByKey.delete(getCanvasHeightFloorKey(editor))
 }
 
+function getRealContentHeight(doc, wrapperEl) {
+  if (!doc) return 0
+  
+  // Temporarily clear inline min-heights so offsetHeight reflects real content height
+  const prevWrapperMin = wrapperEl?.style?.minHeight
+  const prevBodyMin = doc.body?.style?.minHeight
+  if (wrapperEl) wrapperEl.style.minHeight = ''
+  if (doc.body) doc.body.style.minHeight = ''
+
+  let maxBottom = 0
+
+  if (wrapperEl && wrapperEl.children && wrapperEl.children.length > 0) {
+    const children = Array.from(wrapperEl.children)
+    children.forEach((child) => {
+      const top = child.offsetTop || 0
+      const height = child.offsetHeight || child.scrollHeight || 0
+      const bottom = top + height
+      if (bottom > maxBottom) {
+        maxBottom = bottom
+      }
+    })
+  }
+
+  if (maxBottom === 0 && doc.body && doc.body.children) {
+    const bodyChildren = Array.from(doc.body.children)
+    bodyChildren.forEach((child) => {
+      if (child.tagName === 'SCRIPT' || child.tagName === 'STYLE' || child.classList?.contains('gjs-css-rules')) return
+      const top = child.offsetTop || 0
+      const height = child.offsetHeight || child.scrollHeight || 0
+      const bottom = top + height
+      if (bottom > maxBottom) {
+        maxBottom = bottom
+      }
+    })
+  }
+
+  // Restore inline minHeights
+  if (wrapperEl && prevWrapperMin != null) wrapperEl.style.minHeight = prevWrapperMin
+  if (doc.body && prevBodyMin != null) doc.body.style.minHeight = prevBodyMin
+
+  return Math.max(maxBottom, 250)
+}
+
 /**
  * Standard canvas height sync.
- * Grows with content; keeps a high-water floor so removals do not collapse the page frame.
- * Pass `{ allowShrink: true }` after page/device changes to re-measure from content.
+ * Desktop: Fits container viewport when content fits, grows when extra elements overflow.
  */
 export function syncCanvasFrameHeight(editor, options = {}) {
-  const { allowShrink = false } = options
   if (heightSyncTimer) clearTimeout(heightSyncTimer)
   heightSyncTimer = setTimeout(() => {
     heightSyncTimer = null
@@ -243,88 +284,46 @@ export function syncCanvasFrameHeight(editor, options = {}) {
 
       const wrapperEl = doc.querySelector('[data-gjs-type="wrapper"]')
 
-      // Temporarily clear inline min-heights so scrollHeight reflects real content
-      // (otherwise the floor itself would inflate naturalH forever via circular growth).
-      const prevWrapperMin = wrapperEl?.style?.minHeight
-      const prevBodyMin = doc.body.style.minHeight
-      const prevHtmlMin = doc.documentElement?.style?.minHeight
-      if (wrapperEl) wrapperEl.style.minHeight = ''
-      doc.body.style.minHeight = ''
-      if (doc.documentElement) doc.documentElement.style.minHeight = ''
+      // Keep iframe height strictly bound to parent artboard container (no dynamic height jumping on click)
+      frameEl.style.height = '100%'
+      frameEl.style.minHeight = '100%'
 
-      const naturalH = Math.max(
-        wrapperEl?.scrollHeight ?? 0,
-        doc.body.scrollHeight,
-        doc.documentElement.scrollHeight,
-        DEFAULT_CANVAS_MIN_HEIGHT,
-      )
-
-      if (wrapperEl && prevWrapperMin != null) wrapperEl.style.minHeight = prevWrapperMin
-      doc.body.style.minHeight = prevBodyMin
-      if (doc.documentElement && prevHtmlMin != null) {
-        doc.documentElement.style.minHeight = prevHtmlMin
+      if (wrapperEl) {
+        wrapperEl.style.minHeight = '100%'
+        wrapperEl.style.background = '#ffffff'
       }
-
-      const pageFrame = document.querySelector('.tc-page-frame')
-      const isFixedHeight = !!(pageFrame?.style.height && pageFrame.style.height !== 'auto')
-
-      if (isFixedHeight) {
-        frameEl.style.height = '100%'
-        frameEl.style.minHeight = '100%'
-        // Still lock wrapper/body so absolute overlays keep a stable containing block.
-        const fixedFloor = Math.max(
-          pageFrame?.offsetHeight || 0,
-          parseInt(pageFrame?.style.height, 10) || 0,
-          DEFAULT_CANVAS_MIN_HEIGHT,
-        )
-        if (wrapperEl) wrapperEl.style.minHeight = `${fixedFloor}px`
-        doc.body.style.minHeight = `${fixedFloor}px`
-        return
-      }
-
-      const key = getCanvasHeightFloorKey(editor)
-      if (allowShrink) canvasHeightFloorByKey.delete(key)
-      const prevFloor = canvasHeightFloorByKey.get(key) || 0
-      const stableH = resolveStableCanvasHeight(naturalH, prevFloor, { allowShrink })
-      canvasHeightFloorByKey.set(key, stableH)
-
-      const h = stableH + 2
-      frameEl.style.height = `${h}px`
-      frameEl.style.minHeight = `${h}px`
-
-      // Prefer min-height on page/body/wrapper so layout stays fixed when nodes are deleted.
-      if (wrapperEl) wrapperEl.style.minHeight = `${stableH}px`
-      doc.body.style.minHeight = `${stableH}px`
+      doc.body.style.minHeight = '100%'
+      doc.body.style.background = '#ffffff'
       if (doc.documentElement) {
-        doc.documentElement.style.minHeight = `${stableH}px`
-      }
-
-      if (pageFrame) {
-        pageFrame.style.minHeight = `${Math.max(h, 400)}px`
-        const outerWrapper = pageFrame.parentElement
-        if (outerWrapper && outerWrapper !== document.body) {
-          outerWrapper.style.minHeight = ''
-        }
+        doc.documentElement.style.minHeight = '100%'
+        doc.documentElement.style.background = '#ffffff'
       }
 
       const frameWrapper = frameEl.parentElement
       const cvCanvas = frameWrapper?.parentElement
       if (cvCanvas) {
-        cvCanvas.style.height = ''
+        cvCanvas.style.height = '100%'
         cvCanvas.style.top = '0px'
       }
-      if (frameWrapper) frameWrapper.style.top = '0px'
+      if (frameWrapper) {
+        frameWrapper.style.height = '100%'
+        frameWrapper.style.top = '0px'
+      }
     })
-  }, 80)
+  }, 50)
 }
 
 export function setupCanvasEnhancements(editor, onEmptyChange) {
   let alive = true
+  let emptyNotifierTimer = null
 
   const checkEmpty = () => {
-    setTimeout(() => {
-      if (!alive || !editor?.Pages?.getSelected()) return
-      const wrapper = safeGetWrapper(editor)
+    if (!alive) return
+    if (emptyNotifierTimer) clearTimeout(emptyNotifierTimer)
+    emptyNotifierTimer = setTimeout(() => {
+      emptyNotifierTimer = null
+      if (!alive) return
+      const wrapper = editor.getWrapper()
       const count = wrapper?.components().length || 0
       onEmptyChange?.(count === 0)
     }, 0)
@@ -346,11 +345,13 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
       doc.head.appendChild(canvasStyles)
     }
     canvasStyles.textContent = `
-        html, body { scroll-behavior: smooth !important; min-height: 100%; }
-        body { margin: 0; background: #f4f6fb; box-sizing: border-box; }
-        /* Keep page area from collapsing when components are deleted */
+        html, body { scroll-behavior: smooth !important; height: 100% !important; min-height: 100% !important; background: #ffffff !important; margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #ffffff !important; box-sizing: border-box; }
+        /* Single unified white canvas screen */
         [data-gjs-type="wrapper"] {
-          min-height: ${DEFAULT_CANVAS_MIN_HEIGHT}px;
+          min-height: 100% !important;
+          height: 100% !important;
+          background: #ffffff !important;
           box-sizing: border-box;
           position: relative;
         }
@@ -405,13 +406,18 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
 
   const syncHeightIfIdle = () => {
     if (isLiveDrag()) return
-    // Removals/updates must not shrink — only grow with content.
-    syncCanvasFrameHeight(editor)
+    syncCanvasFrameHeight(editor, { allowShrink: true })
   }
 
   editor.on('component:add', syncHeightIfIdle)
   editor.on('component:remove', syncHeightIfIdle)
   editor.on('component:update', syncHeightIfIdle)
+
+  const handleWindowResize = () => {
+    if (!alive) return
+    syncCanvasFrameHeight(editor, { allowShrink: true })
+  }
+  window.addEventListener('resize', handleWindowResize)
 
   editor.on('page:select', () => {
     // New page → re-measure from its content (allow shrink relative to previous page).
@@ -613,6 +619,7 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
 
   return () => {
     alive = false
+    window.removeEventListener('resize', handleWindowResize)
   }
 }
 

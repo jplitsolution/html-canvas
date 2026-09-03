@@ -40,6 +40,15 @@ export function setupTextEditing(editor, onContentChange) {
     placer?.classList.remove('tc-placer-active');
   });
 
+  editor.on('component:doubleclick', (component) => {
+    if (!component) return;
+    try {
+      configureAsTextComponent(component);
+      component.set('editable', true);
+      editor.runCommand('core:rte');
+    } catch (_) {}
+  });
+
   editor.on('component:update:content', notify);
   editor.on('rte:disable', notify);
   editor.on('component:update', (component) => {

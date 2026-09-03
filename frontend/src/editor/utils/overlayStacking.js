@@ -1155,6 +1155,14 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
     object-fit: contain;
     display: block;
     max-width: 100%;
+    position: relative;
+    z-index: ${Z_IMAGE};
+  }
+
+  /* Any non-image child inside image-banner paints above the image */
+  [data-tc-type="image-banner"] > *:not(img) {
+    position: relative;
+    z-index: 10;
   }
 
   img,
@@ -1165,9 +1173,11 @@ export const OVERLAY_STACKING_CANVAS_CSS = `
 
   /* Freeform absolute controls always above images */
   [data-tc-absolute="1"] {
+    position: absolute;
     z-index: ${Z_OVERLAY};
   }
   [data-tc-type="hotspot"] {
+    position: absolute;
     z-index: ${Z_HOTSPOT};
     pointer-events: auto;
     cursor: grab;
@@ -1221,6 +1231,13 @@ export const OVERLAY_STACKING_CSS = `
     object-fit: contain;
     display: block;
     max-width: 100%;
+    position: relative !important;
+    z-index: ${Z_IMAGE} !important;
+  }
+
+  [data-tc-type="image-banner"] > *:not(img) {
+    position: relative !important;
+    z-index: 10 !important;
   }
 
   img,
