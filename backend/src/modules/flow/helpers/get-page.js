@@ -135,7 +135,7 @@ export function createGetPage(deps) {
         campaignId: campaign.id,
       };
 
-      resolvedPageType = await flow.guardConfirmThankYou({
+      const guarded = await flow.guardConfirmThankYou({
         resolvedPageType,
         isVerified,
         hasPhone,
@@ -147,6 +147,10 @@ export function createGetPage(deps) {
         isPacksOnHome: isPacksOnHome(campaign),
         pageTypeForSubscriptionStatus,
       });
+      resolvedPageType =
+        typeof guarded === 'object' && guarded?.resolvedPageType
+          ? guarded.resolvedPageType
+          : guarded || resolvedPageType;
     }
 
     if (!visitId) {

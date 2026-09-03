@@ -66,8 +66,6 @@ export default {
   },
 
   async guardConfirmThankYou(ctx = {}) {
-    return {
-      resolvedPageType: ctx.resolvedPageType || CampaignPageType.THANKYOU,
-    };
+    return ctx.resolvedPageType || CampaignPageType.THANKYOU;
   },
 };
