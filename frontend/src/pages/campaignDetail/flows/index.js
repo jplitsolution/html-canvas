@@ -10,6 +10,7 @@ import HeaderInjection from './HeaderInjection'
 import OtpOnly from './OtpOnly'
 import Both from './Both'
 import UniverseDcb from './UniverseDcb'
+import OrangeBf from './OrangeBf'
 import None from './None'
 import CgHome from './CgHome'
 
@@ -18,6 +19,7 @@ const FLOWS = {
   OTP_ONLY: OtpOnly,
   BOTH: Both,
   UNIVERSE_DCB: UniverseDcb,
+  ORANGE_BF: OrangeBf,
   NONE: None,
   CG_HOME: CgHome,
 }

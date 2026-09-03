@@ -98,9 +98,31 @@ export function extractChecksubStatus(rawData, statusField = 'currentStatus') {
   }
   if (!data || typeof data !== 'object') return '';
 
-  const nested = data.data && typeof data.data === 'object' ? data.data : null;
+  // 1. Support dot-notation path (e.g. data.currentStatus, payload.status)
+  if (field.includes('.')) {
+    const parts = field.split('.');
+    let cur = data;
+    for (const part of parts) {
+      if (!cur || typeof cur !== 'object') {
+        cur = null;
+        break;
+      }
+      cur = readObjectField(cur, part);
+    }
+    if (cur != null && typeof cur !== 'object') {
+      return String(cur).trim();
+    }
+  }
+
+  // 2. Direct lookup at top-level
   const top = readObjectField(data, field);
   if (top != null && typeof top !== 'object') return String(top).trim();
+
+  // 3. Auto-fallback into nested data / result / payload objects
+  const nested = (data.data && typeof data.data === 'object' ? data.data : null) ||
+                 (data.result && typeof data.result === 'object' ? data.result : null) ||
+                 (data.payload && typeof data.payload === 'object' ? data.payload : null);
+
   if (nested) {
     const fromNested = readObjectField(nested, field);
     if (fromNested != null && typeof fromNested !== 'object') {

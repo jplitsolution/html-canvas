@@ -356,6 +356,16 @@ function useShadowInteractions({
       setTransitioning(true)
       setError('')
 
+      const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
+      if (phoneInput && phoneInput.value.trim()) {
+        const cleanVal = phoneInput.value.trim().replace(/\D/g, '')
+        if (cleanVal) {
+          phoneRef.current = cleanVal
+          if (setPhone) setPhone(cleanVal)
+          if (saveSession) saveSession({ phone: cleanVal })
+        }
+      }
+
       const packOnButton = node.hasAttribute('data-pack') ? normalizePack(node.getAttribute('data-pack')) : ''
       const planId = packOnButton || (fromPage === 'CONFIRM' ? getSelectedPackFromShadow(shadow) : undefined)
 
@@ -414,7 +424,14 @@ function useShadowInteractions({
         saveSession,
         transitionLockRef,
       })
-    } else if (pageData.pageType === 'OTP') {
+    } else if (
+      pageData.pageType === 'OTP' ||
+      Boolean(
+        shadow.querySelector(
+          '[data-otp-action], [data-action="send-otp"], [data-action="verify-otp"]',
+        ),
+      )
+    ) {
       flowCleanup = setupOtpBindings(shadow, {
         transitionFlow,
         cachePage,

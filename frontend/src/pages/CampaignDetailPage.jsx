@@ -141,6 +141,8 @@ function CampaignDetailPage() {
   const [vendorDateRange, setVendorDateRange] = useState(() => getDateRangeForPreset('today', timezone))
   const [vendorStats, setVendorStats] = useState({ apiExpose: false, vendors: [] })
   const [vendorStatsLoading, setVendorStatsLoading] = useState(false)
+  const [activeStudioTab, setActiveStudioTab] = useState('canvas')
+  const [showVendorDrawer, setShowVendorDrawer] = useState(false)
 
   const handleVendorPresetChange = (newPreset) => {
     setVendorPreset(newPreset)
@@ -556,9 +558,6 @@ function CampaignDetailPage() {
   const trackings = vendorTrackings
   const apiExpose = isApiExposeCampaign(campaign)
   const dcbApiExpose = isDcbApiExposeCampaign(campaign)
-
-  const [activeStudioTab, setActiveStudioTab] = useState('canvas')
-  const [showVendorDrawer, setShowVendorDrawer] = useState(false)
 
   const pageActions = (
     <div className="flex items-center gap-2">
@@ -1193,6 +1192,7 @@ function CampaignDetailPage() {
         isOpen={showApiConfig}
         onClose={() => setShowApiConfig(false)}
         campaignId={campaign.id}
+        campaign={campaign}
       />
     </AppShell>
   )

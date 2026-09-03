@@ -33,6 +33,13 @@ export const VERIFICATION_MODES = [
     pathHint: 'No HE: number → packs → PIN. HE: packs → PIN → polling. Or public pincode/confirm APIs',
   },
   {
+    id: 'ORANGE_BF',
+    label: 'Orange Burkina Faso',
+    hint: 'Multi-step French VAS flow for Orange BF (+226) with CheckSub auto-forward, Auth OTP & async Unsub.',
+    pathHint: 'HOME (Plan) → OTP (MSISDN + 4-Box Code) → THANKYOU / Success Redirect',
+    isLocked: true,
+  },
+  {
     id: 'NONE',
     label: 'None (null / CG redirect)',
     hint: 'No HE/OTP. If a CG URL is set → redirect there on landing with click_id.',
@@ -171,6 +178,26 @@ export const DEFAULT_FLOWS = {
       flowEdge('INPROGRESS', 'THANKYOU', 'ACTIVATED'),
       flowEdge('INPROGRESS', 'LOW_BALANCE', 'LOW_BALANCE'),
       flowEdge('INPROGRESS', 'ERROR', 'ERROR'),
+    ],
+  },
+  ORANGE_BF: {
+    entryPage: 'HOME',
+    nodes: [
+      { id: 'HOME', pageType: 'HOME', position: { x: 140, y: 180 } },
+      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 380, y: 180 } },
+      { id: 'OTP', pageType: 'OTP', position: { x: 620, y: 180 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 860, y: 180 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 860, y: 300 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 860, y: 420 } },
+    ],
+    edges: [
+      flowEdge('HOME', 'CONFIRM', 'SUBSCRIBE'),
+      flowEdge('CONFIRM', 'OTP', 'OTP_SENT'),
+      flowEdge('CONFIRM', 'OTP', 'DEFAULT'),
+      flowEdge('CONFIRM', 'THANKYOU', 'ACTIVE_SUBSCRIBER'),
+      flowEdge('OTP', 'THANKYOU', 'OTP_VERIFIED'),
+      flowEdge('OTP', 'BLOCKED', 'BLOCKED'),
+      flowEdge('OTP', 'ERROR', 'ERROR'),
     ],
   },
   NONE: {

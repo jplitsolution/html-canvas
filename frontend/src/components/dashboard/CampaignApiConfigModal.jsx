@@ -21,6 +21,20 @@ import {
   serializeDcbConfig,
 } from './dcbConfig'
 import { downloadTextFile } from '../../utils/download'
+import { normalizeModeId } from '../flow/verificationModes'
+
+const DEFAULT_ORANGE_BF_CONFIG = {
+  baseUrl: 'http://103.153.58.55',
+  serviceId: 'Health Portal Livliness',
+  subServiceId: 'Health Portal Livliness pass jour',
+  cpId: '100',
+  channel: 'ussd',
+  country: 'BF',
+  operator: 'ORG',
+  language: '_E',
+  successKey: 'responseCode',
+  successValue: '0',
+}
 
 const DEFAULT_PARTNER = {
   sendUrl: '',
@@ -187,14 +201,53 @@ function Field({ label, hint, children }) {
   )
 }
 
-function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
+function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
   const loadCampaignApiConfig = useStore((s) => s.loadCampaignApiConfig)
   const saveCampaignApiConfig = useStore((s) => s.saveCampaignApiConfig)
   const addToast = useStore((s) => s.addToast)
 
+  const mode = useMemo(() => normalizeModeId(campaign?.verificationMode), [campaign?.verificationMode])
+
+  const availableTabs = useMemo(() => {
+    if (mode === 'ORANGE_BF') {
+      return [
+        { id: 'orange_bf', label: 'Orange BF API' },
+        { id: 'billing', label: 'Checksub Rules' },
+      ]
+    }
+    if (mode === 'UNIVERSE_DCB') {
+      return [
+        { id: 'dcb', label: 'Universe DCB' },
+      ]
+    }
+    if (mode === 'OTP_ONLY') {
+      return [
+        { id: 'otp', label: 'Partner OTP' },
+        { id: 'billing', label: 'Checksub' },
+      ]
+    }
+    if (mode === 'HEADER_INJECTION') {
+      return [
+        { id: 'he', label: 'Detect phone (HE)' },
+        { id: 'billing', label: 'Checksub' },
+      ]
+    }
+    if (mode === 'NONE' || mode === 'CG_HOME') {
+      return [
+        { id: 'billing', label: 'Campaign Settings' },
+      ]
+    }
+    // Default / BOTH
+    return [
+      { id: 'billing', label: 'Checksub' },
+      { id: 'he', label: 'Detect phone' },
+      { id: 'otp', label: 'Partner OTP' },
+    ]
+  }, [mode])
+
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState('billing')
+  const [activeTab, setActiveTab] = useState(() => availableTabs[0]?.id || 'billing')
 
   const [form, setForm] = useState({
     subscriptionApi: '',
@@ -206,6 +259,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   })
   const [heFields, setHeFields] = useState(EMPTY_HE_FIELDS)
   const [partnerConfig, setPartnerConfig] = useState(DEFAULT_PARTNER)
+  const [orangeBfConfig, setOrangeBfConfig] = useState(DEFAULT_ORANGE_BF_CONFIG)
   const [dcbConfig, setDcbConfig] = useState(() => parseDcbConfig(null))
   const [checksubConfig, setChecksubConfig] = useState(() => ({
     ...DEFAULT_CHECKSUB,
@@ -224,27 +278,55 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     setTestResult('')
     setTestPhone('')
     setTestOtp('')
-    setActiveTab('billing')
+
+    const initialTab = mode === 'ORANGE_BF' ? 'orange_bf' : (availableTabs[0]?.id || 'billing')
+    setActiveTab(initialTab)
 
     loadCampaignApiConfig(campaignId)
-      .then((config) => {
-        const provider = config.heProvider || 'header'
-        const parsedHe = parseHeConfig(config.heConfigJson)
+      .then((config = {}) => {
+        const isOrangeBf = mode === 'ORANGE_BF'
+        const provider = config?.heProvider || 'header'
+        const parsedHe = parseHeConfig(config?.heConfigJson)
+
+        const defaultSubscriptionApi = isOrangeBf
+          ? 'http://103.153.58.55/subapi/checksub?msisdn={{msisdn}}&serviceId=Health Portal Livliness'
+          : ''
+
         setForm({
-          subscriptionApi: config.subscriptionApi || '',
-          subscribeApi: config.subscribeApi || '',
-          blocklistApi: config.blocklistApi || '',
-          headersJson: config.headersJson || '',
-          resolveMsisdnUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
+          subscriptionApi: config?.subscriptionApi || defaultSubscriptionApi,
+          subscribeApi: config?.subscribeApi || '',
+          blocklistApi: config?.blocklistApi || '',
+          headersJson: config?.headersJson || '',
+          resolveMsisdnUrl: config?.resolveMsisdnUrl || parsedHe.resolveUrl || '',
           heProvider: provider,
         })
-        setChecksubConfig(parseChecksubConfig(config.checksubConfigJson))
-        setDcbConfig(parseDcbConfig(config.dcbConfigJson || config.dcb_config_json))
+        setChecksubConfig(parseChecksubConfig(config?.checksubConfigJson))
+        setDcbConfig(parseDcbConfig(config?.dcbConfigJson || config?.dcb_config_json))
         setHeFields({
           ...parsedHe,
-          resolveUrl: config.resolveMsisdnUrl || parsedHe.resolveUrl || '',
+          resolveUrl: config?.resolveMsisdnUrl || parsedHe.resolveUrl || '',
         })
-        if (config.otpConfigJson) {
+
+        if (config?.headersJson) {
+          try {
+            const parsed = JSON.parse(config.headersJson)
+            if (parsed && typeof parsed === 'object') {
+              setOrangeBfConfig({
+                ...DEFAULT_ORANGE_BF_CONFIG,
+                ...parsed,
+                baseUrl: config?.sendUrl ? new URL(config.sendUrl).origin : (parsed.baseUrl || DEFAULT_ORANGE_BF_CONFIG.baseUrl),
+                successKey: config?.successKey || parsed.successKey || 'responseCode',
+                successValue: config?.successValue ?? parsed.successValue ?? '0',
+              })
+            }
+          } catch {
+            setOrangeBfConfig(DEFAULT_ORANGE_BF_CONFIG)
+          }
+        } else {
+          setOrangeBfConfig(DEFAULT_ORANGE_BF_CONFIG)
+        }
+
+        if (config?.otpConfigJson) {
           try {
             const parsed = JSON.parse(config.otpConfigJson)
             const source =
@@ -260,13 +342,22 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
             console.error('Failed to parse OTP config JSON', e)
             setPartnerConfig(DEFAULT_PARTNER)
           }
+        } else if (isOrangeBf) {
+          setPartnerConfig({
+            ...DEFAULT_PARTNER,
+            sendUrl: 'http://103.153.58.55/subapi/auth/otp/generate?msisdn={{msisdn}}&language=_E',
+            verifyUrl: 'http://103.153.58.55/subapi/auth/otp/validate?msisdn={{msisdn}}&otp={{otp}}',
+            successKey: 'responseCode',
+            successValue: '0',
+            payoutPercent: 100,
+          })
         } else {
           setPartnerConfig(DEFAULT_PARTNER)
         }
       })
       .catch((err) => addToast(err.message || 'Failed to load API config', 'error'))
       .finally(() => setLoading(false))
-  }, [isOpen, campaignId, loadCampaignApiConfig, addToast])
+  }, [isOpen, campaignId, mode, availableTabs, loadCampaignApiConfig, addToast])
 
   const heConfigPreview = useMemo(
     () => buildHeConfigJson(form.heProvider, heFields, form.resolveMsisdnUrl),
@@ -276,6 +367,8 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
   const handleSave = async () => {
     setSaving(true)
     try {
+      const isOrangeBf = mode === 'ORANGE_BF'
+      const baseClean = (orangeBfConfig.baseUrl || 'http://103.153.58.55').replace(/\/$/, '')
       const heConfigJson = buildHeConfigJson(form.heProvider, heFields, form.resolveMsisdnUrl)
       const resolveMsisdnUrl =
         form.heProvider === 'custom_http'
@@ -284,13 +377,31 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
 
       await saveCampaignApiConfig(campaignId, {
         ...form,
+        subscriptionApi: isOrangeBf ? `${baseClean}/subapi/checksub` : form.subscriptionApi,
+        headersJson: isOrangeBf ? JSON.stringify(orangeBfConfig) : form.headersJson,
         resolveMsisdnUrl: resolveMsisdnUrl || null,
         heConfigJson: heConfigJson || null,
         subscribeApi: (form.subscribeApi || '').trim() || null,
-        otpConfigJson: JSON.stringify({
-          ...partnerConfig,
-          payoutPercent: clampPayoutPercent(partnerConfig.payoutPercent),
-        }),
+        sendUrl: isOrangeBf ? `${baseClean}/subapi/auth/otp/generate` : partnerConfig.sendUrl,
+        verifyUrl: isOrangeBf ? `${baseClean}/subapi/auth/otp/validate` : partnerConfig.verifyUrl,
+        successKey: isOrangeBf ? (orangeBfConfig.successKey || 'responseCode') : partnerConfig.successKey,
+        successValue: isOrangeBf ? (orangeBfConfig.successValue || '0') : partnerConfig.successValue,
+        otpConfigJson: JSON.stringify(
+          isOrangeBf
+            ? {
+                sendUrl: `${baseClean}/subapi/auth/otp/generate`,
+                verifyUrl: `${baseClean}/subapi/auth/otp/validate`,
+                method: 'GET',
+                verifyMethod: 'GET',
+                successKey: orangeBfConfig.successKey || 'responseCode',
+                successValue: orangeBfConfig.successValue || '0',
+                payoutPercent: 100,
+              }
+            : {
+                ...partnerConfig,
+                payoutPercent: clampPayoutPercent(partnerConfig.payoutPercent),
+              }
+        ),
         checksubConfigJson: serializeChecksubConfig(checksubConfig),
         dcbConfigJson: serializeDcbConfig(dcbConfig),
       })
@@ -925,6 +1036,198 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
     )
   }
 
+  const renderOrangeBfTab = () => {
+    const handleOrangeBfTestSend = async () => {
+      if (!testPhone) {
+        alert('Please enter a phone number (+226...) for testing')
+        return
+      }
+      setTesting(true)
+      setTestResult('')
+      try {
+        const baseClean = (orangeBfConfig.baseUrl || 'http://103.153.58.55').replace(/\/$/, '')
+        const res = await testSendOtp({
+          phone: testPhone,
+          provider: 'partner',
+          config: JSON.stringify({
+            sendUrl: `${baseClean}/subapi/auth/otp/generate?msisdn={{msisdn}}&language=${orangeBfConfig.language || '_E'}`,
+            method: 'GET',
+            successKey: orangeBfConfig.successKey || 'responseCode',
+            successValue: orangeBfConfig.successValue || '0',
+          }),
+          campaignId,
+        })
+        if (res.providerRequestId) setLastProviderRequestId(res.providerRequestId)
+        setTestResult(formatTestResult('SEND OTP', res))
+      } catch (err) {
+        setTestResult(`🔴 Dispatch error: ${err.message}`)
+      } finally {
+        setTesting(false)
+      }
+    }
+
+    const handleOrangeBfTestVerify = async () => {
+      if (!testPhone || !testOtp) {
+        alert('Please enter phone and OTP code')
+        return
+      }
+      setTesting(true)
+      setTestResult('')
+      try {
+        const baseClean = (orangeBfConfig.baseUrl || 'http://103.153.58.55').replace(/\/$/, '')
+        const res = await testVerifyOtp({
+          phone: testPhone,
+          otp: testOtp,
+          provider: 'partner',
+          config: JSON.stringify({
+            verifyUrl: `${baseClean}/subapi/auth/otp/validate?msisdn={{msisdn}}&otp={{otp}}`,
+            verifyMethod: 'GET',
+            successKey: orangeBfConfig.successKey || 'responseCode',
+            successValue: orangeBfConfig.successValue || '0',
+          }),
+          providerRequestId: lastProviderRequestId || undefined,
+          campaignId,
+        })
+        setTestResult(formatTestResult('VERIFY OTP', res))
+      } catch (err) {
+        setTestResult(`🔴 Verify error: ${err.message}`)
+      } finally {
+        setTesting(false)
+      }
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="rounded bg-[#ff7900] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Orange BF</span>
+            <p className="text-xs font-semibold text-fg">Orange Burkina Faso — Subscription REST API v1.0.0</p>
+          </div>
+          <p className="mt-1 text-xs text-fg-muted">
+            Configured endpoints: Generate OTP (<code className="font-mono text-[11px]">/subapi/auth/otp/generate</code>), Validate OTP (<code className="font-mono text-[11px]">/subapi/auth/otp/validate</code>), CheckSub (<code className="font-mono text-[11px]">/subapi/checksub</code>), Unsub (<code className="font-mono text-[11px]">/subapi/unsub</code>), and Engine Sync.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Field label="API Base URL" hint="Carrier API Host">
+              <Input
+                value={orangeBfConfig.baseUrl}
+                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, baseUrl: e.target.value }))}
+                placeholder="http://103.153.58.55"
+              />
+            </Field>
+          </div>
+
+          <Field label="Parent Service ID (serviceId)" hint="e.g. Health Portal Livliness">
+            <Input
+              value={orangeBfConfig.serviceId}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, serviceId: e.target.value }))}
+              placeholder="Health Portal Livliness"
+            />
+          </Field>
+
+          <Field label="Sub-Service Plan ID (subServiceId)" hint="e.g. Health Portal Livliness pass jour">
+            <Input
+              value={orangeBfConfig.subServiceId}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, subServiceId: e.target.value }))}
+              placeholder="Health Portal Livliness pass jour"
+            />
+          </Field>
+
+          <Field label="Content Provider ID (cpId)" hint="Default: 100">
+            <Input
+              value={orangeBfConfig.cpId}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, cpId: e.target.value }))}
+              placeholder="100"
+            />
+          </Field>
+
+          <Field label="Channel" hint="Default: ussd">
+            <Input
+              value={orangeBfConfig.channel}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, channel: e.target.value }))}
+              placeholder="ussd"
+            />
+          </Field>
+
+          <Field label="Country Code" hint="Default: BF">
+            <Input
+              value={orangeBfConfig.country}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, country: e.target.value }))}
+              placeholder="BF"
+            />
+          </Field>
+
+          <Field label="Operator Code" hint="Default: ORG">
+            <Input
+              value={orangeBfConfig.operator}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, operator: e.target.value }))}
+              placeholder="ORG"
+            />
+          </Field>
+
+          <Field label="SMS Language" hint="_E (English) or _A (Arabic)">
+            <select
+              className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-fg outline-none focus:border-primary"
+              value={orangeBfConfig.language}
+              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, language: e.target.value }))}
+            >
+              <option value="_E">English (_E)</option>
+              <option value="_A">Arabic (_A)</option>
+            </select>
+          </Field>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Success Key" hint="default: responseCode">
+              <Input
+                value={orangeBfConfig.successKey}
+                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, successKey: e.target.value }))}
+                placeholder="responseCode"
+              />
+            </Field>
+            <Field label="Success Value" hint="default: 0">
+              <Input
+                value={orangeBfConfig.successValue}
+                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, successValue: e.target.value }))}
+                placeholder="0"
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-dashed border-border bg-bg-subtle/40 p-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Orange BF Live OTP Test</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <Field label="Test Phone (+226...)">
+              <Input
+                value={testPhone}
+                onChange={(e) => setTestPhone(e.target.value)}
+                placeholder="e.g. 56864685"
+              />
+            </Field>
+            <Field label="OTP from SMS">
+              <Input value={testOtp} onChange={(e) => setTestOtp(e.target.value)} placeholder="e.g. 4827" />
+            </Field>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="primary" size="sm" onClick={handleOrangeBfTestSend} disabled={testing}>
+              {testing ? 'Sending...' : 'Send Orange BF OTP'}
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleOrangeBfTestVerify} disabled={testing}>
+              Verify Orange BF OTP
+            </Button>
+          </div>
+          {testResult && (
+            <div className="mt-2 max-h-[180px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-base p-2 font-mono text-xs">
+              {testResult}
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Campaign Integration & Settings" size="lg">
       {loading ? (
@@ -932,17 +1235,14 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId }) {
       ) : (
         <div className="space-y-4">
           <Tabs
-            tabs={[
-              { id: 'billing', label: 'Checksub' },
-              { id: 'he', label: 'Detect phone' },
-              { id: 'otp', label: 'Partner OTP' },
-              { id: 'dcb', label: 'Universe DCB' },
-            ]}
+            tabs={availableTabs}
             activeTab={activeTab}
             onChange={setActiveTab}
           />
 
-          {activeTab === 'billing' ? (
+          {activeTab === 'orange_bf' ? (
+            renderOrangeBfTab()
+          ) : activeTab === 'billing' ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
                 <p className="text-xs leading-relaxed text-fg-muted">

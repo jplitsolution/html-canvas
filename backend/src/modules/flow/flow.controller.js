@@ -10,6 +10,8 @@ import {
 import { priorityCheck } from './helpers/priority.controller.js';
 import { universeDcbService } from './universe-dcb.service.js';
 import { universeDcbExposeService } from './universe-dcb-expose.service.js';
+import { orangeBfService } from './orange-bf.service.js';
+import { orangeBfExposeService } from './orange-bf-expose.service.js';
 import { flowEngineService } from './flow-engine.service.js';
 import {
   decorateUniverseDcbDetectResponse,
@@ -359,6 +361,22 @@ export const flowController = {
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.send(html);
+  }),
+
+  orangeBfCheck: asyncHandler(async (req, res) => {
+    return orangeBfExposeService.handleCheckSub(req, res);
+  }),
+
+  orangeBfSendOtp: asyncHandler(async (req, res) => {
+    return orangeBfExposeService.handleSendOtp(req, res);
+  }),
+
+  orangeBfVerifyOtp: asyncHandler(async (req, res) => {
+    return orangeBfExposeService.handleVerifyOtp(req, res);
+  }),
+
+  orangeBfUnsub: asyncHandler(async (req, res) => {
+    return orangeBfExposeService.handleUnsubscribe(req, res);
   }),
 
   callback: asyncHandler(async (req, res) => {

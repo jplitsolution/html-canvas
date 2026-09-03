@@ -12,6 +12,7 @@ import HeaderInjection from './HeaderInjection.js';
 import OtpOnly from './OtpOnly.js';
 import Both from './Both.js';
 import UniverseDcb from './UniverseDcb.js';
+import OrangeBf from './OrangeBf.js';
 import None from './None.js';
 import CgHome from './CgHome.js';
 
@@ -20,6 +21,7 @@ export const FLOWS = {
   OTP_ONLY: OtpOnly,
   BOTH: Both,
   UNIVERSE_DCB: UniverseDcb,
+  ORANGE_BF: OrangeBf,
   NONE: None,
   CG_HOME: CgHome,
 };

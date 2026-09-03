@@ -75,4 +75,14 @@ router.post(
   flowController.registerPostback,
 );
 
+// Orange Burkina Faso Vendor API Expose Endpoints
+router.post('/orange-bf/check', publicRateLimit, flowController.orangeBfCheck);
+router.get('/orange-bf/check', publicRateLimit, flowController.orangeBfCheck);
+router.post('/orange-bf/otp/send', publicRateLimit, flowController.orangeBfSendOtp);
+router.get('/orange-bf/otp/send', publicRateLimit, flowController.orangeBfSendOtp);
+router.post('/orange-bf/otp/verify', publicRateLimit, flowController.orangeBfVerifyOtp);
+router.get('/orange-bf/otp/verify', publicRateLimit, flowController.orangeBfVerifyOtp);
+router.post('/orange-bf/unsub', publicRateLimit, flowController.orangeBfUnsub);
+router.get('/orange-bf/unsub', publicRateLimit, flowController.orangeBfUnsub);
+
 export default router;

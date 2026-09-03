@@ -93,7 +93,7 @@ export const createAnalyticsService = () => {
   };
 
   const getVisit = async (id) => {
-    if (!id) return null;
+    if (!id || Number.isNaN(Number(id))) return null;
     return await getVisitRepo().findOne({ where: { id: parseInt(id, 10) } });
   };
 
@@ -107,6 +107,7 @@ export const createAnalyticsService = () => {
    * Window uses DB clock (NOW()) so Node/Postgres skew cannot break dedupe.
    */
   const findRecentVisitByRcid = async (campaignId, rcid, withinMs = 120000) => {
+    if (!campaignId || Number.isNaN(Number(campaignId))) return null;
     const cId = parseInt(campaignId, 10);
     const key = filledTrackingValue(rcid);
     if (!cId || !key) return null;
@@ -127,6 +128,7 @@ export const createAnalyticsService = () => {
   };
 
   const updateVisit = async (id, status, pageType, phone) => {
+    if (!id || Number.isNaN(Number(id))) return null;
     const visit = await getVisitRepo().findOne({ where: { id: parseInt(id, 10) } });
     if (!visit) return null;
 
@@ -143,6 +145,7 @@ export const createAnalyticsService = () => {
   };
 
   const setVisitPhone = async (id, phone) => {
+    if (!id || Number.isNaN(Number(id))) return;
     const cleanPhone = phone?.trim();
     if (!cleanPhone) return;
     await getVisitRepo().update({ id: parseInt(id, 10) }, { phone: cleanPhone });
@@ -217,16 +220,18 @@ export const createAnalyticsService = () => {
   };
 
   const logEvent = async (visitId, eventType, metadata) => {
-    const eventPayload = { visitId, eventType, metadata };
+    if (!visitId || Number.isNaN(Number(visitId))) return null;
+    const vId = parseInt(visitId, 10);
+    const eventPayload = { visitId: vId, eventType, metadata };
 
     const eventEntity = getVisitEventRepo().create({
-      visitId,
+      visitId: vId,
       eventType,
       metadata,
     });
     await getVisitEventRepo().insert(eventEntity);
 
-    void indexVisitEvent(visitId, eventType);
+    void indexVisitEvent(vId, eventType);
     return eventPayload;
   };
 
@@ -726,6 +731,19 @@ export const createAnalyticsService = () => {
       } else if (row.callType === 'subscribe') {
         statusLabel =
           checksubStatusLabel(responseBody, row.success) || statusLabel;
+      } else if (String(row.callType || '').startsWith('orange_bf_')) {
+        const nestedBf = responseBody?.data ?? responseBody ?? {};
+        if (nestedBf.subscriptionStatus) {
+          statusLabel = String(nestedBf.subscriptionStatus).toUpperCase();
+        } else if (responseBody?.outcome) {
+          statusLabel = String(responseBody.outcome).toUpperCase();
+        } else if (responseBody?.status) {
+          statusLabel = String(responseBody.status).toUpperCase();
+        } else if (row.success) {
+          statusLabel = 'SUCCESS';
+        } else {
+          statusLabel = 'FAILED';
+        }
       }
       return {
         id: row.id,
@@ -743,13 +761,14 @@ export const createAnalyticsService = () => {
         rcid: row.rcid,
         createdAt: row.createdAt,
         summary:
-          row.callType === 'checksub' || row.callType === 'priority'
+          row.callType === 'checksub' || row.callType === 'priority' || row.callType === 'orange_bf_checksub' || row.callType === 'orange_bf_expose_check_in'
             ? {
                 currentStatus: nested.currentStatus ?? null,
                 subscriptionStatus: nested.subscriptionStatus ?? null,
-                serviceId: nested.serviceId ?? null,
+                serviceId: nested.serviceId ?? requestBody?.serviceId ?? null,
                 responseCode: responseBody?.responseCode ?? null,
                 responseMessage: responseBody?.responseMessage ?? null,
+                transactionId: responseBody?.transactionId ?? nested.transactionId ?? null,
                 priority: requestBody?.priority ?? null,
                 pageType: requestBody?.pageType ?? null,
               }
@@ -757,7 +776,8 @@ export const createAnalyticsService = () => {
                 row.callType === 'otp_verify' ||
                 row.callType === 'otp_expose_send_in' ||
                 row.callType === 'otp_expose_verify_in' ||
-                row.callType === 'subscribe'
+                row.callType === 'subscribe' ||
+                String(row.callType || '').startsWith('orange_bf_')
               ? {
                   response: nested.response ?? null,
                   responseCode:
@@ -768,6 +788,7 @@ export const createAnalyticsService = () => {
                     nested.message ||
                     responseBody?.responseMessage ||
                     null,
+                  transactionId: responseBody?.transactionId ?? nested.transactionId ?? null,
                   skipped: nested.skipped ?? null,
                   currentStatus: nested.currentStatus ?? null,
                   subscriptionStatus: nested.subscriptionStatus ?? null,

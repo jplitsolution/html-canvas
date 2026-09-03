@@ -629,6 +629,7 @@ function CampaignDetailPage() {
         isOpen={showApiConfig}
         onClose={() => setShowApiConfig(false)}
         campaignId={campaign.id}
+        campaign={campaign}
       />
     </AppShell>
   )

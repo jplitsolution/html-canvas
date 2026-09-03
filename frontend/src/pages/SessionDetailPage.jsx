@@ -170,6 +170,24 @@ function eventDescription(eventType) {
       return 'Inbound DCB expose PIN confirm (vendor hit).'
     case 'API_DCB_EXPOSE_STATUS_IN':
       return 'Inbound DCB expose status poll (vendor hit).'
+    case 'API_ORANGE_BF_CHECKSUB':
+      return 'Orange BF subscriber status check (checksub).'
+    case 'API_ORANGE_BF_OTP_SEND':
+      return 'Orange BF SMS OTP generate & dispatch call.'
+    case 'API_ORANGE_BF_OTP_VERIFY':
+      return 'Orange BF OTP validate & verify call.'
+    case 'API_ORANGE_BF_UNSUB':
+      return 'Orange BF subscriber unsubscribe request.'
+    case 'API_ORANGE_BF_SYNC':
+      return 'Orange BF subscription engine sync.'
+    case 'API_ORANGE_BF_EXPOSE_CHECK_IN':
+      return 'Inbound Orange BF vendor CheckSub request.'
+    case 'API_ORANGE_BF_EXPOSE_SEND_IN':
+      return 'Inbound Orange BF vendor OTP Send request.'
+    case 'API_ORANGE_BF_EXPOSE_VERIFY_IN':
+      return 'Inbound Orange BF vendor OTP Verify request.'
+    case 'API_ORANGE_BF_EXPOSE_UNSUB_IN':
+      return 'Inbound Orange BF vendor Unsubscribe request.'
     case 'CALLBACK_RECEIVED':
       return 'Billing / operator callback received.'
     case 'POSTBACK_PENDING':
@@ -238,7 +256,8 @@ function ApiCallCard({ call, defaultOpen }) {
         <div className="px-4 pb-4 border-t border-gray-100">
           {(call.callType === 'checksub' ||
             call.callType === 'priority' ||
-            call.callType === 'subscribe') && (
+            call.callType === 'subscribe' ||
+            String(call.callType || '').startsWith('orange_bf')) && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
               {call.callType === 'priority' && summary.priority != null && (
                 <div>

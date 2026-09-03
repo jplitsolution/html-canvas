@@ -11,6 +11,7 @@ import { CampaignPageType } from '../../database/entities/campaign-page.entity.j
 import { smsProviderManager } from './providers/sms-provider.manager.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from '../flow/api-call-log.service.js';
+import { orangeBfService } from '../flow/orange-bf.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { searchService } from '../search/search.service.js';
 import {
@@ -403,6 +404,41 @@ export const createOtpService = () => {
 
     const visit = await loadVisit(visitId);
     const campaign = await getCampaignFromInput(campaignId, visitId);
+
+    if (flowEngineService.normalizeMode(campaign?.verificationMode) === 'ORANGE_BF') {
+      const result = await orangeBfService.startOrCheckSub({
+        phone: String(phone).trim(),
+        campaignId: campaign?.id,
+        visitId,
+      });
+      if (!result.success) {
+        const err = new Error(result.error || result.message || 'Failed to send OTP');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (visitId) {
+        try {
+          await getVisitRepo().update(
+            { id: parseInt(visitId, 10) },
+            { phone: String(phone).trim(), otpVerifiedAt: null },
+          );
+        } catch {
+          // swallow
+        }
+      }
+      return {
+        message: result.message || 'OTP sent successfully',
+        phone: String(phone).trim(),
+        provider: 'orange_bf',
+        remoteVerify: true,
+        responseCode: result.responseCode ?? null,
+        transactionId: result.transactionId || null,
+        isSubscribed: Boolean(result.isSubscribed),
+        status: result.status,
+        forwardUrl: result.forwardUrl,
+      };
+    }
+
     const apiConfig = await getApiConfigForCampaign(campaign?.id);
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
 
@@ -514,8 +550,41 @@ export const createOtpService = () => {
 
     const visit = await loadVisit(visitId);
     const campaign = await getCampaignFromInput(campaignId, visitId);
-    const apiConfig = await getApiConfigForCampaign(campaign?.id);
-    const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
+
+    if (flowEngineService.normalizeMode(campaign?.verificationMode) === 'ORANGE_BF') {
+      const result = await orangeBfService.verifyOtp({
+        phone: String(phone).trim(),
+        otp: String(otpCode).trim(),
+        campaignId: campaign?.id,
+        visitId,
+        vendorId: visit?.vendorId,
+      });
+      if (!result.success) {
+        const err = new Error(result.error || result.message || 'OTP verification failed');
+        err.statusCode = 400;
+        throw err;
+      }
+      if (visitId) {
+        try {
+          await getVisitRepo().update(
+            { id: parseInt(visitId, 10) },
+            { phone: String(phone).trim(), otpVerifiedAt: new Date() },
+          );
+        } catch {
+          // swallow
+        }
+      }
+      return {
+        message: result.message || 'OTP verified successfully',
+        phone: String(phone).trim(),
+        provider: 'orange_bf',
+        responseCode: result.responseCode ?? null,
+        transactionId: result.transactionId || null,
+        forwardUrl: result.forwardUrl,
+        postbackStatus: result.postbackStatus,
+        verified: true,
+      };
+    }
 
     if (!(providerConfig.verifyUrl || providerConfig.verify_url)) {
       const err = new Error(

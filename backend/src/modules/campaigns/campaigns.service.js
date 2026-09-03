@@ -3,6 +3,7 @@ import { Campaign } from '../../database/entities/campaign.entity.js';
 import {
   ALL_CAMPAIGN_PAGE_TYPES,
   CampaignPage,
+  CampaignPageType,
   REQUIRED_CAMPAIGN_PAGE_TYPES,
 } from '../../database/entities/campaign-page.entity.js';
 import { Template } from '../../database/entities/template.entity.js';
@@ -120,13 +121,40 @@ export const createCampaignsService = () => {
       verificationMode: campaign?.verificationMode,
     });
 
-  const ensureUniverseDcbPages = async (campaign) => {
-    const mode = String(campaign?.verificationMode || '').toUpperCase();
-    if (mode !== 'UNIVERSE_DCB') return false;
+  const isDefaultTemplateHtml = (pageType, html) => {
+    const source = String(html || '').trim();
+    if (!source) return true;
+    if (isClassicDefaultFunnelHtml(pageType, source)) return true;
+    if (source.includes('bf-wellness-container') || source.includes('WELLNESS360')) return true;
+    if (source.includes('dcb-home') || source.includes('dcb-otp') || source.includes('data-dcb-action')) return true;
+    if (source.includes('Premium Mobile Service') || source.includes('Verify Mobile Number') || source.includes("You're Subscribed!")) return true;
+    return false;
+  };
 
+  const ensureFlowPages = async (campaign) => {
     let changed = false;
+    const mode = flowEngineService.normalizeMode(campaign.verificationMode);
+    if (mode === 'ORANGE_BF') {
+      const parsedFlow = flowEngineService.parseFlowConfig(campaign.flowConfig);
+      if (
+        !parsedFlow ||
+        !parsedFlow.nodes?.some((n) => n.pageType === CampaignPageType.CONFIRM) ||
+        !parsedFlow.edges?.some(
+          (e) => e.source === 'HOME' && e.target === 'CONFIRM',
+        )
+      ) {
+        campaign.flowConfig = JSON.stringify(
+          flowEngineService.getDefaultFlowConfig('ORANGE_BF'),
+        );
+        await getCampaignRepo().update(
+          { id: campaign.id },
+          { flowConfig: campaign.flowConfig },
+        );
+        changed = true;
+      }
+    }
+
     for (const page of campaign.pages || []) {
-      if (page.pageType !== 'HOME' && page.pageType !== 'OTP') continue;
       if (!page.templateId) continue;
 
       const template = await getTemplateRepo().findOne({
@@ -135,12 +163,18 @@ export const createCampaignsService = () => {
       if (!template) continue;
 
       const html = template.data?.html || '';
-      if (!isClassicDefaultFunnelHtml(page.pageType, html)) continue;
+      const isDefault = isDefaultTemplateHtml(page.pageType, html);
+      const isOrangeBf = mode === 'ORANGE_BF';
 
-      template.data = defaultPageData(page.pageType, campaign);
-      await getTemplateRepo().save(template);
-      page.template = template;
-      changed = true;
+      if (isDefault || isOrangeBf) {
+        const newData = defaultPageData(page.pageType, campaign);
+        if (newData && newData.html && template.data?.html !== newData.html) {
+          template.data = newData;
+          await getTemplateRepo().save(template);
+          page.template = template;
+          changed = true;
+        }
+      }
     }
 
     if (changed) await invalidateFlowCampaignCache(campaign);
@@ -192,7 +226,7 @@ export const createCampaignsService = () => {
       }
     }
 
-    await ensureUniverseDcbPages(campaign);
+    await ensureFlowPages(campaign);
   };
 
   const findAll = async (userId) => {
@@ -580,7 +614,7 @@ export const createCampaignsService = () => {
     flowConfig.entryPage = flowEngineService.getEntryPage(flowConfig);
     campaign.flowConfig = JSON.stringify(flowConfig);
     await persistCampaign(campaign);
-    await ensureUniverseDcbPages(campaign);
+    await ensureFlowPages(campaign);
     await invalidateFlowCampaignCache(campaign);
     return { verificationMode: mode, flowConfig };
   };
@@ -706,10 +740,42 @@ export const createCampaignsService = () => {
   };
 
   const getApiConfig = async (campaignId, userId) => {
-    await findOne(campaignId, userId);
-    return getApiConfigRepo().findOne({
+    const campaign = await findOne(campaignId, userId);
+    let config = await getApiConfigRepo().findOne({
       where: { campaignId: parseInt(campaignId, 10) },
     });
+    const mode = flowEngineService.normalizeMode(campaign?.verificationMode);
+    if (!config && mode === 'ORANGE_BF') {
+      const orangeDefault = {
+        baseUrl: 'http://103.153.58.55',
+        serviceId: 'Health Portal Livliness',
+        subServiceId: 'Health Portal Livliness pass jour',
+        cpId: '100',
+        channel: 'ussd',
+        country: 'BF',
+        operator: 'ORG',
+        language: '_E',
+        successKey: 'responseCode',
+        successValue: '0',
+      };
+      return {
+        campaignId: parseInt(campaignId, 10),
+        subscriptionApi: 'http://103.153.58.55/subapi/checksub?msisdn={{msisdn}}&serviceId=Health Portal Livliness',
+        subscribeApi: null,
+        blocklistApi: null,
+        headersJson: JSON.stringify(orangeDefault),
+        otpConfigJson: JSON.stringify({
+          sendUrl: 'http://103.153.58.55/subapi/auth/otp/generate?msisdn={{msisdn}}&language=_E',
+          verifyUrl: 'http://103.153.58.55/subapi/auth/otp/validate?msisdn={{msisdn}}&otp={{otp}}',
+          method: 'GET',
+          verifyMethod: 'GET',
+          successKey: 'responseCode',
+          successValue: '0',
+          payoutPercent: 100,
+        }),
+      };
+    }
+    return config;
   };
 
   const upsertApiConfig = async (campaignId, payload, userId) => {

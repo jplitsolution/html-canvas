@@ -20,6 +20,7 @@ import { resolveFlow, resolveFlowOrBoth } from './flows/index.js';
 export const VERIFICATION_MODES = [
   'HEADER_INJECTION',
   'UNIVERSE_DCB',
+  'ORANGE_BF',
   'OTP_ONLY',
   'BOTH',
   'NONE',

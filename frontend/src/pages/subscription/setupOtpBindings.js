@@ -95,9 +95,46 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       pageCacheRef?.current?.delete('THANKYOU')
       trackEvent('otp_sent')
       
-      if (otpInput) {
-        otpInput.value = ''
+      if (data?.isSubscribed || data?.status === 'ACTIVE') {
+        if (data.forwardUrl) {
+          setSlotText(statusSlot, 'Abonnement déjà actif ! Redirection en cours...')
+          setTimeout(() => {
+            window.location.href = data.forwardUrl
+          }, 800)
+          return
+        }
       }
+
+      if (!otpInput) {
+        // Separate phone entry step (CONFIRM page) -> Transition to OTP verify step
+        setSlotText(statusSlot, 'Code envoyé ! Chargement...')
+        setTransitioning(true)
+        if (transitionLockRef) transitionLockRef.current = true
+        try {
+          const next = await transitionFlow({
+            visitId: visitIdRef.current,
+            country,
+            operator,
+            campid: campid || undefined,
+            trackingCampid: trackingCampid || undefined,
+            fromPage: 'CONFIRM',
+            action: 'OTP_SENT',
+            phone: msisdn,
+          })
+          if (next) cachePage(next)
+          if (loadPage && (!next || String(next.pageType).toUpperCase() === 'CONFIRM')) {
+            await loadPage('OTP', { direct: true })
+          }
+        } catch {
+          if (loadPage) await loadPage('OTP', { direct: true })
+        } finally {
+          setTransitioning(false)
+          if (transitionLockRef) transitionLockRef.current = false
+        }
+        return
+      }
+
+      otpInput.value = ''
       
       let successText = 'Verification code sent!'
       const devOtp = data.devOtpCode || data.otp
