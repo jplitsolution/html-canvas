@@ -111,14 +111,16 @@ export const createPartnerApiService = () => {
   }) => {
     try {
       await apiCallLogService.record({
-        visitId: input.visitId,
-        campaignId: input.campaignId,
-        msisdn: input.phone,
-        rcid: input.rcid,
-        clickId: input.clickId,
+        visitId: input?.visitId,
+        campaignId: input?.campaignId,
+        msisdn: input?.phone || input?.msisdn,
+        rcid: input?.rcid,
+        clickId: input?.clickId,
         callType,
         requestUrl,
-        requestBody,
+        requestBody: serializeBody(
+          requestBody !== undefined ? requestBody : partnerRequestBody(input),
+        ),
         responseStatus: response?.status ?? null,
         responseBody: serializeBody(response?.data),
         success,
@@ -137,12 +139,24 @@ export const createPartnerApiService = () => {
     const useGet =
       method === 'GET' || (method !== 'POST' && url.includes('?'));
     const body = partnerRequestBody(input);
-    return {
-      url,
-      response: useGet
+    const actualMethod = useGet ? 'GET' : 'POST';
+    const requestPayload = useGet ? body || buildVars(input) : body;
+    try {
+      const response = useGet
         ? await axios.get(url, { headers, timeout: 5000 })
-        : await axios.post(url, body, { headers, timeout: 5000 }),
-    };
+        : await axios.post(url, body, { headers, timeout: 5000 });
+      return {
+        url,
+        method: actualMethod,
+        requestBody: requestPayload,
+        response,
+      };
+    } catch (err) {
+      err.requestUrl = url;
+      err.requestMethod = actualMethod;
+      err.requestBody = requestPayload;
+      throw err;
+    }
   };
 
   const resolveMsisdn = async (config, input) => {
@@ -160,7 +174,7 @@ export const createPartnerApiService = () => {
     };
     try {
       const headers = parseHeaders(config.headersJson);
-      const { url, response } = await sendRequest(
+      const { url, requestBody, response } = await sendRequest(
         config.resolveMsisdnUrl,
         payload,
         headers,
@@ -179,6 +193,7 @@ export const createPartnerApiService = () => {
         callType: ApiCallType.RESOLVE_MSISDN,
         input: payload,
         requestUrl: url,
+        requestBody,
         response,
         success: Boolean(resolved),
       });
@@ -188,9 +203,14 @@ export const createPartnerApiService = () => {
       await logCall({
         callType: ApiCallType.RESOLVE_MSISDN,
         input: payload,
-        requestUrl: config.resolveMsisdnUrl,
+        requestUrl: err.requestUrl || config.resolveMsisdnUrl,
+        requestBody: err.requestBody || payload,
+        response: err.response,
         success: false,
-        errorMessage: err.message,
+        errorMessage:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message,
       });
       return null;
     }
@@ -247,7 +267,7 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const { url, response } = await sendRequest(
+      const { url, requestBody, response } = await sendRequest(
         config.subscriptionApi,
         input,
         headers,
@@ -263,6 +283,7 @@ export const createPartnerApiService = () => {
         callType: ApiCallType.CHECKSUB,
         input,
         requestUrl: url,
+        requestBody,
         response,
         success: true,
         statusLabel: (result.status || 'UNKNOWN').toUpperCase(),
@@ -273,9 +294,16 @@ export const createPartnerApiService = () => {
       await logCall({
         callType: ApiCallType.CHECKSUB,
         input,
-        requestUrl: config.subscriptionApi,
+        requestUrl:
+          err.requestUrl ||
+          resolveTemplate(config.subscriptionApi, buildVars(input)),
+        requestBody: err.requestBody || partnerRequestBody(input),
+        response: err.response,
         success: false,
-        errorMessage: err.message,
+        errorMessage:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message,
         statusLabel: 'FAILED',
       });
       return { ...empty, status: 'failed' };
@@ -293,7 +321,7 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const { url, response } = await sendRequest(
+      const { url, requestBody, response } = await sendRequest(
         config.blocklistApi,
         input,
         headers,
@@ -318,6 +346,7 @@ export const createPartnerApiService = () => {
         callType: ApiCallType.BLOCKLIST,
         input,
         requestUrl: url,
+        requestBody,
         response,
         success: true,
       });
@@ -327,9 +356,14 @@ export const createPartnerApiService = () => {
       await logCall({
         callType: ApiCallType.BLOCKLIST,
         input,
-        requestUrl: config.blocklistApi,
+        requestUrl: err.requestUrl || config.blocklistApi,
+        requestBody: err.requestBody || partnerRequestBody(input),
+        response: err.response,
         success: false,
-        errorMessage: err.message,
+        errorMessage:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message,
       });
       return { blocked: false };
     }
@@ -474,22 +508,33 @@ export const createPartnerApiService = () => {
       await logCall({
         callType: ApiCallType.SUBSCRIBE,
         input,
-        requestUrl: resolvedPreview || template,
-        requestBody: serializeBody(
-          subscribeRequestMeta(input, {
-            method: (resolvedPreview || template).includes('?') ? 'GET' : 'POST',
-          }),
-        ),
+        requestUrl: err.requestUrl || resolvedPreview || template,
+        requestBody:
+          err.requestBody ||
+          serializeBody(
+            subscribeRequestMeta(input, {
+              method: (resolvedPreview || template).includes('?')
+                ? 'GET'
+                : 'POST',
+            }),
+          ),
+        response: err.response,
         success: false,
-        errorMessage: err.message,
+        errorMessage:
+          err.response?.data?.message ||
+          err.response?.data?.error ||
+          err.message,
         statusLabel: 'FAILED',
       });
       return {
         success: false,
         call: {
-          url: resolvedPreview || template,
+          url: err.requestUrl || resolvedPreview || template,
           ok: false,
-          error: err.message,
+          error:
+            err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message,
         },
       };
     }
