@@ -11,7 +11,7 @@ import {
   useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Link2, Plus, Save, Trash2, Pencil } from 'lucide-react'
+import { Link2, Plus, Save, Trash2, Pencil, Lock, Unlock } from 'lucide-react'
 import Button from '../ui/Button'
 import PageNode from './PageNode'
 import StartEndNode from './StartEndNode'
@@ -121,6 +121,7 @@ function CampaignFlowBuilder({
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
   const [mode, setMode] = useState('BOTH')
+  const [isLocked, setIsLocked] = useState(false)
   const [entryPage, setEntryPage] = useState('HOME')
   const [afterIdentity, setAfterIdentity] = useState('HOME')
   const [startConfig, setStartConfig] = useState(() => defaultStartConfig('BOTH'))
@@ -150,12 +151,14 @@ function CampaignFlowBuilder({
   )
 
   const handleResetFlow = useCallback(() => {
+    if (isLocked) return
     applyFlowTemplate(mode, entryPage, afterIdentity)
     addToast('Flow graph reset to default template', 'success')
-  }, [mode, entryPage, afterIdentity, applyFlowTemplate, addToast])
+  }, [mode, entryPage, afterIdentity, applyFlowTemplate, addToast, isLocked])
 
   const handleModeChange = useCallback(
     (newMode) => {
+      if (isLocked) return
       setMode(newMode)
       applyFlowTemplate(
         newMode,
@@ -163,29 +166,31 @@ function CampaignFlowBuilder({
         'HOME',
       )
     },
-    [applyFlowTemplate],
+    [applyFlowTemplate, isLocked],
   )
 
   const handleEntryPageChange = useCallback(
     (nextEntry) => {
+      if (isLocked) return
       const next = String(nextEntry || 'HOME').toUpperCase()
       setEntryPage(next)
       if (mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB') {
         applyFlowTemplate(mode, next, afterIdentity)
       }
     },
-    [mode, afterIdentity, applyFlowTemplate],
+    [mode, afterIdentity, applyFlowTemplate, isLocked],
   )
 
   const handleAfterIdentityChange = useCallback(
     (nextAfter) => {
+      if (isLocked) return
       const next = String(nextAfter || 'HOME').toUpperCase()
       setAfterIdentity(next)
       if (!isApiExposeEntry(entryPage)) {
         applyFlowTemplate(mode, entryPage, next)
       }
     },
-    [mode, entryPage, applyFlowTemplate],
+    [mode, entryPage, applyFlowTemplate, isLocked],
   )
 
   useEffect(() => {
@@ -202,6 +207,7 @@ function CampaignFlowBuilder({
             : res.flowConfig
         const nextStart = normalizeStartConfig(flowConfig?.startConfig, nextMode)
         setMode(nextMode)
+        setIsLocked(Boolean(flowConfig?.isLocked ?? (nextMode === 'ORANGE_BF')))
         setEntryPage(flowConfig?.entryPage || 'HOME')
         setAfterIdentity(resolveAfterIdentityTarget(flowConfig))
         setStartConfig(nextStart)
@@ -524,7 +530,10 @@ function CampaignFlowBuilder({
               condition: e.data?.condition || 'DEFAULT',
             })),
         }
-    const flowConfig = stripMetaNodes(rawConfig)
+    const flowConfig = {
+      ...stripMetaNodes(rawConfig),
+      isLocked,
+    }
     setSaving(true)
     setErrors(clientErrors)
     try {
@@ -544,6 +553,7 @@ function CampaignFlowBuilder({
     pageNodes,
     edges,
     startConfig,
+    isLocked,
     saveCampaignFlow,
     addToast,
   ])
@@ -560,9 +570,20 @@ function CampaignFlowBuilder({
     <div className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className={`font-semibold text-fg ${embedded ? 'text-sm' : 'page-header-title'}`}>
-            Flow builder
-          </h2>
+          <div className="flex items-center gap-2">
+            <h2 className={`font-semibold text-fg ${embedded ? 'text-sm' : 'page-header-title'}`}>
+              Flow builder
+            </h2>
+            {isLocked ? (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                <Lock className="w-3 h-3" /> Locked
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <Unlock className="w-3 h-3" /> Editable
+              </span>
+            )}
+          </div>
           <p className={`text-fg-muted mt-0.5 ${embedded ? 'text-xs' : 'page-header-description'}`}>
             START configures checks before the first page (HE / blocklist / checksub). END marks
             funnel outcomes. Edit page content from any page node.
@@ -574,11 +595,40 @@ function CampaignFlowBuilder({
             ) : null}
           </p>
         </div>
-        <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || loading}>
-          <Save className="w-4 h-4" />
-          {saving ? 'Saving...' : 'Save flow'}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setIsLocked(!isLocked)}
+            className="flex items-center gap-1.5"
+          >
+            {isLocked ? (
+              <>
+                <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                Unlock Flow
+              </>
+            ) : (
+              <>
+                <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                Lock Flow
+              </>
+            )}
+          </Button>
+          <Button variant="primary" size="sm" onClick={handleSave} disabled={saving || loading}>
+            <Save className="w-4 h-4" />
+            {saving ? 'Saving...' : 'Save flow'}
+          </Button>
+        </div>
       </div>
+
+      {isLocked && (
+        <div className="surface-card p-3 bg-amber-50/70 border-amber-200 flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>This flow graph is <strong>locked</strong>. Dragging, adding/removing nodes and changing connections are disabled. Click <strong>Unlock Flow</strong> above to make edits.</span>
+          </div>
+        </div>
+      )}
 
       {/* Verification mode + OTP landing options */}
       <div className="surface-card p-4 space-y-4">
@@ -591,8 +641,11 @@ function CampaignFlowBuilder({
                 <button
                   key={m.id}
                   type="button"
+                  disabled={isLocked}
                   onClick={() => handleModeChange(m.id)}
                   className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    isLocked ? 'cursor-not-allowed opacity-80 ' : ''
+                  }${
                     selected
                       ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                       : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
@@ -844,15 +897,18 @@ function CampaignFlowBuilder({
               nodes={displayNodes}
               edges={edges}
               nodeTypes={nodeTypes}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
+              onNodesChange={isLocked ? undefined : onNodesChange}
+              onEdgesChange={isLocked ? undefined : onEdgesChange}
+              onConnect={isLocked ? undefined : onConnect}
+              nodesDraggable={!isLocked}
+              nodesConnectable={!isLocked}
+              elementsSelectable={!isLocked}
               onNodeClick={(_, node) => setSelectedNodeId(node.id)}
               onPaneClick={() => setSelectedNodeId(null)}
-              onNodesDelete={onNodesDelete}
-              connectOnClick
+              onNodesDelete={isLocked ? undefined : onNodesDelete}
+              connectOnClick={!isLocked}
               connectionMode={ConnectionMode.Loose}
-              deleteKeyCode={['Backspace', 'Delete']}
+              deleteKeyCode={isLocked ? null : ['Backspace', 'Delete']}
               defaultEdgeOptions={{
                 animated: true,
                 labelStyle: { fontSize: 10, fontWeight: 600 },

@@ -21,6 +21,11 @@ import {
   Code2,
   Copy,
   Check,
+  GitFork,
+  Layers,
+  ListFilter,
+  Workflow,
+  ArrowRight,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -500,12 +505,246 @@ function ApiCallCard({ call, defaultOpen }) {
   )
 }
 
-function SessionDetailPage() {
+function categorizeTimelineItem(item, apiCall) {
+  const type = String(item.eventType || '').toUpperCase()
+  const callType = String(apiCall?.callType || '').toLowerCase()
+
+  // Step 1: Landing & MSISDN Detection / Identification
+  if (
+    type === 'VISIT' ||
+    type === 'HOME_VIEW' ||
+    type.includes('RESOLVE_MSISDN') ||
+    type.includes('API_HE_') ||
+    type.includes('CHECKSUB') ||
+    callType === 'checksub' ||
+    callType.includes('he_') ||
+    callType.includes('resolve')
+  ) {
+    return {
+      stepIndex: 1,
+      stepKey: 'LANDING',
+      stepTitle: 'Step 1: Landing & Identification',
+      badge: 'HOME',
+      badgeColor: 'text-sky-700 bg-sky-50 border-sky-200',
+    }
+  }
+
+  // Step 2: Funnel Transition / Pack Selection / Priority Check
+  if (
+    type === 'SUBSCRIBE_CLICK' ||
+    type.includes('PRIORITY') ||
+    callType === 'priority' ||
+    type.includes('BLOCKLIST')
+  ) {
+    return {
+      stepIndex: 2,
+      stepKey: 'PLAN_SELECTION',
+      stepTitle: 'Step 2: Plan Selection & Priority Check',
+      badge: 'CONFIRM / STEP 2',
+      badgeColor: 'text-indigo-700 bg-indigo-50 border-indigo-200',
+    }
+  }
+
+  // Step 3: OTP / PIN Verification & Billing Auth
+  if (
+    type.includes('OTP') ||
+    type.includes('PIN') ||
+    type.includes('DCB') ||
+    type.includes('CONFIRM_CLICK') ||
+    callType.includes('otp') ||
+    callType.includes('dcb') ||
+    callType.includes('pincode')
+  ) {
+    return {
+      stepIndex: 3,
+      stepKey: 'VERIFICATION',
+      stepTitle: 'Step 3: OTP / PIN Verification & Billing Auth',
+      badge: 'OTP',
+      badgeColor: 'text-purple-700 bg-purple-50 border-purple-200',
+    }
+  }
+
+  // Step 4: Outcome, Billing Callback & Postback
+  return {
+    stepIndex: 4,
+    stepKey: 'OUTCOME',
+    stepTitle: 'Step 4: Subscription Outcome & Postback',
+    badge: 'THANKYOU / BILLING',
+    badgeColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+  }
+}
+
+function TimelineItemCard({ item, apiById, visit }) {
+  const apiCall = item.kind === 'api' ? apiById.get(item.apiCallId) : null
+  const label =
+    item.kind === 'api'
+      ? apiCall?.statusLabel || item.metadata?.statusLabel
+      : item.metadata?.held
+        ? 'HELD'
+        : visit?.visitStatus
+  const desc = eventDescription(item.eventType)
+  const pack = eventPack(item.metadata)
+  const billingBody = parseJsonish(apiCall?.requestBody)
+  const skipCopy =
+    billingSkipFromPayload(item.metadata) ||
+    billingSkipFromPayload(billingBody) ||
+    (item.eventType === 'CALLBACK_RECEIVED'
+      ? billingSkipFromPayload(
+          parseJsonish(
+            apiCall?.requestBody,
+          ),
+        )
+      : null)
+  const rawInfo = item.kind === 'event' ? item.metadata?.info : ''
+  const hideFiringInfo =
+    String(rawInfo).includes('firing vendor postback') && skipCopy
+  const eventInfo = skipCopy || (hideFiringInfo ? '' : rawInfo)
+  const serviceId = eventChip(item.metadata, 'serviceId')
+  const subServiceId = eventChip(item.metadata, 'subServiceId')
+
+  return (
+    <div className="relative pl-7">
+      <div className="absolute left-0 top-0.5 w-6 h-6 rounded-full border bg-white flex items-center justify-center shadow-xs">
+        {getEventIcon(item.eventType)}
+      </div>
+      <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs hover:border-gray-300 transition-colors">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-black uppercase tracking-wide text-gray-800">
+              {(item.eventType || '—').replace(/_/g, ' ')}
+            </span>
+            {label && (
+              <span
+                className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusClass(label)}`}
+              >
+                {label}
+              </span>
+            )}
+            {pack && (
+              <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-indigo-700 bg-indigo-50 border-indigo-200">
+                {pack}
+              </span>
+            )}
+            {serviceId && (
+              <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-slate-700 bg-slate-50 border-slate-200">
+                {serviceId}
+              </span>
+            )}
+            {subServiceId && (
+              <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-violet-700 bg-violet-50 border-violet-200">
+                {subServiceId}
+              </span>
+            )}
+          </div>
+          <span className="text-[11px] font-mono text-gray-400 flex items-center gap-1">
+            <Calendar className="w-3.5 h-3.5" />
+            {item.createdAt ? formatDate(item.createdAt) : '—'}
+          </span>
+        </div>
+        {desc && <p className="text-xs text-gray-500 mt-1.5">{desc}</p>}
+        {(apiCall?.callType === 'checksub' || apiCall?.callType === 'priority') &&
+          apiCall.summary && (
+            <p className="text-xs text-gray-700 mt-1.5 font-medium">
+              {apiCall.callType === 'priority' &&
+                apiCall.summary.priority != null && (
+                  <>priority=#{apiCall.summary.priority} · </>
+                )}
+              currentStatus={apiCall.summary.currentStatus || '—'}
+              {' · '}
+              subscriptionStatus={apiCall.summary.subscriptionStatus || '—'}
+            </p>
+          )}
+        {item.kind === 'event' && eventInfo && (
+          <p
+            className={`text-xs mt-1 ${
+              skipCopy ? 'text-amber-800 font-medium' : 'text-gray-600'
+            }`}
+          >
+            {eventInfo}
+          </p>
+        )}
+        {skipCopy && item.kind === 'api' && (
+          <p className="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
+            {skipCopy}
+          </p>
+        )}
+        {item.kind === 'event' &&
+          item.metadata?.vendorFired === false &&
+          (item.metadata.allowedStatuses || item.metadata.receivedStatus) && (
+            <p className="text-[11px] font-mono text-amber-900 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-1.5">
+              allowed: {item.metadata.allowedStatuses || '—'}
+              {' · '}
+              received: {item.metadata.receivedStatus || item.metadata.status || '—'}
+            </p>
+          )}
+        {item.kind === 'event' && item.metadata?.url && (
+          <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
+            {item.metadata.url}
+            {item.metadata.httpStatus != null
+              ? ` · HTTP ${item.metadata.httpStatus}`
+              : ''}
+          </p>
+        )}
+        {item.kind === 'event' && item.metadata?.responseBody != null && (
+          <JsonBlock label="Response" value={item.metadata.responseBody} />
+        )}
+        {item.kind === 'api' && apiCall?.requestUrl && (
+          <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
+            {apiCall.requestUrl}
+            {apiCall.responseStatus != null
+              ? ` · HTTP ${apiCall.responseStatus}`
+              : ''}
+          </p>
+        )}
+        {item.kind === 'api' && apiCall?.requestBody != null && (
+          <JsonBlock
+            label="Request"
+            value={
+              skipCopy && billingBody
+                ? {
+                    ...billingBody,
+                    reason: skipCopy,
+                    matchPath:
+                      billingBody.matchPath ||
+                      (String(billingBody.reason || '').includes('click_id') ||
+                      String(billingBody.reason || '').includes('msisdn')
+                        ? billingBody.reason
+                        : undefined),
+                  }
+                : apiCall.requestBody
+            }
+          />
+        )}
+        {item.kind === 'api' && apiCall?.responseBody != null && (
+          <JsonBlock label="Response" value={apiCall.responseBody} />
+        )}
+        {item.kind === 'api' && apiCall?.errorMessage && (
+          <p className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            {apiCall.errorMessage}
+          </p>
+        )}
+        {item.kind === 'event' &&
+          (item.metadata?.inboundUrl || item.metadata?.partnerUrl) && (
+            <div className="mt-1 space-y-1">
+              {item.metadata.inboundUrl && (
+                <p className="text-[11px] font-mono text-sky-700 break-all">
+                  in: {item.metadata.inboundUrl}
+                </p>
+              )}
+              {item.metadata.partnerUrl && (
+                <p className="text-[11px] font-mono text-indigo-700 break-all">
+                  partner: {item.metadata.partnerUrl}
+                </p>
+              )}
+            </div>
+          )}
+   function SessionDetailPage() {
   const { visitId } = useParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [detail, setDetail] = useState(null)
+  const [viewMode, setViewMode] = useState('flow') // 'flow' | 'timeline'
 
   const load = useCallback(async () => {
     if (!visitId) return
@@ -532,6 +771,61 @@ function SessionDetailPage() {
     for (const c of detail?.apiCalls || []) map.set(c.id, c)
     return map
   }, [detail?.apiCalls])
+
+  const flowSteps = useMemo(() => {
+    const rawTimeline = detail?.timeline || []
+    const groups = [
+      {
+        stepIndex: 1,
+        stepKey: 'LANDING',
+        stepTitle: 'Step 1: Landing & Identity Check',
+        badge: 'HOME',
+        badgeColor: 'text-sky-700 bg-sky-50 border-sky-200',
+        description:
+          'Visitor arrival, Header Enrichment (HE), MSISDN resolution, or subscriber status check.',
+        items: [],
+      },
+      {
+        stepIndex: 2,
+        stepKey: 'PLAN_SELECTION',
+        stepTitle: 'Step 2: User Action & Funnel Transition',
+        badge: 'CONFIRM / STEP 2',
+        badgeColor: 'text-indigo-700 bg-indigo-50 border-indigo-200',
+        description:
+          'User clicked subscribe/continue, pack selected, or Priority Chain routed.',
+        items: [],
+      },
+      {
+        stepIndex: 3,
+        stepKey: 'VERIFICATION',
+        stepTitle: 'Step 3: OTP / PIN Verification & Billing Auth',
+        badge: 'OTP',
+        badgeColor: 'text-purple-700 bg-purple-50 border-purple-200',
+        description:
+          'OTP generation, SMS delivery, PIN submission, and partner verification.',
+        items: [],
+      },
+      {
+        stepIndex: 4,
+        stepKey: 'OUTCOME',
+        stepTitle: 'Step 4: Activation, Billing & Postback',
+        badge: 'COMPLETION',
+        badgeColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+        description:
+          'Subscription status confirmed, carrier billing callback, and vendor CPA postback.',
+        items: [],
+      },
+    ]
+
+    for (const item of rawTimeline) {
+      const apiCall = item.kind === 'api' ? apiById.get(item.apiCallId) : null
+      const { stepIndex } = categorizeTimelineItem(item, apiCall)
+      const group = groups[stepIndex - 1]
+      if (group) group.items.push(item)
+    }
+
+    return groups.filter((g) => g.items.length > 0)
+  }, [detail?.timeline, apiById])
 
   return (
     <AppShell
@@ -712,203 +1006,105 @@ function SessionDetailPage() {
               )}
             </section>
 
-            <section className="space-y-3">
-              <h2 className="text-sm font-bold text-gray-900">Session timeline</h2>
-              <div className="relative pl-8 py-2">
-                <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-200" />
-                <div className="space-y-5">
-                  {(detail?.timeline || []).map((item) => {
-                    const apiCall =
-                      item.kind === 'api' ? apiById.get(item.apiCallId) : null
-                    const label =
-                      item.kind === 'api'
-                        ? apiCall?.statusLabel || item.metadata?.statusLabel
-                        : item.metadata?.held
-                          ? 'HELD'
-                          : visit?.visitStatus
-                    const desc = eventDescription(item.eventType)
-                    const pack = eventPack(item.metadata)
-                    const billingBody = parseJsonish(apiCall?.requestBody)
-                    const skipCopy =
-                      billingSkipFromPayload(item.metadata) ||
-                      billingSkipFromPayload(billingBody) ||
-                      (item.eventType === 'CALLBACK_RECEIVED'
-                        ? billingSkipFromPayload(
-                            parseJsonish(
-                              (detail?.apiCalls || []).find(
-                                (c) => c.callType === 'billing_callback',
-                              )?.requestBody,
-                            ),
-                          )
-                        : null)
-                    const rawInfo = item.kind === 'event' ? item.metadata?.info : ''
-                    const hideFiringInfo =
-                      String(rawInfo).includes('firing vendor postback') && skipCopy
-                    const eventInfo = skipCopy || (hideFiringInfo ? '' : rawInfo)
-                    const serviceId = eventChip(item.metadata, 'serviceId')
-                    const subServiceId = eventChip(item.metadata, 'subServiceId')
-                    return (
-                      <div key={`${item.id}-${item.eventType}`} className="relative">
-                        <div className="absolute -left-8 top-0.5 w-8 h-8 rounded-full border bg-white flex items-center justify-center shadow-sm">
-                          {getEventIcon(item.eventType)}
-                        </div>
-                        <div className="rounded-xl border border-gray-200 bg-white p-3">
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-xs font-black uppercase tracking-wide text-gray-800">
-                                {(item.eventType || '—').replace(/_/g, ' ')}
-                              </span>
-                              {label && (
-                                <span
-                                  className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusClass(label)}`}
-                                >
-                                  {label}
-                                </span>
-                              )}
-                              {pack && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-indigo-700 bg-indigo-50 border-indigo-200">
-                                  {pack}
-                                </span>
-                              )}
-                              {serviceId && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-slate-700 bg-slate-50 border-slate-200">
-                                  {serviceId}
-                                </span>
-                              )}
-                              {subServiceId && (
-                                <span className="inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border text-violet-700 bg-violet-50 border-violet-200">
-                                  {subServiceId}
-                                </span>
-                              )}
-                            </div>
-                            <span className="text-[11px] font-mono text-gray-400 flex items-center gap-1">
-                              <Calendar className="w-3.5 h-3.5" />
-                              {item.createdAt ? formatDate(item.createdAt) : '—'}
-                            </span>
-                          </div>
-                          {desc && (
-                            <p className="text-xs text-gray-500 mt-1.5">{desc}</p>
-                          )}
-                          {(apiCall?.callType === 'checksub' ||
-                            apiCall?.callType === 'priority') &&
-                            apiCall.summary && (
-                            <p className="text-xs text-gray-700 mt-1.5 font-medium">
-                              {apiCall.callType === 'priority' &&
-                                apiCall.summary.priority != null && (
-                                  <>priority=#{apiCall.summary.priority} · </>
-                                )}
-                              currentStatus={apiCall.summary.currentStatus || '—'}
-                              {' · '}
-                              subscriptionStatus={apiCall.summary.subscriptionStatus || '—'}
-                            </p>
-                          )}
-                          {item.kind === 'event' && eventInfo && (
-                            <p
-                              className={`text-xs mt-1 ${
-                                skipCopy
-                                  ? 'text-amber-800 font-medium'
-                                  : 'text-gray-600'
-                              }`}
-                            >
-                              {eventInfo}
-                            </p>
-                          )}
-                          {skipCopy && item.kind === 'api' && (
-                            <p className="text-xs text-amber-800 font-medium mt-1.5 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5">
-                              {skipCopy}
-                            </p>
-                          )}
-                          {item.kind === 'event' &&
-                            item.metadata?.vendorFired === false &&
-                            (item.metadata.allowedStatuses ||
-                              item.metadata.receivedStatus) && (
-                              <p className="text-[11px] font-mono text-amber-900 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 mt-1.5">
-                                allowed: {item.metadata.allowedStatuses || '—'}
-                                {' · '}
-                                received:{' '}
-                                {item.metadata.receivedStatus ||
-                                  item.metadata.status ||
-                                  '—'}
-                              </p>
-                            )}
-                          {item.kind === 'event' && item.metadata?.url && (
-                            <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
-                              {item.metadata.url}
-                              {item.metadata.httpStatus != null
-                                ? ` · HTTP ${item.metadata.httpStatus}`
-                                : ''}
-                            </p>
-                          )}
-                          {item.kind === 'event' && item.metadata?.responseBody != null && (
-                            <JsonBlock
-                              label="Response"
-                              value={item.metadata.responseBody}
-                            />
-                          )}
-                          {item.kind === 'api' && apiCall?.requestUrl && (
-                            <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
-                              {apiCall.requestUrl}
-                              {apiCall.responseStatus != null
-                                ? ` · HTTP ${apiCall.responseStatus}`
-                                : ''}
-                            </p>
-                          )}
-                          {item.kind === 'api' && apiCall?.requestBody != null && (
-                            <JsonBlock
-                              label="Request"
-                              value={
-                                skipCopy && billingBody
-                                  ? {
-                                      ...billingBody,
-                                      reason: skipCopy,
-                                      matchPath:
-                                        billingBody.matchPath ||
-                                        (String(billingBody.reason || '').includes(
-                                          'click_id',
-                                        ) ||
-                                        String(billingBody.reason || '').includes(
-                                          'msisdn',
-                                        )
-                                          ? billingBody.reason
-                                          : undefined),
-                                    }
-                                  : apiCall.requestBody
-                              }
-                            />
-                          )}
-                          {item.kind === 'api' && apiCall?.responseBody != null && (
-                            <JsonBlock
-                              label="Response"
-                              value={apiCall.responseBody}
-                            />
-                          )}
-                          {item.kind === 'api' && apiCall?.errorMessage && (
-                            <p className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
-                              {apiCall.errorMessage}
-                            </p>
-                          )}
-                          {item.kind === 'event' &&
-                            (item.metadata?.inboundUrl ||
-                              item.metadata?.partnerUrl) && (
-                              <div className="mt-1 space-y-1">
-                                {item.metadata.inboundUrl && (
-                                  <p className="text-[11px] font-mono text-sky-700 break-all">
-                                    in: {item.metadata.inboundUrl}
-                                  </p>
-                                )}
-                                {item.metadata.partnerUrl && (
-                                  <p className="text-[11px] font-mono text-indigo-700 break-all">
-                                    partner: {item.metadata.partnerUrl}
-                                  </p>
-                                )}
-                              </div>
-                            )}
-                        </div>
-                      </div>
-                    )
-                  })}
+            <section className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-gray-900">Session flow &amp; execution logs</h2>
+                  <p className="text-xs text-gray-500">
+                    {viewMode === 'flow'
+                      ? 'Events and partner API calls grouped by sequential flow step.'
+                      : 'Flat chronological timeline of all session events and calls.'}
+                  </p>
+                </div>
+                <div className="inline-flex rounded-lg border border-gray-200 p-0.5 bg-gray-100 text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('flow')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${
+                      viewMode === 'flow'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    Flow Steps View
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setViewMode('timeline')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors ${
+                      viewMode === 'timeline'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    <ListFilter className="w-3.5 h-3.5" />
+                    Timeline View
+                  </button>
                 </div>
               </div>
+
+              {viewMode === 'flow' ? (
+                <div className="space-y-6">
+                  {flowSteps.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic">No flow events recorded.</p>
+                  ) : (
+                    flowSteps.map((step) => (
+                      <div
+                        key={step.stepKey}
+                        className="rounded-2xl border border-gray-200 bg-gray-50/50 p-4 space-y-3"
+                      >
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200/80 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-bold text-white">
+                              {step.stepIndex}
+                            </span>
+                            <div>
+                              <h3 className="text-xs font-bold text-gray-900 flex items-center gap-2">
+                                {step.stepTitle}
+                                <span
+                                  className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border ${step.badgeColor}`}
+                                >
+                                  {step.badge}
+                                </span>
+                              </h3>
+                              <p className="text-[11px] text-gray-500">{step.description}</p>
+                            </div>
+                          </div>
+                          <span className="text-[11px] font-medium text-gray-500 bg-white px-2 py-0.5 rounded-md border border-gray-200">
+                            {step.items.length} {step.items.length === 1 ? 'event' : 'events'}
+                          </span>
+                        </div>
+
+                        <div className="space-y-3 pt-1">
+                          {step.items.map((item) => (
+                            <TimelineItemCard
+                              key={`${item.id}-${item.eventType}`}
+                              item={item}
+                              apiById={apiById}
+                              visit={visit}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              ) : (
+                <div className="relative pl-8 py-2">
+                  <div className="absolute left-4 top-4 bottom-4 w-px bg-gray-200" />
+                  <div className="space-y-4">
+                    {(detail?.timeline || []).map((item) => (
+                      <TimelineItemCard
+                        key={`${item.id}-${item.eventType}`}
+                        item={item}
+                        apiById={apiById}
+                        visit={visit}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
 
             <div className="pt-2">

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Workflow, ArrowRight, GitBranch } from 'lucide-react'
+import { Workflow, ArrowRight, GitBranch, Lock, Unlock } from 'lucide-react'
 import Button from '../ui/Button'
 import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
 import {
@@ -29,6 +29,8 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
   const currentMode = normalizeModeId(campaign?.verificationMode)
   const savedEntry = resolveSavedEntry(campaign?.flowConfig)
   const savedAfterIdentity = resolveAfterIdentityTarget(campaign?.flowConfig)
+  const savedLocked = Boolean(campaign?.flowConfig?.isLocked ?? (currentMode === 'ORANGE_BF'))
+  const [isLocked, setIsLocked] = useState(savedLocked)
   const [draftMode, setDraftMode] = useState(currentMode)
   const [draftEntry, setDraftEntry] = useState(savedEntry)
   const [draftAfterIdentity, setDraftAfterIdentity] = useState(savedAfterIdentity)
@@ -38,7 +40,8 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     setDraftMode(currentMode)
     setDraftEntry(savedEntry)
     setDraftAfterIdentity(savedAfterIdentity)
-  }, [campaign?.id, currentMode, savedEntry, savedAfterIdentity])
+    setIsLocked(Boolean(campaign?.flowConfig?.isLocked ?? (currentMode === 'ORANGE_BF')))
+  }, [campaign?.id, currentMode, savedEntry, savedAfterIdentity, campaign?.flowConfig?.isLocked])
 
   const previewConfig = useMemo(() => {
     if (
@@ -81,7 +84,25 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
       draftMode !== 'UNIVERSE_DCB' &&
       draftAfterIdentity !== savedAfterIdentity)
 
+  const handleToggleLock = async () => {
+    const nextLocked = !isLocked
+    setIsLocked(nextLocked)
+    if (onSaveMode) {
+      setSaving(true)
+      try {
+        const currentConfig = campaign?.flowConfig || buildDefaultFlow(currentMode)
+        await onSaveMode({
+          verificationMode: currentMode,
+          flowConfig: { ...currentConfig, isLocked: nextLocked },
+        })
+      } finally {
+        setSaving(false)
+      }
+    }
+  }
+
   const handleModeChange = (nextMode) => {
+    if (isLocked) return
     setDraftMode(nextMode)
     setDraftEntry(
       nextMode === 'OTP_ONLY' || nextMode === 'UNIVERSE_DCB' ? 'OTP' : 'HOME',
@@ -90,16 +111,19 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
   }
 
   const handleSave = async () => {
-    if (!dirty || !onSaveMode) return
+    if (!dirty || !onSaveMode || isLocked) return
     setSaving(true)
     try {
-      const flowConfig = buildDefaultFlow(draftMode, {
-        entryPage:
-          draftMode === 'OTP_ONLY' || draftMode === 'UNIVERSE_DCB'
-            ? draftEntry
-            : 'HOME',
-        afterIdentity: isApiExposeEntry(draftEntry) ? 'HOME' : draftAfterIdentity,
-      })
+      const flowConfig = {
+        ...buildDefaultFlow(draftMode, {
+          entryPage:
+            draftMode === 'OTP_ONLY' || draftMode === 'UNIVERSE_DCB'
+              ? draftEntry
+              : 'HOME',
+          afterIdentity: isApiExposeEntry(draftEntry) ? 'HOME' : draftAfterIdentity,
+        }),
+        isLocked,
+      }
       await onSaveMode({ verificationMode: draftMode, flowConfig })
     } finally {
       setSaving(false)
@@ -124,25 +148,76 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <h2 className="text-sm font-semibold text-fg">Subscription flow</h2>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold text-fg">Subscription flow</h2>
+                  {isLocked ? (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                      <Lock className="w-3 h-3" /> Locked
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      <Unlock className="w-3 h-3" /> Editable
+                    </span>
+                  )}
+                </div>
                 <p className="text-xs text-fg-muted mt-0.5">
                   Pick how the Subscribe CTA moves between pages. Canvas button “When clicked”
                   (page / URL / Priority) can override this for individual buttons.
                 </p>
               </div>
-              {campaign?.id && !showApiExposeDocs && (
-                <Link
-                  to={advancedPath}
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline shrink-0 pt-0.5"
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleToggleLock}
+                  disabled={saving}
+                  className="flex items-center gap-1.5 text-xs font-semibold"
                 >
-                  <GitBranch className="w-3.5 h-3.5" />
-                  Edit advanced path
-                </Link>
-              )}
+                  {isLocked ? (
+                    <>
+                      <Unlock className="w-3.5 h-3.5 text-amber-600" />
+                      Unlock Flow
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                      Lock Flow
+                    </>
+                  )}
+                </Button>
+                {campaign?.id && !showApiExposeDocs && (
+                  isLocked ? (
+                    <span
+                      title="Flow is locked. Unlock above to edit the path."
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted opacity-50 cursor-not-allowed pt-0.5"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      Edit advanced path
+                    </span>
+                  ) : (
+                    <Link
+                      to={advancedPath}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline shrink-0 pt-0.5"
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                      Edit advanced path
+                    </Link>
+                  )
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      {isLocked && (
+        <div className="px-5 py-2.5 bg-amber-50/70 border-b border-amber-100 flex items-center justify-between text-xs text-amber-800">
+          <div className="flex items-center gap-2">
+            <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+            <span>This flow is <strong>locked</strong> against accidental changes. Click <strong>Unlock Flow</strong> above to modify.</span>
+          </div>
+        </div>
+      )}
 
       <div className="px-5 py-4 space-y-4">
         <div>
@@ -154,8 +229,11 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
                 <button
                   key={m.id}
                   type="button"
+                  disabled={isLocked}
                   onClick={() => handleModeChange(m.id)}
                   className={`text-left rounded-lg border px-3.5 py-3 transition-colors ${
+                    isLocked ? 'cursor-not-allowed opacity-80 ' : ''
+                  }${
                     selected
                       ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
                       : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
