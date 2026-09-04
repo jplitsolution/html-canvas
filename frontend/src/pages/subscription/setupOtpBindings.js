@@ -1,5 +1,5 @@
 import { sendOtp, verifyOtp } from '../../services/api/otp'
-import { persistPhone } from '../../services/flow/resolvePhoneNumber'
+import { persistPhone, resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
 function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef, transitionLockRef }) {
@@ -39,8 +39,24 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   // dial code yet, so auto-prepending +91 (etc.) produces wrong MSISDNs.
   // User enters the full number they want to use (local or with country code).
 
-  if (phoneInput && phoneRef.current) {
-    phoneInput.value = phoneRef.current
+  if (phoneInput) {
+    if (phoneRef?.current) {
+      phoneInput.value = phoneRef.current
+    } else {
+      const fromStorage = resolvePhoneFromStorage()
+      if (fromStorage) {
+        phoneInput.value = fromStorage
+        if (phoneRef) phoneRef.current = fromStorage
+        if (setPhone) setPhone(fromStorage)
+      }
+    }
+  }
+
+  const handlePhoneInput = (e) => {
+    const val = e.target.value.trim().replace(/\D/g, '')
+    if (phoneRef) phoneRef.current = val
+    if (setPhone) setPhone(val)
+    if (val) persistPhone(val)
   }
 
   // Check if limit already exceeded on mount
@@ -62,7 +78,11 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       return
     }
     
-    const basePhone = phoneInput ? phoneInput.value.trim() : ''
+    const basePhone =
+      (phoneInput ? phoneInput.value.trim() : '') ||
+      phoneRef?.current ||
+      resolvePhoneFromStorage() ||
+      ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
     
     // No fixed MSISDN length — markets differ (local / with country code).
@@ -201,9 +221,13 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
     if (e && typeof e.preventDefault === 'function') e.preventDefault()
     if (isVerifying) return
 
-    const basePhone = phoneInput ? phoneInput.value.trim() : ''
+    const basePhone =
+      (phoneInput ? phoneInput.value.trim() : '') ||
+      phoneRef?.current ||
+      resolvePhoneFromStorage() ||
+      ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
-    const msisdn = cleanBasePhone || phoneRef.current
+    const msisdn = cleanBasePhone || phoneRef?.current || resolvePhoneFromStorage() || ''
     const code = otpInput ? otpInput.value.trim() : ''
 
     if (!msisdn) {
@@ -333,12 +357,14 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   if (sendBtn) sendBtn.addEventListener('click', handleSendClick)
   if (verifyBtn) verifyBtn.addEventListener('click', handleVerifyClick)
   if (otpInput) otpInput.addEventListener('input', handleOtpInput)
+  if (phoneInput) phoneInput.addEventListener('input', handlePhoneInput)
 
   return () => {
     if (timer) clearInterval(timer)
     if (sendBtn) sendBtn.removeEventListener('click', handleSendClick)
     if (verifyBtn) verifyBtn.removeEventListener('click', handleVerifyClick)
     if (otpInput) otpInput.removeEventListener('input', handleOtpInput)
+    if (phoneInput) phoneInput.removeEventListener('input', handlePhoneInput)
   }
 }
 

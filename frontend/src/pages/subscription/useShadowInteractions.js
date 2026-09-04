@@ -16,6 +16,7 @@ import { isDcbFlowContext, setupDcbBindings } from './setupDcbBindings'
 import { setupOtpBindings } from './setupOtpBindings'
 import { getSelectedPackFromShadow, mountPageInShadow, syncPackPicker, syncPhoneDisplay } from './shadowDom'
 import { pickLivePageData } from '../../editor/services/deviceLayouts'
+import { resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
 
 /**
  * Shadow DOM click routing (Layer C + bridge to Layer B).
@@ -295,7 +296,7 @@ function useShadowInteractions({
             trackingCampid: trackingCampid || trackingCampidRef.current || undefined,
             fromPage: fromPage || 'HOME',
             action: 'SUBSCRIBE_ROUTE',
-            phone: phoneRef.current,
+            phone: phoneRef.current || resolvePhoneFromStorage() || undefined,
             planId,
             clickId: clickIdRef.current || undefined,
             rcid: rcidRef.current || undefined,
@@ -378,7 +379,7 @@ function useShadowInteractions({
           trackingCampid: trackingCampid || trackingCampidRef.current || undefined,
           fromPage,
           action,
-          phone: phoneRef.current,
+          phone: phoneRef.current || resolvePhoneFromStorage() || undefined,
           clickId: clickIdRef.current || undefined,
           rcid: rcidRef.current || undefined,
           vid: vidRef.current || undefined,

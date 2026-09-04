@@ -122,4 +122,54 @@ describe('setupOtpBindings after OTP verify', () => {
       expect(loadPage).toHaveBeenCalledWith('HOME', { direct: true })
     })
   })
+
+  it('uses phoneRef when phoneInput is not on the page (e.g. on CONFIRM step)', async () => {
+    document.body.innerHTML = `
+      <div id="host">
+        <button data-otp-action="send">S'abonner</button>
+        <div data-otp-slot="error"></div>
+        <div data-otp-slot="status"></div>
+      </div>
+    `
+    const host = document.getElementById('host')
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = host.innerHTML
+    host.innerHTML = ''
+
+    const { sendOtp } = await import('../../src/services/api/otp')
+    sendOtp.mockResolvedValueOnce({ success: true })
+    const transitionFlow = vi.fn().mockResolvedValueOnce({
+      pageType: 'OTP',
+      html: '<div>otp</div>',
+    })
+
+    setupOtpBindings(shadow, {
+      transitionFlow,
+      cachePage: vi.fn(),
+      loadPage: vi.fn(),
+      country: 'Burkina Faso',
+      operator: 'Orange',
+      campid: '',
+      trackingCampid: 'BF-OBF-11',
+      visitIdRef: { current: 46104 },
+      phoneRef: { current: '56864685' },
+      packRef: { current: 'daily' },
+      setPhone: vi.fn(),
+      setTransitioning: vi.fn(),
+      setError: vi.fn(),
+      pageCacheRef: { current: new Map() },
+      transitionLockRef: { current: false },
+    })
+
+    shadow.querySelector('[data-otp-action="send"]').click()
+    await vi.waitFor(() => {
+      expect(sendOtp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: '56864685',
+          visitId: 46104,
+        }),
+      )
+    })
+    expect(shadow.querySelector('[data-otp-slot="error"]').textContent).toBe('')
+  })
 })
