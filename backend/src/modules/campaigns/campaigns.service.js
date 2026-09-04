@@ -93,12 +93,16 @@ export const createCampaignsService = () => {
     ) {
       const id = parseInt(campaignOrPartial, 10);
       if (!id || Number.isNaN(id)) return;
-      campaign = await getCampaignRepo().findOne({
-        where: { id },
-        relations: { marketOperator: { country: true } },
-      });
-      if (!campaign) return;
-      withTrackingId(campaign);
+      const keys = [
+        `flow:campaign:id:${id}`,
+        `flow:config:${id}`,
+      ];
+      try {
+        await Promise.all(keys.map((k) => redisService.del(k)));
+      } catch (err) {
+        console.warn('invalidateFlowCampaignCache error:', err?.message || err);
+      }
+      return;
     } else if (campaign?.id && !campaign.trackingId) {
       withTrackingId(campaign);
     }
@@ -113,7 +117,11 @@ export const createCampaignsService = () => {
         : null,
       `flow:config:${campaign.id}`,
     ].filter(Boolean);
-    await Promise.all(keys.map((k) => redisService.del(k)));
+    try {
+      await Promise.all(keys.map((k) => redisService.del(k)));
+    } catch (err) {
+      console.warn('invalidateFlowCampaignCache error:', err?.message || err);
+    }
   };
 
   const defaultPageData = (pageType, campaign) =>
@@ -157,9 +165,11 @@ export const createCampaignsService = () => {
     for (const page of campaign.pages || []) {
       if (!page.templateId) continue;
 
-      const template = await getTemplateRepo().findOne({
-        where: { id: page.templateId },
-      });
+      const template =
+        page.template ||
+        (await getTemplateRepo().findOne({
+          where: { id: page.templateId },
+        }));
       if (!template) continue;
 
       const html = template.data?.html || '';
@@ -186,6 +196,12 @@ export const createCampaignsService = () => {
       (campaign.pages || []).map((p) => p.pageType),
     );
 
+    // Fast return if all pages already exist
+    if (existingPageTypes.size >= ALL_CAMPAIGN_PAGE_TYPES.length) {
+      return;
+    }
+
+    let inserted = false;
     for (const pageType of ALL_CAMPAIGN_PAGE_TYPES) {
       if (!existingPageTypes.has(pageType)) {
         try {
@@ -211,6 +227,7 @@ export const createCampaignsService = () => {
             campaign.pages = [];
           }
           campaign.pages.push(newPage);
+          inserted = true;
         } catch (err) {
           const dbPage = await getCampaignPageRepo().findOne({
             where: { campaignId: campaign.id, pageType },
@@ -226,7 +243,9 @@ export const createCampaignsService = () => {
       }
     }
 
-    await ensureFlowPages(campaign);
+    if (inserted) {
+      await ensureFlowPages(campaign);
+    }
   };
 
   const findAll = async (userId) => {
@@ -240,6 +259,26 @@ export const createCampaignsService = () => {
       order: { updatedAt: 'DESC' },
     });
     return campaigns.map((c) => sanitizeCampaignListItem(withTrackingId(c)));
+  };
+
+  const assertOwnership = async (id, userId) => {
+    const campaign = await getCampaignRepo().findOne({
+      where: { id: parseInt(id, 10) },
+      select: { id: true, name: true, userId: true },
+    });
+    if (!campaign) {
+      const err = new Error(`Campaign with ID ${id} not found`);
+      err.statusCode = 404;
+      throw err;
+    }
+    if (campaign.userId !== userId) {
+      const err = new Error(
+        'You do not have permission to access this campaign',
+      );
+      err.statusCode = 403;
+      throw err;
+    }
+    return campaign;
   };
 
   const findOne = async (id, userId) => {
@@ -690,8 +729,8 @@ export const createCampaignsService = () => {
       throw err;
     }
 
-    // Always reload template fresh in case ensureCampaignPages just created it
-    if (page.templateId) {
+    // Only reload template if relation was somehow missing
+    if (!page.template && page.templateId) {
       const template = await getTemplateRepo().findOne({
         where: { id: page.templateId },
       });
@@ -717,9 +756,11 @@ export const createCampaignsService = () => {
       throw err;
     }
 
-    const template = await getTemplateRepo().findOne({
-      where: { id: page.templateId },
-    });
+    const template =
+      page.template ||
+      (await getTemplateRepo().findOne({
+        where: { id: page.templateId },
+      }));
     if (!template) {
       const err = new Error('Template not found');
       err.statusCode = 404;
@@ -735,8 +776,15 @@ export const createCampaignsService = () => {
     template.data = data;
     await getTemplateRepo().save(template);
 
-    await invalidateFlowCampaignCache(campaignId);
-    return getPage(campaignId, normalizedType, userId);
+    page.template = template;
+    page.updatedAt = new Date();
+
+    // Fast asynchronous cache invalidation
+    invalidateFlowCampaignCache(campaignId).catch((e) =>
+      console.warn('invalidateFlowCampaignCache:', e?.message || e),
+    );
+
+    return page;
   };
 
   const getApiConfig = async (campaignId, userId) => {
@@ -866,6 +914,7 @@ export const createCampaignsService = () => {
   return {
     findAll,
     findOne,
+    assertOwnership,
     findByCountryOperator,
     findByIdForFlow,
     findByTrackingId,

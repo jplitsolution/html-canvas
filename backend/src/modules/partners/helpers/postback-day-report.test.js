@@ -284,12 +284,12 @@ describe('formatDayReportText', () => {
       'Asia/Kolkata',
     );
 
-    assert.match(text, /MSISDN  254711111111/);
+    assert.match(text, /MSISDN {2}254711111111/);
     assert.match(text, /1\. QUEUED\s+YES/);
     assert.match(text, /2\. RECEIVED\s+YES/);
     assert.match(text, /3\. FIRED\s+YES/);
     assert.match(text, /COMPLETE/);
-    assert.match(text, /MSISDN  254722222222/);
+    assert.match(text, /MSISDN {2}254722222222/);
     assert.match(text, /WAITING/);
     assert.match(text, /Vendor fire SENT\s+: 1/);
     assert.match(text, /Waiting for callback\s+: 1/);

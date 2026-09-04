@@ -570,7 +570,7 @@ export const createOtpService = () => {
             { id: parseInt(visitId, 10) },
             { phone: String(phone).trim(), otpVerifiedAt: new Date() },
           );
-        } catch {
+        } catch (_) {
           // swallow
         }
       }
@@ -585,6 +585,9 @@ export const createOtpService = () => {
         verified: true,
       };
     }
+
+    const apiConfig = await getApiConfigForCampaign(campaign?.id);
+    const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
 
     if (!(providerConfig.verifyUrl || providerConfig.verify_url)) {
       const err = new Error(

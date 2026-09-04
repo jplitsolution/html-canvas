@@ -11,10 +11,8 @@ export const createTemplatesService = () => {
     });
     return templates.map((template) => {
       if (template.data) {
-        template.data = { ...template.data };
-        delete template.data.projectData;
-        delete template.data.html;
-        delete template.data.css;
+        const { projectData, html, css, ...restData } = template.data;
+        template.data = restData;
       }
       return template;
     });
@@ -27,10 +25,8 @@ export const createTemplatesService = () => {
     });
     return templates.map((template) => {
       if (template.data) {
-        template.data = { ...template.data };
-        delete template.data.projectData;
-        delete template.data.html;
-        delete template.data.css;
+        const { projectData, html, css, ...restData } = template.data;
+        template.data = restData;
       }
       return template;
     });

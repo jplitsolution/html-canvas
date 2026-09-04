@@ -527,7 +527,7 @@ export const createAnalyticsService = () => {
   };
 
   const getCampaignActivityLogs = async (campaignId, userId, query) => {
-    await campaignsService.findOne(campaignId, userId);
+    await campaignsService.assertOwnership(campaignId, userId);
     const cId = parseInt(campaignId, 10);
 
     const page = Number(query.page) || 1;
@@ -663,7 +663,7 @@ export const createAnalyticsService = () => {
 
     let campaignName = null;
     if (visit.campaignId) {
-      const campaign = await campaignsService.findOne(
+      const campaign = await campaignsService.assertOwnership(
         visit.campaignId,
         userId,
       );

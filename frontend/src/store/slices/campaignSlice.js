@@ -196,12 +196,22 @@ export function createCampaignSlice(set, get) {
       set({ saving: true })
       try {
         const page = await campaignsApi.saveCampaignPage(campaignId, pageType, payload)
-        set({
+        set((s) => ({
           saving: false,
           isDirty: false,
           campaignPage: { ...page, campaignId: Number(campaignId) || campaignId },
-        })
-        await get().refreshCampaign(campaignId)
+          campaign:
+            s.campaign && sameId(s.campaign.id, campaignId)
+              ? {
+                  ...s.campaign,
+                  pages: (s.campaign.pages || []).map((p) =>
+                    p.pageType === pageType
+                      ? { ...p, hasContent: true, updatedAt: new Date().toISOString() }
+                      : p,
+                  ),
+                }
+              : s.campaign,
+        }))
         return page
       } catch (err) {
         set({ saving: false })
@@ -212,15 +222,27 @@ export function createCampaignSlice(set, get) {
 
     afterPageSaved: async (campaignId, pageType, savedPage) => {
       if (savedPage) {
-        set({
+        set((s) => ({
           campaignPage: { ...savedPage, campaignId: Number(campaignId) || campaignId },
-        })
+          isDirty: false,
+          saving: false,
+          campaign:
+            s.campaign && sameId(s.campaign.id, campaignId)
+              ? {
+                  ...s.campaign,
+                  pages: (s.campaign.pages || []).map((p) =>
+                    p.pageType === pageType
+                      ? { ...p, hasContent: true, updatedAt: new Date().toISOString() }
+                      : p,
+                  ),
+                }
+              : s.campaign,
+        }))
       } else {
         set({ campaignPage: null })
-      }
-      await get().refreshCampaign(campaignId)
-      if (pageType && !savedPage) {
-        await get().loadCampaignPage(campaignId, pageType, true)
+        if (pageType) {
+          await get().loadCampaignPage(campaignId, pageType, true)
+        }
       }
     },
 

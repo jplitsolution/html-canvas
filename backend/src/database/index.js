@@ -15,6 +15,7 @@ export const initDatabase = async () => {
   const config = getConfig();
   const dbConfig = config.database;
 
+  const isPostgres = (dbConfig.type || 'postgres') === 'postgres';
   dataSource = new DataSource({
     type: dbConfig.type || 'postgres',
     host: dbConfig.host,
@@ -25,6 +26,9 @@ export const initDatabase = async () => {
     synchronize: false,
     logging: false,
     entities,
+    extra: isPostgres
+      ? { max: 20, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000 }
+      : { connectionLimit: 20, waitForConnections: true },
   });
 
   await dataSource.initialize();

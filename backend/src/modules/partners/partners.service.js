@@ -79,17 +79,29 @@ export const createPartnersService = () => {
     await getVendorRepo().save(vendor);
   };
 
+  const attributionCache = new Map();
+  const ATTRIBUTION_CACHE_TTL = 300000; // 5 mins
+
   /** Resolve traffic partner from vid only (affiliates removed from product). */
   const resolveAttribution = async (vidCode) => {
     let vendorId;
     const normalizedVid = vidCode ? normalizeCode(vidCode) : '';
 
     if (normalizedVid) {
-      const vendor = await getVendorRepo()
-        .createQueryBuilder('v')
-        .where('LOWER(v.code) = :code', { code: normalizedVid })
-        .getOne();
-      if (vendor) vendorId = vendor.id;
+      const cached = attributionCache.get(normalizedVid);
+      const now = Date.now();
+      if (cached && now - cached.timestamp < ATTRIBUTION_CACHE_TTL) {
+        vendorId = cached.vendorId;
+      } else {
+        const vendor = await getVendorRepo()
+          .createQueryBuilder('v')
+          .where('LOWER(v.code) = :code', { code: normalizedVid })
+          .getOne();
+        if (vendor) {
+          vendorId = vendor.id;
+          attributionCache.set(normalizedVid, { vendorId, timestamp: now });
+        }
+      }
     }
 
     return { vendorId, affiliateId: null, mismatch: false };

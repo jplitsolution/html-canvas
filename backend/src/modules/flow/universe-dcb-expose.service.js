@@ -918,8 +918,6 @@ export const createUniverseDcbExposeService = (
           payload,
           providerLog,
         };
-      } catch (err) {
-        throw err;
       } finally {
         await redisService.del(lockKey);
         localConfirmLocks.delete(lockKey);
