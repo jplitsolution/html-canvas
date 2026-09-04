@@ -738,7 +738,12 @@ function TimelineItemCard({ item, apiById, visit }) {
               )}
             </div>
           )}
-   function SessionDetailPage() {
+      </div>
+    </div>
+  )
+}
+
+function SessionDetailPage() {
   const { visitId } = useParams()
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
