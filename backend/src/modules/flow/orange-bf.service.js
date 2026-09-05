@@ -13,6 +13,16 @@ import { interpretChecksubResponse } from './helpers/checksub-rules.js';
 
 const cleanPhone = (val) => String(val || '').replace(/\D/g, '');
 
+const safeParseJson = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
 export const createOrangeBfService = () => {
   const getCampaign = async (campaignId) => {
     if (!campaignId) return null;
@@ -27,16 +37,59 @@ export const createOrangeBfService = () => {
   const parseProviderConfig = (apiConfig) => {
     if (!apiConfig) return { ...ORANGE_BF_DEFAULTS };
     try {
-      const parsed = typeof apiConfig.headersJson === 'string' ? JSON.parse(apiConfig.headersJson) : {};
+      const headersParsed = safeParseJson(apiConfig.headersJson);
+      const otpConfigParsed = safeParseJson(apiConfig.otpConfigJson);
+
+      const merged = { ...headersParsed, ...otpConfigParsed };
+
+      let baseUrl = ORANGE_BF_DEFAULTS.baseUrl;
+      if (merged.baseUrl) {
+        baseUrl = merged.baseUrl;
+      } else if (apiConfig.sendUrl) {
+        try {
+          baseUrl = new URL(apiConfig.sendUrl).origin;
+        } catch {
+          baseUrl = ORANGE_BF_DEFAULTS.baseUrl;
+        }
+      }
+
       return {
-        baseUrl: apiConfig.sendUrl ? new URL(apiConfig.sendUrl).origin : ORANGE_BF_DEFAULTS.baseUrl,
-        serviceId: parsed.serviceId || ORANGE_BF_DEFAULTS.serviceId,
-        subServiceId: parsed.subServiceId || ORANGE_BF_DEFAULTS.subServiceId,
-        cpId: parsed.cpId || ORANGE_BF_DEFAULTS.cpId,
-        channel: parsed.channel || ORANGE_BF_DEFAULTS.channel,
-        country: parsed.country || ORANGE_BF_DEFAULTS.country,
-        operator: parsed.operator || ORANGE_BF_DEFAULTS.operator,
-        language: parsed.language || ORANGE_BF_DEFAULTS.language,
+        baseUrl,
+        sendUrl: merged.sendUrl || apiConfig.sendUrl || null,
+        sendMethod: (merged.sendMethod || merged.method || 'GET').toUpperCase(),
+        sendHeadersJson: merged.sendHeadersJson || merged.headersJson || apiConfig.headersJson || null,
+        sendBodyJson: merged.sendBodyJson || merged.bodyJson || merged.body || null,
+
+        verifyUrl: merged.verifyUrl || apiConfig.verifyUrl || null,
+        verifyMethod: (merged.verifyMethod || 'GET').toUpperCase(),
+        verifyHeadersJson: merged.verifyHeadersJson || merged.headersJson || apiConfig.headersJson || null,
+        verifyBodyJson: merged.verifyBodyJson || merged.verifyBody || null,
+
+        checksubUrl: merged.checksubUrl || apiConfig.subscriptionApi || null,
+        checksubMethod: (merged.checksubMethod || 'GET').toUpperCase(),
+        checksubHeadersJson: merged.checksubHeadersJson || merged.headersJson || apiConfig.headersJson || null,
+        checksubBodyJson: merged.checksubBodyJson || null,
+
+        unsubUrl: merged.unsubUrl || null,
+        unsubMethod: (merged.unsubMethod || 'GET').toUpperCase(),
+        unsubHeadersJson: merged.unsubHeadersJson || merged.headersJson || apiConfig.headersJson || null,
+        unsubBodyJson: merged.unsubBodyJson || null,
+
+        syncUrl: merged.syncUrl || null,
+        syncMethod: (merged.syncMethod || 'GET').toUpperCase(),
+        syncHeadersJson: merged.syncHeadersJson || merged.headersJson || apiConfig.headersJson || null,
+        syncBodyJson: merged.syncBodyJson || null,
+
+        serviceId: merged.serviceId || ORANGE_BF_DEFAULTS.serviceId,
+        subServiceId: merged.subServiceId || ORANGE_BF_DEFAULTS.subServiceId,
+        cpId: merged.cpId || ORANGE_BF_DEFAULTS.cpId,
+        channel: merged.channel || ORANGE_BF_DEFAULTS.channel,
+        country: merged.country || ORANGE_BF_DEFAULTS.country,
+        operator: merged.operator || ORANGE_BF_DEFAULTS.operator,
+        language: merged.language || ORANGE_BF_DEFAULTS.language,
+        successKey: merged.successKey || apiConfig.successKey || 'responseCode',
+        successValue: merged.successValue !== undefined ? String(merged.successValue) : (apiConfig.successValue || '0'),
+        timeoutMs: Number(merged.timeoutMs) || ORANGE_BF_DEFAULTS.timeoutMs,
       };
     } catch {
       return { ...ORANGE_BF_DEFAULTS };
@@ -53,11 +106,22 @@ export const createOrangeBfService = () => {
       const campaign = await getCampaign(campaignId);
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
+      const context = {
+        campaignId: campaign?.id ? String(campaign.id) : '',
+        campaignName: campaign?.name || '',
+        visitId: visitId ? String(visitId) : '',
+      };
 
       // 1. Run CheckSub first to see if user is already an active subscriber
       const checkResult = await orangeBfProvider.checkSubscription({
         msisdn,
         serviceId: config.serviceId,
+        subServiceId: config.subServiceId,
+        cpId: config.cpId,
+        channel: config.channel,
+        country: config.country,
+        operator: config.operator,
+        context,
         config,
       });
 
@@ -67,7 +131,7 @@ export const createOrangeBfService = () => {
         msisdn,
         callType: ApiCallType.ORANGE_BF_CHECKSUB || 'orange_bf_checksub',
         requestUrl: checkResult.requestUrl,
-        requestBody: JSON.stringify({ msisdn, serviceId: config.serviceId, channel: config.channel }),
+        requestBody: checkResult.requestBody ? (typeof checkResult.requestBody === 'string' ? checkResult.requestBody : JSON.stringify(checkResult.requestBody)) : JSON.stringify(checkResult.requestParams || { msisdn, serviceId: config.serviceId }),
         responseStatus: checkResult.httpStatus,
         responseBody: checkResult.rawResponse,
         success: checkResult.success,
@@ -109,6 +173,13 @@ export const createOrangeBfService = () => {
       const otpResult = await orangeBfProvider.generateAuthOtp({
         msisdn,
         language: language || config.language || '_E',
+        serviceId: config.serviceId,
+        subServiceId: config.subServiceId,
+        cpId: config.cpId,
+        channel: config.channel,
+        country: config.country,
+        operator: config.operator,
+        context,
         config,
       });
 
@@ -118,7 +189,7 @@ export const createOrangeBfService = () => {
         msisdn,
         callType: ApiCallType.ORANGE_BF_OTP_SEND || 'orange_bf_otp_send',
         requestUrl: otpResult.requestUrl,
-        requestBody: JSON.stringify({ msisdn, language: language || config.language || '_E' }),
+        requestBody: otpResult.requestBody ? (typeof otpResult.requestBody === 'string' ? otpResult.requestBody : JSON.stringify(otpResult.requestBody)) : JSON.stringify(otpResult.requestParams || { msisdn, language: language || config.language || '_E' }),
         responseStatus: otpResult.httpStatus,
         responseBody: otpResult.rawResponse,
         success: otpResult.success,
@@ -136,12 +207,52 @@ export const createOrangeBfService = () => {
         };
       }
 
-      // Cache session state in Redis
+      // Extract chained identifiers & cache session state in Redis
+      const raw = otpResult.rawResponse || {};
+      const chainedId = String(
+        otpResult.transactionId ||
+        raw.transactionId ||
+        raw.transaction_id ||
+        raw.requestId ||
+        raw.request_id ||
+        raw.referenceId ||
+        raw.reference_id ||
+        raw.token ||
+        raw.sessionId ||
+        raw.session_id ||
+        raw.otpId ||
+        raw.otp_id ||
+        raw.id ||
+        ''
+      );
+
+      const cachePayload = {
+        msisdn,
+        transactionId: chainedId,
+        requestId: chainedId,
+        referenceId: chainedId,
+        token: raw.token || chainedId,
+        sessionId: raw.sessionId || raw.session_id || chainedId,
+        rawResponse: raw,
+        timestamp: Date.now(),
+      };
+
       if (visitId) {
         try {
           await redisService.set(
             `orange_bf:${visitId}`,
-            JSON.stringify({ msisdn, transactionId: otpResult.transactionId, timestamp: Date.now() }),
+            JSON.stringify(cachePayload),
+            900,
+          );
+        } catch {
+          // Redis cache optional
+        }
+      }
+      if (campaign?.id && msisdn) {
+        try {
+          await redisService.set(
+            `orange_bf:${campaign.id}:${msisdn}`,
+            JSON.stringify(cachePayload),
             900,
           );
         } catch {
@@ -153,7 +264,7 @@ export const createOrangeBfService = () => {
         success: true,
         status: ORANGE_BF_OUTCOMES.OTP_SENT,
         responseCode: otpResult.responseCode,
-        transactionId: otpResult.transactionId,
+        transactionId: chainedId,
         message: 'OTP generated and sent successfully',
       };
     },
@@ -168,9 +279,38 @@ export const createOrangeBfService = () => {
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
 
+      // Retrieve cached session chaining values
+      let cachedData = {};
+      if (visitId) {
+        try {
+          const raw = await redisService.get(`orange_bf:${visitId}`);
+          if (raw) cachedData = safeParseJson(raw);
+        } catch {}
+      }
+      if (!cachedData.transactionId && campaign?.id && msisdn) {
+        try {
+          const raw = await redisService.get(`orange_bf:${campaign.id}:${msisdn}`);
+          if (raw) cachedData = safeParseJson(raw);
+        } catch {}
+      }
+
+      const context = {
+        campaignId: campaign?.id ? String(campaign.id) : '',
+        campaignName: campaign?.name || '',
+        visitId: visitId ? String(visitId) : '',
+        vendorId: vendorId ? String(vendorId) : '',
+        ...cachedData,
+      };
+
       const verifyResult = await orangeBfProvider.validateAuthOtp({
         msisdn,
         otp: String(otp).trim(),
+        transactionId: cachedData.transactionId || '',
+        requestId: cachedData.requestId || cachedData.transactionId || '',
+        referenceId: cachedData.referenceId || cachedData.transactionId || '',
+        token: cachedData.token || '',
+        sessionId: cachedData.sessionId || '',
+        context,
         config,
       });
 
@@ -180,7 +320,7 @@ export const createOrangeBfService = () => {
         msisdn,
         callType: ApiCallType.ORANGE_BF_OTP_VERIFY || 'orange_bf_otp_verify',
         requestUrl: verifyResult.requestUrl,
-        requestBody: JSON.stringify({ msisdn, otp: String(otp).trim() }),
+        requestBody: verifyResult.requestBody ? (typeof verifyResult.requestBody === 'string' ? verifyResult.requestBody : JSON.stringify(verifyResult.requestBody)) : JSON.stringify(verifyResult.requestParams || { msisdn, otp: String(otp).trim() }),
         responseStatus: verifyResult.httpStatus,
         responseBody: verifyResult.rawResponse,
         success: verifyResult.success,
@@ -194,7 +334,7 @@ export const createOrangeBfService = () => {
           status: verifyResult.outcome,
           responseCode: verifyResult.responseCode,
           error: verifyResult.responseMessage || 'OTP validation failed',
-          transactionId: verifyResult.transactionId,
+          transactionId: verifyResult.transactionId || cachedData.transactionId || null,
         };
       }
 
@@ -221,7 +361,7 @@ export const createOrangeBfService = () => {
             visitId: visitId ? parseInt(visitId, 10) : null,
             msisdn,
             status: postbackStatus,
-            transactionId: verifyResult.transactionId || null,
+            transactionId: verifyResult.transactionId || cachedData.transactionId || null,
           });
           await postbackRepo.save(postback);
         } catch (e) {
@@ -235,7 +375,7 @@ export const createOrangeBfService = () => {
         success: true,
         status: ORANGE_BF_OUTCOMES.SUCCESS,
         responseCode: verifyResult.responseCode,
-        transactionId: verifyResult.transactionId,
+        transactionId: verifyResult.transactionId || cachedData.transactionId || null,
         forwardUrl,
         postbackStatus,
         message: 'OTP validated successfully',
@@ -246,10 +386,20 @@ export const createOrangeBfService = () => {
       const msisdn = cleanPhone(phone);
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
+      const context = {
+        campaignId: campaignId ? String(campaignId) : '',
+        visitId: visitId ? String(visitId) : '',
+      };
 
       const checkResult = await orangeBfProvider.checkSubscription({
         msisdn,
         serviceId: config.serviceId,
+        subServiceId: config.subServiceId,
+        cpId: config.cpId,
+        channel: config.channel,
+        country: config.country,
+        operator: config.operator,
+        context,
         config,
       });
 
@@ -259,7 +409,7 @@ export const createOrangeBfService = () => {
         msisdn,
         callType: ApiCallType.ORANGE_BF_CHECKSUB || 'orange_bf_checksub',
         requestUrl: checkResult.requestUrl,
-        requestBody: JSON.stringify({ msisdn, serviceId: config.serviceId }),
+        requestBody: checkResult.requestBody ? (typeof checkResult.requestBody === 'string' ? checkResult.requestBody : JSON.stringify(checkResult.requestBody)) : JSON.stringify(checkResult.requestParams || { msisdn, serviceId: config.serviceId }),
         responseStatus: checkResult.httpStatus,
         responseBody: checkResult.rawResponse,
         success: checkResult.success,
@@ -274,10 +424,15 @@ export const createOrangeBfService = () => {
       const msisdn = cleanPhone(phone);
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
+      const context = {
+        campaignId: campaignId ? String(campaignId) : '',
+        visitId: visitId ? String(visitId) : '',
+      };
 
       const unsubResult = await orangeBfProvider.unsubscribe({
         msisdn,
         serviceId: config.serviceId,
+        context,
         config,
       });
 
@@ -287,7 +442,7 @@ export const createOrangeBfService = () => {
         msisdn,
         callType: ApiCallType.ORANGE_BF_UNSUB || 'orange_bf_unsub',
         requestUrl: unsubResult.requestUrl,
-        requestBody: JSON.stringify({ msisdn, serviceId: config.serviceId }),
+        requestBody: unsubResult.requestBody ? (typeof unsubResult.requestBody === 'string' ? unsubResult.requestBody : JSON.stringify(unsubResult.requestBody)) : JSON.stringify(unsubResult.requestParams || { msisdn, serviceId: config.serviceId }),
         responseStatus: unsubResult.httpStatus,
         responseBody: unsubResult.rawResponse,
         success: unsubResult.success,

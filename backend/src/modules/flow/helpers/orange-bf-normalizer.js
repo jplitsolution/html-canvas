@@ -47,7 +47,19 @@ export function normalizeOrangeBfResponse(raw, config = {}) {
   const code = String(raw[successKey] ?? raw.responseCode ?? raw.response_code ?? '500').trim();
   const message = raw.responseMessage || raw.response_message || raw.message || ORANGE_BF_RESPONSE_CODES[code] || 'Unknown';
   const data = raw.data && typeof raw.data === 'object' ? raw.data : null;
-  const transactionId = raw.transactionId ? String(raw.transactionId) : (data?.engineTransactionId ? String(data.engineTransactionId) : null);
+  const transactionId = raw.transactionId ? String(raw.transactionId) :
+    raw.transaction_id ? String(raw.transaction_id) :
+    raw.requestId ? String(raw.requestId) :
+    raw.request_id ? String(raw.request_id) :
+    raw.referenceId ? String(raw.referenceId) :
+    raw.reference_id ? String(raw.reference_id) :
+    raw.token ? String(raw.token) :
+    raw.sessionId ? String(raw.sessionId) :
+    raw.session_id ? String(raw.session_id) :
+    raw.otpId ? String(raw.otpId) :
+    raw.otp_id ? String(raw.otp_id) :
+    raw.id ? String(raw.id) :
+    (data?.engineTransactionId ? String(data.engineTransactionId) : null);
   const timestamp = raw.timestamp ? String(raw.timestamp) : null;
 
   // 1. Success response (code === "0")

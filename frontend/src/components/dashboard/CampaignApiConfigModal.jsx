@@ -22,6 +22,7 @@ import {
 } from './dcbConfig'
 import { downloadTextFile } from '../../utils/download'
 import { normalizeModeId } from '../flow/verificationModes'
+import { OrangeBfTab } from './api-config/flows/OrangeBfTab'
 
 const DEFAULT_ORANGE_BF_CONFIG = {
   baseUrl: 'http://103.153.58.55',
@@ -34,6 +35,16 @@ const DEFAULT_ORANGE_BF_CONFIG = {
   language: '_E',
   successKey: 'responseCode',
   successValue: '0',
+  sendUrl: '',
+  sendMethod: 'GET',
+  sendBodyJson: '',
+  verifyUrl: '',
+  verifyMethod: 'GET',
+  verifyBodyJson: '',
+  checksubUrl: '',
+  checksubMethod: 'GET',
+  checksubBodyJson: '',
+  headersJson: '',
 }
 
 const DEFAULT_PARTNER = {
@@ -307,7 +318,32 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
           resolveUrl: config?.resolveMsisdnUrl || parsedHe.resolveUrl || '',
         })
 
-        if (config?.headersJson) {
+        if (isOrangeBf) {
+          try {
+            const hParsed = config?.headersJson ? JSON.parse(config.headersJson) : {}
+            const oParsed = config?.otpConfigJson ? JSON.parse(config.otpConfigJson) : {}
+            const merged = { ...hParsed, ...oParsed }
+            setOrangeBfConfig({
+              ...DEFAULT_ORANGE_BF_CONFIG,
+              ...merged,
+              baseUrl: merged.baseUrl || (config?.sendUrl ? new URL(config.sendUrl).origin : DEFAULT_ORANGE_BF_CONFIG.baseUrl),
+              sendUrl: merged.sendUrl || config?.sendUrl || '',
+              sendMethod: merged.sendMethod || merged.method || 'GET',
+              sendBodyJson: merged.sendBodyJson || merged.bodyJson || '',
+              verifyUrl: merged.verifyUrl || config?.verifyUrl || '',
+              verifyMethod: merged.verifyMethod || 'GET',
+              verifyBodyJson: merged.verifyBodyJson || '',
+              checksubUrl: merged.checksubUrl || config?.subscriptionApi || '',
+              checksubMethod: merged.checksubMethod || 'GET',
+              checksubBodyJson: merged.checksubBodyJson || '',
+              headersJson: merged.headersJson || '',
+              successKey: config?.successKey || merged.successKey || 'responseCode',
+              successValue: config?.successValue ?? merged.successValue ?? '0',
+            })
+          } catch {
+            setOrangeBfConfig(DEFAULT_ORANGE_BF_CONFIG)
+          }
+        } else if (config?.headersJson) {
           try {
             const parsed = JSON.parse(config.headersJson)
             if (parsed && typeof parsed === 'object') {
@@ -375,24 +411,36 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
           ? (heFields.resolveUrl || form.resolveMsisdnUrl || '').trim()
           : form.resolveMsisdnUrl || null
 
+      const finalSendUrl = isOrangeBf
+        ? (orangeBfConfig.sendUrl?.trim() || `${baseClean}/subapi/auth/otp/generate`)
+        : partnerConfig.sendUrl
+      const finalVerifyUrl = isOrangeBf
+        ? (orangeBfConfig.verifyUrl?.trim() || `${baseClean}/subapi/auth/otp/validate`)
+        : partnerConfig.verifyUrl
+      const finalChecksubUrl = isOrangeBf
+        ? (orangeBfConfig.checksubUrl?.trim() || `${baseClean}/subapi/checksub`)
+        : form.subscriptionApi
+
       await saveCampaignApiConfig(campaignId, {
         ...form,
-        subscriptionApi: isOrangeBf ? `${baseClean}/subapi/checksub` : form.subscriptionApi,
+        subscriptionApi: finalChecksubUrl,
         headersJson: isOrangeBf ? JSON.stringify(orangeBfConfig) : form.headersJson,
         resolveMsisdnUrl: resolveMsisdnUrl || null,
         heConfigJson: heConfigJson || null,
         subscribeApi: (form.subscribeApi || '').trim() || null,
-        sendUrl: isOrangeBf ? `${baseClean}/subapi/auth/otp/generate` : partnerConfig.sendUrl,
-        verifyUrl: isOrangeBf ? `${baseClean}/subapi/auth/otp/validate` : partnerConfig.verifyUrl,
+        sendUrl: finalSendUrl,
+        verifyUrl: finalVerifyUrl,
         successKey: isOrangeBf ? (orangeBfConfig.successKey || 'responseCode') : partnerConfig.successKey,
         successValue: isOrangeBf ? (orangeBfConfig.successValue || '0') : partnerConfig.successValue,
         otpConfigJson: JSON.stringify(
           isOrangeBf
             ? {
-                sendUrl: `${baseClean}/subapi/auth/otp/generate`,
-                verifyUrl: `${baseClean}/subapi/auth/otp/validate`,
-                method: 'GET',
-                verifyMethod: 'GET',
+                ...orangeBfConfig,
+                sendUrl: finalSendUrl,
+                verifyUrl: finalVerifyUrl,
+                checksubUrl: finalChecksubUrl,
+                method: orangeBfConfig.sendMethod || 'GET',
+                verifyMethod: orangeBfConfig.verifyMethod || 'GET',
                 successKey: orangeBfConfig.successKey || 'responseCode',
                 successValue: orangeBfConfig.successValue || '0',
                 payoutPercent: 100,
@@ -1036,198 +1084,6 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
     )
   }
 
-  const renderOrangeBfTab = () => {
-    const handleOrangeBfTestSend = async () => {
-      if (!testPhone) {
-        alert('Please enter a phone number (+226...) for testing')
-        return
-      }
-      setTesting(true)
-      setTestResult('')
-      try {
-        const baseClean = (orangeBfConfig.baseUrl || 'http://103.153.58.55').replace(/\/$/, '')
-        const res = await testSendOtp({
-          phone: testPhone,
-          provider: 'partner',
-          config: JSON.stringify({
-            sendUrl: `${baseClean}/subapi/auth/otp/generate?msisdn={{msisdn}}&language=${orangeBfConfig.language || '_E'}`,
-            method: 'GET',
-            successKey: orangeBfConfig.successKey || 'responseCode',
-            successValue: orangeBfConfig.successValue || '0',
-          }),
-          campaignId,
-        })
-        if (res.providerRequestId) setLastProviderRequestId(res.providerRequestId)
-        setTestResult(formatTestResult('SEND OTP', res))
-      } catch (err) {
-        setTestResult(`🔴 Dispatch error: ${err.message}`)
-      } finally {
-        setTesting(false)
-      }
-    }
-
-    const handleOrangeBfTestVerify = async () => {
-      if (!testPhone || !testOtp) {
-        alert('Please enter phone and OTP code')
-        return
-      }
-      setTesting(true)
-      setTestResult('')
-      try {
-        const baseClean = (orangeBfConfig.baseUrl || 'http://103.153.58.55').replace(/\/$/, '')
-        const res = await testVerifyOtp({
-          phone: testPhone,
-          otp: testOtp,
-          provider: 'partner',
-          config: JSON.stringify({
-            verifyUrl: `${baseClean}/subapi/auth/otp/validate?msisdn={{msisdn}}&otp={{otp}}`,
-            verifyMethod: 'GET',
-            successKey: orangeBfConfig.successKey || 'responseCode',
-            successValue: orangeBfConfig.successValue || '0',
-          }),
-          providerRequestId: lastProviderRequestId || undefined,
-          campaignId,
-        })
-        setTestResult(formatTestResult('VERIFY OTP', res))
-      } catch (err) {
-        setTestResult(`🔴 Verify error: ${err.message}`)
-      } finally {
-        setTesting(false)
-      }
-    }
-
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
-          <div className="flex items-center gap-2">
-            <span className="rounded bg-[#ff7900] px-1.5 py-0.5 text-[10px] font-bold text-white uppercase">Orange BF</span>
-            <p className="text-xs font-semibold text-fg">Orange Burkina Faso — Subscription REST API v1.0.0</p>
-          </div>
-          <p className="mt-1 text-xs text-fg-muted">
-            Configured endpoints: Generate OTP (<code className="font-mono text-[11px]">/subapi/auth/otp/generate</code>), Validate OTP (<code className="font-mono text-[11px]">/subapi/auth/otp/validate</code>), CheckSub (<code className="font-mono text-[11px]">/subapi/checksub</code>), Unsub (<code className="font-mono text-[11px]">/subapi/unsub</code>), and Engine Sync.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <Field label="API Base URL" hint="Carrier API Host">
-              <Input
-                value={orangeBfConfig.baseUrl}
-                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, baseUrl: e.target.value }))}
-                placeholder="http://103.153.58.55"
-              />
-            </Field>
-          </div>
-
-          <Field label="Parent Service ID (serviceId)" hint="e.g. Health Portal Livliness">
-            <Input
-              value={orangeBfConfig.serviceId}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, serviceId: e.target.value }))}
-              placeholder="Health Portal Livliness"
-            />
-          </Field>
-
-          <Field label="Sub-Service Plan ID (subServiceId)" hint="e.g. Health Portal Livliness pass jour">
-            <Input
-              value={orangeBfConfig.subServiceId}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, subServiceId: e.target.value }))}
-              placeholder="Health Portal Livliness pass jour"
-            />
-          </Field>
-
-          <Field label="Content Provider ID (cpId)" hint="Default: 100">
-            <Input
-              value={orangeBfConfig.cpId}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, cpId: e.target.value }))}
-              placeholder="100"
-            />
-          </Field>
-
-          <Field label="Channel" hint="Default: ussd">
-            <Input
-              value={orangeBfConfig.channel}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, channel: e.target.value }))}
-              placeholder="ussd"
-            />
-          </Field>
-
-          <Field label="Country Code" hint="Default: BF">
-            <Input
-              value={orangeBfConfig.country}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, country: e.target.value }))}
-              placeholder="BF"
-            />
-          </Field>
-
-          <Field label="Operator Code" hint="Default: ORG">
-            <Input
-              value={orangeBfConfig.operator}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, operator: e.target.value }))}
-              placeholder="ORG"
-            />
-          </Field>
-
-          <Field label="SMS Language" hint="_E (English) or _A (Arabic)">
-            <select
-              className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-fg outline-none focus:border-primary"
-              value={orangeBfConfig.language}
-              onChange={(e) => setOrangeBfConfig((s) => ({ ...s, language: e.target.value }))}
-            >
-              <option value="_E">English (_E)</option>
-              <option value="_A">Arabic (_A)</option>
-            </select>
-          </Field>
-
-          <div className="grid grid-cols-2 gap-2">
-            <Field label="Success Key" hint="default: responseCode">
-              <Input
-                value={orangeBfConfig.successKey}
-                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, successKey: e.target.value }))}
-                placeholder="responseCode"
-              />
-            </Field>
-            <Field label="Success Value" hint="default: 0">
-              <Input
-                value={orangeBfConfig.successValue}
-                onChange={(e) => setOrangeBfConfig((s) => ({ ...s, successValue: e.target.value }))}
-                placeholder="0"
-              />
-            </Field>
-          </div>
-        </div>
-
-        <div className="space-y-3 rounded-xl border border-dashed border-border bg-bg-subtle/40 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-fg-muted">Orange BF Live OTP Test</p>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            <Field label="Test Phone (+226...)">
-              <Input
-                value={testPhone}
-                onChange={(e) => setTestPhone(e.target.value)}
-                placeholder="e.g. 56864685"
-              />
-            </Field>
-            <Field label="OTP from SMS">
-              <Input value={testOtp} onChange={(e) => setTestOtp(e.target.value)} placeholder="e.g. 4827" />
-            </Field>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="primary" size="sm" onClick={handleOrangeBfTestSend} disabled={testing}>
-              {testing ? 'Sending...' : 'Send Orange BF OTP'}
-            </Button>
-            <Button variant="primary" size="sm" onClick={handleOrangeBfTestVerify} disabled={testing}>
-              Verify Orange BF OTP
-            </Button>
-          </div>
-          {testResult && (
-            <div className="mt-2 max-h-[180px] overflow-y-auto whitespace-pre-wrap rounded-lg border border-border bg-bg-base p-2 font-mono text-xs">
-              {testResult}
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Campaign Integration & Settings" size="lg">
       {loading ? (
@@ -1241,7 +1097,22 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
           />
 
           {activeTab === 'orange_bf' ? (
-            renderOrangeBfTab()
+            <OrangeBfTab
+              orangeBfConfig={orangeBfConfig}
+              setOrangeBfConfig={setOrangeBfConfig}
+              campaignId={campaignId}
+              testPhone={testPhone}
+              setTestPhone={setTestPhone}
+              testOtp={testOtp}
+              setTestOtp={setTestOtp}
+              testing={testing}
+              setTesting={setTesting}
+              testResult={testResult}
+              setTestResult={setTestResult}
+              lastProviderRequestId={lastProviderRequestId}
+              setLastProviderRequestId={setLastProviderRequestId}
+              formatTestResult={formatTestResult}
+            />
           ) : activeTab === 'billing' ? (
             <div className="space-y-4">
               <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
