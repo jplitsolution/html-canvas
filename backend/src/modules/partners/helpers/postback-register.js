@@ -12,6 +12,11 @@ import { searchService } from '../../search/search.service.js';
 import { apiCallLogService } from '../../flow/api-call-log.service.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
 import { appendPostbackHitSafe } from './postback-day-report-file.js';
+import {
+  affiliateRcidFromVisit,
+  fillTemplate,
+  serializeBody,
+} from './postback-template.js';
 
 /** Returns full MSISDN for UI display (no masking). */
 export const maskPhone = (phone) => {
@@ -19,23 +24,13 @@ export const maskPhone = (phone) => {
   return String(phone).trim();
 };
 
-export const serializeBody = (data) => {
-  if (data == null) return null;
-  try {
-    return typeof data === 'string' ? data : JSON.stringify(data);
-  } catch {
-    return String(data);
-  }
-};
-
-export const fillTemplate = (template, vars) => {
-  let url = String(template || '');
-  for (const [key, val] of Object.entries(vars)) {
-    url = url.split(`{{${key}}}`).join(encodeURIComponent(val ?? ''));
-    url = url.split(`{${key}}`).join(encodeURIComponent(val ?? ''));
-  }
-  return url;
-};
+export {
+  affiliateRcidFromLandingUrl,
+  affiliateRcidFromVisit,
+  applyVisitAttributionToPostback,
+  fillTemplate,
+  serializeBody,
+} from './postback-template.js';
 
 export const daysAgo = (n) => {
   const d = new Date();
@@ -145,7 +140,7 @@ export const createPostbackRegister = (deps) => {
       if (visit) {
         vendorId = vendorId || visit.vendorId || null;
         clickId = clickId || visit.clickId || '';
-        rcid = rcid || visit.rcid || '';
+        rcid = rcid || affiliateRcidFromVisit(visit) || '';
         campaignId = campaignId || visit.campaignId || null;
         if (!campid && visit.campid) campid = String(visit.campid);
         if (!trackingCampid && visit.trackingCampid) {

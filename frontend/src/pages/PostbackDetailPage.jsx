@@ -114,6 +114,9 @@ function PostbackDetailPage() {
 
   const life = data?.lifecycle || {}
   const fireFailed = life.vendorFireStatus === 'failed'
+  const lastFiredUrl = [...(data?.relatedLogs || [])]
+    .reverse()
+    .find((l) => l.callType === 'vendor_postback' && l.requestUrl)?.requestUrl
 
   return (
     <AppShell
@@ -178,7 +181,7 @@ function PostbackDetailPage() {
                 >
                   {life.billingReceived
                     ? life.vendorFireSkipReason ||
-                      `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}.`
+                    `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}.`
                     : 'Not required for every flow. If no operator callback arrives, use Fire postback to send vendor CPA.'}
                 </Step>
                 <Step
@@ -286,9 +289,16 @@ function PostbackDetailPage() {
 
             <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-xs space-y-3">
               <h2 className="text-sm font-semibold text-gray-800">Vendor postback URL / response</h2>
-              <Field label="postback_url">
+              <Field label="postback_url (template)">
                 <span className="font-mono text-xs whitespace-pre-wrap">{data.postbackUrl}</span>
               </Field>
+              {lastFiredUrl ? (
+                <Field label="last fired URL">
+                  <span className="font-mono text-xs whitespace-pre-wrap text-indigo-800">
+                    {lastFiredUrl}
+                  </span>
+                </Field>
+              ) : null}
               {data.responseBody ? (
                 <Field label="response_body">
                   <pre className="mt-1 text-xs font-mono bg-gray-50 rounded-lg p-3 overflow-x-auto max-h-48">
@@ -314,6 +324,9 @@ function PostbackDetailPage() {
                       ) : null}
                       {l.success === false ? (
                         <span className="text-rose-600">{l.errorMessage || 'failed'}</span>
+                      ) : null}
+                      {l.requestUrl ? (
+                        <span className="font-mono text-gray-700 break-all">{l.requestUrl}</span>
                       ) : null}
                     </li>
                   ))}

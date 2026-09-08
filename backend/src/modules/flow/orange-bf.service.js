@@ -11,6 +11,7 @@ import {
 import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
 import { postbackService } from '../partners/postback.service.js';
+import { affiliateRcidFromVisit } from '../partners/helpers/postback-template.js';
 import {
   parsePayoutPercent,
   payoutSeqKey,
@@ -88,11 +89,18 @@ const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) =>
   );
 
   const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
+  const visit = parsedVisitId
+    ? await getRepository(Visit).findOne({ where: { id: parsedVisitId } })
+    : null;
   const queued = await postbackService.registerPending({
     visitId: parsedVisitId,
     msisdn,
     campaignId: campaign.id,
-    vendorId: resolvedVendorId,
+    vendorId: resolvedVendorId || visit?.vendorId || null,
+    clickId: visit?.clickId || '',
+    rcid: affiliateRcidFromVisit(visit),
+    campid: visit?.campid || '',
+    trackingCampid: visit?.trackingCampid || campaign.trackingId || '',
     keepIfSent: true,
     fireImmediate: !decision.held,
   });
@@ -109,8 +117,8 @@ const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) =>
       visitId: parsedVisitId,
       campaignId: campaign.id,
       msisdn,
-      rcid: row?.rcid || null,
-      clickId: row?.clickId || null,
+      rcid: row?.rcid || visit?.rcid || null,
+      clickId: row?.clickId || visit?.clickId || null,
       vendorId: resolvedVendorId,
       callType: ApiCallType.VENDOR_POSTBACK,
       requestUrl: row?.postbackUrl || '',

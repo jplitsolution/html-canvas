@@ -2,6 +2,7 @@ import axios from 'axios';
 import { getRepository } from '../../../database/index.js';
 import { Vendor } from '../../../database/entities/vendor.entity.js';
 import { CampaignTracking } from '../../../database/entities/campaign-tracking.entity.js';
+import { Visit } from '../../../database/entities/visit.entity.js';
 import {
   ConversionPostback,
   ConversionPostbackStatus,
@@ -9,44 +10,51 @@ import {
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { VisitEventType } from '../../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../../database/entities/api-call-log.entity.js';
-import { fillTemplate, serializeBody } from './postback-register.js';
+import {
+  applyVisitAttributionToPostback,
+  fillTemplate,
+  serializeBody,
+} from './postback-template.js';
 
 export const createPostbackForward = (deps) => {
   const {
     getPostbackRepo = () => getRepository(ConversionPostback),
     getVendorRepo = () => getRepository(Vendor),
     getTrackingRepo = () => getRepository(CampaignTracking),
+    getVisitRepo = () => getRepository(Visit),
     indexPostbackEvent,
     logApiCall,
+    logVisitEvent = (visitId, eventType, payload) =>
+      analyticsService.logEvent(visitId, eventType, payload),
     httpClient = axios,
   } = deps;
 
-    const logSkippedFire = async (row, reason, extra = {}) => {
-      if (!logApiCall) {
-        return { skipped: true, reason, id: row?.id };
-      }
-      await logApiCall({
-        visitId: row?.visitId || null,
-        campaignId: row?.campaignId || null,
-        msisdn: row?.msisdn || null,
-        rcid: row?.rcid || null,
-        clickId: row?.clickId || null,
-        callType: ApiCallType.VENDOR_POSTBACK,
-        requestUrl: row?.postbackUrl || '',
-        requestBody: serializeBody({
-          skipped: true,
-          reason,
-          postbackId: row?.id || null,
-          vendorId: row?.vendorId || null,
-          ...extra,
-        }),
-        responseStatus: null,
-        success: false,
-        errorMessage: reason,
-        statusLabel: 'SKIPPED',
-      });
+  const logSkippedFire = async (row, reason, extra = {}) => {
+    if (!logApiCall) {
       return { skipped: true, reason, id: row?.id };
-    };
+    }
+    await logApiCall({
+      visitId: row?.visitId || null,
+      campaignId: row?.campaignId || null,
+      msisdn: row?.msisdn || null,
+      rcid: row?.rcid || null,
+      clickId: row?.clickId || null,
+      callType: ApiCallType.VENDOR_POSTBACK,
+      requestUrl: row?.postbackUrl || '',
+      requestBody: serializeBody({
+        skipped: true,
+        reason,
+        postbackId: row?.id || null,
+        vendorId: row?.vendorId || null,
+        ...extra,
+      }),
+      responseStatus: null,
+      success: false,
+      errorMessage: reason,
+      statusLabel: 'SKIPPED',
+    });
+    return { skipped: true, reason, id: row?.id };
+  };
 
   const resolveMissingPostbackUrl = async (row) => {
     if (String(row.postbackUrl || '').trim()) return String(row.postbackUrl).trim();
@@ -86,14 +94,28 @@ export const createPostbackForward = (deps) => {
     const resolvedUrl = await resolveMissingPostbackUrl(row);
     if (resolvedUrl) row.postbackUrl = resolvedUrl;
 
+    if (row.visitId && getVisitRepo) {
+      const visit = await getVisitRepo().findOne({
+        where: { id: parseInt(row.visitId, 10) },
+      });
+      if (visit) {
+        const before = `${row.clickId || ''}|${row.rcid || ''}|${row.campid || ''}|${row.trackingCampid || ''}`;
+        applyVisitAttributionToPostback(row, visit);
+        const after = `${row.clickId || ''}|${row.rcid || ''}|${row.campid || ''}|${row.trackingCampid || ''}`;
+        if (after !== before) {
+          await getPostbackRepo().save(row);
+        }
+      }
+    }
+
     let vendorCode = '';
     if (row.vendorId) {
       const vendor = await getVendorRepo().findOne({ where: { id: row.vendorId } });
       vendorCode = vendor?.code || '';
     }
 
+    // Vendor CPA click_id is the affiliate/network original (rcid), not our minted id.
     const networkRcid = row.rcid || row.clickId || '';
-    const ourClickId = row.clickId || '';
     const vendorCampid = row.campid || '';
 
     if (!String(row.postbackUrl || '').trim()) {
@@ -109,7 +131,7 @@ export const createPostbackForward = (deps) => {
 
     const url = fillTemplate(row.postbackUrl, {
       msisdn: row.msisdn,
-      click_id: ourClickId,
+      click_id: networkRcid,
       rcid: networkRcid,
       campid: vendorCampid,
       camp: vendorCampid,
@@ -144,7 +166,7 @@ export const createPostbackForward = (deps) => {
         visitId: row.visitId,
         campaignId: row.campaignId,
         msisdn: row.msisdn,
-        rcid: row.rcid,
+        rcid: networkRcid,
         clickId: row.clickId,
         callType: ApiCallType.VENDOR_POSTBACK,
         requestUrl: url,
@@ -170,17 +192,21 @@ export const createPostbackForward = (deps) => {
         : VisitEventType.POSTBACK_FAILED;
 
       if (row.visitId) {
-        await analyticsService.logEvent(row.visitId, eventType, {
-          info: ok
-            ? 'Vendor / affiliate CPA postback fired successfully.'
-            : `Vendor / affiliate CPA postback failed (HTTP ${response.status}).`,
-          postbackId: row.id,
-          httpStatus: response.status,
-          url,
-          campid: vendorCampid,
-          trackingCampid: row.trackingCampid,
-          responseBody: body,
-        });
+        try {
+          await logVisitEvent(row.visitId, eventType, {
+            info: ok
+              ? 'Vendor / affiliate CPA postback fired successfully.'
+              : `Vendor / affiliate CPA postback failed (HTTP ${response.status}).`,
+            postbackId: row.id,
+            httpStatus: response.status,
+            url,
+            campid: vendorCampid,
+            trackingCampid: row.trackingCampid,
+            responseBody: body,
+          });
+        } catch (eventErr) {
+          console.warn(`postback visit event failed: ${eventErr.message}`);
+        }
       } else {
         await indexPostbackEvent(row, eventType, { requestUrl: url });
       }
@@ -203,7 +229,7 @@ export const createPostbackForward = (deps) => {
         visitId: row.visitId,
         campaignId: row.campaignId,
         msisdn: row.msisdn,
-        rcid: row.rcid,
+        rcid: networkRcid,
         clickId: row.clickId,
         callType: ApiCallType.VENDOR_POSTBACK,
         requestUrl: url,
@@ -225,18 +251,22 @@ export const createPostbackForward = (deps) => {
       });
 
       if (row.visitId) {
-        await analyticsService.logEvent(
-          row.visitId,
-          VisitEventType.POSTBACK_FAILED,
-          {
-            info: `Vendor / affiliate CPA postback error: ${err.message}`,
-            postbackId: row.id,
-            error: err.message,
-            url,
-            campid: vendorCampid,
-            trackingCampid: row.trackingCampid,
-          },
-        );
+        try {
+          await logVisitEvent(
+            row.visitId,
+            VisitEventType.POSTBACK_FAILED,
+            {
+              info: `Vendor / affiliate CPA postback error: ${err.message}`,
+              postbackId: row.id,
+              error: err.message,
+              url,
+              campid: vendorCampid,
+              trackingCampid: row.trackingCampid,
+            },
+          );
+        } catch (eventErr) {
+          console.warn(`postback visit event failed: ${eventErr.message}`);
+        }
       } else {
         await indexPostbackEvent(row, 'POSTBACK_FAILED', {
           requestUrl: url,

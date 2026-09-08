@@ -38,8 +38,8 @@ const STEPS = [
 
 const PLACEHOLDERS = [
   { key: '{{msisdn}}', meaning: 'Subscriber MSISDN (digits)' },
-  { key: '{{click_id}}', meaning: 'Our generated click id for the visit' },
-  { key: '{{rcid}}', meaning: 'Network / vendor original click id' },
+  { key: '{{click_id}}', meaning: 'Affiliate / network original click (same as rcid). Our minted id is not sent.' },
+  { key: '{{rcid}}', meaning: 'Affiliate / network original click (same value as {click_id})' },
   { key: '{{campid}} / {{camp}}', meaning: 'Vendor / network campid from tracking URL (?campid=)' },
   { key: '{{tracking_campid}}', meaning: 'Our tracking id (BF-OBF-11) from ?tracking_campid=' },
   { key: '{{offer_code}}', meaning: 'Optional offer code if provided' },

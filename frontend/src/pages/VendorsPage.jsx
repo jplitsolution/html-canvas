@@ -249,8 +249,10 @@ function VendorsPage() {
             detail pages. Statuses on a vendor are only a default — after assign, that
             campaign stores its own allow-list (same vendor can differ per campaign).
             Placeholders:{' '}
-            <code className="font-mono">{'{{click_id}}'}</code>,{' '}
-            <code className="font-mono">{'{rcid}'}</code>,{' '}
+            <code className="font-mono">{'{{click_id}}'}</code>
+            {' / '}
+            <code className="font-mono">{'{rcid}'}</code>
+            {' (both = affiliate click)'},{' '}
             <code className="font-mono">{'{{msisdn}}'}</code>,{' '}
             <code className="font-mono">{'{{campid}}'}</code> (vendor),{' '}
             <code className="font-mono">{'{{tracking_campid}}'}</code> (ours).{' '}
