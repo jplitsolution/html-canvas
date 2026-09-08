@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -9,11 +9,13 @@ import {
   Phone,
   Store,
   Clock,
+  Zap,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { formatDate } from '../utils/date'
-import { getPostback } from '../services/api/partners'
+import { firePostback, getPostback } from '../services/api/partners'
+import useStore from '../store/useStore'
 
 function Step({ done, failed, title, subtitle, children }) {
   let Icon = Circle
@@ -49,9 +51,20 @@ function Field({ label, children }) {
 function PostbackDetailPage() {
   const { postbackId } = useParams()
   const navigate = useNavigate()
+  const addToast = useStore((s) => s.addToast)
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [firing, setFiring] = useState(false)
   const [error, setError] = useState('')
+
+  const load = useCallback(() => {
+    setError('')
+    return getPostback(postbackId)
+      .then((res) => setData(res))
+      .catch((err) => {
+        setError(err?.message || 'Failed to load postback')
+      })
+  }, [postbackId])
 
   useEffect(() => {
     let cancelled = false
@@ -72,23 +85,63 @@ function PostbackDetailPage() {
     }
   }, [postbackId])
 
+  const fireVendorPostback = async () => {
+    if (!data || firing) return
+    const alreadySent = String(data.status || '').toLowerCase() === 'sent'
+    const ok = window.confirm(
+      alreadySent
+        ? 'This postback was already sent to the vendor. Fire it again?'
+        : 'Fire this vendor CPA postback now?',
+    )
+    if (!ok) return
+    setFiring(true)
+    try {
+      const result = await firePostback(postbackId, { force: alreadySent })
+      if (result?.skipped || result?.vendorSkipped) {
+        addToast(result.reason || 'Postback was not sent', 'error')
+      } else if (result?.success === false) {
+        addToast(result.error || result.errorMessage || 'Vendor postback failed', 'error')
+      } else {
+        addToast('Vendor postback fired', 'success')
+      }
+      await load()
+    } catch (err) {
+      addToast(err?.message || 'Failed to fire postback', 'error')
+    } finally {
+      setFiring(false)
+    }
+  }
+
   const life = data?.lifecycle || {}
   const fireFailed = life.vendorFireStatus === 'failed'
 
   return (
     <AppShell
       actions={
-        <Button variant="outline" size="sm" onClick={() => navigate('/postbacks')}>
-          <ArrowLeft className="w-4 h-4" />
-          Back
-        </Button>
+        <div className="flex items-center gap-2">
+          {data ? (
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={fireVendorPostback}
+              disabled={firing || loading}
+            >
+              <Zap className={`w-4 h-4 ${firing ? 'animate-pulse' : ''}`} />
+              {firing ? 'Firing…' : 'Fire postback'}
+            </Button>
+          ) : null}
+          <Button variant="outline" size="sm" onClick={() => navigate('/postbacks')}>
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
+        </div>
       }
     >
       <div className="page-container space-y-6 max-w-4xl">
         <div className="page-header">
           <h1 className="page-header-title">Postback #{postbackId}</h1>
           <p className="page-header-description">
-            Create → billing callback → vendor CPA fire
+            Create → billing callback (or manual fire) → vendor CPA
           </p>
         </div>
 
@@ -108,8 +161,9 @@ function PostbackDetailPage() {
                   title="Postback created"
                   subtitle={life.createdAt ? formatDate(life.createdAt) : null}
                 >
-                  Queued in conversion_postbacks — waiting for operator billing callback.
-                  Funnel subscribe click can create pending; HE detect does not.
+                  Queued in conversion_postbacks. Some flows (no operator billing
+                  callback) stay pending until you fire vendor CPA from this page.
+                  Funnel subscribe click can also create pending; HE detect does not.
                 </Step>
                 <Step
                   done={life.billingReceived}
@@ -125,7 +179,7 @@ function PostbackDetailPage() {
                   {life.billingReceived
                     ? life.vendorFireSkipReason ||
                       `Operator hit /api/flow/callback — status ${life.operatorStatus || data.operatorStatus || 'received'}.`
-                    : 'Still pending — vendor CPA has not been fired from billing yet.'}
+                    : 'Not required for every flow. If no operator callback arrives, use Fire postback to send vendor CPA.'}
                 </Step>
                 <Step
                   done={life.vendorFired && !fireFailed}
@@ -164,7 +218,7 @@ function PostbackDetailPage() {
                     </p>
                   ) : (
                     <p className="text-xs text-gray-500">
-                      Waiting for a billable operator status on this assignment.
+                      Waiting for a billable operator status, or fire it manually above.
                     </p>
                   )}
                 </Step>

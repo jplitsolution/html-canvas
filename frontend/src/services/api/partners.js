@@ -58,6 +58,13 @@ export async function getPostback(id) {
   return apiClient(`/partners/postbacks/${id}`)
 }
 
+export async function firePostback(id, { force = false } = {}) {
+  return apiClient(`/partners/postbacks/${id}/fire`, {
+    method: 'POST',
+    body: { force: Boolean(force) },
+  })
+}
+
 export async function getPostbackStats({
   from,
   to,

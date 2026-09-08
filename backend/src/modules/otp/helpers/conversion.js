@@ -72,9 +72,8 @@ export const apiExposePinStats = ({
 
 /**
  * One vendor row for campaign detail.
- * API expose: verified/requested (+ pub after hold) plus the PIN leg breakdown.
- * WAP / CG: conversions = operator callbacks (received+sent) or subscribe success.
- * Pub conv % = vendor postbacks actually sent.
+ * Rule comes from the campaign's flow so CG callbacks, OTP-payout fires,
+ * and classic subscribe hops stay independent.
  */
 export const campaignVendorPerf = ({
   clicks = 0,
@@ -86,6 +85,7 @@ export const campaignVendorPerf = ({
   held = 0,
   failedApi = 0,
   apiExpose = false,
+  conversionRule,
   pinRequest = 0,
   uniquePinSend = 0,
   pinValRequest = 0,
@@ -98,7 +98,8 @@ export const campaignVendorPerf = ({
   const totalClicks = Math.max(0, Number(clicks) || 0);
   const matched = Math.max(0, Number(postbacksMatched) || 0);
   const sent = Math.max(0, Number(postbacksSent) || 0);
-  const conversionsWap = Math.max(matched, Math.max(0, Number(subscribeSuccess) || 0));
+  const subscribe = Math.max(0, Number(subscribeSuccess) || 0);
+  const conversionsWap = Math.max(matched, subscribe);
   const otp = otpConversionStats({ requested, liveVerified, held });
   const pin = apiExposePinStats({
     pinRequest,
@@ -110,17 +111,37 @@ export const campaignVendorPerf = ({
     uniquePinVal,
     held: otp.held,
   });
+  const rule =
+    conversionRule || (apiExpose ? 'api_expose' : 'subscribe_or_callback');
+
+  let conversions = conversionsWap;
+  let convPercent = pct(conversionsWap, totalClicks);
+  let pubConvPercent = pct(sent, totalClicks);
+  if (rule === 'operator_callback') {
+    conversions = matched;
+    convPercent = pct(matched, totalClicks);
+  } else if (rule === 'otp_payout') {
+    conversions = sent;
+    convPercent = pct(sent, totalClicks);
+    pubConvPercent = pct(sent, totalClicks);
+  } else if (rule === 'api_expose') {
+    conversions = otp.verifiedLive;
+    convPercent = otp.liveConvPercent;
+    pubConvPercent = otp.vendorConvPercent;
+  }
+
   return {
     totalClicks,
-    conversions: apiExpose ? otp.verifiedLive : conversionsWap,
-    convPercent: apiExpose ? otp.liveConvPercent : pct(conversionsWap, totalClicks),
+    ...pin,
+    conversionRule: rule,
+    conversions,
+    convPercent,
     requestedApi: otp.requested,
     verifiedApi: otp.verifiedLive,
     failedApi: Math.max(0, Number(failedApi) || 0),
-    pubConvPercent: apiExpose ? otp.vendorConvPercent : pct(sent, totalClicks),
+    pubConvPercent,
     homeView: Math.max(0, Number(homeView) || 0),
     subscribeClick: Math.max(0, Number(subscribeClick) || 0),
     cgRedirect: Math.max(0, Number(cgRedirect) || 0),
-    ...pin,
   };
 };

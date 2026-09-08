@@ -23,6 +23,7 @@ export default {
   useDcbDummyPages: false,
   needsIspResolve: true,
   wapBlockedMessage: OTP_WAP_BLOCKED,
+  conversionRule: 'subscribe_or_callback',
   packsOnHomeNoPhone: { nextPage: 'OTP', useFailRedirect: false },
 
   getDefaultFlowConfig({ applyFunnelLayoutToFlowConfig }, options = {}) {

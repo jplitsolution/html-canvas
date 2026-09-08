@@ -108,7 +108,7 @@ describe('resolveCampaignDetailFlow', () => {
 
   it('NONE (landing CG) adds CG redirects', () => {
     const flow = resolveCampaignDetailFlow({ ...campaignBase, verificationMode: 'NONE' })
-    expect(columnKeys(flow)).toEqual(['totalClicks', 'cgRedirect', 'convPercent', 'pubConvPercent'])
+    expect(columnKeys(flow)).toEqual(['totalClicks', 'cgRedirect', 'conversions', 'convPercent', 'pubConvPercent'])
     expect(flow.vendorHint).toMatch(/no HOME/)
     expect(flow.assignmentActions.openTracking).toBe(true)
   })
@@ -120,11 +120,29 @@ describe('resolveCampaignDetailFlow', () => {
       'homeView',
       'subscribeClick',
       'cgRedirect',
+      'conversions',
       'convPercent',
       'pubConvPercent',
     ])
     expect(flow.vendorHint).toMatch(/Home shown/)
     expect(flow.assignmentActions.openTracking).toBe(true)
+  })
+
+  it('ORANGE_BF fires vendor CPA on OTP success subject to payout %', () => {
+    const flow = resolveCampaignDetailFlow({
+      ...campaignBase,
+      country: 'BF',
+      operator: 'Orange',
+      verificationMode: 'ORANGE_BF',
+    })
+    expect(flow.id).toBe('ORANGE_BF')
+    expect(flow.vendorHint).toMatch(/payout/i)
+    expect(flow.statsColumns.map((c) => c.key)).toEqual([
+      'totalClicks',
+      'conversions',
+      'convPercent',
+      'pubConvPercent',
+    ])
   })
 
   it('unknown mode falls back to BOTH WAP tracking', () => {

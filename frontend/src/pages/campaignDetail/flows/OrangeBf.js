@@ -1,4 +1,9 @@
-import { wapFlowDetail } from './shared/wapClicks'
+import {
+  convPercentColumn,
+  pubConvPercentColumn,
+  totalClicksColumn,
+  wapFlowDetail,
+} from './shared/wapClicks'
 
 const wap = wapFlowDetail('ORANGE_BF')
 
@@ -6,7 +11,19 @@ export const orangeBfFlowDetail = {
   ...wap,
   id: 'ORANGE_BF',
   isFlowLocked: true,
-  vendorHint: 'Orange Burkina Faso (+226) VAS OTP & CheckSub flow. Postbacks fire on successful OTP validation subject to vendor approval percentage.',
+  vendorHint:
+    'Orange Burkina Faso (+226). Conversion = vendor CPA fired on OTP success after payout %. Operator billing callback is not used. Skipped/failed rows can still be fired from Postbacks.',
+  statsColumns: [
+    totalClicksColumn,
+    {
+      key: 'conversions',
+      label: 'Conversions',
+      hint: 'Vendor CPA fired after payout %',
+      render: (row) => row.conversions ?? 0,
+    },
+    convPercentColumn,
+    pubConvPercentColumn,
+  ],
   getVendorEndpoints({ origin, campaign, vendorId }) {
     const base = `${origin}/flow/api/orange-bf`
     const copyKey = String(vendorId || 'all')

@@ -10,7 +10,7 @@ import {
 export default {
   id: 'CG_HOME',
   vendorHint:
-    'Landings = visits. Home shown = HOME page loaded. Banner clicks = subscribe CTA. CG redirects = users sent to the operator CG URL. Conv % is matched operator callbacks ÷ clicks.',
+    'Landings = visits. Home shown = HOME page loaded. Banner clicks = subscribe CTA. CG redirects = users sent to the operator CG URL. Conversion = operator billing callback received.',
   statsColumns: [
     totalClicksColumn,
     {
@@ -30,6 +30,12 @@ export default {
       label: 'CG redirects',
       hint: 'Redirected to operator CG',
       render: (row) => row.cgRedirect ?? 0,
+    },
+    {
+      key: 'conversions',
+      label: 'Conversions',
+      hint: 'Operator billing callbacks received',
+      render: (row) => row.conversions ?? 0,
     },
     convPercentColumn,
     pubConvPercentColumn,

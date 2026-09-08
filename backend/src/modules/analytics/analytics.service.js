@@ -10,6 +10,8 @@ import { campaignsService } from '../campaigns/campaigns.service.js';
 import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { campaignVendorPerf } from '../otp/helpers/conversion.js';
+import { resolveFlowOrBoth } from '../flow/flows/index.js';
+import { resolveConversionRule } from '../flow/flows/conversion-rule.js';
 import getConfig from '../../config/configuration.js';
 import { filledTrackingValue } from '../flow/helpers/placeholder-macro.js';
 import { resolveRangeBounds } from '../../common/zoned-day.js';
@@ -312,6 +314,10 @@ export const createAnalyticsService = () => {
     const campaign = await campaignsService.findOne(campaignId, userId);
     const { flowConfig } = await campaignsService.getFlow(campaignId, userId);
     const apiExpose = flowEngineService.isApiExposeFlow(flowConfig);
+    const flow = resolveFlowOrBoth(
+      flowEngineService.normalizeMode(campaign.verificationMode),
+    );
+    const conversionRule = resolveConversionRule(flow, { apiExpose });
     const cId = parseInt(campaignId, 10);
     const successTrue = jsonBoolSql('event.metadata', 'success');
     const heldTrue = jsonBoolSql('event.metadata', 'held');
@@ -473,7 +479,7 @@ export const createAnalyticsService = () => {
         vendorCode: vendor.code || null,
         assignmentActive: t.active !== false,
         payoutPercent: Number(t.payoutPercent ?? 100),
-        ...campaignVendorPerf({ ...raw, apiExpose }),
+        ...campaignVendorPerf({ ...raw, apiExpose, conversionRule }),
       });
     }
 
@@ -486,7 +492,7 @@ export const createAnalyticsService = () => {
         vendorCode: null,
         assignmentActive: false,
         payoutPercent: 100,
-        ...campaignVendorPerf({ ...raw, apiExpose }),
+        ...campaignVendorPerf({ ...raw, apiExpose, conversionRule }),
       });
     }
 
@@ -494,7 +500,7 @@ export const createAnalyticsService = () => {
       (a, b) => b.totalClicks - a.totalClicks || a.vendorName.localeCompare(b.vendorName),
     );
 
-    return { apiExpose, vendors };
+    return { apiExpose, conversionRule, vendors };
   };
 
   const derivePagePath = (visit) => {

@@ -10,7 +10,7 @@ import {
 export default {
   id: 'NONE',
   vendorHint:
-    'Landings = visits. CG redirects = users sent to the operator CG on landing (no HOME). Conv % is matched operator callbacks ÷ clicks.',
+    'Landings = visits. CG redirects = users sent to the operator CG on landing (no HOME). Conversion = operator billing callback received.',
   statsColumns: [
     totalClicksColumn,
     {
@@ -18,6 +18,12 @@ export default {
       label: 'CG redirects',
       hint: 'Redirected to operator CG on landing',
       render: (row) => row.cgRedirect ?? 0,
+    },
+    {
+      key: 'conversions',
+      label: 'Conversions',
+      hint: 'Operator billing callbacks received',
+      render: (row) => row.conversions ?? 0,
     },
     convPercentColumn,
     pubConvPercentColumn,

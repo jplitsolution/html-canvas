@@ -12,6 +12,12 @@ import {
   resolveRangeBounds,
 } from '../../common/zoned-day.js';
 import { todayYmd } from '../partners/helpers/postback-day-report.js';
+import { flowEngineService } from '../flow/flow-engine.service.js';
+import { resolveFlowOrBoth } from '../flow/flows/index.js';
+import {
+  countFlowConversions,
+  resolveConversionRule,
+} from '../flow/flows/conversion-rule.js';
 import {
   bumpMetric,
   bumpOperatorStatus,
@@ -49,7 +55,7 @@ export const createDailyStatsService = () => {
     const [campaigns, vendors] = await Promise.all([
       getCampaignRepo().find({
         where: { userId },
-        select: ['id', 'name'],
+        select: ['id', 'name', 'verificationMode', 'flowConfig'],
       }),
       getVendorRepo().find({
         where: { userId },
@@ -550,7 +556,40 @@ export const createDailyStatsService = () => {
       timezone,
       groupBy: 'vendor',
     });
+    const campaignReport = await getReport(userId, {
+      ...query,
+      from,
+      to,
+      timezone,
+      groupBy: 'campaign',
+    });
     const totals = dateReport.totals || emptyMetrics();
+    const scopedCampaigns = await getCampaignRepo().find({
+      where: { userId },
+      select: ['id', 'verificationMode', 'flowConfig'],
+    });
+    const ruleByCampaign = Object.fromEntries(
+      scopedCampaigns.map((campaign) => {
+        const flow = resolveFlowOrBoth(
+          flowEngineService.normalizeMode(campaign.verificationMode),
+        );
+        const parsed = flowEngineService.parseFlowConfig(campaign.flowConfig);
+        return [
+          campaign.id,
+          resolveConversionRule(flow, {
+            apiExpose: flowEngineService.isApiExposeFlow(parsed),
+          }),
+        ];
+      }),
+    );
+    let conversions = 0;
+    for (const row of campaignReport.rows || []) {
+      const cid = n(row.campaignId);
+      conversions += countFlowConversions(
+        row,
+        ruleByCampaign[cid] || 'subscribe_or_callback',
+      );
+    }
     const byOperatorStatus = flattenOperatorStatus(dateReport.rows);
     const callbacksReceived =
       byOperatorStatus.reduce((sum, row) => sum + (Number(row.count) || 0), 0) ||
@@ -581,6 +620,7 @@ export const createDailyStatsService = () => {
 
     return {
       visits: n(totals.visits),
+      conversions,
       msisdnResolved: n(totals.msisdnResolved),
       heFailCg: n(totals.heFailCg),
       otpSend: n(totals.otpSend),

@@ -16,6 +16,7 @@ router.get('/postbacks/summary', partnersController.postbacksSummary);
 router.get('/postbacks/stats', partnersController.postbacksStats);
 router.get('/postbacks/day-report', partnersController.postbacksDayReport);
 router.get('/postbacks', partnersController.listPostbacks);
+router.post('/postbacks/:id/fire', partnersController.firePostback);
 router.get('/postbacks/:id', partnersController.getPostback);
 
 export default router;

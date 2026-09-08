@@ -62,11 +62,20 @@ export const createPostbackService = () => {
       getApiCallLogRepo,
     });
 
+  const fireManualPostback = async (id, userId, options = {}) => {
+    await getPostbackById(id, userId);
+    return firePostback(id, {
+      force: Boolean(options.force),
+      manual: true,
+    });
+  };
+
   return {
     fillTemplate,
     resolvePostbackTemplate,
     registerPending,
     firePostback,
+    fireManualPostback,
     processOperatorCallback,
     getSummary,
     listPostbacks,

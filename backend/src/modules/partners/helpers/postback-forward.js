@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { getRepository } from '../../../database/index.js';
 import { Vendor } from '../../../database/entities/vendor.entity.js';
+import { CampaignTracking } from '../../../database/entities/campaign-tracking.entity.js';
 import {
   ConversionPostback,
   ConversionPostbackStatus,
@@ -14,11 +15,13 @@ export const createPostbackForward = (deps) => {
   const {
     getPostbackRepo = () => getRepository(ConversionPostback),
     getVendorRepo = () => getRepository(Vendor),
+    getTrackingRepo = () => getRepository(CampaignTracking),
     indexPostbackEvent,
     logApiCall,
+    httpClient = axios,
   } = deps;
 
-    const logSkippedFire = async (row, reason) => {
+    const logSkippedFire = async (row, reason, extra = {}) => {
       if (!logApiCall) {
         return { skipped: true, reason, id: row?.id };
       }
@@ -35,6 +38,7 @@ export const createPostbackForward = (deps) => {
           reason,
           postbackId: row?.id || null,
           vendorId: row?.vendorId || null,
+          ...extra,
         }),
         responseStatus: null,
         success: false,
@@ -44,21 +48,48 @@ export const createPostbackForward = (deps) => {
       return { skipped: true, reason, id: row?.id };
     };
 
-  const firePostback = async (postbackId) => {
+  const resolveMissingPostbackUrl = async (row) => {
+    if (String(row.postbackUrl || '').trim()) return String(row.postbackUrl).trim();
+    if (row.vendorId) {
+      const vendor = await getVendorRepo().findOne({ where: { id: row.vendorId } });
+      if (vendor?.postbackUrl?.trim()) return vendor.postbackUrl.trim();
+    }
+    if (!row.campaignId || !getTrackingRepo) return '';
+    const trackings = await getTrackingRepo().find({
+      where: { campaignId: parseInt(row.campaignId, 10), active: true },
+      order: { id: 'ASC' },
+      take: 20,
+    });
+    for (const tracking of trackings) {
+      if (!tracking.vendorId) continue;
+      const vendor = await getVendorRepo().findOne({ where: { id: tracking.vendorId } });
+      if (!vendor?.postbackUrl?.trim()) continue;
+      if (!row.vendorId) row.vendorId = tracking.vendorId;
+      return vendor.postbackUrl.trim();
+    }
+    return '';
+  };
+
+  const firePostback = async (postbackId, options = {}) => {
+    const force = Boolean(options.force);
+    const manual = Boolean(options.manual);
     const row = await getPostbackRepo().findOne({
       where: { id: parseInt(postbackId, 10) },
     });
     if (!row) {
-      return logSkippedFire(null, 'postback not found');
+      return logSkippedFire(null, 'postback not found', { force, manual });
     }
-    if (row.status === ConversionPostbackStatus.SENT) {
-      return logSkippedFire(row, 'already sent');
+    if (row.status === ConversionPostbackStatus.SENT && !force) {
+      return logSkippedFire(row, 'already sent', { force, manual });
     }
+
+    const resolvedUrl = await resolveMissingPostbackUrl(row);
+    if (resolvedUrl) row.postbackUrl = resolvedUrl;
 
     let vendorCode = '';
     if (row.vendorId) {
-      const v = await getVendorRepo().findOne({ where: { id: row.vendorId } });
-      vendorCode = v?.code || '';
+      const vendor = await getVendorRepo().findOne({ where: { id: row.vendorId } });
+      vendorCode = vendor?.code || '';
     }
 
     const networkRcid = row.rcid || row.clickId || '';
@@ -66,8 +97,7 @@ export const createPostbackForward = (deps) => {
     const vendorCampid = row.campid || '';
 
     if (!String(row.postbackUrl || '').trim()) {
-      // Conversion row stays — vendor URL is optional for storing the callback.
-      await logSkippedFire(row, 'no postback_url on vendor');
+      await logSkippedFire(row, 'no postback_url on vendor', { force, manual });
       return {
         success: true,
         id: row.id,
@@ -91,7 +121,7 @@ export const createPostbackForward = (deps) => {
     });
 
     try {
-      const response = await axios.get(url, {
+      const response = await httpClient.get(url, {
         timeout: 10000,
         validateStatus: () => true,
       });
@@ -125,6 +155,8 @@ export const createPostbackForward = (deps) => {
           campid: vendorCampid,
           trackingCampid: row.trackingCampid,
           template: row.postbackUrl,
+          force,
+          manual,
         }),
         responseStatus: response.status,
         responseBody: body,
@@ -182,6 +214,8 @@ export const createPostbackForward = (deps) => {
           campid: vendorCampid,
           trackingCampid: row.trackingCampid,
           template: row.postbackUrl,
+          force,
+          manual,
         }),
         responseStatus: err.response?.status ?? null,
         responseBody: serializeBody(err.response?.data),

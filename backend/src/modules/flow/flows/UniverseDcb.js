@@ -25,6 +25,7 @@ export default {
   useDcbDummyPages: true,
   needsIspResolve: true,
   wapBlockedMessage: DCB_WAP_BLOCKED,
+  conversionRule: 'subscribe_or_callback',
   resolveHomeSubscribeNext: Both.resolveHomeSubscribeNext,
 
   getDefaultFlowConfig() {

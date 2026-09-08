@@ -30,6 +30,7 @@ export default {
   useDcbDummyPages: false,
   needsIspResolve: false,
   isFlowLocked: true,
+  conversionRule: 'otp_payout',
   wapBlockedMessage: 'This service is only available for Orange Burkina Faso subscribers (+226).',
 
   getDefaultFlowConfig() {

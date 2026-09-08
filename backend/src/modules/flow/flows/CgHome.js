@@ -20,6 +20,7 @@ export default {
   subscribeStayHome: true,
   needsIspResolve: false,
   wapBlockedMessage: OTP_WAP_BLOCKED,
+  conversionRule: 'operator_callback',
 
   getDefaultFlowConfig() {
     return {

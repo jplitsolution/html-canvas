@@ -18,6 +18,7 @@ describe('backend flow registry', () => {
       'CG_HOME',
       'HEADER_INJECTION',
       'NONE',
+      'ORANGE_BF',
       'OTP_ONLY',
       'UNIVERSE_DCB',
     ]);
@@ -38,9 +39,9 @@ describe('backend flow registry', () => {
     assert.equal(resolveFlow('NONE').isNullIdentity, true);
     assert.equal(resolveFlow('OTP_ONLY').allowsHe, false);
     assert.equal(resolveFlow('HEADER_INJECTION').allowsHe, true);
-    assert.equal(resolveFlow('UNIVERSE_DCB').allowsApiExpose, true);
-    assert.equal(resolveFlow('OTP_ONLY').allowsApiExpose, true);
-    assert.equal(resolveFlow('BOTH').allowsApiExpose, false);
+    assert.equal(resolveFlow('ORANGE_BF').conversionRule, 'otp_payout');
+    assert.equal(resolveFlow('NONE').conversionRule, 'operator_callback');
+    assert.equal(resolveFlow('CG_HOME').conversionRule, 'operator_callback');
   });
 
   it('API expose WAP errors stay mode-specific', () => {

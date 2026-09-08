@@ -14,6 +14,7 @@ import {
   Filter,
   FileDown,
   Inbox,
+  Zap,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -25,7 +26,7 @@ import {
   getDateRangeForPreset,
   DEFAULT_TIMEZONE,
 } from '../utils/date'
-import { getPostbackSummary, listPostbacks, exportPostbackDayReport } from '../services/api/partners'
+import { getPostbackSummary, listPostbacks, exportPostbackDayReport, firePostback } from '../services/api/partners'
 import useStore from '../store/useStore'
 
 const PAGE_SIZE = 25
@@ -103,6 +104,7 @@ function PostbacksPage() {
     getDateRangeForPreset('today', timezone),
   )
   const [exporting, setExporting] = useState(false)
+  const [firingId, setFiringId] = useState(null)
   const addToast = useStore((s) => s.addToast)
 
   const load = useCallback(async () => {
@@ -189,6 +191,35 @@ function PostbacksPage() {
     }
   }
 
+  const fireVendorPostback = async (row, e) => {
+    e.stopPropagation()
+    if (!row?.id || firingId) return
+    const alreadySent = String(row.status || '').toLowerCase() === 'sent'
+    const label = row.msisdn || `#${row.id}`
+    const ok = window.confirm(
+      alreadySent
+        ? `Postback for ${label} was already sent. Fire it again?`
+        : `Fire vendor postback for ${label}?`,
+    )
+    if (!ok) return
+    setFiringId(row.id)
+    try {
+      const result = await firePostback(row.id, { force: alreadySent })
+      if (result?.skipped || result?.vendorSkipped) {
+        addToast(result.reason || 'Postback was not sent', 'error')
+      } else if (result?.success === false) {
+        addToast(result.error || result.errorMessage || 'Vendor postback failed', 'error')
+      } else {
+        addToast(`Fired postback for ${label}`, 'success')
+      }
+      await load()
+    } catch (err) {
+      addToast(err?.message || 'Failed to fire postback', 'error')
+    } finally {
+      setFiringId(null)
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
 
   return (
@@ -222,7 +253,9 @@ function PostbacksPage() {
         <div className="page-header">
           <h1 className="page-header-title">Postbacks</h1>
           <p className="page-header-description">
-            MSISDN resolve → postback queue → billing callback → vendor CPA fire.
+            MSISDN resolve → postback queue → billing callback (or manual fire) → vendor CPA.
+            <span className="font-medium text-gray-700"> Fire postback</span> sends vendor CPA
+            without waiting for an operator callback.
             <span className="font-medium text-gray-700"> Export logs</span> downloads
             the selected date range as CSV (and writes the same file on the server).
           </p>
@@ -564,16 +597,27 @@ function PostbacksPage() {
                         {row.campid || '—'}
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            navigate(`/postbacks/${row.id}`)
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
+                        <div className="inline-flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Fire vendor postback"
+                            disabled={firingId === row.id}
+                            onClick={(e) => fireVendorPostback(row, e)}
+                          >
+                            <Zap className={`w-4 h-4 ${firingId === row.id ? 'animate-pulse' : ''}`} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              navigate(`/postbacks/${row.id}`)
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}

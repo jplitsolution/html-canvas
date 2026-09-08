@@ -133,6 +133,33 @@ describe('campaignVendorPerf', () => {
     assert.equal(row.advCrPercent, 33.3);
     assert.equal(row.pubCrPercent, 26.7);
   });
+
+  it('operator_callback ignores subscribe success', () => {
+    const row = campaignVendorPerf({
+      clicks: 100,
+      subscribeSuccess: 40,
+      postbacksMatched: 8,
+      postbacksSent: 6,
+      conversionRule: 'operator_callback',
+    });
+    assert.equal(row.conversions, 8);
+    assert.equal(row.convPercent, 8);
+    assert.equal(row.pubConvPercent, 6);
+  });
+
+  it('otp_payout counts vendor fires after payout, not operator callbacks', () => {
+    const row = campaignVendorPerf({
+      clicks: 50,
+      subscribeSuccess: 20,
+      postbacksMatched: 20,
+      postbacksSent: 7,
+      liveVerified: 20,
+      conversionRule: 'otp_payout',
+    });
+    assert.equal(row.conversions, 7);
+    assert.equal(row.convPercent, 14);
+    assert.equal(row.pubConvPercent, 14);
+  });
 });
 
 describe('apiExposePinStats', () => {

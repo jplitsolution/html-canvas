@@ -4,12 +4,23 @@ import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
 import { Visit } from '../../database/entities/visit.entity.js';
 import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
-import { ConversionPostback, ConversionPostbackStatus } from '../../database/entities/conversion-postback.entity.js';
+import {
+  ConversionPostback,
+  ConversionPostbackStatus,
+} from '../../database/entities/conversion-postback.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
+import { postbackService } from '../partners/postback.service.js';
+import {
+  parsePayoutPercent,
+  payoutSeqKey,
+  shouldPayoutOtp,
+} from '../otp/helpers/payout.js';
 import { orangeBfProvider, ORANGE_BF_DEFAULTS } from './orange-bf.provider.js';
 import { ORANGE_BF_OUTCOMES } from './helpers/orange-bf-normalizer.js';
 import { interpretChecksubResponse } from './helpers/checksub-rules.js';
+import { analyticsService } from '../analytics/analytics.service.js';
+import { VisitEventType } from '../../database/entities/visit-event.entity.js';
 
 const cleanPhone = (val) => String(val || '').replace(/\D/g, '');
 
@@ -21,6 +32,114 @@ const safeParseJson = (raw) => {
   } catch {
     return {};
   }
+};
+
+const resolvePayoutHold = async (campaignId, vendorId, payoutPercentRaw) => {
+  const payoutPercent = parsePayoutPercent(payoutPercentRaw);
+  if (payoutPercent >= 100) {
+    return { held: false, seq: null, payoutPercent };
+  }
+  const seq = await redisService.incr(payoutSeqKey(campaignId, vendorId));
+  if (!seq) return { held: false, seq: null, payoutPercent };
+  return {
+    held: !shouldPayoutOtp(seq, payoutPercent),
+    seq,
+    payoutPercent,
+  };
+};
+
+const resolveVendorForPostback = async (campaignId, vendorId, visitId) => {
+  if (vendorId) return parseInt(vendorId, 10);
+  if (visitId) {
+    const visit = await getRepository(Visit).findOne({
+      where: { id: parseInt(visitId, 10) },
+    });
+    if (visit?.vendorId) return visit.vendorId;
+  }
+  if (!campaignId) return null;
+  const tracking = await getRepository(CampaignTracking).findOne({
+    where: { campaignId: parseInt(campaignId, 10), active: true },
+    order: { id: 'ASC' },
+  });
+  return tracking?.vendorId || null;
+};
+
+const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) => {
+  const resolvedVendorId = await resolveVendorForPostback(
+    campaign.id,
+    vendorId,
+    visitId,
+  );
+  let tracking = null;
+  if (resolvedVendorId) {
+    tracking = await getRepository(CampaignTracking).findOne({
+      where: {
+        campaignId: campaign.id,
+        vendorId: resolvedVendorId,
+        active: true,
+      },
+    });
+  }
+
+  const decision = await resolvePayoutHold(
+    campaign.id,
+    resolvedVendorId,
+    tracking?.payoutPercent,
+  );
+
+  const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
+  const queued = await postbackService.registerPending({
+    visitId: parsedVisitId,
+    msisdn,
+    campaignId: campaign.id,
+    vendorId: resolvedVendorId,
+    keepIfSent: true,
+    fireImmediate: !decision.held,
+  });
+
+  if (decision.held && queued?.id) {
+    const repo = getRepository(ConversionPostback);
+    const row = await repo.findOne({ where: { id: queued.id } });
+    if (row && row.status !== ConversionPostbackStatus.SENT) {
+      row.status = ConversionPostbackStatus.SKIPPED;
+      row.errorMessage = `Payout hold — vendor cut ${100 - decision.payoutPercent}% (seq ${decision.seq})`;
+      await repo.save(row);
+    }
+    await apiCallLogService.record({
+      visitId: parsedVisitId,
+      campaignId: campaign.id,
+      msisdn,
+      rcid: row?.rcid || null,
+      clickId: row?.clickId || null,
+      vendorId: resolvedVendorId,
+      callType: ApiCallType.VENDOR_POSTBACK,
+      requestUrl: row?.postbackUrl || '',
+      requestBody: JSON.stringify({
+        skipped: true,
+        reason: 'payout_hold',
+        payoutPercent: decision.payoutPercent,
+        seq: decision.seq,
+        postbackId: queued.id,
+        vendorId: resolvedVendorId,
+      }),
+      success: false,
+      errorMessage: `payout hold (${decision.payoutPercent}%)`,
+      statusLabel: 'SKIPPED',
+    });
+    return {
+      status: ConversionPostbackStatus.SKIPPED,
+      held: true,
+      payoutPercent: decision.payoutPercent,
+      seq: decision.seq,
+    };
+  }
+
+  return {
+    status: queued?.status || (queued?.skipped ? 'skipped' : 'pending'),
+    held: false,
+    payoutPercent: decision.payoutPercent,
+    seq: decision.seq,
+  };
 };
 
 export const createOrangeBfService = () => {
@@ -338,34 +457,42 @@ export const createOrangeBfService = () => {
         };
       }
 
-      // Record Conversion & Vendor Approval Check
+      // Orange BF has no operator billing callback. Fire vendor CPA on OTP
+      // success, subject to the campaign-tracking payout % (same lattice as OTP expose).
       let postbackStatus = null;
+      let payoutHeld = false;
+      let payoutPercent = null;
       if (campaign) {
         try {
-          // Find vendor tracking assignment if present
-          let tracking = null;
-          if (vendorId) {
-            tracking = await getRepository(CampaignTracking).findOne({
-              where: { campaignId: campaign.id, vendorId: parseInt(vendorId, 10), active: true },
-            });
-          }
-
-          const payoutPercent = tracking?.payoutPercent ?? 100;
-          const shouldSendPostback = Math.random() * 100 <= payoutPercent;
-          postbackStatus = shouldSendPostback ? ConversionPostbackStatus.PENDING : ConversionPostbackStatus.SKIPPED;
-
-          const postbackRepo = getRepository(ConversionPostback);
-          const postback = postbackRepo.create({
-            campaignId: campaign.id,
-            vendorId: vendorId ? parseInt(vendorId, 10) : null,
-            visitId: visitId ? parseInt(visitId, 10) : null,
+          const queued = await queueOrangeBfPostback({
+            campaign,
+            visitId,
+            vendorId,
             msisdn,
-            status: postbackStatus,
-            transactionId: verifyResult.transactionId || cachedData.transactionId || null,
           });
-          await postbackRepo.save(postback);
+          postbackStatus = queued.status;
+          payoutHeld = Boolean(queued.held);
+          payoutPercent = queued.payoutPercent ?? null;
         } catch (e) {
           console.warn('[OrangeBf] Failed to queue postback:', e.message);
+        }
+      }
+
+      if (visitId) {
+        try {
+          await analyticsService.logEvent(
+            parseInt(visitId, 10),
+            VisitEventType.OTP_VERIFY,
+            {
+              source: 'orange_bf',
+              success: true,
+              held: payoutHeld,
+              payoutPercent,
+              postbackStatus,
+            },
+          );
+        } catch {
+          // Session Detail still has api_call_logs
         }
       }
 
@@ -378,6 +505,8 @@ export const createOrangeBfService = () => {
         transactionId: verifyResult.transactionId || cachedData.transactionId || null,
         forwardUrl,
         postbackStatus,
+        payoutHeld,
+        payoutPercent,
         message: 'OTP validated successfully',
       };
     },

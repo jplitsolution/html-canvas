@@ -61,6 +61,19 @@ export const partnersController = {
     res.json(data);
   }),
 
+  firePostback: asyncHandler(async (req, res) => {
+    const force =
+      req.body?.force === true ||
+      req.body?.force === '1' ||
+      String(req.query?.force || '') === '1';
+    const data = await postbackService.fireManualPostback(
+      req.params.id,
+      req.user.id,
+      { force },
+    );
+    res.json(data);
+  }),
+
   postbacksDayReport: asyncHandler(async (req, res) => {
     const data = await postbackService.getDayReport(req.user.id, req.query || {});
     const format = String(req.query.format || 'json').toLowerCase();

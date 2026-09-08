@@ -223,7 +223,10 @@ function DashboardPage() {
   }, [fetchDashboardData])
 
   const totalVisits = Number(postbackStats?.visits) || 0
-  const totalConversions = Number(postbackStats?.subscribeSuccess) || 0
+  const totalConversions =
+    postbackStats?.conversions != null
+      ? Number(postbackStats.conversions) || 0
+      : Number(postbackStats?.subscribeSuccess) || 0
 
   const conversionRate = useMemo(() => {
     if (!totalVisits) return '0.0%'
@@ -382,7 +385,7 @@ function DashboardPage() {
 
           {/* Card 2: Conversions */}
           <Link
-            to={buildAnalyticsUrl({ eventType: 'SUBSCRIBE_SUCCESS' })}
+            to={buildAnalyticsUrl()}
             className="group relative overflow-hidden rounded-2xl border border-border bg-bg-elevated p-4 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-emerald-500/40"
           >
             <div className="flex items-center justify-between">
@@ -396,7 +399,7 @@ function DashboardPage() {
                 {loading ? '...' : totalConversions.toLocaleString()}
               </p>
               <p className="text-[11px] text-fg-muted mt-1 flex items-center justify-between">
-                <span>Subscribe success (same source as visits)</span>
+                <span>Per-flow total (CG callback, OTP payout, subscribe)</span>
                 <ArrowUpRight className="w-3.5 h-3.5 text-emerald-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </p>
             </div>
