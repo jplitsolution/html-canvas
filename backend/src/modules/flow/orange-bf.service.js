@@ -25,6 +25,18 @@ import { VisitEventType } from '../../database/entities/visit-event.entity.js';
 
 const cleanPhone = (val) => String(val || '').replace(/\D/g, '');
 
+const isOrangeBfTestMsisdn = (phone) => {
+  const digits = cleanPhone(phone);
+  if (!digits) return false;
+  if (process.env.BYPASS_ORANGE_BF_DUPLICATE_CHECK === 'true') return true;
+  const configured = String(process.env.TEST_POSTBACK_MSISDNS || '')
+    .split(',')
+    .map((s) => cleanPhone(s))
+    .filter(Boolean);
+  const defaultTestNumbers = ['66649028'];
+  return defaultTestNumbers.includes(digits) || configured.includes(digits);
+};
+
 const safeParseJson = (raw) => {
   if (!raw) return {};
   if (typeof raw === 'object') return raw;
@@ -92,6 +104,7 @@ const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) =>
   const visit = parsedVisitId
     ? await getRepository(Visit).findOne({ where: { id: parsedVisitId } })
     : null;
+    const isTest = isOrangeBfTestMsisdn(msisdn);
   const queued = await postbackService.registerPending({
     visitId: parsedVisitId,
     msisdn,
@@ -101,7 +114,8 @@ const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) =>
     rcid: affiliateRcidFromVisit(visit),
     campid: visit?.campid || '',
     trackingCampid: visit?.trackingCampid || campaign.trackingId || '',
-    keepIfSent: true,
+    keepIfSent: !isTest,
+    forceFire: isTest,
     fireImmediate: !decision.held,
   });
 

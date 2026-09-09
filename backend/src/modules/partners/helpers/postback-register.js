@@ -203,6 +203,7 @@ export const createPostbackRegister = (deps) => {
     const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
     const savedTemplate = template || null;
     const keepIfSent = Boolean(input.keepIfSent);
+    const forceFire = Boolean(input.forceFire || input.force);
     const alreadySent = existing?.status === ConversionPostbackStatus.SENT;
     const nextStatus = input.asReceived
       ? ConversionPostbackStatus.RECEIVED
@@ -218,7 +219,7 @@ export const createPostbackRegister = (deps) => {
       if (campaignId) existing.campaignId = campaignId;
       if (vendorId) existing.vendorId = vendorId;
       if (savedTemplate) existing.postbackUrl = savedTemplate;
-      if (!(keepIfSent && alreadySent)) {
+      if (!(keepIfSent && alreadySent) || forceFire) {
         existing.status = nextStatus;
         existing.httpStatus = null;
         existing.responseBody = null;
@@ -254,7 +255,7 @@ export const createPostbackRegister = (deps) => {
       }
 
       if (input.fireImmediate) {
-        return firePostback(row.id);
+        return firePostback(row.id, { force: forceFire });
       }
 
       return { success: true, id: row.id, status: row.status, updated: true };
@@ -301,7 +302,7 @@ export const createPostbackRegister = (deps) => {
     }
 
     if (input.fireImmediate) {
-      return firePostback(row.id);
+      return firePostback(row.id, { force: forceFire });
     }
 
     return { success: true, id: row.id, status: row.status };

@@ -33,6 +33,20 @@ export const createPostbackForward = (deps) => {
     if (!logApiCall) {
       return { skipped: true, reason, id: row?.id };
     }
+    const networkRcid = row?.rcid || row?.clickId || '';
+    const vendorCampid = row?.campid || '';
+    const displayUrl = row?.postbackUrl
+      ? fillTemplate(row.postbackUrl, {
+          msisdn: row?.msisdn || '',
+          click_id: networkRcid,
+          rcid: networkRcid,
+          campid: vendorCampid,
+          camp: vendorCampid,
+          tracking_campid: row?.trackingCampid || '',
+          offer_code: row?.offerCode || '',
+          visit_id: row?.visitId != null ? String(row.visitId) : '',
+        })
+      : '';
     await logApiCall({
       visitId: row?.visitId || null,
       campaignId: row?.campaignId || null,
@@ -40,7 +54,7 @@ export const createPostbackForward = (deps) => {
       rcid: row?.rcid || null,
       clickId: row?.clickId || null,
       callType: ApiCallType.VENDOR_POSTBACK,
-      requestUrl: row?.postbackUrl || '',
+      requestUrl: displayUrl || row?.postbackUrl || '',
       requestBody: serializeBody({
         skipped: true,
         reason,
@@ -79,14 +93,14 @@ export const createPostbackForward = (deps) => {
   };
 
   const firePostback = async (postbackId, options = {}) => {
-    const force = Boolean(options.force);
     const manual = Boolean(options.manual);
     const row = await getPostbackRepo().findOne({
       where: { id: parseInt(postbackId, 10) },
     });
     if (!row) {
-      return logSkippedFire(null, 'postback not found', { force, manual });
+      return logSkippedFire(null, 'postback not found', { force: Boolean(options.force), manual });
     }
+    const force = Boolean(options.force);
     if (row.status === ConversionPostbackStatus.SENT && !force) {
       return logSkippedFire(row, 'already sent', { force, manual });
     }
