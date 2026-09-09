@@ -20,12 +20,14 @@ export async function deleteVendor(id) {
   return apiClient(`/partners/vendors/${id}`, { method: 'DELETE' })
 }
 
-export async function getPostbackSummary({ days, from, to, timezone } = {}) {
+export async function getPostbackSummary({ days, from, to, timezone, campaignId, offerCode } = {}) {
   const params = new URLSearchParams()
   if (days) params.set('days', String(days))
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (timezone) params.set('timezone', timezone)
+  if (campaignId) params.set('campaignId', String(campaignId))
+  if (offerCode) params.set('offerCode', offerCode)
   const qs = params.toString()
   return apiClient(`/partners/postbacks/summary${qs ? `?${qs}` : ''}`)
 }
@@ -37,6 +39,8 @@ export async function listPostbacks({
   operatorStatus,
   q,
   vendorId,
+  campaignId,
+  offerCode,
   from,
   to,
   timezone,
@@ -48,6 +52,8 @@ export async function listPostbacks({
   if (operatorStatus) params.set('operatorStatus', operatorStatus)
   if (q) params.set('q', q)
   if (vendorId) params.set('vendorId', String(vendorId))
+  if (campaignId) params.set('campaignId', String(campaignId))
+  if (offerCode) params.set('offerCode', offerCode)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (timezone) params.set('timezone', timezone)
@@ -92,6 +98,7 @@ function reportQuery({
   timezone,
   campaignId,
   vendorId,
+  offerCode,
   outcome,
   hitType,
   q,
@@ -108,6 +115,7 @@ function reportQuery({
   if (timezone) params.set('timezone', timezone)
   if (campaignId) params.set('campaignId', String(campaignId))
   if (vendorId) params.set('vendorId', String(vendorId))
+  if (offerCode) params.set('offerCode', offerCode)
   if (outcome && outcome !== 'all') params.set('outcome', outcome)
   if (hitType && hitType !== 'all') params.set('hitType', hitType)
   if (q) params.set('q', q)

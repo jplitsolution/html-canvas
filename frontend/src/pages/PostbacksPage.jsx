@@ -83,6 +83,8 @@ function PostbacksPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
+  const campaigns = useStore((s) => s.campaigns)
+  const fetchCampaigns = useStore((s) => s.fetchCampaigns)
   const [summary, setSummary] = useState(null)
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -93,6 +95,9 @@ function PostbacksPage() {
   )
   const [operatorStatus, setOperatorStatus] = useState(
     () => String(searchParams.get('operatorStatus') || '').trim().toLowerCase(),
+  )
+  const [campaignId, setCampaignId] = useState(
+    () => searchParams.get('campaignId') || searchParams.get('offer') || '',
   )
   const [vendorId, setVendorId] = useState('')
   const [q, setQ] = useState('')
@@ -107,6 +112,10 @@ function PostbacksPage() {
   const [firingId, setFiringId] = useState(null)
   const addToast = useStore((s) => s.addToast)
 
+  useEffect(() => {
+    fetchCampaigns().catch(() => {})
+  }, [fetchCampaigns])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
@@ -117,7 +126,10 @@ function PostbacksPage() {
         timezone,
       }
       const [sum, list] = await Promise.all([
-        getPostbackSummary(rangeParams),
+        getPostbackSummary({
+          ...rangeParams,
+          campaignId: campaignId || undefined,
+        }),
         listPostbacks({
           page,
           limit: PAGE_SIZE,
@@ -125,6 +137,7 @@ function PostbacksPage() {
           operatorStatus: operatorStatus || undefined,
           q,
           vendorId: vendorId || undefined,
+          campaignId: campaignId || undefined,
           ...rangeParams,
         }),
       ])
@@ -136,7 +149,7 @@ function PostbacksPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, status, operatorStatus, q, vendorId, dateRange.from, dateRange.to, timezone])
+  }, [page, status, operatorStatus, q, vendorId, campaignId, dateRange.from, dateRange.to, timezone])
 
   useEffect(() => {
     load()
@@ -169,6 +182,8 @@ function PostbacksPage() {
     params.set('preset', datePreset)
     if (dateRange.from) params.set('from', dateRange.from)
     if (dateRange.to) params.set('to', dateRange.to)
+    if (campaignId) params.set('campaignId', campaignId)
+    if (vendorId) params.set('vendorId', vendorId)
     if (extra.filter) params.set('filter', extra.filter)
     return `/postbacks/day-logs?${params.toString()}`
   }
@@ -181,6 +196,8 @@ function PostbacksPage() {
         from: dateRange.from,
         to: dateRange.to,
         timezone,
+        campaignId: campaignId || undefined,
+        vendorId: vendorId || undefined,
         format: 'csv',
       })
       addToast(`Exported ${result.filename} (also saved on server)`, 'success')
@@ -444,6 +461,41 @@ function PostbacksPage() {
             </div>
           ) : null}
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
+                <Zap className="w-3.5 h-3.5 text-indigo-500" />
+                Offer / Campaign
+              </label>
+              <select
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer"
+                value={campaignId}
+                onChange={(e) => {
+                  const val = e.target.value
+                  setCampaignId(val)
+                  setPage(1)
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    if (!val) {
+                      next.delete('campaignId')
+                      next.delete('offer')
+                    } else {
+                      next.set('campaignId', val)
+                    }
+                    return next
+                  })
+                }}
+              >
+                <option value="">All offers / campaigns</option>
+                {campaigns.map((c) => (
+                  <option key={c.id} value={String(c.id)}>
+                    {c.trackingId ? `[${c.trackingId}] ` : ''}{c.name} {c.country && c.operator ? `(${c.country} / ${c.operator})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <div className="flex flex-wrap gap-2">
             <Button
               variant="primary"
@@ -484,6 +536,25 @@ function PostbacksPage() {
                   {f.label}
                 </button>
               ))}
+              {campaignId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCampaignId('')
+                    setPage(1)
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.delete('campaignId')
+                      next.delete('offer')
+                      return next
+                    })
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1.5"
+                >
+                  <span>Clear offer: {campaigns.find((c) => String(c.id) === String(campaignId))?.name || `#${campaignId}`}</span>
+                  <XCircle className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
+                </button>
+              ) : null}
               {operatorStatus ? (
                 <button
                   type="button"
@@ -525,8 +596,8 @@ function PostbacksPage() {
               <div className="relative">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white w-56"
-                  placeholder="msisdn / click / rcid / campid"
+                  className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white w-60"
+                  placeholder="msisdn / click / rcid / camp / offer"
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                 />
@@ -552,6 +623,7 @@ function PostbacksPage() {
                 <thead>
                   <tr className="text-left text-xs text-gray-500 border-b border-gray-100 bg-gray-50/40">
                     <th className="px-5 py-3 font-medium">Created</th>
+                    <th className="px-3 py-3 font-medium">Offer</th>
                     <th className="px-3 py-3 font-medium">MSISDN</th>
                     <th className="px-3 py-3 font-medium">Callback</th>
                     <th className="px-3 py-3 font-medium">Postback</th>
@@ -571,6 +643,40 @@ function PostbacksPage() {
                     >
                       <td className="px-5 py-3 text-gray-600 whitespace-nowrap">
                         {formatDate(row.createdAt)}
+                      </td>
+                      <td
+                        className="px-3 py-3"
+                        title={row.campaignId ? 'Click to filter by this offer' : ''}
+                        onClick={(e) => {
+                          if (row.campaignId) {
+                            e.stopPropagation()
+                            const cidStr = String(row.campaignId)
+                            setCampaignId(cidStr)
+                            setPage(1)
+                            setSearchParams((prev) => {
+                              const next = new URLSearchParams(prev)
+                              next.set('campaignId', cidStr)
+                              return next
+                            })
+                          }
+                        }}
+                      >
+                        <div
+                          className={`font-medium text-xs text-gray-900 truncate max-w-[140px] ${
+                            row.campaignId ? 'hover:text-indigo-600 transition-colors' : ''
+                          }`}
+                          title={row.campaignName || (row.campaignId ? `Campaign #${row.campaignId}` : '')}
+                        >
+                          {row.campaignName || (row.campaignId ? `Campaign #${row.campaignId}` : '—')}
+                        </div>
+                        {row.offerCode || row.trackingCampid ? (
+                          <div
+                            className="text-[11px] text-gray-400 font-mono truncate max-w-[140px]"
+                            title={row.offerCode || row.trackingCampid || ''}
+                          >
+                            {row.offerCode || row.trackingCampid}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="px-3 py-3 font-mono text-xs text-gray-800">{row.msisdn || '—'}</td>
                       <td className="px-3 py-3">

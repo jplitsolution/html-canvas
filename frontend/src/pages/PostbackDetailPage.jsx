@@ -277,7 +277,22 @@ function PostbackDetailPage() {
                 <Field label="tracking_campid">
                   <span className="font-mono text-xs">{data.trackingCampid}</span>
                 </Field>
-                <Field label="campaignId">{data.campaignId}</Field>
+                <Field label="Offer / Campaign">
+                  {data.campaignName ? (
+                    <span className="font-medium text-gray-900">
+                      {data.campaignName}{data.campaignId ? ` (#${data.campaignId})` : ''}
+                    </span>
+                  ) : data.campaignId ? (
+                    `Campaign #${data.campaignId}`
+                  ) : (
+                    '—'
+                  )}
+                </Field>
+                {data.offerCode ? (
+                  <Field label="offer_code">
+                    <span className="font-mono text-xs">{data.offerCode}</span>
+                  </Field>
+                ) : null}
                 <Field label="Updated">
                   <span className="inline-flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-gray-400" />
