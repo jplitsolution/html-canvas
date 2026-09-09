@@ -40,6 +40,7 @@ export function parseReportQuery(query = {}) {
   return {
     campaignId: toInt(query.campaignId),
     vendorId: toInt(query.vendorId),
+    offerCode: String(query.offerCode || '').trim() || null,
     outcome: REPORT_OUTCOMES.has(outcome) ? outcome : 'all',
     hitType: REPORT_HIT_FILTERS.has(hitType) ? hitType : 'all',
     q: String(query.q || '').trim(),
@@ -64,6 +65,9 @@ export function matchesNumberFilters(row, filters = {}) {
   if (filters.vendorId && Number(row.vendorId) !== Number(filters.vendorId)) {
     return false;
   }
+  if (filters.offerCode && String(row.offerCode || '').toLowerCase() !== String(filters.offerCode).toLowerCase()) {
+    return false;
+  }
   if (filters.outcome && filters.outcome !== 'all' && row.outcome !== filters.outcome) {
     return false;
   }
@@ -75,6 +79,7 @@ export function matchesNumberFilters(row, filters = {}) {
     row.rcid,
     row.campid,
     row.trackingCampid,
+    row.offerCode,
     row.vendorName,
     row.vendorCode,
     row.campaignName,

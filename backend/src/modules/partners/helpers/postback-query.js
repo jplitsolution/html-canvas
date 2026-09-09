@@ -54,7 +54,7 @@ export function createPostbackQuery(deps) {
     const [campaigns, vendors] = await Promise.all([
       getCampaignRepo().find({
         where: { userId },
-        select: ['id'],
+        select: ['id', 'name', 'country', 'operator'],
       }),
       getVendorRepo().find({
         where: { userId },
@@ -64,6 +64,7 @@ export function createPostbackQuery(deps) {
     return {
       campaignIds: campaigns.map((c) => c.id),
       vendorIds: vendors.map((v) => v.id),
+      campaigns,
       vendors,
     };
   };
@@ -80,8 +81,9 @@ export function createPostbackQuery(deps) {
     }
   };
 
-  const serializePostback = (row, vendorMap = {}) => {
+  const serializePostback = (row, vendorMap = {}, campaignMap = {}) => {
     const vendor = row.vendorId ? vendorMap[row.vendorId] : null;
+    const campaign = row.campaignId ? campaignMap[row.campaignId] : null;
     return {
       id: row.id,
       msisdn: maskPhone(row.msisdn),
@@ -92,6 +94,8 @@ export function createPostbackQuery(deps) {
       campid: row.campid,
       trackingCampid: row.trackingCampid,
       campaignId: row.campaignId,
+      campaignName: campaign?.name || null,
+      campaignTrackingId: campaign?.trackingId || null,
       vendorId: row.vendorId,
       vendorName: vendor?.name || null,
       vendorCode: vendor?.code || null,
@@ -139,6 +143,20 @@ export function createPostbackQuery(deps) {
       return emptySummary();
     }
 
+    const campaignIdFilter = query.campaignId
+      ? parseInt(query.campaignId, 10)
+      : null;
+    const vendorIdFilter = query.vendorId
+      ? parseInt(query.vendorId, 10)
+      : null;
+    const offerCodeFilter = String(query.offerCode || '').trim();
+
+    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+      if (campaignIds.length && !campaignIds.includes(campaignIdFilter)) {
+        return emptySummary();
+      }
+    }
+
     const days = Math.min(Math.max(Number(query.days) || 30, 1), 365);
     const hasExplicitRange = Boolean(query.from || query.to);
     const { from, to } = hasExplicitRange
@@ -161,6 +179,12 @@ export function createPostbackQuery(deps) {
         .andWhere("v.phone <> ''")
         .andWhere('v.createdAt >= :since', { since });
       if (to) visitQ.andWhere('v.createdAt <= :until', { until: to });
+      if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+        visitQ.andWhere('v.campaignId = :campaignIdFilter', { campaignIdFilter });
+      }
+      if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
+        visitQ.andWhere('v.vendorId = :vendorIdFilter', { vendorIdFilter });
+      }
       msisdnResolved = await visitQ.getCount();
 
       const failQ = getApiCallLogRepo()
@@ -172,6 +196,9 @@ export function createPostbackQuery(deps) {
         .andWhere('l.success = :fail', { fail: false })
         .andWhere('l.createdAt >= :since', { since });
       if (to) failQ.andWhere('l.createdAt <= :until', { until: to });
+      if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+        failQ.andWhere('l.campaignId = :campaignIdFilter', { campaignIdFilter });
+      }
       heFailCg = await failQ.getCount();
     }
 
@@ -188,6 +215,15 @@ export function createPostbackQuery(deps) {
       pbQ.andWhere('p.campaignId IN (:...campaignIds)', { campaignIds });
     } else {
       pbQ.andWhere('p.vendorId IN (:...vendorIds)', { vendorIds });
+    }
+    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+      pbQ.andWhere('p.campaignId = :campaignIdFilter', { campaignIdFilter });
+    }
+    if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
+      pbQ.andWhere('p.vendorId = :vendorIdFilter', { vendorIdFilter });
+    }
+    if (offerCodeFilter) {
+      pbQ.andWhere('p.offerCode = :offerCodeFilter', { offerCodeFilter });
     }
 
     const rows = await pbQ
@@ -256,6 +292,15 @@ export function createPostbackQuery(deps) {
     } else {
       opQ.andWhere('p.vendorId IN (:...vendorIds)', { vendorIds });
     }
+    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+      opQ.andWhere('p.campaignId = :campaignIdFilter', { campaignIdFilter });
+    }
+    if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
+      opQ.andWhere('p.vendorId = :vendorIdFilter', { vendorIdFilter });
+    }
+    if (offerCodeFilter) {
+      opQ.andWhere('p.offerCode = :offerCodeFilter', { offerCodeFilter });
+    }
     const operatorRows = await opQ
       .select('LOWER(p.operatorStatus)', 'operatorStatus')
       .addSelect('COUNT(*)', 'cnt')
@@ -322,7 +367,7 @@ export function createPostbackQuery(deps) {
   };
 
   const listPostbacks = async (userId, query = {}) => {
-    const { campaignIds, vendorIds, vendors } = await resolveUserScope(userId);
+    const { campaignIds, vendorIds, campaigns, vendors } = await resolveUserScope(userId);
     if (!campaignIds.length && !vendorIds.length) {
       return { total: 0, page: 1, limit: 25, items: [] };
     }
@@ -335,6 +380,10 @@ export function createPostbackQuery(deps) {
     const vendorIdFilter = query.vendorId
       ? parseInt(query.vendorId, 10)
       : null;
+    const campaignIdFilter = query.campaignId
+      ? parseInt(query.campaignId, 10)
+      : null;
+    const offerCodeFilter = String(query.offerCode || '').trim();
 
     const qb = getPostbackRepo().createQueryBuilder('p');
     if (campaignIds.length && vendorIds.length) {
@@ -360,10 +409,16 @@ export function createPostbackQuery(deps) {
     if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
       qb.andWhere('p.vendorId = :vendorIdFilter', { vendorIdFilter });
     }
+    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
+      qb.andWhere('p.campaignId = :campaignIdFilter', { campaignIdFilter });
+    }
+    if (offerCodeFilter) {
+      qb.andWhere('p.offerCode = :offerCodeFilter', { offerCodeFilter });
+    }
     if (q) {
       const like = `%${q}%`;
       qb.andWhere(
-        '(p.msisdn LIKE :like OR p.clickId LIKE :like OR p.rcid LIKE :like OR p.campid LIKE :like OR p.trackingCampid LIKE :like)',
+        '(p.msisdn LIKE :like OR p.clickId LIKE :like OR p.rcid LIKE :like OR p.campid LIKE :like OR p.trackingCampid LIKE :like OR p.offerCode LIKE :like)',
         { like },
       );
     }
@@ -392,11 +447,27 @@ export function createPostbackQuery(deps) {
       for (const v of extra) vendorMap[v.id] = v;
     }
 
+    const campaignMap = Object.fromEntries(campaigns.map((c) => [c.id, c]));
+    const missingCids = [
+      ...new Set(
+        rows
+          .map((r) => r.campaignId)
+          .filter((id) => id && !campaignMap[id]),
+      ),
+    ];
+    if (missingCids.length) {
+      const extra = await getCampaignRepo().find({
+        where: { id: In(missingCids) },
+        select: ['id', 'name', 'country', 'operator'],
+      });
+      for (const c of extra) campaignMap[c.id] = c;
+    }
+
     return {
       total,
       page,
       limit,
-      items: rows.map((r) => serializePostback(r, vendorMap)),
+      items: rows.map((r) => serializePostback(r, vendorMap, campaignMap)),
     };
   };
 
@@ -416,6 +487,15 @@ export function createPostbackQuery(deps) {
       vendor = await getVendorRepo().findOne({ where: { id: row.vendorId } });
     }
     const vendorMap = vendor ? { [vendor.id]: vendor } : {};
+
+    let campaign = null;
+    if (row.campaignId) {
+      campaign = await getCampaignRepo().findOne({
+        where: { id: parseInt(row.campaignId, 10) },
+        select: ['id', 'name', 'country', 'operator'],
+      });
+    }
+    const campaignMap = campaign ? { [campaign.id]: campaign } : {};
 
     let billingReceived = false;
     let billingReceivedAt = null;
@@ -514,7 +594,7 @@ export function createPostbackQuery(deps) {
     }
 
     return {
-      ...serializePostback(row, vendorMap),
+      ...serializePostback(row, vendorMap, campaignMap),
       lifecycle: {
         created: true,
         createdAt: row.createdAt,

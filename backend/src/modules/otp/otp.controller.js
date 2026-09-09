@@ -2,6 +2,7 @@ import { asyncHandler } from '../../common/middleware/asyncHandler.js';
 import { otpService } from './otp.service.js';
 import { smsProviderManager } from './providers/sms-provider.manager.js';
 import { getSuccessRule } from './providers/partner.provider.js';
+import { orangeBfProvider } from '../flow/orange-bf.provider.js';
 
 const parseConfigPayload = (body) => {
   if (body?.config && typeof body.config === 'string') {
@@ -179,6 +180,43 @@ export const otpController = {
       error: result?.success ? null : result?.error || 'Verify failed',
       httpStatus: result?.httpStatus ?? null,
       rawResponse: result?.rawResponse ?? null,
+    });
+  }),
+
+  testSync: asyncHandler(async (req, res) => {
+    const body = req.body || {};
+    const phone = String(body.phone || '').trim();
+    if (!phone) {
+      const err = new Error('phone is required');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const providerConfig = parseConfigPayload(body);
+    const result = await orangeBfProvider.syncSubscription({
+      msisdn: phone,
+      subServiceId: providerConfig.syncSubServiceId || providerConfig.subServiceId,
+      serviceId: providerConfig.syncServiceId || providerConfig.serviceId,
+      cpId: providerConfig.syncCpId || providerConfig.cpId,
+      channel: providerConfig.syncChannel || providerConfig.channel,
+      country: providerConfig.syncCountry || providerConfig.country,
+      operator: providerConfig.syncOperator || providerConfig.operator,
+      reqType: providerConfig.syncReqType != null ? providerConfig.syncReqType : 1,
+      config: providerConfig,
+    });
+
+    res.json({
+      success: Boolean(result?.success),
+      ok: Boolean(result?.success),
+      provider: 'orange_bf_sync',
+      responseCode: result?.responseCode ?? null,
+      message: result?.responseMessage || result?.message || (result?.success ? 'Subscription sync successful' : 'Subscription sync failed'),
+      httpStatus: result?.httpStatus ?? null,
+      rawResponse: result?.rawResponse ?? null,
+      requestUrl: result?.requestUrl ?? null,
+      requestParams: result?.requestParams ?? null,
+      requestBody: result?.requestBody ?? null,
+      latencyMs: result?.latencyMs ?? null,
     });
   }),
 

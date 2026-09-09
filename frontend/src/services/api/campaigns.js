@@ -258,6 +258,13 @@ export async function testVerifyOtp(payload) {
   })
 }
 
+export async function testOrangeBfSync(payload) {
+  return apiClient('/otp/test-sync', {
+    method: 'POST',
+    body: payload,
+  })
+}
+
 export async function checkOtpProviderHealth(payload) {
   return apiClient('/otp/health-check', {
     method: 'POST',

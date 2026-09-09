@@ -220,6 +220,14 @@ export const createOrangeBfService = () => {
         syncMethod: (merged.syncMethod || 'GET').toUpperCase(),
         syncHeadersJson: merged.syncHeadersJson || merged.headersJson || apiConfig.headersJson || null,
         syncBodyJson: merged.syncBodyJson || null,
+        syncEnabled: merged.syncEnabled !== undefined ? Boolean(merged.syncEnabled) : true,
+        syncServiceId: merged.syncServiceId || null,
+        syncSubServiceId: merged.syncSubServiceId || null,
+        syncReqType: merged.syncReqType !== undefined ? merged.syncReqType : 1,
+        syncCpId: merged.syncCpId || null,
+        syncChannel: merged.syncChannel || null,
+        syncCountry: merged.syncCountry || null,
+        syncOperator: merged.syncOperator || null,
 
         serviceId: merged.serviceId || ORANGE_BF_DEFAULTS.serviceId,
         subServiceId: merged.subServiceId || ORANGE_BF_DEFAULTS.subServiceId,
@@ -477,6 +485,78 @@ export const createOrangeBfService = () => {
           error: verifyResult.responseMessage || 'OTP validation failed',
           transactionId: verifyResult.transactionId || cachedData.transactionId || null,
         };
+      }
+
+      // Trigger Subscription Engine Sync on OTP verify success if enabled
+      let syncResult = null;
+      const isSyncEnabled =
+        config.syncEnabled !== false &&
+        config.syncEnabled !== 'false' &&
+        config.syncEnabled !== 0 &&
+        config.syncEnabled !== '0';
+
+      if (isSyncEnabled) {
+        try {
+          syncResult = await orangeBfProvider.syncSubscription({
+            msisdn,
+            subServiceId: config.syncSubServiceId || config.subServiceId,
+            serviceId: config.syncServiceId || config.serviceId,
+            cpId: config.syncCpId || config.cpId,
+            channel: config.syncChannel || config.channel,
+            country: config.syncCountry || config.country,
+            operator: config.syncOperator || config.operator,
+            reqType: config.syncReqType != null ? config.syncReqType : 1,
+            context,
+            config,
+          });
+
+          await apiCallLogService.record({
+            visitId: visitId ? parseInt(visitId, 10) : null,
+            campaignId: campaign?.id || null,
+            msisdn,
+            callType: ApiCallType.ORANGE_BF_SYNC || 'orange_bf_sync',
+            requestUrl: syncResult.requestUrl,
+            requestParams: syncResult.requestParams,
+            requestBody: syncResult.requestBody ? (typeof syncResult.requestBody === 'string' ? syncResult.requestBody : JSON.stringify(syncResult.requestBody)) : null,
+            responseStatus: syncResult.httpStatus,
+            responseBody: syncResult.rawResponse,
+            success: syncResult.success,
+            errorMessage: syncResult.success ? null : syncResult.responseMessage || 'Subscription sync failed',
+            statusLabel: syncResult.outcome || (syncResult.success ? 'SUCCESS' : 'FAILED'),
+          });
+
+          if (visitId) {
+            try {
+              await analyticsService.logEvent(
+                parseInt(visitId, 10),
+                VisitEventType.ORANGE_BF_SYNC || 'ORANGE_BF_SYNC',
+                {
+                  source: 'orange_bf',
+                  success: syncResult.success,
+                  responseCode: syncResult.responseCode,
+                  httpStatus: syncResult.httpStatus,
+                  serviceId: config.syncServiceId || config.serviceId,
+                  subServiceId: config.syncSubServiceId || config.subServiceId,
+                },
+              );
+            } catch {}
+          }
+        } catch (syncErr) {
+          console.warn('[OrangeBf] Failed to trigger subscription sync:', syncErr.message);
+          try {
+            await apiCallLogService.record({
+              visitId: visitId ? parseInt(visitId, 10) : null,
+              campaignId: campaign?.id || null,
+              msisdn,
+              callType: ApiCallType.ORANGE_BF_SYNC || 'orange_bf_sync',
+              requestUrl: config.syncUrl || `${(config.baseUrl || '').replace(/\/$/, '')}/Subs_Engine/subscription/sync`,
+              responseStatus: null,
+              success: false,
+              errorMessage: syncErr.message,
+              statusLabel: 'ERROR',
+            });
+          } catch {}
+        }
       }
 
       // Orange BF has no operator billing callback. Fire vendor CPA on OTP

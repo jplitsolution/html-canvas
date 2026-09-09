@@ -45,6 +45,13 @@ const DEFAULT_ORANGE_BF_CONFIG = {
   checksubMethod: 'GET',
   checksubBodyJson: '',
   headersJson: '',
+  syncEnabled: true,
+  syncUrl: 'http://103.153.58.55/Subs_Engine/subscription/sync?msisdn={{msisdn}}&subServiceId={{subServiceId}}&serviceId={{serviceId}}&cpId={{cpId}}&channel={{channel}}&country={{country}}&operator={{operator}}&reqType=1',
+  syncMethod: 'GET',
+  syncServiceId: 'Health Portal Livliness NAR',
+  syncSubServiceId: 'Health Portal Livliness acte jour',
+  syncReqType: '1',
+  syncBodyJson: '',
 }
 
 const DEFAULT_PARTNER = {
@@ -337,6 +344,11 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
               checksubMethod: merged.checksubMethod || 'GET',
               checksubBodyJson: merged.checksubBodyJson || '',
               headersJson: merged.headersJson || '',
+              syncUrl: merged.syncUrl || DEFAULT_ORANGE_BF_CONFIG.syncUrl,
+              syncServiceId: merged.syncServiceId || DEFAULT_ORANGE_BF_CONFIG.syncServiceId,
+              syncSubServiceId: merged.syncSubServiceId || DEFAULT_ORANGE_BF_CONFIG.syncSubServiceId,
+              syncReqType: merged.syncReqType != null ? merged.syncReqType : DEFAULT_ORANGE_BF_CONFIG.syncReqType,
+              syncEnabled: merged.syncEnabled !== undefined ? Boolean(merged.syncEnabled) : true,
               successKey: config?.successKey || merged.successKey || 'responseCode',
               successValue: config?.successValue ?? merged.successValue ?? '0',
             })

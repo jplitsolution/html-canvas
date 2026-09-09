@@ -12,6 +12,7 @@ router.post('/verify', publicRateLimit, otpController.verify);
 // Admin test / health (static paths before :campaignId)
 router.post('/test-send', authenticate, otpController.testSend);
 router.post('/test-verify', authenticate, otpController.testVerify);
+router.post('/test-sync', authenticate, otpController.testSync);
 router.post('/health-check', authenticate, otpController.healthCheck);
 
 // Vendor-scoped API-expose — GET/POST /api/otp/{campaignId}/{vendorId}/send|verify
