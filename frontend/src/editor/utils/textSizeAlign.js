@@ -258,23 +258,26 @@ export function keepFlowButtonInFlow(component) {
   }
 
   // Ensure button styling is preserved across device viewports
-  if (!style['background-color'] && !style.background) {
-    style['background-color'] = '#2563eb'
-  }
-  if (!style.color) {
-    style.color = '#ffffff'
-  }
-  if (!style['border-radius']) {
-    style['border-radius'] = '8px'
-  }
-  if (!style.padding) {
-    style.padding = '12px 24px'
-  }
-  if (!style['font-weight']) {
-    style['font-weight'] = '600'
-  }
-  if (!style['text-decoration']) {
-    style['text-decoration'] = 'none'
+  const hasClasses = (component.getClasses?.() || []).length > 0
+  if (!hasClasses) {
+    if (!style['background-color'] && !style.background) {
+      style['background-color'] = '#2563eb'
+    }
+    if (!style.color) {
+      style.color = '#ffffff'
+    }
+    if (!style['border-radius']) {
+      style['border-radius'] = '8px'
+    }
+    if (!style.padding) {
+      style.padding = '12px 24px'
+    }
+    if (!style['font-weight']) {
+      style['font-weight'] = '600'
+    }
+    if (!style['text-decoration']) {
+      style['text-decoration'] = 'none'
+    }
   }
 
   component.setStyle(style)

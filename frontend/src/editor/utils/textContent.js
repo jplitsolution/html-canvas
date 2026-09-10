@@ -73,33 +73,54 @@ export function configureAsTextComponent(component) {
     return;
   }
 
-  const el = component.getEl?.();
-  const domText = el?.textContent?.trim() || '';
-  const modelContent = component.get('content');
-  const content = typeof modelContent === 'string' && modelContent.trim() ? modelContent : domText;
-
-  if (type === 'text') {
-    component.set({
-      content,
-      editable: true,
-      highlightable: true,
-      hoverable: true,
-      selectable: true,
-      droppable: false,
-    });
-    return;
+  // 1. Get content: check model content, then existing child components, then DOM text
+  let content = component.get('content');
+  if (typeof content !== 'string' || !content.trim()) {
+    const children = component.components?.();
+    if (children && children.length > 0) {
+      const childTexts = [];
+      children.forEach((c) => {
+        const cContent = c.get?.('content');
+        if (typeof cContent === 'string' && cContent) {
+          childTexts.push(cContent);
+        } else if (c.toHTML) {
+          childTexts.push(stripHtml(c.toHTML()));
+        }
+      });
+      const combined = childTexts.join('').trim();
+      if (combined) {
+        content = combined;
+      }
+    }
+    if (!content) {
+      const el = component.getEl?.();
+      const domText = el?.textContent?.trim() || '';
+      if (domText) {
+        content = domText;
+      }
+    }
   }
 
-  component.set({
-    type: 'text',
-    tagName: tag || 'p',
-    content,
+  const props = {
     editable: true,
     highlightable: true,
     hoverable: true,
     selectable: true,
     droppable: false,
-  });
+  };
+
+  if (type !== 'text') {
+    props.type = 'text';
+    props.tagName = tag || 'p';
+  }
+
+  // Only assign content if we resolved a non-empty string AND the component has no child components
+  const children = component.components?.();
+  if (typeof content === 'string' && content.trim() && (!children || children.length === 0)) {
+    props.content = content;
+  }
+
+  component.set(props);
 }
 
 export function getTextContent(component) {
