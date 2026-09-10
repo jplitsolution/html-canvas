@@ -14,6 +14,7 @@ import {
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
 import { mergePurchaseTypeMappings } from './helpers/universe-dcb-purchase-types.js';
+import { resolveDcbNextPage } from './helpers/universe-dcb-runtime.js';
 
 const localCorrelations = new Map();
 const localConfirmLocks = new Set();
@@ -95,6 +96,17 @@ export const createUniverseDcbService = (
       where: { campaignId: campaign.id },
     });
     const config = parseConfig(apiConfig?.dcbConfigJson);
+    let checksubConfig = null;
+    if (apiConfig?.checksubConfigJson) {
+      try {
+        checksubConfig =
+          typeof apiConfig.checksubConfigJson === 'string'
+            ? JSON.parse(apiConfig.checksubConfigJson)
+            : apiConfig.checksubConfigJson;
+      } catch {
+        checksubConfig = null;
+      }
+    }
     const msisdn = cleanPhone(input.msisdn || input.phone);
     if (options.requireMsisdn && !msisdn) {
       throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
@@ -131,6 +143,7 @@ export const createUniverseDcbService = (
     return {
       campaign,
       config,
+      checksubConfig,
       msisdn,
       visitId: visitId || null,
       visit,
@@ -267,8 +280,8 @@ export const createUniverseDcbService = (
     );
     return {
       ...(safeProviderConfig &&
-      typeof safeProviderConfig === 'object' &&
-      !Array.isArray(safeProviderConfig)
+        typeof safeProviderConfig === 'object' &&
+        !Array.isArray(safeProviderConfig)
         ? safeProviderConfig
         : { providerConfig: safeProviderConfig }),
       campaignId: ctx.campaign.id,
@@ -290,6 +303,7 @@ export const createUniverseDcbService = (
       purchaseTypeMappings: Array.isArray(ctx.config.purchaseTypeMappings)
         ? ctx.config.purchaseTypeMappings
         : [],
+      checksubConfig: ctx.checksubConfig || null,
     };
   };
 
@@ -312,6 +326,7 @@ export const createUniverseDcbService = (
       campaignId: ctx.campaign.id,
       serviceId: ctx.serviceId,
       ...normalize(response, ctx),
+      checksubConfig: ctx.checksubConfig || null,
     };
   };
 
@@ -330,29 +345,49 @@ export const createUniverseDcbService = (
         normalize(providerResponse, ctx).outcome,
     });
     const result = normalize(response, ctx);
-    if (result.outcome !== DCB_OUTCOMES.ENTITLED) {
+    const customNextPage = resolveDcbNextPage(
+      result.outcome,
+      result.status,
+      ctx.checksubConfig,
+    );
+    if (result.outcome === DCB_OUTCOMES.ENTITLED || customNextPage === 'THANKYOU') {
       return {
         campaignId: ctx.campaign.id,
         serviceId: ctx.serviceId,
         ...result,
-        ...(result.outcome === DCB_OUTCOMES.NEW
-          ? { stage: 'PLAN_SELECT' }
-          : {}),
+        nextPage: 'THANKYOU',
+        outcome: DCB_OUTCOMES.ENTITLED,
+        stage: 'ENTITLED',
+        checksubConfig: ctx.checksubConfig || null,
+        flowContext: {
+          provider: 'UNIVERSE_DCB',
+          verificationMode: 'UNIVERSE_DCB',
+          stage: 'ENTITLED',
+          outcome: DCB_OUTCOMES.ENTITLED,
+          status: result.status,
+        },
       };
     }
+
+    const hasCustomRules = Boolean(
+      ctx.checksubConfig &&
+      Array.isArray(ctx.checksubConfig.rules) &&
+      ctx.checksubConfig.rules.length > 0,
+    );
+    // If a custom status rule is defined, honor it; otherwise the user must choose a pack on HOME
+    const nextPage = hasCustomRules && customNextPage ? customNextPage : 'HOME';
+
     return {
       campaignId: ctx.campaign.id,
       serviceId: ctx.serviceId,
       ...result,
-      nextPage: 'OTP',
-      stage: 'AUTH_OTP',
-      authorization: 'PARTNER_OTP',
-      message: 'Enter the authorization OTP sent to this number.',
+      nextPage,
+      checksubConfig: ctx.checksubConfig || null,
+      stage: nextPage === 'HOME' ? 'PLAN_SELECT' : (result.stage || 'PLAN_SELECT'),
       flowContext: {
         provider: 'UNIVERSE_DCB',
         verificationMode: 'UNIVERSE_DCB',
-        stage: 'AUTH_OTP',
-        authorization: 'PARTNER_OTP',
+        stage: nextPage === 'HOME' ? 'PLAN_SELECT' : 'PIN_REQUIRED',
         outcome: result.outcome,
         status: result.status,
       },
@@ -404,6 +439,13 @@ export const createUniverseDcbService = (
       serviceId: ctx.serviceId,
       outcome: DCB_OUTCOMES.PENDING,
       stage: 'PIN_REQUIRED',
+      nextPage: 'OTP',
+      flowContext: {
+        provider: 'UNIVERSE_DCB',
+        verificationMode: 'UNIVERSE_DCB',
+        stage: 'PIN_REQUIRED',
+        outcome: DCB_OUTCOMES.PENDING,
+      },
     };
   };
 

@@ -48,4 +48,44 @@ describe('Universe DCB default funnel pages', () => {
     assert.equal(isClassicDefaultFunnelHtml('HOME', dcbHome), false);
     assert.equal(isClassicDefaultFunnelHtml('OTP', dcbOtp), false);
   });
+
+  it('provides dedicated and separated default pages for all flows', () => {
+    // 1. Orange BF remains untouched
+    const orangeBfHome = getDefaultFunnelPageData('HOME', { verificationMode: 'ORANGE_BF' });
+    const orangeBfOtp = getDefaultFunnelPageData('OTP', { verificationMode: 'ORANGE_BF' });
+    assert.match(orangeBfHome.html, /bf-wellness-container/);
+    assert.match(orangeBfHome.html, /Orange Burkina Faso/);
+    assert.match(orangeBfOtp.html, /Vérifiez votre/);
+
+    // 2. Header Injection (1-Click)
+    const heHome = getDefaultFunnelPageData('HOME', { verificationMode: 'HEADER_INJECTION' });
+    assert.match(heHome.html, /he-home/);
+    assert.match(heHome.html, /1-Click Direct Access/);
+    assert.match(heHome.html, /1-Click Activate/);
+
+    // 3. OTP Only
+    const otpHome = getDefaultFunnelPageData('HOME', { verificationMode: 'OTP_ONLY' });
+    const otpPage = getDefaultFunnelPageData('OTP', { verificationMode: 'OTP_ONLY' });
+    assert.match(otpHome.html, /otp-flow-home/);
+    assert.match(otpPage.html, /otp-flow-verify/);
+    assert.match(otpPage.html, /data-otp-field="phone"/);
+
+    // 4. BOTH (Hybrid)
+    const bothHome = getDefaultFunnelPageData('HOME', { verificationMode: 'BOTH' });
+    const bothOtp = getDefaultFunnelPageData('OTP', { verificationMode: 'BOTH' });
+    assert.match(bothHome.html, /both-flow-home/);
+    assert.match(bothOtp.html, /both-flow-otp/);
+
+    // 5. CG Home (Consent Gateway)
+    const cgHome = getDefaultFunnelPageData('HOME', { verificationMode: 'CG_HOME' });
+    assert.match(cgHome.html, /cg-flow-home/);
+    assert.match(cgHome.html, /Official Service Access/);
+    assert.match(cgHome.html, /Proceed to {{operator}} Gateway/);
+
+    // 6. NONE (Direct Redirect)
+    const noneHome = getDefaultFunnelPageData('HOME', { verificationMode: 'NONE' });
+    assert.match(noneHome.html, /none-flow-home/);
+    assert.match(noneHome.html, /Connecting to {{operator}}/);
+  });
 });
+

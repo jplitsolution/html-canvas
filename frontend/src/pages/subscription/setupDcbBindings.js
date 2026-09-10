@@ -50,7 +50,22 @@ function normalizedOutcome(response) {
     .toUpperCase()
 }
 
-function pageForDcbOutcome(outcome) {
+function pageForDcbOutcome(outcome, status, checksubConfig = null) {
+  const normStatus = String(status || '').trim().toUpperCase()
+
+  if (checksubConfig && Array.isArray(checksubConfig.rules) && checksubConfig.rules.length > 0) {
+    for (const rule of checksubConfig.rules) {
+      if (String(rule.value || '').trim().toUpperCase() === normStatus) {
+        if (rule.go === 'page' && rule.page) return String(rule.page).toUpperCase()
+        if (rule.go === 'continue') return 'HOME'
+      }
+    }
+    if (checksubConfig.missPage && checksubConfig.missGo === 'page') {
+      return String(checksubConfig.missPage).toUpperCase()
+    }
+  }
+
+  if (normStatus === 'PENDING_PIN') return 'OTP'
   if (outcome === 'ENTITLED') return 'THANKYOU'
   if (outcome === 'LOW_BALANCE') return 'LOW_BALANCE'
   if (outcome === 'TERMINAL_FAILURE' || outcome === 'PARSE_ERROR') return 'ERROR'
@@ -59,12 +74,21 @@ function pageForDcbOutcome(outcome) {
   return null
 }
 
-async function routeDcbResponse(response, { currentPage, cachePage, loadPage }) {
+async function routeDcbResponse(response, { currentPage, cachePage, loadPage, checksubConfig = null }) {
   if (!response) return null
+  const responseStage = String(response.stage || response.flowContext?.stage || '').toUpperCase()
   const explicitPage = String(response.nextPage || response.pageType || '')
     .trim()
     .toUpperCase()
-  const targetPage = explicitPage || pageForDcbOutcome(normalizedOutcome(response))
+  const cfg = checksubConfig || response?.flowContext?.checksubConfig || response?.checksubConfig || null
+  const targetPage =
+    (responseStage === 'PIN_REQUIRED' && !explicitPage ? 'OTP' : null) ||
+    explicitPage ||
+    pageForDcbOutcome(
+      normalizedOutcome(response),
+      response?.status || response?.flowContext?.status,
+      cfg
+    )
 
   if (response.pageType && response.html) {
     cachePage(response)
@@ -142,8 +166,8 @@ function setupDcbBindings(
     }
   })()
   let currentStage =
-    saved.dcbStage === 'AUTH_OTP' && String(pageData.pageType || '').toUpperCase() === 'OTP'
-      ? 'AUTH_OTP'
+    saved.dcbStage && String(pageData.pageType || '').toUpperCase() === 'OTP'
+      ? saved.dcbStage
       : normalizeDcbStage(pageData)
   const phoneInput = shadow.querySelector(
     '[data-dcb-field="phone"], [data-otp-field="phone"], [data-field="phone"], input[type="tel"]'
@@ -218,7 +242,7 @@ function setupDcbBindings(
         phone,
         msisdnSource: 'MANUAL',
         transactionChannel: 'Wifi',
-        dcbStage: authOtp ? 'AUTH_OTP' : undefined,
+        dcbStage: authOtp ? 'AUTH_OTP' : 'PLAN_SELECT',
       })
       if (authOtp) {
         currentStage = 'AUTH_OTP'
@@ -231,11 +255,15 @@ function setupDcbBindings(
         return
       }
       setSlot(statusSlot, 'Number checked')
-      await routeDcbResponse(response, {
+      const target = await routeDcbResponse(response, {
         currentPage: pageData.pageType,
         cachePage,
         loadPage,
       })
+      // If response did not route to a different outcome page (e.g. THANKYOU or custom rule), go to HOME to choose pack
+      if (!target || target === 'OTP') {
+        await loadPage('HOME', { direct: true })
+      }
     }, 'Checking subscription...')
   }
 
@@ -272,15 +300,13 @@ function setupDcbBindings(
         transactionChannel,
       })
       setSlot(statusSlot, 'PIN sent')
-      const responseStage = String(response?.stage || response?.flowContext?.stage || '').toUpperCase()
-      if (responseStage === 'PIN_REQUIRED' && !response?.nextPage && !response?.pageType) {
+      const target = await routeDcbResponse(response, {
+        currentPage: pageData.pageType,
+        cachePage,
+        loadPage,
+      })
+      if (!target || target === 'HOME') {
         await loadPage('OTP', { direct: true })
-      } else {
-        await routeDcbResponse(response, {
-          currentPage: pageData.pageType,
-          cachePage,
-          loadPage,
-        })
       }
     }, 'Sending PIN...')
   }

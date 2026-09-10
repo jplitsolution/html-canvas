@@ -236,6 +236,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
     if (mode === 'UNIVERSE_DCB') {
       return [
         { id: 'dcb', label: 'Universe DCB' },
+        { id: 'billing', label: 'Status & Page Mapping' },
       ]
     }
     if (mode === 'OTP_ONLY') {
@@ -1127,22 +1128,33 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
             />
           ) : activeTab === 'billing' ? (
             <div className="space-y-4">
-              <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
-                <p className="text-xs leading-relaxed text-fg-muted">
-                  Checksub / blocklist / optional Confirm subscribe live here. OTP send/verify is on the Partner OTP
-                  tab. Placeholders: <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
-                  <code className="font-mono text-[11px]">{'{{serviceId}}'}</code>,{' '}
-                  <code className="font-mono text-[11px]">{'{{country}}'}</code>,{' '}
-                  <code className="font-mono text-[11px]">{'{{operator}}'}</code>.
-                </p>
-              </div>
-              <Field label="Subscription check URL (checksub)">
-                <Input
-                  value={form.subscriptionApi}
-                  onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
-                  placeholder="https://…/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
-                />
-              </Field>
+              {mode === 'UNIVERSE_DCB' ? (
+                <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+                  <p className="text-xs leading-relaxed text-fg-muted">
+                    Universe DCB subscription status check is handled via <code className="font-mono text-[11px]">/api/dcb/subscriptions</code> (configured in Universe DCB tab).
+                    Yahan aap customize kar sakte hain ki kis status pe kaunsa page dikhana hai (jaise <code className="font-mono text-[11px]">PENDING_PIN → OTP</code>, <code className="font-mono text-[11px]">ACTIVE → THANKYOU</code>). Agar rules empty chhodenge toh built-in DCB default mapping automatically use hogi.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="rounded-xl border border-border bg-bg-subtle/60 px-4 py-3">
+                    <p className="text-xs leading-relaxed text-fg-muted">
+                      Checksub / blocklist / optional Confirm subscribe live here. OTP send/verify is on the Partner OTP
+                      tab. Placeholders: <code className="font-mono text-[11px]">{'{{msisdn}}'}</code>,{' '}
+                      <code className="font-mono text-[11px]">{'{{serviceId}}'}</code>,{' '}
+                      <code className="font-mono text-[11px]">{'{{country}}'}</code>,{' '}
+                      <code className="font-mono text-[11px]">{'{{operator}}'}</code>.
+                    </p>
+                  </div>
+                  <Field label="Subscription check URL (checksub)">
+                    <Input
+                      value={form.subscriptionApi}
+                      onChange={(e) => setForm({ ...form, subscriptionApi: e.target.value })}
+                      placeholder="https://…/checksub?msisdn={{msisdn}}&serviceId=WELLNESS"
+                    />
+                  </Field>
+                </>
+              )}
 
               <div className="rounded-xl border border-border bg-bg-elevated p-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -1155,6 +1167,33 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
                     </p>
                   </div>
                   <div className="flex flex-wrap gap-2 shrink-0">
+                    {mode === 'UNIVERSE_DCB' ? (
+                      <button
+                        type="button"
+                        className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
+                        onClick={() =>
+                          setChecksubConfig({
+                            statusField: 'status',
+                            rules: [
+                              { value: 'PENDING_PIN', go: 'page', page: 'OTP', url: '' },
+                              { value: 'ACTIVE', go: 'page', page: 'THANKYOU', url: '' },
+                              { value: 'NEW', go: 'page', page: 'HOME', url: '' },
+                              { value: 'PARKED_NO_BALANCE', go: 'page', page: 'LOW_BALANCE', url: '' },
+                              { value: 'SUSPENDED', go: 'page', page: 'LOW_BALANCE', url: '' },
+                              { value: 'PENDING_CONFIRMATION', go: 'page', page: 'INPROGRESS', url: '' },
+                              { value: 'DEACTIVATED', go: 'page', page: 'ERROR', url: '' },
+                              { value: 'EXPIRED', go: 'page', page: 'ERROR', url: '' },
+                              { value: 'FAILED', go: 'page', page: 'ERROR', url: '' },
+                            ],
+                            missGo: 'page',
+                            missPage: 'ERROR',
+                            missUrl: '',
+                          })
+                        }
+                      >
+                        DCB preset
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       className="px-2.5 py-1.5 text-[11px] font-semibold rounded-lg border border-border text-fg-muted hover:bg-bg-subtle"
@@ -1274,8 +1313,22 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
                               rules[idx] = { ...rules[idx], value: e.target.value }
                               setChecksubConfig({ ...checksubConfig, rules })
                             }}
-                            placeholder="ACTIVE / inactive / parking"
+                            placeholder="PENDING_PIN / ACTIVE / NEW"
+                            list="checksub-status-values"
                           />
+                          <datalist id="checksub-status-values">
+                            <option value="PENDING_PIN" />
+                            <option value="ACTIVE" />
+                            <option value="TRIAL_ACTIVE" />
+                            <option value="NEW" />
+                            <option value="PARKED_NO_BALANCE" />
+                            <option value="SUSPENDED" />
+                            <option value="PENDING_CONFIRMATION" />
+                            <option value="DEACTIVATED" />
+                            <option value="EXPIRED" />
+                            <option value="FAILED" />
+                            <option value="CANCELLED" />
+                          </datalist>
                         </Field>
                         <Field label="Then">
                           <select

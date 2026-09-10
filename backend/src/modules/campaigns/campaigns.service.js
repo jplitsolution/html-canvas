@@ -135,9 +135,17 @@ export const createCampaignsService = () => {
     if (isClassicDefaultFunnelHtml(pageType, source)) return true;
     if (source.includes('bf-wellness-container') || source.includes('WELLNESS360')) return true;
     if (source.includes('dcb-home') || source.includes('dcb-otp') || source.includes('data-dcb-action')) return true;
+    if (
+      source.includes('he-page') ||
+      source.includes('otp-flow-page') ||
+      source.includes('both-flow-page') ||
+      source.includes('cg-flow-page') ||
+      source.includes('none-flow-page')
+    ) return true;
     if (source.includes('Premium Mobile Service') || source.includes('Verify Mobile Number') || source.includes("You're Subscribed!")) return true;
     return false;
   };
+
 
   const ensureFlowPages = async (campaign) => {
     let changed = false;

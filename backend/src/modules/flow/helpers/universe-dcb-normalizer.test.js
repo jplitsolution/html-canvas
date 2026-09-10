@@ -162,4 +162,38 @@ describe('normalizeUniverseDcbResponse', () => {
       );
     }
   });
+
+  it('supports direct array payloads from provider without current flag', () => {
+    const rawArray = [
+      {
+        id: 77,
+        subscriptionUuid: '8c3664fd-6b3c-4f44-a792-2cc441226fb6',
+        msisdn: '+972566891023',
+        serviceId: 581,
+        lifecycleNo: 11,
+        status: 'PENDING_PIN',
+        billingStatus: null,
+        entitlementActive: false,
+      },
+    ];
+    const pendingResult = normalizeUniverseDcbResponse(rawArray, {}, { serviceId: '581' });
+    assert.equal(pendingResult.outcome, DCB_OUTCOMES.PENDING);
+    assert.equal(pendingResult.status, 'PENDING_PIN');
+    assert.equal(pendingResult.current, true);
+    assert.equal(pendingResult.subscriptionUuid, '8c3664fd-6b3c-4f44-a792-2cc441226fb6');
+
+    const activeArray = [
+      {
+        id: 78,
+        msisdn: '+972566891023',
+        serviceId: 581,
+        status: 'ACTIVE',
+        entitlementActive: true,
+      },
+    ];
+    const activeResult = normalizeUniverseDcbResponse(activeArray, {}, { serviceId: '581' });
+    assert.equal(activeResult.outcome, DCB_OUTCOMES.ENTITLED);
+    assert.equal(activeResult.status, 'ACTIVE');
+    assert.equal(activeResult.current, true);
+  });
 });

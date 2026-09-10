@@ -9,6 +9,29 @@ export const DCB_DETECT_PAGES = Object.freeze({
   [DCB_OUTCOMES.PARSE_ERROR]: 'ERROR',
 });
 
+export function resolveDcbNextPage(outcome, status, checksubConfig = null) {
+  const normStatus = String(status || '').trim().toUpperCase();
+
+  if (checksubConfig && Array.isArray(checksubConfig.rules) && checksubConfig.rules.length > 0) {
+    for (const rule of checksubConfig.rules) {
+      if (String(rule.value || '').trim().toUpperCase() === normStatus) {
+        if (rule.go === 'page' && rule.page) {
+          return String(rule.page).toUpperCase();
+        }
+        if (rule.go === 'continue') {
+          return 'HOME';
+        }
+      }
+    }
+    if (checksubConfig.missPage && checksubConfig.missGo === 'page') {
+      return String(checksubConfig.missPage).toUpperCase();
+    }
+  }
+
+  if (normStatus === 'PENDING_PIN') return 'OTP';
+  return DCB_DETECT_PAGES[outcome] || 'ERROR';
+}
+
 const baseContext = (runtime = {}) => ({
   provider: 'UNIVERSE_DCB',
   mode: 'UNIVERSE_DCB',
@@ -88,8 +111,12 @@ export function decorateUniverseDcbDetectResponse(
   }
 
   const outcome = normalizedStatus?.outcome || DCB_OUTCOMES.PARSE_ERROR;
-  const nextPage = DCB_DETECT_PAGES[outcome] || 'ERROR';
-  const entitled = outcome === DCB_OUTCOMES.ENTITLED;
+  const nextPage = resolveDcbNextPage(
+    outcome,
+    normalizedStatus?.status,
+    runtime?.checksubConfig,
+  );
+  const entitled = outcome === DCB_OUTCOMES.ENTITLED || nextPage === 'THANKYOU';
   return {
     ...response,
     verificationMode: 'UNIVERSE_DCB',
@@ -106,6 +133,7 @@ export function decorateUniverseDcbDetectResponse(
       outcome,
       status: normalizedStatus?.status || null,
       reason: normalizedStatus?.reason || null,
+      checksubConfig: runtime?.checksubConfig || null,
     },
   };
 }

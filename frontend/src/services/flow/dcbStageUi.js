@@ -78,37 +78,51 @@ export function applyDcbStageUi(root, stage, { phoneInput, pinInput } = {}) {
   setFieldVisibility(resolvedPhone, showNumber)
   setFieldVisibility(resolvedPin, showPin || showAuth)
 
+  const preserveCustom =
+    Boolean(root.getAttribute?.('data-dcb-custom')) ||
+    Boolean(root.querySelector?.('[data-dcb-custom]'))
+
   if (sendButton) {
     sendButton.hidden = PIN_STAGES.has(stage)
-    if (showNumber) sendButton.textContent = 'Check subscription'
-    if (showAuth) sendButton.textContent = 'Send OTP'
+    if (!preserveCustom && !sendButton.hasAttribute('data-dcb-custom')) {
+      if (showNumber) sendButton.textContent = 'Check subscription'
+      if (showAuth) sendButton.textContent = 'Send OTP'
+    }
   }
   if (verifyButton) {
     verifyButton.hidden = showNumber
-    if (PIN_STAGES.has(stage)) verifyButton.textContent = 'Confirm billing PIN'
-    if (showAuth) verifyButton.textContent = 'Verify OTP'
+    if (!preserveCustom && !verifyButton.hasAttribute('data-dcb-custom')) {
+      if (PIN_STAGES.has(stage)) verifyButton.textContent = 'Confirm billing PIN'
+      if (showAuth) verifyButton.textContent = 'Verify OTP'
+    }
   }
 
   if (showNumber) {
-    if (heading) heading.textContent = 'Enter your number'
-    if (description) description.textContent = 'Enter your mobile number. After that you will choose a pack.'
-    if (footnote) footnote.textContent = 'PIN is asked only after you pick a pack.'
+    if (!preserveCustom && heading && !heading.hasAttribute('data-dcb-custom')) {
+      heading.textContent = 'Enter your number'
+      if (description) description.textContent = 'Enter your mobile number. After that you will choose a pack.'
+      if (footnote) footnote.textContent = 'PIN is asked only after you pick a pack.'
+    }
     return 'number'
   }
 
   if (showAuth) {
-    if (heading) heading.textContent = 'Verify subscription'
-    if (description) {
-      description.textContent = 'This number is already subscribed. Enter the authorization OTP to continue.'
+    if (!preserveCustom && heading && !heading.hasAttribute('data-dcb-custom')) {
+      heading.textContent = 'Verify subscription'
+      if (description) {
+        description.textContent = 'This number is already subscribed. Enter the authorization OTP to continue.'
+      }
+      if (footnote) footnote.textContent = 'Dummy OTP is printed in the server log. 1234 also works.'
     }
-    if (footnote) footnote.textContent = 'Dummy OTP is printed in the server log. 1234 also works.'
     return 'pin'
   }
 
   if (showPin) {
-    if (heading) heading.textContent = 'Enter billing PIN'
-    if (description) description.textContent = 'Enter the PIN sent to your mobile number.'
-    if (footnote) footnote.textContent = 'Your subscription will activate after the PIN is confirmed.'
+    if (!preserveCustom && heading && !heading.hasAttribute('data-dcb-custom')) {
+      heading.textContent = 'Enter billing PIN'
+      if (description) description.textContent = 'Enter the PIN sent to your mobile number.'
+      if (footnote) footnote.textContent = 'Your subscription will activate after the PIN is confirmed.'
+    }
     return 'pin'
   }
 

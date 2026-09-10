@@ -36,6 +36,42 @@ describe('Universe DCB detect runtime', () => {
       assert.equal(result.flowContext.outcome, outcome);
       assert.equal(result.successRedirectUrl, null);
     }
+
+    const pendingPinResult = decorateUniverseDcbDetectResponse(
+      { phone: '9725550001' },
+      { outcome: 'PENDING', status: 'PENDING_PIN' },
+    );
+    assert.equal(pendingPinResult.nextPage, 'OTP');
+    assert.equal(pendingPinResult.flowContext.stage, 'PIN_REQUIRED');
+  });
+
+  it('honors custom checksubConfig rules for DCB statuses', () => {
+    const checksubConfig = {
+      rules: [
+        { value: 'PENDING_PIN', go: 'page', page: 'HOME' },
+        { value: 'SPECIAL_ACTIVE', go: 'page', page: 'THANKYOU' },
+      ],
+    };
+    const res1 = decorateUniverseDcbDetectResponse(
+      { phone: '9725550001' },
+      { outcome: 'PENDING', status: 'PENDING_PIN' },
+      { checksubConfig },
+    );
+    assert.equal(res1.nextPage, 'HOME');
+
+    const res2 = decorateUniverseDcbDetectResponse(
+      { phone: '9725550001' },
+      { outcome: 'PENDING', status: 'SPECIAL_ACTIVE' },
+      { checksubConfig },
+    );
+    assert.equal(res2.nextPage, 'THANKYOU');
+
+    const res3 = decorateUniverseDcbDetectResponse(
+      { phone: '9725550001' },
+      { outcome: 'NEW', status: 'NEW' },
+      { checksubConfig: { rules: [{ value: 'CUSTOM', go: 'page', page: 'OTP' }] } },
+    );
+    assert.equal(res3.nextPage, 'HOME');
   });
 });
 

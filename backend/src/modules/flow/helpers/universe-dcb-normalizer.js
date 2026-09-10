@@ -97,13 +97,25 @@ export function normalizeUniverseDcbResponse(
   config = {},
   context = {},
 ) {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+  if (!payload || typeof payload !== 'object') {
     return parseError('MALFORMED_RESPONSE');
   }
-  if (payload.success === false) return parseError('UPSTREAM_UNSUCCESSFUL');
+  if (!Array.isArray(payload) && payload.success === false) {
+    return parseError('UPSTREAM_UNSUCCESSFUL');
+  }
 
   const cfg = normalizerConfig(config);
-  const items = getNestedValue(payload, cfg.itemsPath);
+  let items = Array.isArray(payload)
+    ? payload
+    : getNestedValue(payload, cfg.itemsPath);
+
+  if (!Array.isArray(items) && typeof payload === 'object') {
+    if (Array.isArray(payload.data)) items = payload.data;
+    else if (Array.isArray(payload.items)) items = payload.items;
+    else if (Array.isArray(payload.subscriptions)) items = payload.subscriptions;
+    else if (Array.isArray(payload.result)) items = payload.result;
+  }
+
   if (!Array.isArray(items)) return parseError('ITEMS_NOT_ARRAY');
   if (items.length === 0) {
     return {
@@ -165,15 +177,28 @@ export function normalizeUniverseDcbResponse(
       : '';
   if (!status) return parseError('STATUS_MISSING');
 
-  const entitlementActive =
-    getNestedValue(selected, cfg.entitlementActivePath) === true;
-  const current = getNestedValue(selected, cfg.currentPath) === true;
-  const base = { status, entitlementActive, current };
-
   const entitledStatuses = normalizeStatuses(
     cfg.entitledStatuses,
     UNIVERSE_DCB_NORMALIZER_DEFAULTS.entitledStatuses,
   );
+  const rawEntitlement = getNestedValue(selected, cfg.entitlementActivePath);
+  const rawCurrent = getNestedValue(selected, cfg.currentPath);
+  const current = rawCurrent === undefined ? true : rawCurrent === true;
+  const entitlementActive =
+    rawEntitlement === undefined
+      ? entitledStatuses.has(status)
+      : rawEntitlement === true;
+  const subscriptionUuid =
+    getNestedValue(selected, 'subscriptionUuid') ||
+    getNestedValue(selected, 'id') ||
+    null;
+  const base = {
+    status,
+    entitlementActive,
+    current,
+    ...(subscriptionUuid ? { subscriptionUuid } : {}),
+  };
+
   if (entitledStatuses.has(status)) {
     return {
       ...base,
