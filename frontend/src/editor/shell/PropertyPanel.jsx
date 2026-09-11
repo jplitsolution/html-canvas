@@ -1335,6 +1335,7 @@ export function PropertyPanel() {
               <textarea
                 className={`${inputClass} min-h-[80px] resize-y`}
                 value={getTextContent(selected)}
+                placeholder="Add your text here..."
                 onChange={(e) => {
                   setTextContent(selected, e.target.value, editor);
                   update();

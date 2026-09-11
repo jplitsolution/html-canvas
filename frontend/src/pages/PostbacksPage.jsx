@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   RefreshCw,
@@ -9,19 +9,18 @@ import {
   Clock,
   CheckCircle2,
   XCircle,
-  Store,
-  Calendar,
   Filter,
   FileDown,
   Inbox,
   Zap,
+  RotateCcw,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import EmptyState from '../components/ui/EmptyState'
+import SearchableSelect from '../components/ui/SearchableSelect'
 import {
   formatDate,
-  formatChartLabel,
   DATE_PRESETS,
   getDateRangeForPreset,
   DEFAULT_TIMEZONE,
@@ -85,6 +84,8 @@ function PostbacksPage() {
   const timezone = useStore((s) => s.timezone) || DEFAULT_TIMEZONE
   const campaigns = useStore((s) => s.campaigns)
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
+  const vendors = useStore((s) => s.vendors)
+  const fetchVendors = useStore((s) => s.fetchVendors)
   const [summary, setSummary] = useState(null)
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
@@ -99,22 +100,33 @@ function PostbacksPage() {
   const [campaignId, setCampaignId] = useState(
     () => searchParams.get('campaignId') || searchParams.get('offer') || '',
   )
-  const [vendorId, setVendorId] = useState('')
+  const [vendorId, setVendorId] = useState(
+    () => searchParams.get('vendorId') || '',
+  )
   const [q, setQ] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [datePreset, setDatePreset] = useState('today')
-  const [dateRange, setDateRange] = useState(() =>
-    getDateRangeForPreset('today', timezone),
-  )
+  const [datePreset, setDatePreset] = useState(() => {
+    if (searchParams.get('from') || searchParams.get('to')) return 'custom'
+    return 'today'
+  })
+  const [dateRange, setDateRange] = useState(() => {
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
+    if (from || to) {
+      return { from: from || '', to: to || '' }
+    }
+    return getDateRangeForPreset('today', timezone)
+  })
   const [exporting, setExporting] = useState(false)
   const [firingId, setFiringId] = useState(null)
   const addToast = useStore((s) => s.addToast)
 
   useEffect(() => {
     fetchCampaigns().catch(() => {})
-  }, [fetchCampaigns])
+    fetchVendors().catch(() => {})
+  }, [fetchCampaigns, fetchVendors])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -129,6 +141,7 @@ function PostbacksPage() {
         getPostbackSummary({
           ...rangeParams,
           campaignId: campaignId || undefined,
+          vendorId: vendorId || undefined,
         }),
         listPostbacks({
           page,
@@ -235,6 +248,56 @@ function PostbacksPage() {
     } finally {
       setFiringId(null)
     }
+  }
+
+  const campaignOptions = useMemo(() => {
+    return campaigns.map((c) => ({
+      value: String(c.id),
+      label: `${c.name} (${c.id})`,
+      sublabel: [
+        c.trackingId ? `ID: ${c.trackingId}` : '',
+        c.country && c.operator ? `${c.country} / ${c.operator}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      searchKey: `${c.name} ${c.id} ${c.trackingId || ''} ${c.country || ''} ${c.operator || ''}`,
+    }))
+  }, [campaigns])
+
+  const vendorOptions = useMemo(() => {
+    const map = new Map()
+    vendors.forEach((v) => {
+      map.set(String(v.id), {
+        value: String(v.id),
+        label: `${v.name} (${v.id})`,
+        sublabel: v.code ? `Code: ${v.code}` : '',
+        searchKey: `${v.name} ${v.id} ${v.code || ''}`,
+      })
+    })
+    if (summary?.byVendor) {
+      summary.byVendor.forEach((v) => {
+        if (v.vendorId && !map.has(String(v.vendorId))) {
+          map.set(String(v.vendorId), {
+            value: String(v.vendorId),
+            label: `${v.vendorName || 'Vendor'} (${v.vendorId})`,
+            sublabel: v.vendorCode ? `Code: ${v.vendorCode}` : '',
+            searchKey: `${v.vendorName || ''} ${v.vendorId} ${v.vendorCode || ''}`,
+          })
+        }
+      })
+    }
+    return Array.from(map.values())
+  }, [vendors, summary?.byVendor])
+
+  const handleResetFilters = () => {
+    setCampaignId('')
+    setVendorId('')
+    setOperatorStatus('')
+    setQ('')
+    setSearchDraft('')
+    setStatus('all')
+    applyDatePreset('today')
+    setSearchParams({})
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -354,124 +417,43 @@ function PostbacksPage() {
           </div>
         ) : null}
 
-        {summary?.byVendor?.length > 0 ? (
-          <div className="bg-white border border-gray-100 rounded-2xl shadow-xs overflow-hidden">
-            <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2 bg-gray-50/40">
-              <Store className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-sm font-semibold text-gray-800">By vendor</h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-xs text-gray-500 border-b border-gray-100">
-                    <th className="px-5 py-2.5 font-medium">Vendor</th>
-                    <th className="px-3 py-2.5 font-medium">Total</th>
-                    <th className="px-3 py-2.5 font-medium">Pending</th>
-                    <th className="px-3 py-2.5 font-medium">Received</th>
-                    <th className="px-3 py-2.5 font-medium">Sent</th>
-                    <th className="px-3 py-2.5 font-medium">Failed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {summary.byVendor.map((v) => (
-                    <tr
-                      key={v.vendorId ?? 'unknown'}
-                      className="border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer"
-                      onClick={() => {
-                        setVendorId(v.vendorId ? String(v.vendorId) : '')
-                        setPage(1)
-                      }}
-                    >
-                      <td className="px-5 py-2.5">
-                        <div className="font-medium text-gray-900">{v.vendorName}</div>
-                        {v.vendorCode ? (
-                          <div className="text-xs text-gray-400 font-mono">{v.vendorCode}</div>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2.5 tabular-nums">{v.total}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-amber-700">{v.pending}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-sky-700">{v.received}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-emerald-700">{v.sent}</td>
-                      <td className="px-3 py-2.5 tabular-nums text-rose-700">{v.failed}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : null}
 
-        <div className="bg-white border border-gray-100 rounded-2xl p-5 space-y-4">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-            <Filter className="w-3.5 h-3.5" />
-            Filters
-          </h3>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 mb-1.5">Date Range</label>
-            <div className="flex flex-wrap gap-2">
-              {DATE_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => applyDatePreset(preset.id)}
-                  className={`px-3.5 py-1.5 rounded-xl text-sm font-semibold border transition-all duration-200 ${
-                    datePreset === preset.id
-                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
-                      : 'bg-gray-50/60 text-gray-600 border-gray-200 hover:bg-gray-100 hover:border-gray-300'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            {datePreset !== 'custom' && dateRange.from && dateRange.to ? (
-              <p className="mt-2 text-[11px] text-gray-400 font-medium">
-                Showing {formatChartLabel(dateRange.from)} → {formatChartLabel(dateRange.to)}
-                {timezone ? ` · ${timezone === 'Asia/Kolkata' ? 'IST' : timezone}` : ''}
-              </p>
-            ) : null}
-          </div>
-
-          {datePreset === 'custom' ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-xl">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5">From Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500"
-                    value={dateRange.from}
-                    onChange={(e) => updateDateField('from', e.target.value)}
-                  />
-                  <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-gray-500 mb-1.5">To Date</label>
-                <div className="relative">
-                  <input
-                    type="date"
-                    className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500"
-                    value={dateRange.to}
-                    onChange={(e) => updateDateField('to', e.target.value)}
-                  />
-                  <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                </div>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-w-2xl">
-            <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-indigo-500" />
-                Offer / Campaign
+        <div className="bg-white border border-gray-200/90 rounded-2xl p-5 shadow-xs space-y-3.5">
+          {/* Main Filter Row: From, To, Offer Dropdown, Vendor Dropdown, and Filter Button */}
+          <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+            {/* From Date */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="filter-from-date" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                From:
               </label>
-              <select
-                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 cursor-pointer"
+              <input
+                id="filter-from-date"
+                type="date"
+                value={dateRange.from || ''}
+                onChange={(e) => updateDateField('from', e.target.value)}
+                className="h-[38px] border border-gray-300 rounded-md px-3 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs transition-colors"
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="flex items-center gap-2">
+              <label htmlFor="filter-to-date" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                To:
+              </label>
+              <input
+                id="filter-to-date"
+                type="date"
+                value={dateRange.to || ''}
+                onChange={(e) => updateDateField('to', e.target.value)}
+                className="h-[38px] border border-gray-300 rounded-md px-3 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs transition-colors"
+              />
+            </div>
+
+            {/* Campaign / Offer Searchable Dropdown */}
+            <div className="w-56 min-w-[190px]">
+              <SearchableSelect
                 value={campaignId}
-                onChange={(e) => {
-                  const val = e.target.value
+                onChange={(val) => {
                   setCampaignId(val)
                   setPage(1)
                   setSearchParams((prev) => {
@@ -485,34 +467,104 @@ function PostbacksPage() {
                     return next
                   })
                 }}
+                options={campaignOptions}
+                placeholder="All offers / campaigns"
+                allOptionLabel="All offers / campaigns"
+                searchPlaceholder="Search campaign..."
+              />
+            </div>
+
+            {/* Vendor Searchable Dropdown */}
+            <div className="w-48 min-w-[160px]">
+              <SearchableSelect
+                value={vendorId}
+                onChange={(val) => {
+                  setVendorId(val)
+                  setPage(1)
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    if (!val) {
+                      next.delete('vendorId')
+                    } else {
+                      next.set('vendorId', val)
+                    }
+                    return next
+                  })
+                }}
+                options={vendorOptions}
+                placeholder="All Vendors"
+                allOptionLabel="All Vendors"
+                searchPlaceholder="Search vendor..."
+              />
+            </div>
+
+            {/* Filter Button in the same line */}
+            <button
+              type="button"
+              onClick={() => {
+                setPage(1)
+                load()
+              }}
+              className="h-[38px] bg-blue-600 text-white font-medium px-6 rounded-md shadow-sm text-sm flex items-center justify-center gap-2 cursor-pointer transition-none shrink-0"
+            >
+              <Filter className="w-4 h-4" />
+              Filter
+            </button>
+
+            {/* Reset Button in the same line when active */}
+            {(campaignId || vendorId || operatorStatus || q || datePreset !== 'today') && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="h-[38px] text-gray-500 text-xs sm:text-sm px-3.5 border border-gray-200 rounded-md cursor-pointer flex items-center gap-1.5 shrink-0"
               >
-                <option value="">All offers / campaigns</option>
-                {campaigns.map((c) => (
-                  <option key={c.id} value={String(c.id)}>
-                    {c.trackingId ? `[${c.trackingId}] ` : ''}{c.name} {c.country && c.operator ? `(${c.country} / ${c.operator})` : ''}
-                  </option>
-                ))}
-              </select>
+                <RotateCcw className="w-3.5 h-3.5" />
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Secondary Controls Bar: Presets on left, Export logs on right */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-gray-100">
+            {/* Quick Date Presets */}
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className="font-medium text-gray-400 mr-1">Quick:</span>
+              {DATE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyDatePreset(preset.id)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border cursor-pointer ${
+                    datePreset === preset.id
+                      ? 'bg-blue-50 text-blue-800 border-blue-300 font-semibold shadow-2xs'
+                      : 'bg-white text-gray-600 border-gray-200'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+
+            {/* Export & Detailed Logs action buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={exportLogs}
+                disabled={exporting || !dateRange.from || !dateRange.to}
+              >
+                <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
+                {exporting ? 'Exporting…' : 'Export logs'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => navigate(logsQuery())}>
+                View detailed logs
+              </Button>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={exportLogs}
-              disabled={exporting || !dateRange.from || !dateRange.to}
-            >
-              <FileDown className={`w-4 h-4 ${exporting ? 'animate-pulse' : ''}`} />
-              {exporting ? 'Exporting…' : 'Export logs'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate(logsQuery())}>
-              View detailed logs
-            </Button>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
-            <div className="flex flex-wrap gap-1.5">
+          {/* Status Tabs and Search Input Row */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between pt-1">
+            <div className="flex flex-wrap items-center gap-1.5">
               {STATUS_FILTERS.map((f) => (
                 <button
                   key={f.id}
@@ -527,15 +579,16 @@ function PostbacksPage() {
                       return next
                     })
                   }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
                     status === f.id
-                      ? 'bg-indigo-600 text-white'
+                      ? 'bg-blue-600 text-white shadow-2xs'
                       : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
                   }`}
                 >
                   {f.label}
                 </button>
               ))}
+
               {campaignId ? (
                 <button
                   type="button"
@@ -549,12 +602,38 @@ function PostbacksPage() {
                       return next
                     })
                   }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-indigo-50 text-indigo-800 border border-indigo-200 flex items-center gap-1.5"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1.5 cursor-pointer"
                 >
-                  <span>Clear offer: {campaigns.find((c) => String(c.id) === String(campaignId))?.name || `#${campaignId}`}</span>
+                  <span>
+                    Clear offer:{' '}
+                    {campaigns.find((c) => String(c.id) === String(campaignId))?.name || `#${campaignId}`}
+                  </span>
                   <XCircle className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
                 </button>
               ) : null}
+
+              {vendorId ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVendorId('')
+                    setPage(1)
+                    setSearchParams((prev) => {
+                      const next = new URLSearchParams(prev)
+                      next.delete('vendorId')
+                      return next
+                    })
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <span>
+                    Clear vendor:{' '}
+                    {vendors.find((v) => String(v.id) === String(vendorId))?.name || `#${vendorId}`}
+                  </span>
+                  <XCircle className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
+                </button>
+              ) : null}
+
               {operatorStatus ? (
                 <button
                   type="button"
@@ -567,42 +646,32 @@ function PostbacksPage() {
                       return next
                     })
                   }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200"
+                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5 cursor-pointer"
                 >
-                  Clear operator status: {operatorStatus}
-                </button>
-              ) : null}
-              {vendorId ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVendorId('')
-                    setPage(1)
-                  }}
-                  className="px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200"
-                >
-                  Clear vendor filter
+                  <span>Clear operator status: {operatorStatus}</span>
+                  <XCircle className="w-3.5 h-3.5 opacity-70 hover:opacity-100" />
                 </button>
               ) : null}
             </div>
+
             <form
-              className="flex gap-2"
+              className="flex items-center gap-2"
               onSubmit={(e) => {
                 e.preventDefault()
                 setQ(searchDraft.trim())
                 setPage(1)
               }}
             >
-              <div className="relative">
+              <div className="relative flex items-center">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
-                  className="pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white w-60"
+                  className="h-[36px] pl-8 pr-3 text-sm border border-gray-200 rounded-lg bg-white w-60 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   placeholder="msisdn / click / rcid / camp / offer"
                   value={searchDraft}
                   onChange={(e) => setSearchDraft(e.target.value)}
                 />
               </div>
-              <Button type="submit" variant="outline" size="sm">
+              <Button type="submit" variant="outline" size="sm" className="h-[36px]">
                 Search
               </Button>
             </form>

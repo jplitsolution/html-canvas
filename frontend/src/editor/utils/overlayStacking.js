@@ -6,21 +6,26 @@
  * that freezes the sorter and leaves the component "stuck" to the cursor.
  */
 
+import { getComp } from './editorUtils'
+
 export const Z_IMAGE = 1
 export const Z_OVERLAY = 40
 export const Z_HOTSPOT = 50
 
 export function isImageComponent(component) {
-  if (!component) return false
-  const tag = (component.get('tagName') || '').toLowerCase()
-  const type = component.get('type') || ''
-  const tc = component.getAttributes?.()?.['data-tc-type']
-  return tag === 'img' || type === 'image' || tc === 'image' || tc === 'image-banner'
+  const comp = getComp(component)
+  if (!comp) return false
+  const tag = (typeof comp.get === 'function' ? comp.get('tagName') : comp.tagName) || ''
+  const type = (typeof comp.get === 'function' ? comp.get('type') : comp.type) || ''
+  const tc = comp.getAttributes?.()?.['data-tc-type']
+  const tagLower = tag.toLowerCase()
+  return tagLower === 'img' || type === 'image' || tc === 'image' || tc === 'image-banner'
 }
 
 export function isHotspotComponent(component) {
-  if (!component) return false
-  return component.getAttributes?.()?.['data-tc-type'] === 'hotspot'
+  const comp = getComp(component)
+  if (!comp) return false
+  return comp.getAttributes?.()?.['data-tc-type'] === 'hotspot'
 }
 
 /** Tight containing block so hotspot % tracks the image, not the page. */
@@ -959,8 +964,9 @@ export function dropPointHitsImage(parentEl, clientX, clientY) {
 
 /** Parent is an image/banner, or has an image sibling of this component. */
 export function parentHasImageSibling(component) {
-  if (!component) return false
-  const parent = component.parent?.()
+  const comp = getComp(component)
+  if (!comp) return false
+  const parent = comp.parent?.()
   if (!parent) return false
   if (isImageComponent(parent)) return true
   const pTc = parent.getAttributes?.()?.['data-tc-type']
@@ -969,7 +975,7 @@ export function parentHasImageSibling(component) {
   if (!kids?.length) return false
   for (let i = 0; i < kids.length; i++) {
     const child = typeof kids.at === 'function' ? kids.at(i) : kids.models?.[i]
-    if (child && child !== component && isImageComponent(child)) return true
+    if (child && child !== comp && isImageComponent(child)) return true
   }
   return false
 }
@@ -979,23 +985,24 @@ export function parentHasImageSibling(component) {
  * parent that also contains an image — e.g. in-card Subscribe below a banner).
  */
 export function isOverImageContext(component) {
-  if (!component) return false
-  const parent = component.parent?.()
+  const comp = getComp(component)
+  if (!comp) return false
+  const parent = comp.parent?.()
   if (!parent) return false
 
   if (isImageComponent(parent)) return true
   const pTc = parent.getAttributes?.()?.['data-tc-type']
   if (pTc === 'image-banner' || pTc === 'image') return true
 
-  const attrs = component.getAttributes?.() || {}
-  const style = component.getStyle?.() || {}
+  const attrs = comp.getAttributes?.() || {}
+  const style = comp.getStyle?.() || {}
   const isAbs =
     attrs['data-tc-absolute'] === '1' ||
     attrs['data-tc-absolute'] === 'true' ||
     String(style.position || '').toLowerCase() === 'absolute'
 
   if (!isAbs) return false
-  return parentHasImageSibling(component)
+  return parentHasImageSibling(comp)
 }
 
 function ensureParentRelative(component) {
@@ -1024,26 +1031,27 @@ function ensureParentRelative(component) {
  * Do NOT call during active drag/resize moves.
  */
 export function markAsAbsoluteOverlay(component, extraStyle = {}) {
-  if (!component || isHotspotComponent(component)) return
+  const comp = getComp(component)
+  if (!comp || isHotspotComponent(comp)) return
 
-  const attrs = component.getAttributes?.() || {}
+  const attrs = comp.getAttributes?.() || {}
   const already = attrs['data-tc-absolute'] === '1' || attrs['data-tc-absolute'] === 'true'
-  const prev = component.getStyle?.() || {}
+  const prev = comp.getStyle?.() || {}
   const hasExtra = extraStyle && Object.keys(extraStyle).length > 0
 
   // Already locked — only apply explicit placement updates (never fight live drag)
   if (already && !hasExtra) {
-    ensureParentRelative(component)
+    ensureParentRelative(comp)
     if (String(prev['z-index'] || '') !== String(Z_OVERLAY)) {
-      component.addStyle({ 'z-index': String(Z_OVERLAY) })
+      comp.addStyle({ 'z-index': String(Z_OVERLAY) })
     }
     return
   }
 
-  component.addAttributes({ 'data-tc-absolute': '1' })
-  ensureParentRelative(component)
+  comp.addAttributes({ 'data-tc-absolute': '1' })
+  ensureParentRelative(comp)
   try {
-    component.set('draggable', true)
+    comp.set('draggable', true)
   } catch (_) {
     /* noop */
   }
@@ -1064,7 +1072,7 @@ export function markAsAbsoluteOverlay(component, extraStyle = {}) {
     patch['max-width'] = 'calc(100% - 16px)'
   }
 
-  component.addStyle(patch)
+  comp.addStyle(patch)
 }
 
 /**
@@ -1072,27 +1080,28 @@ export function markAsAbsoluteOverlay(component, extraStyle = {}) {
  * Returns true when it is (or becomes) an overlay. Never mutates hotspots.
  */
 export function promoteOverlayIfNeeded(component) {
-  if (!component) return false
-  const attrs = component.getAttributes?.() || {}
+  const comp = getComp(component)
+  if (!comp) return false
+  const attrs = comp.getAttributes?.() || {}
 
   // Hotspots are already overlays — just ensure image siblings stay under
   if (attrs['data-tc-type'] === 'hotspot') {
-    ensureParentRelative(component)
+    ensureParentRelative(comp)
     return true
   }
 
   if (attrs['data-tc-absolute'] === '1' || attrs['data-tc-absolute'] === 'true') {
-    markAsAbsoluteOverlay(component)
+    markAsAbsoluteOverlay(comp)
     return true
   }
 
-  const style = component.getStyle?.() || {}
+  const style = comp.getStyle?.() || {}
   const isAbs = String(style.position || '').toLowerCase() === 'absolute'
   if (!isAbs) return false
 
   // Absolute + shares parent with an image → always above the image
-  if (parentHasImageSibling(component) || isOverImageContext(component)) {
-    markAsAbsoluteOverlay(component)
+  if (parentHasImageSibling(comp) || isOverImageContext(comp)) {
+    markAsAbsoluteOverlay(comp)
     return true
   }
 

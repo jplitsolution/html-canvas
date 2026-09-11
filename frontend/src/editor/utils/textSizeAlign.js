@@ -1,4 +1,5 @@
 import { isOverImageContext } from './overlayStacking'
+import { getComp } from './editorUtils'
 
 /**
  * Flow-button resize safety for in-card CTAs only.
@@ -34,35 +35,39 @@ function parsePx(value) {
 }
 
 export function isButtonLikeComponent(component) {
-  if (!component) return false
-  const tag = (component.get('tagName') || '').toLowerCase()
-  const type = component.get('type') || ''
-  const attrs = component.getAttributes?.() || {}
+  const comp = getComp(component)
+  if (!comp) return false
+  const tag = (typeof comp.get === 'function' ? comp.get('tagName') : comp.tagName) || ''
+  const type = (typeof comp.get === 'function' ? comp.get('type') : comp.type) || ''
+  const attrs = comp.getAttributes?.() || {}
   const tcType = attrs['data-tc-type']
+  const tagLower = tag.toLowerCase()
   return (
-    tag === 'button' ||
+    tagLower === 'button' ||
     type === 'link' ||
     tcType === 'button' ||
-    (tag === 'a' && tcType !== 'hotspot')
+    (tagLower === 'a' && tcType !== 'hotspot')
   )
 }
 
 export function isTextSizedComponent(component) {
-  if (!component) return false
-  const tag = (component.get('tagName') || '').toLowerCase()
-  const type = component.get('type') || ''
-  const attrs = component.getAttributes?.() || {}
+  const comp = getComp(component)
+  if (!comp) return false
+  const tag = (typeof comp.get === 'function' ? comp.get('tagName') : comp.tagName) || ''
+  const type = (typeof comp.get === 'function' ? comp.get('type') : comp.type) || ''
+  const attrs = comp.getAttributes?.() || {}
   const tcType = attrs['data-tc-type']
 
   if (tcType === 'hotspot') return false
-  if (isButtonLikeComponent(component)) return true
-  if (TEXT_TAGS.has(tag) || type === 'text') return true
+  if (isButtonLikeComponent(comp)) return true
+  if (TEXT_TAGS.has(tag.toLowerCase()) || type === 'text') return true
   return false
 }
 
 export function isFlowLayoutButton(component) {
-  if (!component || !isButtonLikeComponent(component)) return false
-  const attrs = component.getAttributes?.() || {}
+  const comp = getComp(component)
+  if (!comp || !isButtonLikeComponent(comp)) return false
+  const attrs = comp.getAttributes?.() || {}
   if (attrs['data-tc-type'] === 'hotspot') return false
 
   return true
@@ -78,14 +83,15 @@ export function isFlowLayoutButton(component) {
  * drag:end must call markAsAbsoluteOverlay so real overlays get the flag.
  */
 export function wasIntentionallyAbsolute(component) {
-  if (!component) return false
-  const attrs = component.getAttributes?.() || {}
+  const comp = getComp(component)
+  if (!comp) return false
+  const attrs = comp.getAttributes?.() || {}
   if (attrs['data-tc-type'] === 'hotspot') return true
   if (attrs['data-tc-absolute'] === '1' || attrs['data-tc-absolute'] === 'true') return true
 
-  const style = component.getStyle?.() || {}
+  const style = comp.getStyle?.() || {}
   const pos = String(style.position || '').toLowerCase()
-  if (pos === 'absolute' && isOverImageContext(component)) return true
+  if (pos === 'absolute' && isOverImageContext(comp)) return true
   return false
 }
 
@@ -179,12 +185,13 @@ function syncFlowButtonDom(el, minHeightPx, width = '100%') {
  * Always strips leftover style="" absolute (Grapes often keeps class=relative + attr absolute).
  */
 export function keepFlowButtonInFlow(component) {
-  if (!component || !isFlowLayoutButton(component)) return
-  if (wasIntentionallyAbsolute(component)) return
+  const comp = getComp(component)
+  if (!comp || !isFlowLayoutButton(comp)) return
+  if (wasIntentionallyAbsolute(comp)) return
 
-  stripAbsoluteStyleAttribute(component)
+  stripAbsoluteStyleAttribute(comp)
 
-  const prev = component.getStyle?.() || {}
+  const prev = comp.getStyle?.() || {}
   let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
   if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
 
@@ -334,12 +341,13 @@ export const OVERLAY_BUTTON_RESIZABLE = {
 }
 
 export function configureFlowButtonResizable(component) {
-  if (!isFlowLayoutButton(component)) return
-  if (wasIntentionallyAbsolute(component)) {
-    component.set('resizable', OVERLAY_BUTTON_RESIZABLE)
+  const comp = getComp(component)
+  if (!comp || !isFlowLayoutButton(comp)) return
+  if (wasIntentionallyAbsolute(comp)) {
+    comp.set('resizable', OVERLAY_BUTTON_RESIZABLE)
     return
   }
-  component.set('resizable', FLOW_BUTTON_RESIZABLE)
+  comp.set('resizable', FLOW_BUTTON_RESIZABLE)
 }
 
 const BLOCK_CONTAINER_TAGS = new Set([
@@ -385,46 +393,50 @@ export const ABSOLUTE_BLOCK_RESIZABLE = {
 
 /** Sections / generic containers users expect to stretch — not text, CTAs, images, hotspots. */
 export function isResizableBlockContainer(component) {
-  if (!component) return false
-  if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) return false
+  const comp = getComp(component)
+  if (!comp) return false
+  if (isButtonLikeComponent(comp) || isFlowLayoutButton(comp)) return false
 
-  const tag = (component.get('tagName') || '').toLowerCase()
-  const type = component.get('type') || ''
-  const attrs = component.getAttributes?.() || {}
+  const tag = (typeof comp.get === 'function' ? comp.get('tagName') : comp.tagName) || ''
+  const type = (typeof comp.get === 'function' ? comp.get('type') : comp.type) || ''
+  const attrs = comp.getAttributes?.() || {}
   const tcType = attrs['data-tc-type']
+  const tagLower = tag.toLowerCase()
 
-  if (type === 'wrapper' || tag === 'body' || tag === 'html') return false
+  if (type === 'wrapper' || tagLower === 'body' || tagLower === 'html') return false
   if (tcType === 'hotspot' || tcType === 'button' || tcType === 'image') return false
-  if (type === 'image' || tag === 'img') return false
-  if (TEXT_TAGS.has(tag) || type === 'text') return false
+  if (type === 'image' || tagLower === 'img') return false
+  if (TEXT_TAGS.has(tagLower) || type === 'text') return false
 
   if (tcType === 'section' || tcType === 'image-banner') return true
-  return BLOCK_CONTAINER_TAGS.has(tag)
+  return BLOCK_CONTAINER_TAGS.has(tagLower)
 }
 
 export function configureBlockResizable(component) {
-  if (!isResizableBlockContainer(component)) return
-  const style = component.getStyle?.() || {}
+  const comp = getComp(component)
+  if (!comp || !isResizableBlockContainer(comp)) return
+  const style = comp.getStyle?.() || {}
   const isAbs =
     String(style.position || '').toLowerCase() === 'absolute' ||
-    component.getAttributes?.()?.['data-tc-absolute'] === '1'
-  component.set('resizable', isAbs ? ABSOLUTE_BLOCK_RESIZABLE : FLOW_BLOCK_RESIZABLE)
+    comp.getAttributes?.()?.['data-tc-absolute'] === '1'
+  comp.set('resizable', isAbs ? ABSOLUTE_BLOCK_RESIZABLE : FLOW_BLOCK_RESIZABLE)
 }
 
 export function applyTextSizeAlignment(component, opts = {}) {
-  if (!component || typeof component.addStyle !== 'function') return
-  if (!isTextSizedComponent(component)) return
+  const comp = getComp(component)
+  if (!comp || typeof comp.addStyle !== 'function') return
+  if (!isTextSizedComponent(comp)) return
 
-  if (isFlowLayoutButton(component) && !wasIntentionallyAbsolute(component)) {
-    keepFlowButtonInFlow(component)
+  if (isFlowLayoutButton(comp) && !wasIntentionallyAbsolute(comp)) {
+    keepFlowButtonInFlow(comp)
     return
   }
 
-  const style = component.getStyle?.() || {}
+  const style = comp.getStyle?.() || {}
   const heightPx = parsePx(style.height) ?? parsePx(style['min-height'])
   if (!opts.force && (heightPx == null || heightPx <= 0)) return
 
-  const buttonLike = isButtonLikeComponent(component)
+  const buttonLike = isButtonLikeComponent(comp)
   const patch = {
     'box-sizing': 'border-box',
     'line-height': '1.25',
@@ -448,7 +460,7 @@ export function applyTextSizeAlignment(component, opts = {}) {
           : 'flex-start'
   }
 
-  component.addStyle(patch)
+  comp.addStyle(patch)
 }
 
 export function healFlowButtonsInEditor(editor) {

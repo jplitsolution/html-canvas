@@ -30,7 +30,7 @@ export function registerComponentBlocks(editor) {
     'Text',
     'component',
     'text',
-    `<p data-gjs-type="text" style="font-family:Inter,sans-serif;font-size:16px;color:#334155;line-height:1.6;margin:0;padding:16px;">Add your text here. Double-click to edit.</p>`
+    `<p data-gjs-type="text" style="font-family:Inter,sans-serif;font-size:16px;color:#334155;line-height:1.6;margin:0;padding:16px;">Add text</p>`
   )
 
   addBlock(

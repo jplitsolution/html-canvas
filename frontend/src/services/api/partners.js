@@ -20,13 +20,14 @@ export async function deleteVendor(id) {
   return apiClient(`/partners/vendors/${id}`, { method: 'DELETE' })
 }
 
-export async function getPostbackSummary({ days, from, to, timezone, campaignId, offerCode } = {}) {
+export async function getPostbackSummary({ days, from, to, timezone, campaignId, offerCode, vendorId } = {}) {
   const params = new URLSearchParams()
   if (days) params.set('days', String(days))
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (timezone) params.set('timezone', timezone)
   if (campaignId) params.set('campaignId', String(campaignId))
+  if (vendorId) params.set('vendorId', String(vendorId))
   if (offerCode) params.set('offerCode', offerCode)
   const qs = params.toString()
   return apiClient(`/partners/postbacks/summary${qs ? `?${qs}` : ''}`)

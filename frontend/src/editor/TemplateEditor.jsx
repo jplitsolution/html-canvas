@@ -33,7 +33,7 @@ import useStore from '../store/useStore'
 import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
-import { safeGetWrapper } from './utils/editorUtils'
+import { safeGetWrapper, getComp } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
 import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, HOTSPOT_RESIZABLE, freezeHotspotToPixels } from './utils/overlayStacking'
 
@@ -688,8 +688,10 @@ export default function TemplateEditor({
     })
 
     // After drag: lift buttons above images (img has z-index:1 in canvas CSS)
-    ed.on('component:drag:end', (component) => {
-      if (!mounted || !component) return
+    ed.on('component:drag:end', (componentArg) => {
+      if (!mounted || !componentArg) return
+      const component = getComp(componentArg)
+      if (!component) return
       if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
         // px → % + restore data-action / pointer-events (absolute drag leaves junk)
         healEditorHotspot(component, ed, { geometry: 'pixels' })
