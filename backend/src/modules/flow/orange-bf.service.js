@@ -196,6 +196,9 @@ export const createOrangeBfService = () => {
 
       return {
         baseUrl,
+        otpCooldownMessage: merged.otpCooldownMessage,
+        otpBlockedMessage: merged.otpBlockedMessage,
+        otpUnavailableMessage: merged.otpUnavailableMessage,
         sendUrl: merged.sendUrl || apiConfig.sendUrl || null,
         sendMethod: (merged.sendMethod || merged.method || 'GET').toUpperCase(),
         sendHeadersJson: merged.sendHeadersJson || merged.headersJson || apiConfig.headersJson || null,

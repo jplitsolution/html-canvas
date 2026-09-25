@@ -23,6 +23,7 @@ import {
 import { downloadTextFile } from '../../utils/download'
 import { normalizeModeId } from '../flow/verificationModes'
 import { OrangeBfTab } from './api-config/flows/OrangeBfTab'
+import { OtpLimitMessages } from './api-config/common/OtpLimitMessages'
 
 const DEFAULT_ORANGE_BF_CONFIG = {
   baseUrl: 'http://103.153.58.55',
@@ -1108,6 +1109,13 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
             activeTab={activeTab}
             onChange={setActiveTab}
           />
+
+          {(activeTab === 'otp' || activeTab === 'orange_bf') && (
+            <OtpLimitMessages
+              config={activeTab === 'orange_bf' ? orangeBfConfig : partnerConfig}
+              onChange={activeTab === 'orange_bf' ? setOrangeBfConfig : setPartnerConfig}
+            />
+          )}
 
           {activeTab === 'orange_bf' ? (
             <OrangeBfTab

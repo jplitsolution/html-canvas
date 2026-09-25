@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { redisService } from '../../../common/services/redis.service.js';
+import { reserveOtpSend } from '../helpers/send-limit.js';
 
 const parseHeaders = (headersJson) => {
   if (!headersJson) return {};
@@ -137,6 +139,8 @@ export const partnerProvider = {
         ? JSON.stringify(bodyTemplate)
         : resolveTemplate(bodyTemplate, templateVariables);
     const meta = { requestUrl: resolvedUrl, requestBody: resolvedBodyStr || null, otp };
+
+    await reserveOtpSend(redisService.getClient(), phone, config);
 
     try {
       let response;

@@ -1,4 +1,6 @@
 import axios from 'axios';
+import { redisService } from '../../common/services/redis.service.js';
+import { reserveOtpSend } from '../otp/helpers/send-limit.js';
 import { normalizeOrangeBfResponse } from './helpers/orange-bf-normalizer.js';
 
 export const ORANGE_BF_DEFAULTS = Object.freeze({
@@ -124,6 +126,7 @@ export const createOrangeBfProvider = ({ httpClient = axios } = {}) => {
       context = {},
       config = {},
     }) => {
+      await reserveOtpSend(redisService.getClient(), msisdn, config);
       const baseUrl = config.baseUrl || ORANGE_BF_DEFAULTS.baseUrl;
       const timeout = Number(config.timeoutMs) || ORANGE_BF_DEFAULTS.timeoutMs;
       const method = String(config.sendMethod || config.method || 'GET').toUpperCase();
