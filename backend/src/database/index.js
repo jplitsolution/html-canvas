@@ -1,6 +1,24 @@
 import { DataSource } from 'typeorm';
+import pg from 'pg';
 import getConfig from '../config/configuration.js';
 import { entities } from './entities/index.js';
+
+// Force PostgreSQL timestamp without time zone (OID 1114) parser to return UTC Date.
+// By default, node-postgres parses timestamps in the local OS timezone (e.g. Africa/Nairobi, UTC+3),
+// which distorts the timestamp by the server's UTC offset when converted to ISO strings.
+if (pg?.types?.setTypeParser) {
+  pg.types.setTypeParser(1114, (stringValue) => {
+    if (!stringValue) return null;
+    const normalized = stringValue.includes('T')
+      ? stringValue
+      : stringValue.replace(' ', 'T');
+    const iso =
+      normalized.endsWith('Z') || /[+-]\d{2}(?::?\d{2})?$/.test(normalized)
+        ? normalized
+        : `${normalized}Z`;
+    return new Date(iso);
+  });
+}
 
 /** @type {DataSource | null} */
 let dataSource = null;

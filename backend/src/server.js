@@ -1,3 +1,4 @@
+process.env.TZ = 'UTC';
 import 'reflect-metadata';
 import { initDatabase } from './database/index.js';
 import { seedPrebuiltTemplates } from './database/seed/templates-seed.service.js';
