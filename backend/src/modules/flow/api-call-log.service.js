@@ -19,12 +19,42 @@ export const createApiCallLogService = () => {
   const getRepo = () => getRepository(ApiCallLog);
 
   const record = async (input) => {
+    let resolvedVendorId = input.vendorId ? parseInt(input.vendorId, 10) : null;
+    let clickId = input.clickId || null;
+    let rcid = input.rcid || null;
+    let campaignId = input.campaignId ? parseInt(input.campaignId, 10) : null;
+
+    if (input.visitId && (!resolvedVendorId || !clickId || !rcid || !campaignId)) {
+      try {
+        const { Visit } = await import('../../database/entities/visit.entity.js');
+        const visit = await getRepository(Visit).findOne({
+          where: { id: parseInt(input.visitId, 10) },
+        });
+        if (visit) {
+          if (!resolvedVendorId && visit.vendorId) {
+            resolvedVendorId = visit.vendorId;
+          }
+          if (!clickId && visit.clickId) {
+            clickId = visit.clickId;
+          }
+          if (!rcid && visit.rcid) {
+            rcid = visit.rcid;
+          }
+          if (!campaignId && visit.campaignId) {
+            campaignId = visit.campaignId;
+          }
+        }
+      } catch {
+        // swallow lookup errors
+      }
+    }
+
     const row = getRepo().create({
       visitId: input.visitId ? parseInt(input.visitId, 10) : null,
-      campaignId: input.campaignId ? parseInt(input.campaignId, 10) : null,
+      campaignId,
       msisdn: input.msisdn ? String(input.msisdn).replace(/\D/g, '') : null,
-      rcid: input.rcid || null,
-      clickId: input.clickId || null,
+      rcid,
+      clickId,
       callType: input.callType,
       requestUrl: truncate(input.requestUrl),
       requestBody: truncate(input.requestBody),
@@ -44,7 +74,7 @@ export const createApiCallLogService = () => {
     void searchService.indexEvent({
       campaignId: saved.campaignId,
       visitId: saved.visitId,
-      vendorId: input.vendorId ? parseInt(input.vendorId, 10) : null,
+      vendorId: resolvedVendorId,
       clickId: saved.clickId,
       rcid: saved.rcid,
       phoneMasked: maskPhone(saved.msisdn),

@@ -92,6 +92,7 @@ export const createOrangeBfExposeService = () => {
         phone,
         campaignId: campaign.id,
         visitId,
+        vendorId: vendor?.id || null,
         language,
       });
 

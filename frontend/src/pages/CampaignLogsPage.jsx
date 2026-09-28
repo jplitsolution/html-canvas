@@ -73,6 +73,12 @@ function eventLabel(type) {
     OTP_VERIFY: 'OTP verify',
     SUBSCRIBE_SUCCESS: 'Subscribe success',
     CONFIRM_CLICK: 'Confirm click',
+    API_ORANGE_BF_OTP_SEND: 'OTP send (Orange BF)',
+    API_ORANGE_BF_OTP_VERIFY: 'OTP verify (Orange BF)',
+    API_ORANGE_BF_CHECKSUB: 'CheckSub (Orange BF)',
+    API_ORANGE_BF_SYNC: 'Sync (Orange BF)',
+    API_ORANGE_BF_EXPOSE_SEND_IN: 'API OTP send',
+    API_ORANGE_BF_EXPOSE_VERIFY_IN: 'API OTP verify',
   }
   return labels[type] || type.replace(/_/g, ' ')
 }
@@ -95,6 +101,12 @@ const STANDARD_EVENT_TYPES = [
   'CONFIRM_CLICK',
   'SUBSCRIBE_SUCCESS',
   'SUBSCRIBE_FAILED',
+  'API_ORANGE_BF_OTP_SEND',
+  'API_ORANGE_BF_OTP_VERIFY',
+  'API_ORANGE_BF_CHECKSUB',
+  'API_ORANGE_BF_SYNC',
+  'API_ORANGE_BF_EXPOSE_SEND_IN',
+  'API_ORANGE_BF_EXPOSE_VERIFY_IN',
   'API_CHECKSUB',
   'API_PRIORITY',
   'API_SUBSCRIBE',
@@ -315,6 +327,12 @@ function CampaignLogsPage() {
     if (!c) return `Campaign #${campaignId}`
     return `${c.trackingId || `${c.country} / ${c.operator}`} — ${c.name}`
   }, [campaigns])
+
+  const getVendorLabel = useCallback((vendorId) => {
+    if (!vendorId || vendorId === 'null') return 'Unknown'
+    const v = vendors.find((item) => String(item.id) === String(vendorId))
+    return v ? `${v.name} (${v.code})` : `Vendor #${vendorId}`
+  }, [vendors])
 
   useEffect(() => {
     getLogsStatus()
@@ -931,7 +949,14 @@ function CampaignLogsPage() {
                 <BarChart data={aggs?.byVendor || []} layout="vertical" margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="key" stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} width={80} />
+                  <YAxis
+                    type="category"
+                    dataKey="key"
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 10, fontWeight: 500 }}
+                    width={110}
+                    tickFormatter={getVendorLabel}
+                  />
                   <Tooltip content={<CustomTooltip />} />
                   <Bar dataKey="count" name="Total Events" fill="#10b981" radius={[0, 6, 6, 0]} />
                 </BarChart>
@@ -1004,9 +1029,9 @@ function CampaignLogsPage() {
                           </td>
                         )}
                         <td className="px-4 py-3 text-xs text-gray-700">
-                          {row.vidRaw || row.vendorId ? (
+                          {row.vendorId || row.vidRaw ? (
                             <span className="font-semibold text-gray-800">
-                              {row.vidRaw || row.vendorId}
+                              {getVendorLabel(row.vendorId) || row.vidRaw}
                             </span>
                           ) : <span className="text-gray-300">—</span>}
                         </td>

@@ -410,6 +410,7 @@ export const createOtpService = () => {
         phone: String(phone).trim(),
         campaignId: campaign?.id,
         visitId,
+        vendorId: visit?.vendorId,
       });
       if (!result.success) {
         const err = new Error(result.error || result.message || 'Failed to send OTP');

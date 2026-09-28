@@ -249,10 +249,21 @@ export const createOrangeBfService = () => {
   };
 
   return {
-    startOrCheckSub: async ({ phone, campaignId, visitId, language = '_E' }) => {
+    startOrCheckSub: async ({ phone, campaignId, visitId, vendorId, language = '_E' }) => {
       const msisdn = cleanPhone(phone);
       if (!msisdn) {
         return { success: false, error: 'MSISDN is required' };
+      }
+
+      let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
+      if (!resolvedVendorId && visitId) {
+        try {
+          const v = await getRepository(Visit).findOne({
+            where: { id: parseInt(visitId, 10) },
+            select: ['id', 'vendorId'],
+          });
+          if (v?.vendorId) resolvedVendorId = v.vendorId;
+        } catch {}
       }
 
       const campaign = await getCampaign(campaignId);
@@ -262,6 +273,7 @@ export const createOrangeBfService = () => {
         campaignId: campaign?.id ? String(campaign.id) : '',
         campaignName: campaign?.name || '',
         visitId: visitId ? String(visitId) : '',
+        vendorId: resolvedVendorId ? String(resolvedVendorId) : '',
       };
 
       // 1. Run CheckSub first to see if user is already an active subscriber
@@ -280,6 +292,7 @@ export const createOrangeBfService = () => {
       await apiCallLogService.record({
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaign?.id || null,
+        vendorId: resolvedVendorId,
         msisdn,
         callType: ApiCallType.ORANGE_BF_CHECKSUB || 'orange_bf_checksub',
         requestUrl: checkResult.requestUrl,
@@ -338,6 +351,7 @@ export const createOrangeBfService = () => {
       await apiCallLogService.record({
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaign?.id || null,
+        vendorId: resolvedVendorId,
         msisdn,
         callType: ApiCallType.ORANGE_BF_OTP_SEND || 'orange_bf_otp_send',
         requestUrl: otpResult.requestUrl,
@@ -350,6 +364,22 @@ export const createOrangeBfService = () => {
       });
 
       if (!otpResult.success) {
+        if (visitId) {
+          try {
+            await analyticsService.logEvent(
+              parseInt(visitId, 10),
+              VisitEventType.OTP_SEND,
+              {
+                source: 'orange_bf',
+                phone: msisdn,
+                success: false,
+                responseCode: otpResult.responseCode ?? null,
+                transactionId: otpResult.transactionId || null,
+                error: otpResult.responseMessage || 'Failed to send OTP',
+              },
+            );
+          } catch {}
+        }
         return {
           success: false,
           status: otpResult.outcome,
@@ -399,6 +429,19 @@ export const createOrangeBfService = () => {
         } catch {
           // Redis cache optional
         }
+        try {
+          await analyticsService.logEvent(
+            parseInt(visitId, 10),
+            VisitEventType.OTP_SEND,
+            {
+              source: 'orange_bf',
+              phone: msisdn,
+              success: true,
+              responseCode: otpResult.responseCode ?? null,
+              transactionId: chainedId,
+            },
+          );
+        } catch {}
       }
       if (campaign?.id && msisdn) {
         try {
@@ -427,6 +470,17 @@ export const createOrangeBfService = () => {
         return { success: false, error: 'Phone and OTP are required' };
       }
 
+      let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
+      if (!resolvedVendorId && visitId) {
+        try {
+          const v = await getRepository(Visit).findOne({
+            where: { id: parseInt(visitId, 10) },
+            select: ['id', 'vendorId'],
+          });
+          if (v?.vendorId) resolvedVendorId = v.vendorId;
+        } catch {}
+      }
+
       const campaign = await getCampaign(campaignId);
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
@@ -450,7 +504,7 @@ export const createOrangeBfService = () => {
         campaignId: campaign?.id ? String(campaign.id) : '',
         campaignName: campaign?.name || '',
         visitId: visitId ? String(visitId) : '',
-        vendorId: vendorId ? String(vendorId) : '',
+        vendorId: resolvedVendorId ? String(resolvedVendorId) : '',
         ...cachedData,
       };
 
@@ -469,6 +523,7 @@ export const createOrangeBfService = () => {
       await apiCallLogService.record({
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaign?.id || null,
+        vendorId: resolvedVendorId,
         msisdn,
         callType: ApiCallType.ORANGE_BF_OTP_VERIFY || 'orange_bf_otp_verify',
         requestUrl: verifyResult.requestUrl,
@@ -481,6 +536,21 @@ export const createOrangeBfService = () => {
       });
 
       if (!verifyResult.success) {
+        if (visitId) {
+          try {
+            await analyticsService.logEvent(
+              parseInt(visitId, 10),
+              VisitEventType.OTP_VERIFY,
+              {
+                source: 'orange_bf',
+                phone: msisdn,
+                success: false,
+                responseCode: verifyResult.responseCode ?? null,
+                error: verifyResult.responseMessage || 'OTP validation failed',
+              },
+            );
+          } catch {}
+        }
         return {
           success: false,
           status: verifyResult.outcome,
@@ -516,6 +586,7 @@ export const createOrangeBfService = () => {
           await apiCallLogService.record({
             visitId: visitId ? parseInt(visitId, 10) : null,
             campaignId: campaign?.id || null,
+            vendorId: resolvedVendorId,
             msisdn,
             callType: ApiCallType.ORANGE_BF_SYNC || 'orange_bf_sync',
             requestUrl: syncResult.requestUrl,
@@ -550,6 +621,7 @@ export const createOrangeBfService = () => {
             await apiCallLogService.record({
               visitId: visitId ? parseInt(visitId, 10) : null,
               campaignId: campaign?.id || null,
+              vendorId: resolvedVendorId,
               msisdn,
               callType: ApiCallType.ORANGE_BF_SYNC || 'orange_bf_sync',
               requestUrl: config.syncUrl || `${(config.baseUrl || '').replace(/\/$/, '')}/Subs_Engine/subscription/sync`,
@@ -572,7 +644,7 @@ export const createOrangeBfService = () => {
           const queued = await queueOrangeBfPostback({
             campaign,
             visitId,
-            vendorId,
+            vendorId: resolvedVendorId,
             msisdn,
           });
           postbackStatus = queued.status;
@@ -590,6 +662,7 @@ export const createOrangeBfService = () => {
             VisitEventType.OTP_VERIFY,
             {
               source: 'orange_bf',
+              phone: msisdn,
               success: true,
               held: payoutHeld,
               payoutPercent,
@@ -616,13 +689,25 @@ export const createOrangeBfService = () => {
       };
     },
 
-    checkSub: async ({ phone, campaignId, visitId }) => {
+    checkSub: async ({ phone, campaignId, visitId, vendorId }) => {
       const msisdn = cleanPhone(phone);
+      let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
+      if (!resolvedVendorId && visitId) {
+        try {
+          const v = await getRepository(Visit).findOne({
+            where: { id: parseInt(visitId, 10) },
+            select: ['id', 'vendorId'],
+          });
+          if (v?.vendorId) resolvedVendorId = v.vendorId;
+        } catch {}
+      }
+
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
       const context = {
         campaignId: campaignId ? String(campaignId) : '',
         visitId: visitId ? String(visitId) : '',
+        vendorId: resolvedVendorId ? String(resolvedVendorId) : '',
       };
 
       const checkResult = await orangeBfProvider.checkSubscription({
@@ -640,6 +725,7 @@ export const createOrangeBfService = () => {
       await apiCallLogService.record({
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaignId ? parseInt(campaignId, 10) : null,
+        vendorId: resolvedVendorId,
         msisdn,
         callType: ApiCallType.ORANGE_BF_CHECKSUB || 'orange_bf_checksub',
         requestUrl: checkResult.requestUrl,
@@ -654,13 +740,25 @@ export const createOrangeBfService = () => {
       return checkResult;
     },
 
-    unsubscribe: async ({ phone, campaignId, visitId }) => {
+    unsubscribe: async ({ phone, campaignId, visitId, vendorId }) => {
       const msisdn = cleanPhone(phone);
+      let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
+      if (!resolvedVendorId && visitId) {
+        try {
+          const v = await getRepository(Visit).findOne({
+            where: { id: parseInt(visitId, 10) },
+            select: ['id', 'vendorId'],
+          });
+          if (v?.vendorId) resolvedVendorId = v.vendorId;
+        } catch {}
+      }
+
       const apiConfig = await getApiConfig(campaignId);
       const config = parseProviderConfig(apiConfig);
       const context = {
         campaignId: campaignId ? String(campaignId) : '',
         visitId: visitId ? String(visitId) : '',
+        vendorId: resolvedVendorId ? String(resolvedVendorId) : '',
       };
 
       const unsubResult = await orangeBfProvider.unsubscribe({
@@ -673,6 +771,7 @@ export const createOrangeBfService = () => {
       await apiCallLogService.record({
         visitId: visitId ? parseInt(visitId, 10) : null,
         campaignId: campaignId ? parseInt(campaignId, 10) : null,
+        vendorId: resolvedVendorId,
         msisdn,
         callType: ApiCallType.ORANGE_BF_UNSUB || 'orange_bf_unsub',
         requestUrl: unsubResult.requestUrl,
