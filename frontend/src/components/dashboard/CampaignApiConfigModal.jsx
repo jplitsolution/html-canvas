@@ -1501,27 +1501,68 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
                 </Field>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Send method">
-                    <Input
-                      value={partnerConfig.method}
+                    <select
+                      className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                      value={partnerConfig.method || 'GET'}
                       onChange={(e) => setPartnerConfig({ ...partnerConfig, method: e.target.value })}
-                    />
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                    </select>
                   </Field>
                   <Field label="Verify method">
-                    <Input
-                      value={partnerConfig.verifyMethod}
+                    <select
+                      className="w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 text-sm text-fg"
+                      value={partnerConfig.verifyMethod || 'GET'}
                       onChange={(e) =>
                         setPartnerConfig({
                           ...partnerConfig,
                           verifyMethod: e.target.value,
                         })
                       }
-                    />
+                    >
+                      <option value="GET">GET</option>
+                      <option value="POST">POST</option>
+                    </select>
                   </Field>
                 </div>
+                {(partnerConfig.method === 'POST' || partnerConfig.bodyJson) && (
+                  <Field label="Send Body (JSON)" hint="Variables: {{msisdn}}, {{phone}}">
+                    <textarea
+                      className="min-h-[60px] w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 font-mono text-xs text-fg"
+                      value={partnerConfig.bodyJson || ''}
+                      onChange={(e) =>
+                        setPartnerConfig({
+                          ...partnerConfig,
+                          bodyJson: e.target.value,
+                        })
+                      }
+                      placeholder='{"msisdn": "{{msisdn}}"}'
+                    />
+                  </Field>
+                )}
+                {(partnerConfig.verifyMethod === 'POST' || partnerConfig.verifyBodyJson) && (
+                  <Field label="Verify Body (JSON)" hint="Variables: {{msisdn}}, {{otp}}, {{code}}">
+                    <textarea
+                      className="min-h-[60px] w-full rounded-lg border border-border bg-bg-subtle px-3 py-1.5 font-mono text-xs text-fg"
+                      value={partnerConfig.verifyBodyJson || ''}
+                      onChange={(e) =>
+                        setPartnerConfig({
+                          ...partnerConfig,
+                          verifyBodyJson: e.target.value,
+                        })
+                      }
+                      placeholder='{"msisdn": "{{msisdn}}", "code": "{{otp}}"}'
+                    />
+                  </Field>
+                )}
                 <div className="rounded-lg border border-border bg-bg-subtle/50 p-3">
-                  <p className="mb-2 text-xs font-semibold text-fg">Success rule</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-fg">Success rule</p>
+                    <span className="text-[11px] text-fg-muted">For Beecell: Key = success, Value = true</span>
+                  </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <Field label="Key">
+                    <Field label="Key" hint="e.g. responseCode or success">
                       <Input
                         value={partnerConfig.successKey || 'responseCode'}
                         onChange={(e) =>
@@ -1532,7 +1573,7 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
                         }
                       />
                     </Field>
-                    <Field label="Value">
+                    <Field label="Value" hint="e.g. 0 or true">
                       <Input
                         value={partnerConfig.successValue ?? '0'}
                         onChange={(e) =>

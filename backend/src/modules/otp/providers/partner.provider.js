@@ -84,7 +84,7 @@ const formatPartnerError = (data, config, fallback) => {
   const code = getBusinessCode(data, config);
   const { key, value } = getSuccessRule(config);
   const mapped = code ? PARTNER_RESPONSE_MESSAGES[code] : null;
-  const apiMsg = data?.responseMessage || data?.response_message;
+  const apiMsg = data?.responseMessage || data?.response_message || data?.message;
   if (mapped && code !== value) {
     return mapped;
   }
@@ -134,10 +134,11 @@ export const partnerProvider = {
     };
 
     const resolvedUrl = resolveTemplate(sendUrl, templateVariables);
-    const resolvedBodyStr =
-      typeof bodyTemplate === 'object'
+    const rawBodyStr =
+      typeof bodyTemplate === 'object' && bodyTemplate !== null
         ? JSON.stringify(bodyTemplate)
-        : resolveTemplate(bodyTemplate, templateVariables);
+        : String(bodyTemplate || '');
+    const resolvedBodyStr = resolveTemplate(rawBodyStr, templateVariables);
     const meta = { requestUrl: resolvedUrl, requestBody: resolvedBodyStr || null, otp };
 
     await reserveOtpSend(redisService.getClient(), phone, config);
@@ -274,16 +275,18 @@ export const partnerProvider = {
       phone,
       msisdn: phone,
       otp,
+      code: otp,
       providerRequestId,
       referenceId: providerRequestId,
       transactionId: providerRequestId,
     };
 
     const resolvedUrl = resolveTemplate(verifyUrl, templateVariables);
-    const resolvedBodyStr =
-      typeof bodyTemplate === 'object'
+    const rawBodyStr =
+      typeof bodyTemplate === 'object' && bodyTemplate !== null
         ? JSON.stringify(bodyTemplate)
-        : resolveTemplate(bodyTemplate, templateVariables);
+        : String(bodyTemplate || '');
+    const resolvedBodyStr = resolveTemplate(rawBodyStr, templateVariables);
     const meta = { requestUrl: resolvedUrl, requestBody: resolvedBodyStr || null, otp };
 
     try {
