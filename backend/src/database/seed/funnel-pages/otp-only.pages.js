@@ -229,31 +229,35 @@ export const otpOnlyPages = {
       <h1 class="otp-flow-title">Verify Mobile Number</h1>
       <p class="otp-flow-subtitle">Enter your mobile number to receive a one-time SMS verification code.</p>
 
-      <div class="otp-flow-field-group">
-        <label class="otp-flow-label">Mobile Number</label>
-        <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" class="otp-flow-input" />
+      <div data-otp-step="1" class="otp-step-1">
+        <div class="otp-flow-field-group">
+          <label class="otp-flow-label">Mobile Number</label>
+          <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" class="otp-flow-input" />
+        </div>
+
+        <button type="button" data-otp-action="send" class="otp-flow-btn" style="margin-bottom:16px;">
+          Get OTP
+        </button>
       </div>
 
-      <button type="button" data-otp-action="send" class="otp-flow-btn" style="margin-bottom:16px;">
-        Get OTP
-      </button>
+      <div data-otp-step="2" class="otp-step-2">
+        <div class="otp-flow-field-group">
+          <label class="otp-flow-label">Verification Code (SMS PIN)</label>
+          <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP" class="otp-flow-input otp-code-box" />
+        </div>
 
-      <div class="otp-flow-field-group">
-        <label class="otp-flow-label">Verification Code (SMS PIN)</label>
-        <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP" class="otp-flow-input otp-code-box" />
+        <div class="otp-resend-row">
+          <button type="button" data-otp-action="send" class="otp-link-btn">Resend code</button>
+          <span> &#xB7; Didn't receive SMS?</span>
+        </div>
+
+        <div data-otp-slot="error" class="otp-error-slot"></div>
+        <div data-otp-slot="status" class="otp-status-slot"></div>
+
+        <button type="button" data-otp-action="verify" class="otp-flow-btn">
+          Verify &amp; Continue
+        </button>
       </div>
-
-      <div class="otp-resend-row">
-        <button type="button" data-otp-action="send" class="otp-link-btn">Resend code</button>
-        <span> &#xB7; Didn't receive SMS?</span>
-      </div>
-
-      <div data-otp-slot="error" class="otp-error-slot"></div>
-      <div data-otp-slot="status" class="otp-status-slot"></div>
-
-      <button type="button" data-otp-action="verify" class="otp-flow-btn">
-        Verify &amp; Continue
-      </button>
 
       <p class="otp-footnote">You'll receive a one-time code via SMS. Standard carrier rates apply.</p>
     </div>

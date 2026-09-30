@@ -43,3 +43,53 @@ describe('applyDcbStageUi', () => {
     expect(root.querySelector('h1').textContent).toBe('Enter billing PIN')
   })
 })
+
+describe('setDcbEditorPreview', () => {
+  it('hides verify button and otp field when editing step 1 (number)', async () => {
+    const { setDcbEditorPreview } = await import('../../src/services/flow/dcbStageUi')
+    const fakeDoc = document.implementation.createHTMLDocument('Editor Canvas')
+    fakeDoc.body.innerHTML = `
+      <div class="both-flow-field-group"><label>Mobile</label><input data-otp-field="phone" /></div>
+      <button type="button" data-otp-action="send" class="both-flow-btn">Get OTP</button>
+      <div class="both-flow-field-group"><label>OTP</label><input data-otp-field="otp" /></div>
+      <button type="button" data-otp-action="verify" class="both-flow-btn">Verify & Continue</button>
+    `
+    const fakeEditor = { Canvas: { getDocument: () => fakeDoc } }
+
+    setDcbEditorPreview(fakeEditor, 'number')
+
+    const sendBtn = fakeDoc.querySelector('[data-otp-action="send"]')
+    const verifyBtn = fakeDoc.querySelector('[data-otp-action="verify"]')
+    const phoneGroup = fakeDoc.querySelector('[data-otp-field="phone"]').closest('.both-flow-field-group')
+    const otpGroup = fakeDoc.querySelector('[data-otp-field="otp"]').closest('.both-flow-field-group')
+
+    expect(sendBtn.style.display).not.toBe('none')
+    expect(verifyBtn.style.display).toBe('none')
+    expect(phoneGroup.style.display).not.toBe('none')
+    expect(otpGroup.style.display).toBe('none')
+  })
+
+  it('hides send button and phone field when editing step 2 (otp)', async () => {
+    const { setDcbEditorPreview } = await import('../../src/services/flow/dcbStageUi')
+    const fakeDoc = document.implementation.createHTMLDocument('Editor Canvas')
+    fakeDoc.body.innerHTML = `
+      <div class="both-flow-field-group"><label>Mobile</label><input data-otp-field="phone" /></div>
+      <button type="button" data-otp-action="send" class="both-flow-btn">Get OTP</button>
+      <div class="both-flow-field-group"><label>OTP</label><input data-otp-field="otp" /></div>
+      <button type="button" data-otp-action="verify" class="both-flow-btn">Verify & Continue</button>
+    `
+    const fakeEditor = { Canvas: { getDocument: () => fakeDoc } }
+
+    setDcbEditorPreview(fakeEditor, 'otp')
+
+    const sendBtn = fakeDoc.querySelector('[data-otp-action="send"]')
+    const verifyBtn = fakeDoc.querySelector('[data-otp-action="verify"]')
+    const phoneGroup = fakeDoc.querySelector('[data-otp-field="phone"]').closest('.both-flow-field-group')
+    const otpGroup = fakeDoc.querySelector('[data-otp-field="otp"]').closest('.both-flow-field-group')
+
+    expect(sendBtn.style.display).toBe('none')
+    expect(verifyBtn.style.display).not.toBe('none')
+    expect(phoneGroup.style.display).toBe('none')
+    expect(otpGroup.style.display).not.toBe('none')
+  })
+})

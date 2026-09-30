@@ -213,24 +213,28 @@ const defaultPages = {
           We couldn't detect your number automatically. Enter it to continue.
         </p>
 
-        <div style="text-align:left;margin-bottom:12px;">
-          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
-          <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210"
-            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+        <div data-otp-step="1" class="otp-step-1">
+          <div style="text-align:left;margin-bottom:12px;">
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">Mobile number</label>
+            <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210"
+              style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+          </div>
+
+          <button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Get OTP</button>
         </div>
 
-        <button type="button" data-otp-action="send" class="flow-btn" style="margin-bottom:12px;">Get OTP</button>
+        <div data-otp-step="2" class="otp-step-2">
+          <div style="text-align:left;margin-bottom:12px;">
+            <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">OTP</label>
+            <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP"
+              style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+          </div>
 
-        <div style="text-align:left;margin-bottom:12px;">
-          <label style="display:block;font-size:12px;font-weight:600;color:#64748b;margin-bottom:6px;">OTP</label>
-          <input data-otp-field="otp" inputmode="numeric" placeholder="Enter OTP"
-            style="width:100%;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;font-size:14px;outline:none;" />
+          <div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>
+          <div data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>
+
+          <button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>
         </div>
-
-        <div data-otp-slot="error" style="min-height:18px;color:#dc2626;font-size:13px;margin-bottom:8px;"></div>
-        <div data-otp-slot="status" style="min-height:18px;color:#64748b;font-size:12px;margin-bottom:10px;"></div>
-
-        <button type="button" data-otp-action="verify" class="flow-btn">Verify &amp; Continue</button>
         <p class="flow-footnote">You'll receive a one-time code via SMS (dev: returned in response).</p>
       </div>
     `,

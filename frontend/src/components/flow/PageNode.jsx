@@ -27,6 +27,12 @@ function PageNode({ data, selected }) {
         {data.label}
       </div>
 
+      {data.subtitle && (
+        <div className="text-[11px] text-zinc-500 mt-0.5 font-normal">
+          {data.subtitle}
+        </div>
+      )}
+
       <div className="flex items-center justify-center gap-1.5 mt-2 nodrag nopan">
         <button
           type="button"

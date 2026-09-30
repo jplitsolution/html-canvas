@@ -2,15 +2,11 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Plus, ShieldAlert } from 'lucide-react'
 import { useEditor } from '../context/EditorContext'
 import { insertFunnelPart, validateFunnelPage } from '../utils/funnelGuide'
-import { setDcbEditorPreview } from '../../services/flow/dcbStageUi'
 
 export function FunnelGuideBanner({ pageType }) {
   const { editor, verificationMode } = useEditor()
   const [expanded, setExpanded] = useState(false)
   const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType, verificationMode))
-  const [dcbPreview, setDcbPreview] = useState('number')
-  const isOtpPage = String(pageType || '').toUpperCase() === 'OTP'
-  const isDcb = String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB'
 
   useEffect(() => {
     if (!editor || !pageType) return
@@ -59,13 +55,6 @@ export function FunnelGuideBanner({ pageType }) {
     }
   }, [editor, pageType, verificationMode])
 
-  useEffect(() => {
-    if (!editor || !isOtpPage) return undefined
-    const apply = () => setDcbEditorPreview(editor, dcbPreview)
-    apply()
-    editor.on('canvas:frame:load', apply)
-    return () => editor.off('canvas:frame:load', apply)
-  }, [editor, isOtpPage, dcbPreview])
 
   const { guide, ok, missing } = status
   if (!pageType || !guide) return null
@@ -106,29 +95,6 @@ export function FunnelGuideBanner({ pageType }) {
                 ? 'Tap ▼ to see what you can change vs. must keep'
                 : 'Tap ▼ for tips — this page is fully customizable'}
           </p>
-          {isOtpPage && (
-            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
-              <span className="text-[11px] font-medium text-fg-muted mr-0.5">Steps:</span>
-              {[
-                { id: 'number', label: isDcb ? '1. Enter number' : '1. Enter number' },
-                { id: 'pin', label: isDcb ? '2. Enter PIN after pack' : '2. Verify OTP' },
-                { id: 'all', label: 'Show all (Edit)' },
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setDcbPreview(opt.id)}
-                  className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors ${
-                    dcbPreview === opt.id
-                      ? 'bg-accent text-white'
-                      : 'bg-bg-elevated border border-border text-fg-muted hover:text-fg'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          )}
 
           {!ok && (
             <div className="mt-1.5">

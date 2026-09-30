@@ -19,8 +19,12 @@ export function campaignDetailPath(countryCode, operatorCode, campaignId) {
   return `${marketPath(countryCode, operatorCode)}/campaigns/${campaignId}`
 }
 
-export function campaignEditPath(countryCode, operatorCode, campaignId, pageType) {
+export function campaignEditPath(countryCode, operatorCode, campaignId, pageType, query = null) {
   const base = campaignDetailPath(countryCode, operatorCode, campaignId)
+  if (query && typeof query === 'object' && Object.keys(query).length > 0) {
+    const qs = new URLSearchParams(query).toString()
+    return `${base}/edit/${pageType}?${qs}`
+  }
   return `${base}/edit/${pageType}`
 }
 

@@ -196,26 +196,30 @@ export const bothPages = {
       <h1 class="both-flow-title">Verify Mobile Number</h1>
       <p class="both-flow-subtitle">We couldn't detect your mobile line automatically. Please enter your number to receive an SMS verification code.</p>
 
-      <div class="both-flow-field-group">
-        <label class="both-flow-label">Mobile Number</label>
-        <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" class="both-flow-input" />
+      <div data-otp-step="1" class="both-step-1">
+        <div class="both-flow-field-group">
+          <label class="both-flow-label">Mobile Number</label>
+          <input data-otp-field="phone" inputmode="numeric" placeholder="e.g. 919876543210" class="both-flow-input" />
+        </div>
+
+        <button type="button" data-otp-action="send" class="both-flow-btn" style="margin-bottom:16px;">
+          Get OTP
+        </button>
       </div>
 
-      <button type="button" data-otp-action="send" class="both-flow-btn" style="margin-bottom:16px;">
-        Get OTP
-      </button>
+      <div data-otp-step="2" class="both-step-2">
+        <div class="both-flow-field-group">
+          <label class="both-flow-label">Enter OTP</label>
+          <input data-otp-field="otp" inputmode="numeric" placeholder="Enter code" class="both-flow-input" />
+        </div>
 
-      <div class="both-flow-field-group">
-        <label class="both-flow-label">Enter OTP</label>
-        <input data-otp-field="otp" inputmode="numeric" placeholder="Enter code" class="both-flow-input" />
+        <div data-otp-slot="error" class="both-error-slot"></div>
+        <div data-otp-slot="status" class="both-status-slot"></div>
+
+        <button type="button" data-otp-action="verify" class="both-flow-btn">
+          Verify &amp; Continue
+        </button>
       </div>
-
-      <div data-otp-slot="error" class="both-error-slot"></div>
-      <div data-otp-slot="status" class="both-status-slot"></div>
-
-      <button type="button" data-otp-action="verify" class="both-flow-btn">
-        Verify &amp; Continue
-      </button>
 
       <p class="both-footnote">You'll receive a one-time code via SMS on {{operator}}.</p>
     </div>

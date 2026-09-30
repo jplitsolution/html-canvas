@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useStore from '../store/useStore'
 import { PAGE_TYPE_LABELS, getCampaignPagePreviewUrl } from '../services/api/campaigns'
 import Button from '../components/ui/Button'
@@ -22,6 +22,8 @@ function BuilderFallback() {
 
 export default function CampaignBuilder() {
   const { id, pageType, countryCode: routeCountry, operatorCode: routeOperator } = useParams()
+  const [searchParams] = useSearchParams()
+  const step = searchParams.get('step')
   const navigate = useNavigate()
   const campaign = useStore((s) => s.campaign)
   const campaignPage = useStore((s) => s.campaignPage)
@@ -50,10 +52,16 @@ export default function CampaignBuilder() {
   }, [id, pageType, loadCampaignPage])
 
   const verificationMode = String(campaign?.verificationMode || '').toUpperCase()
-  const pageLabel =
-    verificationMode === 'UNIVERSE_DCB' && String(pageType || '').toUpperCase() === 'OTP'
-      ? 'Number then PIN'
-      : PAGE_TYPE_LABELS[pageType] || pageType
+  let pageLabel = PAGE_TYPE_LABELS[pageType] || pageType
+  if (String(pageType || '').toUpperCase() === 'OTP') {
+    if (step === 'number') {
+      pageLabel = 'Mobile Number'
+    } else if (step === 'otp' || step === 'pin') {
+      pageLabel = verificationMode === 'UNIVERSE_DCB' ? 'Confirm PIN' : 'Verify OTP'
+    } else if (verificationMode === 'UNIVERSE_DCB') {
+      pageLabel = 'Number then PIN'
+    }
+  }
   const { countryCode, operatorCode } = resolveMarketCodes(
     { countryCode: routeCountry, operatorCode: routeOperator },
     campaign,
@@ -153,6 +161,7 @@ export default function CampaignBuilder() {
           onSave={handleEditorSave}
           onPreview={handlePreview}
           saveHandler={saveHandler}
+          step={step}
         />
       </Suspense>
     </div>

@@ -36,6 +36,7 @@ import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils
 import { safeGetWrapper, getComp } from './utils/editorUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
 import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, HOTSPOT_RESIZABLE, freezeHotspotToPixels } from './utils/overlayStacking'
+import { setDcbEditorPreview } from '../services/flow/dcbStageUi'
 
 export default function TemplateEditor({
   projectId,
@@ -54,6 +55,7 @@ export default function TemplateEditor({
   onDirtyChange,
   onPreview,
   saveHandler,
+  step,
 }) {
   const containerRef = useRef(null)
   const editorRef = useRef(null)
@@ -911,6 +913,10 @@ export default function TemplateEditor({
         console.error('Failed to heal CSS rules:', e);
       }
 
+      if (String(funnelPageType || '').toUpperCase() === 'OTP') {
+        setDcbEditorPreview(ed, step || 'number')
+      }
+
       requestAnimationFrame(() => {
         ensureBlockManagerMounted(ed)
         filterBlockElements(ed, 'sections', '')
@@ -954,6 +960,9 @@ export default function TemplateEditor({
         ensureAllTextEditable(ed)
         injectStylesheetsIntoCanvas(ed)
         syncCanvasFrameHeight(ed)
+        if (String(funnelPageType || '').toUpperCase() === 'OTP') {
+          setDcbEditorPreview(ed, step || 'number')
+        }
       }, delay)
     })
 
@@ -980,6 +989,21 @@ export default function TemplateEditor({
       if (lMount) lMount.innerHTML = ''
     }
   }, [projectId])
+
+  useEffect(() => {
+    if (!editor || String(funnelPageType || '').toUpperCase() !== 'OTP') return undefined
+    const currentStep = step || 'number'
+    const apply = () => setDcbEditorPreview(editor, currentStep)
+    apply()
+    editor.on('canvas:frame:load', apply)
+    editor.on('canvas:ready', apply)
+    editor.on('component:mount', apply)
+    return () => {
+      editor.off('canvas:frame:load', apply)
+      editor.off('canvas:ready', apply)
+      editor.off('component:mount', apply)
+    }
+  }, [editor, funnelPageType, step])
 
   const contextValue = {
     editor,

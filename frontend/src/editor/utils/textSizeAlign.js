@@ -163,13 +163,17 @@ function syncFlowButtonDom(el, minHeightPx, width = '100%') {
   el.style.minHeight = `${minHeightPx}px`
   el.style.boxSizing = 'border-box'
   // inline-flex + align-self so parent flex stretch cannot force full row width
-  el.style.display = 'inline-flex'
+  if (el.style.display !== 'none') {
+    el.style.display = 'inline-flex'
+  }
   el.style.alignItems = 'center'
   el.style.justifyContent = 'center'
   el.style.alignSelf = custom ? 'center' : 'stretch'
   el.style.flexShrink = '0'
   el.style.overflow = 'visible'
-  el.style.visibility = 'visible'
+  if (el.style.visibility !== 'hidden') {
+    el.style.visibility = 'visible'
+  }
   if (el.style.opacity === '0') el.style.opacity = '1'
   el.style.top = ''
   el.style.left = ''

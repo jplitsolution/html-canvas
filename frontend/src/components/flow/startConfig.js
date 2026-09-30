@@ -52,19 +52,59 @@ export function normalizeStartConfig(raw, mode) {
   }
 }
 
-/** Strip START/END from persisted page graph (they are visual + startConfig only). */
+/** Strip START/END and fold visual OTP split nodes back into the single persisted page graph. */
 export function stripMetaNodes(flowConfig) {
   if (!flowConfig) return flowConfig
-  const nodes = (flowConfig.nodes || []).filter((n) => !isMetaPageType(n.pageType) && !isMetaNodeId(n.id))
-  const nodeIds = new Set(nodes.map((n) => n.id))
-  const edges = (flowConfig.edges || []).filter(
-    (e) => nodeIds.has(e.source) && nodeIds.has(e.target) && !isMetaNodeId(e.source) && !isMetaNodeId(e.target)
+  let nodes = (flowConfig.nodes || []).filter((n) => !isMetaPageType(n.pageType) && !isMetaNodeId(n.id))
+  let edges = (flowConfig.edges || []).filter(
+    (e) => !isMetaNodeId(e.source) && !isMetaNodeId(e.target)
   )
-  return { ...flowConfig, nodes, edges }
+
+  const hasOtpSplit = nodes.some((n) => n.id === 'OTP_NUMBER' || n.id === 'OTP_VERIFY')
+  if (hasOtpSplit) {
+    const otpNumberNode = nodes.find((n) => n.id === 'OTP_NUMBER')
+    const otpVerifyNode = nodes.find((n) => n.id === 'OTP_VERIFY')
+    const remainingNodes = nodes.filter((n) => n.id !== 'OTP_NUMBER' && n.id !== 'OTP_VERIFY')
+    const pos = otpNumberNode?.position || otpVerifyNode?.position || { x: 260, y: 160 }
+    nodes = [...remainingNodes, { id: 'OTP', pageType: 'OTP', position: pos }]
+
+    edges = edges
+      .filter(
+        (e) =>
+          !(
+            (e.source === 'OTP_NUMBER' && e.target === 'OTP_VERIFY') ||
+            (e.source === 'OTP_VERIFY' && e.target === 'OTP_NUMBER')
+          )
+      )
+      .map((e) => {
+        const source = e.source === 'OTP_NUMBER' || e.source === 'OTP_VERIFY' ? 'OTP' : e.source
+        const target = e.target === 'OTP_NUMBER' || e.target === 'OTP_VERIFY' ? 'OTP' : e.target
+        return { ...e, source, target }
+      })
+
+    const seenEdges = new Set()
+    edges = edges.filter((e) => {
+      const key = `${e.source}->${e.target}:${e.condition || 'DEFAULT'}`
+      if (seenEdges.has(key)) return false
+      seenEdges.add(key)
+      return true
+    })
+  }
+
+  const nodeIds = new Set(nodes.map((n) => n.id))
+  edges = edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target))
+
+  let entryPage = flowConfig.entryPage
+  if (entryPage === 'OTP_NUMBER' || entryPage === 'OTP_VERIFY') {
+    entryPage = 'OTP'
+  }
+
+  return { ...flowConfig, entryPage, nodes, edges }
 }
 
 /**
- * Inject visual START → entry and outcome → END for the React Flow canvas.
+ * Inject visual START → entry and outcome → END for the React Flow canvas,
+ * and visually split the OTP page into Mobile Number and Verify OTP screens.
  * Does not mutate the saved page graph shape used by flow-engine nextPage().
  */
 export function withVisualStartEnd(flowConfig, startConfig, mode) {
@@ -88,8 +128,72 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
     }
   }
 
-  const entryNode = (base.nodes || []).find((n) => n.pageType === entry)
-  const entryId = entryNode?.id || entry
+  const dcbMode = String(mode || '').toUpperCase() === 'UNIVERSE_DCB'
+  const otpNode = (base.nodes || []).find((n) => n.pageType === 'OTP')
+  const shouldSplitOtp = Boolean(otpNode && !dcbMode)
+
+  let workingNodes = [...(base.nodes || [])]
+  let workingEdges = [...(base.edges || [])]
+
+  if (shouldSplitOtp) {
+    const otpNumberNode = {
+      id: 'OTP_NUMBER',
+      pageType: 'OTP',
+      step: 'number',
+      label: 'Mobile Number',
+      subtitle: 'Enter mobile number',
+      position: { ...(otpNode.position || { x: 260, y: 160 }) },
+      kind: 'page',
+    }
+    const otpVerifyNode = {
+      id: 'OTP_VERIFY',
+      pageType: 'OTP',
+      step: 'otp',
+      label: 'Verify OTP',
+      subtitle: 'Enter SMS code',
+      position: {
+        x: Math.max((otpNode.position?.x || 260) + 220, 480),
+        y: otpNode.position?.y || 160,
+      },
+      kind: 'page',
+    }
+
+    const otherNodes = workingNodes
+      .filter((n) => n.id !== otpNode.id)
+      .map((n) => {
+        const px = n.position?.x || 0
+        if (px >= (otpNode.position?.x || 260) && px < otpVerifyNode.position.x + 180) {
+          return {
+            ...n,
+            position: { x: Math.max(px, otpVerifyNode.position.x + 200), y: n.position?.y || 160 },
+          }
+        }
+        return n
+      })
+
+    workingNodes = [otpNumberNode, otpVerifyNode, ...otherNodes]
+
+    workingEdges = workingEdges.map((e) => {
+      let source = e.source
+      let target = e.target
+      if (source === otpNode.id || source === 'OTP') source = 'OTP_VERIFY'
+      if (target === otpNode.id || target === 'OTP') target = 'OTP_NUMBER'
+      return { ...e, source, target }
+    })
+
+    workingEdges.push({
+      id: 'OTP_NUMBER-OTP_sent-OTP_VERIFY',
+      source: 'OTP_NUMBER',
+      target: 'OTP_VERIFY',
+      condition: 'OTP sent',
+    })
+  }
+
+  const entryNode = workingNodes.find((n) => n.pageType === entry || n.id === entry)
+  const entryId =
+    shouldSplitOtp && (entry === 'OTP' || entry === otpNode?.id)
+      ? 'OTP_NUMBER'
+      : entryNode?.id || entry
   const entryPos = entryNode?.position || { x: 40, y: 160 }
 
   const startNode = {
@@ -105,21 +209,19 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
     kind: 'end',
   }
 
-  const dcbMode = String(mode || '').toUpperCase() === 'UNIVERSE_DCB'
   const outcomeTypes = new Set(
     dcbMode
       ? ['THANKYOU', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       : ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
   )
-  const outcomeNodes = (base.nodes || []).filter((n) => outcomeTypes.has(n.pageType))
+  const outcomeNodes = workingNodes.filter((n) => outcomeTypes.has(n.pageType))
   if (outcomeNodes.length) {
     const avgY = outcomeNodes.reduce((s, n) => s + (n.position?.y || 160), 0) / outcomeNodes.length
     const maxX = Math.max(...outcomeNodes.map((n) => n.position?.x || 880), 880)
     endNode.position = { x: maxX + 200, y: avgY }
   }
 
-  const otpNode = (base.nodes || []).find((n) => n.pageType === 'OTP')
-  const homeNode = (base.nodes || []).find((n) => n.pageType === 'HOME')
+  const homeNode = workingNodes.find((n) => n.pageType === 'HOME')
   const extraEdges =
     dcbMode && otpNode
       ? [
@@ -160,7 +262,7 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
   return {
     ...base,
     startConfig: normalizeStartConfig(startConfig ?? base.startConfig, mode),
-    nodes: [startNode, ...(base.nodes || []), endNode],
-    edges: [...(base.edges || []), ...extraEdges],
+    nodes: [startNode, ...workingNodes, endNode],
+    edges: [...workingEdges, ...extraEdges],
   }
 }

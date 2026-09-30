@@ -75,12 +75,17 @@ function toRfNodes(flowConfig, startConfig, mode) {
       position: n.position || { x: 0, y: 0 },
       deletable: !isMeta,
       data: {
-        label: isMeta
-          ? n.pageType
-          : mode === 'UNIVERSE_DCB'
-            ? dcbPageLabel(n.pageType)
-            : PAGE_TYPE_LABELS[n.pageType] || n.pageType,
+        label:
+          n.label ||
+          (isMeta
+            ? n.pageType
+            : mode === 'UNIVERSE_DCB'
+              ? dcbPageLabel(n.pageType)
+              : PAGE_TYPE_LABELS[n.pageType] || n.pageType),
+        subtitle: n.subtitle,
         pageType: n.pageType,
+        step: n.step,
+        editQuery: n.step ? { step: n.step } : undefined,
         kind: n.kind || (n.pageType === 'START' ? 'start' : n.pageType === 'END' ? 'end' : 'page'),
         startConfig: isMeta && n.pageType === 'START' ? visual.startConfig : undefined,
       },
@@ -267,6 +272,47 @@ function CampaignFlowBuilder({
     (pageType) => {
       if (existingPageTypes.has(pageType)) return
       const offset = nodes.length * 30
+      if (pageType === 'OTP' && mode !== 'UNIVERSE_DCB') {
+        setNodes((nds) => [
+          ...nds,
+          {
+            id: 'OTP_NUMBER',
+            type: 'pageNode',
+            position: { x: 120 + offset, y: 120 + offset },
+            data: {
+              label: 'Mobile Number',
+              subtitle: 'Enter mobile number',
+              pageType: 'OTP',
+              step: 'number',
+              editQuery: { step: 'number' },
+            },
+          },
+          {
+            id: 'OTP_VERIFY',
+            type: 'pageNode',
+            position: { x: 340 + offset, y: 120 + offset },
+            data: {
+              label: 'Verify OTP',
+              subtitle: 'Enter SMS code',
+              pageType: 'OTP',
+              step: 'otp',
+              editQuery: { step: 'otp' },
+            },
+          },
+        ])
+        setEdges((eds) => [
+          ...eds,
+          {
+            id: `OTP_NUMBER-OTP_sent-OTP_VERIFY-${Date.now()}`,
+            source: 'OTP_NUMBER',
+            target: 'OTP_VERIFY',
+            label: 'OTP sent',
+            animated: true,
+            data: { condition: 'OTP sent' },
+          },
+        ])
+        return
+      }
       setNodes((nds) => [
         ...nds,
         {
@@ -277,13 +323,27 @@ function CampaignFlowBuilder({
         },
       ])
     },
-    [existingPageTypes, nodes.length, setNodes],
+    [existingPageTypes, nodes.length, setNodes, setEdges, mode],
   )
 
   const removeNode = useCallback(
     (nodeId) => {
       if (isMetaNodeId(nodeId)) {
         addToast('START and END cannot be removed', 'error')
+        return
+      }
+      if (nodeId === 'OTP_NUMBER' || nodeId === 'OTP_VERIFY') {
+        const otpIds = new Set(['OTP_NUMBER', 'OTP_VERIFY', 'OTP'])
+        setNodes((nds) => nds.filter((n) => !otpIds.has(n.id)))
+        setEdges((eds) => eds.filter((e) => !otpIds.has(e.source) && !otpIds.has(e.target)))
+        setSelectedNodeId(null)
+        if (entryPage === 'OTP') {
+          const remaining = nodes.filter(
+            (n) => !otpIds.has(n.id) && !isMetaPageType(n.data?.pageType),
+          )
+          setEntryPage(remaining[0]?.data?.pageType || 'HOME')
+        }
+        addToast('OTP pages removed from flow', 'success')
         return
       }
       const removed = nodes.find((n) => n.id === nodeId)
@@ -319,9 +379,9 @@ function CampaignFlowBuilder({
   )
 
   const editNode = useCallback(
-    (pageType) => {
+    (pageType, query) => {
       if (isMetaPageType(pageType)) return
-      navigate(campaignEditPath(countryCode, operatorCode, campaignId, pageType))
+      navigate(campaignEditPath(countryCode, operatorCode, campaignId, pageType, query))
     },
     [campaignId, navigate, countryCode, operatorCode],
   )
@@ -333,9 +393,11 @@ function CampaignFlowBuilder({
         selected: n.id === selectedNodeId,
         data: {
           ...n.data,
-          isEntry: n.data.pageType === entryPage,
+          isEntry:
+            (entryPage === 'OTP' && (n.id === 'OTP_NUMBER' || n.data.step === 'number')) ||
+            (n.id !== 'OTP_VERIFY' && n.data.pageType === entryPage),
           startConfig: n.id === START_NODE_ID ? startConfig : n.data.startConfig,
-          onEdit: () => editNode(n.data.pageType),
+          onEdit: () => editNode(n.data.pageType, n.data.editQuery),
           onDelete: () => removeNode(n.id),
         },
       })),
