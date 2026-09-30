@@ -9,9 +9,8 @@ export function FunnelGuideBanner({ pageType }) {
   const [expanded, setExpanded] = useState(false)
   const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType, verificationMode))
   const [dcbPreview, setDcbPreview] = useState('number')
-  const isDcbOtp =
-    String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB' &&
-    String(pageType || '').toUpperCase() === 'OTP'
+  const isOtpPage = String(pageType || '').toUpperCase() === 'OTP'
+  const isDcb = String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB'
 
   useEffect(() => {
     if (!editor || !pageType) return
@@ -61,12 +60,12 @@ export function FunnelGuideBanner({ pageType }) {
   }, [editor, pageType, verificationMode])
 
   useEffect(() => {
-    if (!editor || !isDcbOtp) return undefined
+    if (!editor || !isOtpPage) return undefined
     const apply = () => setDcbEditorPreview(editor, dcbPreview)
     apply()
     editor.on('canvas:frame:load', apply)
     return () => editor.off('canvas:frame:load', apply)
-  }, [editor, isDcbOtp, dcbPreview])
+  }, [editor, isOtpPage, dcbPreview])
 
   const { guide, ok, missing } = status
   if (!pageType || !guide) return null
@@ -107,11 +106,13 @@ export function FunnelGuideBanner({ pageType }) {
                 ? 'Tap ▼ to see what you can change vs. must keep'
                 : 'Tap ▼ for tips — this page is fully customizable'}
           </p>
-          {isDcbOtp && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+          {isOtpPage && (
+            <div className="mt-2 flex flex-wrap gap-1.5 items-center">
+              <span className="text-[11px] font-medium text-fg-muted mr-0.5">Steps:</span>
               {[
-                { id: 'number', label: '1. Enter number' },
-                { id: 'pin', label: '2. Enter PIN after pack' },
+                { id: 'number', label: isDcb ? '1. Enter number' : '1. Enter number' },
+                { id: 'pin', label: isDcb ? '2. Enter PIN after pack' : '2. Verify OTP' },
+                { id: 'all', label: 'Show all (Edit)' },
               ].map((opt) => (
                 <button
                   key={opt.id}

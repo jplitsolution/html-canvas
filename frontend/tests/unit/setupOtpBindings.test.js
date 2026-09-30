@@ -172,4 +172,115 @@ describe('setupOtpBindings after OTP verify', () => {
     })
     expect(shadow.querySelector('[data-otp-slot="error"]').textContent).toBe('')
   })
+
+  it('runs 2-step flow: step 1 enters phone, step 2 enters OTP and verifies', async () => {
+    document.body.innerHTML = `
+      <div id="host">
+        <div class="field-phone">
+          <input data-otp-field="phone" value="962791234567" />
+        </div>
+        <button type="button" data-otp-action="send">Get OTP</button>
+        <div class="field-otp">
+          <input data-otp-field="otp" value="" />
+        </div>
+        <button type="button" data-otp-action="verify">Verify & Continue</button>
+        <div data-otp-slot="error"></div>
+        <div data-otp-slot="status"></div>
+      </div>
+    `
+    const host = document.getElementById('host')
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = host.innerHTML
+    host.innerHTML = ''
+
+    const { sendOtp } = await import('../../src/services/api/otp')
+    sendOtp.mockResolvedValueOnce({ success: true, devOtpCode: '9999' })
+    verifyOtp.mockResolvedValueOnce({ success: true })
+
+    const transitionFlow = vi.fn().mockResolvedValueOnce({
+      pageType: 'HOME',
+      html: '<div>home</div>',
+    })
+
+    setupOtpBindings(shadow, {
+      transitionFlow,
+      cachePage: vi.fn(),
+      loadPage: vi.fn(),
+      country: 'Jordan',
+      operator: 'Zain',
+      campid: '31',
+      trackingCampid: 'JO-ZA-31',
+      visitIdRef: { current: 1234 },
+      phoneRef: { current: '962791234567' },
+      packRef: { current: 'daily' },
+      setPhone: vi.fn(),
+      setTransitioning: vi.fn(),
+      setError: vi.fn(),
+      pageCacheRef: { current: new Map() },
+      transitionLockRef: { current: false },
+    })
+
+    const phoneField = shadow.querySelector('.field-phone')
+    const otpField = shadow.querySelector('.field-otp')
+    const sendBtn = shadow.querySelector('[data-otp-action="send"]')
+    const verifyBtn = shadow.querySelector('[data-otp-action="verify"]')
+
+    // Initially Step 1: Phone visible, OTP hidden
+    expect(phoneField.hidden).toBe(false)
+    expect(sendBtn.hidden).toBe(false)
+    expect(otpField.hidden).toBe(true)
+    expect(verifyBtn.hidden).toBe(true)
+
+    // Send OTP
+    sendBtn.click()
+
+    await vi.waitFor(() => {
+      // Step 2 should now be visible, Step 1 hidden
+      expect(phoneField.hidden).toBe(true)
+      expect(sendBtn.hidden).toBe(true)
+      expect(otpField.hidden).toBe(false)
+      expect(verifyBtn.hidden).toBe(false)
+    })
+
+    // Click change phone button
+    const changeBtn = shadow.querySelector('[data-otp-action="change-phone"]')
+    expect(changeBtn).not.toBeNull()
+    changeBtn.click()
+
+    // Back to Step 1
+    expect(phoneField.hidden).toBe(false)
+    expect(sendBtn.hidden).toBe(false)
+    expect(otpField.hidden).toBe(true)
+    expect(verifyBtn.hidden).toBe(true)
+
+    // Re-send OTP to go back to Step 2
+    sendOtp.mockResolvedValueOnce({ success: true, devOtpCode: '9999' })
+    sendBtn.click()
+
+    await vi.waitFor(() => {
+      expect(otpField.hidden).toBe(false)
+      expect(verifyBtn.hidden).toBe(false)
+    })
+
+    // Fill OTP and verify
+    shadow.querySelector('[data-otp-field="otp"]').value = '9999'
+    verifyBtn.click()
+
+    await vi.waitFor(() => {
+      expect(verifyOtp).toHaveBeenCalledWith(
+        expect.objectContaining({
+          phone: '962791234567',
+          otp: '9999',
+          visitId: 1234,
+        }),
+      )
+      expect(transitionFlow).toHaveBeenCalledWith(
+        expect.objectContaining({
+          fromPage: 'OTP',
+          action: 'CONTINUE',
+          phone: '962791234567',
+        }),
+      )
+    })
+  })
 })

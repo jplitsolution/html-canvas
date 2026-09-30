@@ -8,19 +8,29 @@ const NUMBER_PREVIEW_CSS = `
 [data-dcb-stage="pin"],
 [data-dcb-action="confirm-pin"],
 [data-otp-action="verify"],
+[data-otp-step="2"],
+.otp-step-2,
+.otp-resend-row,
+.otp-step2-actions,
 :has(> [data-dcb-field="pin"]),
 :has(> [data-otp-field="otp"]),
 :has(> [data-field="otp"]),
-:has(> [data-field="pin"]) { display: none !important; }
+:has(> [data-field="pin"]),
+[class*="field-group"]:has([data-otp-field="otp"]),
+[class*="field-group"]:has([data-dcb-field="pin"]) { display: none !important; }
 `
 
 const PIN_PREVIEW_CSS = `
 [data-dcb-stage="number"],
 [data-dcb-action="manual-check"],
 [data-otp-action="send"],
+[data-otp-step="1"],
+.otp-step-1,
 :has(> [data-dcb-field="phone"]),
 :has(> [data-otp-field="phone"]),
-:has(> [data-field="phone"]) { display: none !important; }
+:has(> [data-field="phone"]),
+[class*="field-group"]:has([data-otp-field="phone"]),
+[class*="field-group"]:has([data-dcb-field="phone"]) { display: none !important; }
 `
 
 function query(root, selector) {
@@ -132,13 +142,19 @@ export function applyDcbStageUi(root, stage, { phoneInput, pinInput } = {}) {
 export function setDcbEditorPreview(editor, mode) {
   const doc = editor?.Canvas?.getDocument?.()
   if (!doc) return
-  doc.body.classList.remove('dcb-preview-number', 'dcb-preview-pin')
-  doc.body.classList.add(mode === 'pin' ? 'dcb-preview-pin' : 'dcb-preview-number')
+  doc.body.classList.remove('dcb-preview-number', 'dcb-preview-pin', 'dcb-preview-all')
+  if (mode === 'all') {
+    doc.body.classList.add('dcb-preview-all')
+    const style = doc.getElementById(DCB_OTP_PREVIEW_STYLE_ID)
+    if (style) style.textContent = ''
+    return
+  }
+  doc.body.classList.add(mode === 'pin' || mode === 'otp' ? 'dcb-preview-pin' : 'dcb-preview-number')
   let style = doc.getElementById(DCB_OTP_PREVIEW_STYLE_ID)
   if (!style) {
     style = doc.createElement('style')
     style.id = DCB_OTP_PREVIEW_STYLE_ID
     doc.head.appendChild(style)
   }
-  style.textContent = mode === 'pin' ? PIN_PREVIEW_CSS : NUMBER_PREVIEW_CSS
+  style.textContent = mode === 'pin' || mode === 'otp' ? PIN_PREVIEW_CSS : NUMBER_PREVIEW_CSS
 }

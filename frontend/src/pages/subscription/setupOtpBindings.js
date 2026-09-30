@@ -69,6 +69,165 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
     setSlotText(errorSlot, 'Maximum resend attempts reached. Please try again later.', true)
   }
 
+  const isTwoStepOtp = Boolean(phoneInput && otpInput && sendBtn && verifyBtn)
+
+  const findContainer = (el, otherSelector) => {
+    if (!el) return null
+    const stage = el.closest?.('[data-otp-step], [data-dcb-stage]')
+    if (stage) return stage
+    const parent = el.parentElement
+    if (parent && !parent.querySelector(otherSelector)) {
+      return parent
+    }
+    return el
+  }
+
+  const phoneBlock = findContainer(phoneInput, '[data-otp-field="otp"], [data-field="otp"]')
+  const otpBlock = findContainer(otpInput, '[data-otp-field="phone"], [data-field="phone"]')
+  const existingResendRow = shadow.querySelector('.otp-resend-row')
+
+  let changeNumberBtn = shadow.querySelector('[data-otp-action="change-phone"]')
+  let step2Footer = shadow.querySelector('.otp-step2-actions')
+
+  if (isTwoStepOtp && !changeNumberBtn && verifyBtn && verifyBtn.parentNode) {
+    step2Footer = document.createElement('div')
+    step2Footer.className = 'otp-step2-actions'
+    step2Footer.style.cssText =
+      'display:flex;align-items:center;justify-content:space-between;margin-top:14px;font-size:12.5px;gap:8px;'
+
+    changeNumberBtn = document.createElement('button')
+    changeNumberBtn.type = 'button'
+    changeNumberBtn.setAttribute('data-otp-action', 'change-phone')
+    changeNumberBtn.textContent = '← Change number'
+    changeNumberBtn.style.cssText =
+      'background:none;border:none;color:#059669;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;text-decoration:underline;'
+
+    const resendBtn = document.createElement('button')
+    resendBtn.type = 'button'
+    resendBtn.className = 'otp-resend-link'
+    resendBtn.textContent = 'Resend code'
+    resendBtn.style.cssText =
+      'background:none;border:none;color:#64748b;font-size:12.5px;font-weight:600;cursor:pointer;padding:0;'
+
+    step2Footer.appendChild(changeNumberBtn)
+    step2Footer.appendChild(resendBtn)
+    verifyBtn.insertAdjacentElement('afterend', step2Footer)
+
+    resendBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      if (!resendBtn.disabled && !isSending) {
+        handleSendClick(e)
+      }
+    })
+  }
+
+  const inlineResendBtn = step2Footer?.querySelector?.('.otp-resend-link') || null
+
+  let currentStep = 1
+
+  const setStep = (step) => {
+    if (!isTwoStepOtp) return
+    currentStep = step
+    if (step === 1) {
+      if (phoneBlock) {
+        phoneBlock.hidden = false
+        phoneBlock.style.display = ''
+      }
+      if (sendBtn) {
+        sendBtn.hidden = false
+        sendBtn.style.display = ''
+      }
+      if (otpBlock) {
+        otpBlock.hidden = true
+        otpBlock.style.display = 'none'
+      }
+      if (verifyBtn) {
+        verifyBtn.hidden = true
+        verifyBtn.style.display = 'none'
+      }
+      if (step2Footer) {
+        step2Footer.hidden = true
+        step2Footer.style.display = 'none'
+      }
+      if (existingResendRow) {
+        existingResendRow.hidden = true
+        existingResendRow.style.display = 'none'
+      }
+    } else if (step === 2) {
+      if (phoneBlock) {
+        phoneBlock.hidden = true
+        phoneBlock.style.display = 'none'
+      }
+      if (sendBtn) {
+        sendBtn.hidden = true
+        sendBtn.style.display = 'none'
+      }
+      if (otpBlock) {
+        otpBlock.hidden = false
+        otpBlock.style.display = ''
+      }
+      if (verifyBtn) {
+        verifyBtn.hidden = false
+        verifyBtn.style.display = ''
+      }
+      if (step2Footer) {
+        step2Footer.hidden = false
+        step2Footer.style.display = 'flex'
+      }
+      if (existingResendRow) {
+        existingResendRow.hidden = false
+        existingResendRow.style.display = ''
+      }
+      if (otpInput) {
+        setTimeout(() => otpInput.focus?.(), 50)
+      }
+    }
+  }
+
+  const handleChangePhone = (e) => {
+    if (e && typeof e.preventDefault === 'function') e.preventDefault()
+    if (timer) {
+      clearInterval(timer)
+      timer = null
+    }
+    setStep(1)
+    setSlotText(errorSlot, '')
+    setSlotText(statusSlot, '')
+    if (sendBtn && resendAttempts < 5) {
+      sendBtn.disabled = false
+      sendBtn.style.opacity = '1'
+      sendBtn.textContent = 'Get OTP'
+    }
+    if (phoneInput) {
+      phoneInput.focus?.()
+    }
+  }
+
+  if (changeNumberBtn) {
+    changeNumberBtn.addEventListener('click', handleChangePhone)
+  }
+
+  if (isTwoStepOtp) {
+    if (initialResendAttempts > 0) {
+      setStep(2)
+    } else {
+      setStep(1)
+    }
+  }
+
+  const updateCountdown = (text, disabled) => {
+    if (sendBtn) {
+      sendBtn.textContent = text
+      sendBtn.disabled = disabled
+    }
+    if (inlineResendBtn) {
+      inlineResendBtn.textContent = text
+      inlineResendBtn.disabled = disabled
+      inlineResendBtn.style.opacity = disabled ? '0.6' : '1'
+      inlineResendBtn.style.cursor = disabled ? 'not-allowed' : 'pointer'
+    }
+  }
+
   const handleSendClick = async (e) => {
     if (e && typeof e.preventDefault === 'function') e.preventDefault()
     if (isSending) return
@@ -163,6 +322,8 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       }
       setSlotText(statusSlot, successText)
 
+      setStep(2)
+
       // Increment resend attempts
       resendAttempts += 1
       try {
@@ -181,36 +342,43 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
           sendBtn.style.opacity = '0.5'
           sendBtn.textContent = 'Limit Exceeded'
         }
+        if (inlineResendBtn) {
+          inlineResendBtn.disabled = true
+          inlineResendBtn.textContent = 'Limit Exceeded'
+        }
         setSlotText(errorSlot, 'Maximum resend attempts reached. Please try again later.', true)
         return
       }
 
       // Start Resend countdown timer (30s)
       let seconds = 30
-      if (sendBtn) {
-        sendBtn.disabled = true
-        timer = setInterval(() => {
-          seconds -= 1
-          if (seconds <= 0) {
-            clearInterval(timer)
-            if (resendAttempts < 5) {
-              sendBtn.disabled = false
+      updateCountdown(`Resend in ${seconds}s`, true)
+      timer = setInterval(() => {
+        seconds -= 1
+        if (seconds <= 0) {
+          clearInterval(timer)
+          if (resendAttempts < 5) {
+            updateCountdown('Resend code', false)
+            if (sendBtn) {
               sendBtn.style.opacity = '1'
               sendBtn.textContent = 'Get OTP'
             }
-            setSlotText(statusSlot, '')
-          } else {
-            sendBtn.textContent = `Resend in ${seconds}s`
           }
-        }, 1000)
-      }
+          setSlotText(statusSlot, '')
+        } else {
+          updateCountdown(`Resend in ${seconds}s`, true)
+        }
+      }, 1000)
     } catch (err) {
       setSlotText(statusSlot, '')
       setSlotText(errorSlot, err.message, true)
-      if (sendBtn && resendAttempts < 5) {
-        sendBtn.disabled = false
-        sendBtn.style.opacity = '1'
-        sendBtn.textContent = 'Get OTP'
+      if (resendAttempts < 5) {
+        updateCountdown('Resend code', false)
+        if (sendBtn) {
+          sendBtn.disabled = false
+          sendBtn.style.opacity = '1'
+          sendBtn.textContent = 'Get OTP'
+        }
       }
     } finally {
       isSending = false
@@ -365,6 +533,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
     if (verifyBtn) verifyBtn.removeEventListener('click', handleVerifyClick)
     if (otpInput) otpInput.removeEventListener('input', handleOtpInput)
     if (phoneInput) phoneInput.removeEventListener('input', handlePhoneInput)
+    if (changeNumberBtn) changeNumberBtn.removeEventListener('click', handleChangePhone)
   }
 }
 
