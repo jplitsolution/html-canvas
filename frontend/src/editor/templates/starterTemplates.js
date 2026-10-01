@@ -441,24 +441,40 @@ body {
   border-radius: 16px;
   height: 52px;
   margin: 0 auto 16px;
-  padding: 0 16px;
+  padding: 0;
   overflow: hidden;
   box-sizing: border-box;
   transition: border-color 0.15s, box-shadow 0.15s;
+  direction: ltr;
 }
 .wjo-phone-wrap:focus-within {
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+.wjo-country-code {
+  background: #f0f4ff;
+  color: #4f46e5;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 0 14px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1.5px solid #dce0ee;
+  user-select: none;
+  flex-shrink: 0;
+  direction: ltr;
 }
 .wjo-phone-input {
   width: 100%;
   height: 100%;
   border: none;
   outline: none;
-  padding: 0;
-  font-size: 19px;
+  padding: 0 14px;
+  font-size: 18px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   color: #1e1b4b;
   background: transparent;
   text-align: center;
@@ -594,9 +610,11 @@ const wellnessJoOtpHtml = `
       </div>
 
       <div class="wjo-phone-wrap">
+        <span class="wjo-country-code" data-country-code="+962">+962</span>
         <input
           class="wjo-phone-input"
           data-otp-field="phone"
+          data-country-code="+962"
           data-input-restriction="numbers"
           data-min-length="7"
           data-max-length="10"

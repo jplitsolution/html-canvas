@@ -1,6 +1,30 @@
 import { sendOtp, verifyOtp } from '../../services/api/otp'
-import { persistPhone, resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
+import {
+  formatMsisdnWithCountryCode,
+  normalizeMsisdn,
+  persistPhone,
+  resolvePhoneFromStorage,
+} from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
+
+export function getCountryCodeFromDom(phoneInput, shadow) {
+  if (phoneInput) {
+    const attr =
+      phoneInput.getAttribute('data-country-code') ||
+      phoneInput.getAttribute('data-phone-prefix')
+    if (attr && attr.trim()) return attr.trim()
+  }
+  if (shadow) {
+    const badge = shadow.querySelector(
+      '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .country-code',
+    )
+    if (badge) {
+      const val = badge.getAttribute('data-country-code') || badge.textContent || ''
+      if (val && val.trim()) return val.trim()
+    }
+  }
+  return ''
+}
 
 function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef, transitionLockRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
@@ -113,24 +137,34 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   }
   let resendAttempts = initialResendAttempts
 
-  // Country-code dropdown disabled for now — campaign country isn't mapped to a
-  // dial code yet, so auto-prepending +91 (etc.) produces wrong MSISDNs.
-  // User enters the full number they want to use (local or with country code).
+  const countryCode = getCountryCodeFromDom(phoneInput, shadow)
 
   if (phoneInput) {
-    if (phoneRef?.current) {
-      phoneInput.value = phoneRef.current
-    } else {
-      const fromStorage = resolvePhoneFromStorage()
-      if (fromStorage) {
-        phoneInput.value = fromStorage
-        if (phoneRef) phoneRef.current = fromStorage
-        if (setPhone) setPhone(fromStorage)
+    const initialPhone = phoneRef?.current || resolvePhoneFromStorage() || ''
+    if (initialPhone) {
+      if (phoneRef) phoneRef.current = initialPhone
+      if (setPhone) setPhone(initialPhone)
+      const cleanCode = normalizeMsisdn(countryCode)
+      const hasVisibleBadge = Boolean(
+        shadow.querySelector(
+          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge',
+        ),
+      )
+      if (
+        hasVisibleBadge &&
+        cleanCode &&
+        initialPhone.startsWith(cleanCode) &&
+        initialPhone.length > cleanCode.length + 4
+      ) {
+        phoneInput.value = initialPhone.slice(cleanCode.length)
+      } else {
+        phoneInput.value = initialPhone
       }
     }
   }
 
   const handlePhoneInput = (e) => {
+    setErrorText('')
     let val = e.target.value.trim().replace(/\D/g, '')
     const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
     const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
@@ -140,9 +174,11 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
     if (e.target.value !== val) {
       e.target.value = val
     }
-    if (phoneRef) phoneRef.current = val
-    if (setPhone) setPhone(val)
-    if (val) persistPhone(val)
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const fullMsisdn = formatMsisdnWithCountryCode(val, activeCountryCode)
+    if (phoneRef) phoneRef.current = fullMsisdn
+    if (setPhone) setPhone(fullMsisdn)
+    if (fullMsisdn) persistPhone(fullMsisdn)
   }
 
   // Check if limit already exceeded on mount
@@ -285,6 +321,23 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       sendBtn.textContent = 'Get OTP'
     }
     if (phoneInput) {
+      const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+      const cleanCode = normalizeMsisdn(activeCountryCode)
+      const hasVisibleBadge = Boolean(
+        shadow.querySelector(
+          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge',
+        ),
+      )
+      if (
+        hasVisibleBadge &&
+        cleanCode &&
+        phoneRef?.current?.startsWith(cleanCode) &&
+        phoneRef.current.length > cleanCode.length + 4
+      ) {
+        phoneInput.value = phoneRef.current.slice(cleanCode.length)
+      } else if (phoneRef?.current) {
+        phoneInput.value = phoneRef.current
+      }
       phoneInput.focus?.()
     }
   }
@@ -338,20 +391,31 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
 
     const minAttr = phoneInput?.getAttribute('minlength') || phoneInput?.getAttribute('data-min-length')
     const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
-    if (Number.isFinite(min) && min > 0 && cleanBasePhone.length < min) {
+    const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const cleanCountryDigits = normalizeMsisdn(activeCountryCode)
+    const alreadyHasCountryCode = Boolean(
+      cleanCountryDigits && cleanBasePhone.startsWith(cleanCountryDigits)
+    )
+    const effectiveMin =
+      alreadyHasCountryCode && Number.isFinite(min) ? min + cleanCountryDigits.length : min
+    const effectiveMax =
+      alreadyHasCountryCode && Number.isFinite(max) ? max + cleanCountryDigits.length : max
+
+    if (Number.isFinite(effectiveMin) && effectiveMin > 0 && cleanBasePhone.length < effectiveMin) {
       setSlotText(errorSlot, `Mobile number must be at least ${min} digits`, true)
       return
     }
 
-    const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
-    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
-    if (Number.isFinite(max) && max > 0 && cleanBasePhone.length > max) {
+    if (Number.isFinite(effectiveMax) && effectiveMax > 0 && cleanBasePhone.length > effectiveMax) {
       setSlotText(errorSlot, `Mobile number cannot exceed ${max} digits`, true)
       return
     }
 
-    // Use number as entered — do not invent a country code.
-    const msisdn = cleanBasePhone
+    // Attach country code prefix to mobile number before sending
+    const msisdn = formatMsisdnWithCountryCode(cleanBasePhone, activeCountryCode)
     
     setSlotText(errorSlot, '')
     setSlotText(statusSlot, 'Sending verification code...')
@@ -495,7 +559,12 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       resolvePhoneFromStorage() ||
       ''
     const cleanBasePhone = basePhone.replace(/\D/g, '')
-    const msisdn = cleanBasePhone || phoneRef?.current || resolvePhoneFromStorage() || ''
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const msisdn =
+      formatMsisdnWithCountryCode(cleanBasePhone, activeCountryCode) ||
+      phoneRef?.current ||
+      resolvePhoneFromStorage() ||
+      ''
     const code = otpInput ? otpInput.value.trim() : ''
 
     if (!msisdn) {

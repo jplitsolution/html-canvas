@@ -10,6 +10,7 @@ vi.mock('../../src/services/flow/safaricomHe', () => ({
 
 import {
   normalizeMsisdn,
+  formatMsisdnWithCountryCode,
   resolvePhoneNumber,
   pickHeFailRedirectUrl,
   isHeRedirectUrl,
@@ -185,5 +186,29 @@ describe('MSISDN & Operator Header Resolution', () => {
     )
     expect(url).toContain('ext_id=clk-1')
     expect(url).toContain('m=2547')
+  })
+
+  describe('formatMsisdnWithCountryCode', () => {
+    it('prepends country code to local phone number', () => {
+      expect(formatMsisdnWithCountryCode('791234567', '+962')).toBe('962791234567')
+      expect(formatMsisdnWithCountryCode('9876543210', '+91')).toBe('919876543210')
+      expect(formatMsisdnWithCountryCode('56864685', '226')).toBe('22656864685')
+    })
+
+    it('strips leading national zero before prepending country code', () => {
+      expect(formatMsisdnWithCountryCode('0791234567', '+962')).toBe('962791234567')
+      expect(formatMsisdnWithCountryCode('09876543210', '+91')).toBe('919876543210')
+    })
+
+    it('does not double-prepend when number already has country code', () => {
+      expect(formatMsisdnWithCountryCode('962791234567', '+962')).toBe('962791234567')
+      expect(formatMsisdnWithCountryCode('+919876543210', '+91')).toBe('919876543210')
+    })
+
+    it('returns raw clean digits when country code is empty or missing', () => {
+      expect(formatMsisdnWithCountryCode('56864685', '')).toBe('56864685')
+      expect(formatMsisdnWithCountryCode('56864685', null)).toBe('56864685')
+      expect(formatMsisdnWithCountryCode('', '+962')).toBe('')
+    })
   })
 })

@@ -12,9 +12,13 @@ vi.mock('../../src/services/api/otp', () => ({
   verifyOtp: vi.fn(),
 }))
 
-vi.mock('../../src/services/flow/resolvePhoneNumber', () => ({
-  persistPhone: vi.fn(),
-}))
+vi.mock('../../src/services/flow/resolvePhoneNumber', async (importOriginal) => {
+  const actual = await importOriginal()
+  return {
+    ...actual,
+    persistPhone: vi.fn(),
+  }
+})
 
 import { checkDcbMsisdn, confirmDcbPincode, sendDcbPincode } from '../../src/services/api/dcb'
 import { sendOtp, verifyOtp } from '../../src/services/api/otp'

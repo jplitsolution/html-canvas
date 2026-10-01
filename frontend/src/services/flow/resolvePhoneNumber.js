@@ -21,6 +21,30 @@ export function normalizeMsisdn(value) {
   return String(value).replace(/\D/g, '')
 }
 
+/**
+ * Resolves full MSISDN with country code prefix if configured.
+ * Prepend country code (e.g. 962 + 791234567 -> 962791234567).
+ * Avoids double-prepending if user already typed the full number.
+ * Strips leading national zero (e.g. 0791234567 -> 962791234567).
+ */
+export function formatMsisdnWithCountryCode(rawPhone, countryCode) {
+  const cleanPhone = normalizeMsisdn(rawPhone)
+  if (!cleanPhone) return ''
+  const cleanCode = normalizeMsisdn(countryCode)
+  if (!cleanCode) return cleanPhone
+
+  if (cleanPhone.startsWith(cleanCode) && cleanPhone.length > cleanCode.length + 4) {
+    return cleanPhone
+  }
+
+  const withoutLeadingZero = cleanPhone.replace(/^0+/, '')
+  if (withoutLeadingZero.startsWith(cleanCode) && withoutLeadingZero.length > cleanCode.length + 4) {
+    return withoutLeadingZero
+  }
+
+  return `${cleanCode}${withoutLeadingZero}`
+}
+
 export function resolvePhoneFromUrl(searchParams) {
   if (!searchParams) return ''
   for (const key of URL_KEYS) {

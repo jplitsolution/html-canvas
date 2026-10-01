@@ -1,7 +1,8 @@
 import { checkDcbMsisdn, confirmDcbPincode, getDcbConfig, sendDcbPincode } from '../../services/api/dcb'
 import { sendOtp, verifyOtp } from '../../services/api/otp'
-import { persistPhone } from '../../services/flow/resolvePhoneNumber'
+import { formatMsisdnWithCountryCode, persistPhone } from '../../services/flow/resolvePhoneNumber'
 import { applyDcbStageUi } from '../../services/flow/dcbStageUi'
+import { getCountryCodeFromDom } from './setupOtpBindings'
 
 const DCB_STAGES = new Set([
   'MANUAL_MSISDN',
@@ -253,7 +254,9 @@ function setupDcbBindings(
   const handleManualCheck = (event) => {
     event.preventDefault()
     event.stopImmediatePropagation()
-    const phone = String(phoneInput?.value || phoneRef.current || '').replace(/\D/g, '')
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const rawVal = String(phoneInput?.value || phoneRef.current || '').replace(/\D/g, '')
+    const phone = formatMsisdnWithCountryCode(rawVal, activeCountryCode)
     if (!phone) {
       setSlot(errorSlot, 'Please enter a valid mobile number', true)
       return
@@ -378,7 +381,9 @@ function setupDcbBindings(
   const handleAuthSend = (event) => {
     event.preventDefault()
     event.stopImmediatePropagation()
-    const phone = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const rawVal = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    const phone = formatMsisdnWithCountryCode(rawVal, activeCountryCode)
     if (!phone) {
       setSlot(errorSlot, 'Please enter a valid mobile number', true)
       return
@@ -386,14 +391,14 @@ function setupDcbBindings(
 
     const minAttr = phoneInput?.getAttribute('minlength') || phoneInput?.getAttribute('data-min-length')
     const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
-    if (Number.isFinite(min) && min > 0 && phone.length < min) {
+    if (Number.isFinite(min) && min > 0 && rawVal.length < min) {
       setSlot(errorSlot, `Mobile number must be at least ${min} digits`, true)
       return
     }
 
     const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
     const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
-    if (Number.isFinite(max) && max > 0 && phone.length > max) {
+    if (Number.isFinite(max) && max > 0 && rawVal.length > max) {
       setSlot(errorSlot, `Mobile number cannot exceed ${max} digits`, true)
       return
     }
@@ -407,7 +412,9 @@ function setupDcbBindings(
   const handleAuthVerify = (event) => {
     event.preventDefault()
     event.stopImmediatePropagation()
-    const phone = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    const activeCountryCode = getCountryCodeFromDom(phoneInput, shadow)
+    const rawVal = String(phoneRef.current || phoneInput?.value || '').replace(/\D/g, '')
+    const phone = formatMsisdnWithCountryCode(rawVal, activeCountryCode)
     const otp = String(pinInput?.value || '').trim()
     if (!otp) {
       setSlot(errorSlot, 'Please enter the OTP', true)
