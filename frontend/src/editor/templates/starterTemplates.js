@@ -354,7 +354,289 @@ const wellnessOtpHtml = `
 </div>
 `
 
+const wellnessJoOtpCss = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: transparent;
+  color: #1e1b4b;
+  -webkit-font-smoothing: antialiased;
+}
+.wjo-container {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  background: radial-gradient(circle at 50% 25%, #4c4270 0%, #2f274c 55%, #1c1732 100%);
+  direction: rtl;
+}
+.wjo-card {
+  width: 100%;
+  max-width: 390px;
+  background: #ffffff;
+  border-radius: 38px;
+  padding: 32px 22px 24px;
+  text-align: center;
+  box-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.45);
+}
+.wjo-logo {
+  display: block;
+  margin: 0 auto 16px;
+  width: 110px;
+  height: auto;
+}
+.wjo-illustration {
+  display: block;
+  margin: 0 auto 18px;
+  width: 250px;
+  max-width: 100%;
+  height: auto;
+}
+.wjo-title-wrap {
+  margin-bottom: 20px;
+}
+.wjo-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2e264e;
+  line-height: 1.45;
+  margin-bottom: 10px;
+}
+.wjo-divider {
+  position: relative;
+  width: 140px;
+  height: 8px;
+  margin: 0 auto;
+  background: radial-gradient(ellipse at 50% 50%, rgba(99, 102, 241, 0.35) 0%, transparent 70%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wjo-divider-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #6366f1;
+  box-shadow: 0 0 10px rgba(99, 102, 241, 0.7);
+}
+.wjo-phone-wrap {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1.5px solid #dce0ee;
+  border-radius: 16px;
+  height: 52px;
+  margin-bottom: 16px;
+  overflow: hidden;
+  direction: ltr;
+}
+.wjo-country-code {
+  background: #f0f4ff;
+  color: #3b82f6;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 0 16px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1.5px solid #dce0ee;
+  user-select: none;
+}
+.wjo-phone-input {
+  flex: 1;
+  border: none;
+  outline: none;
+  padding: 0 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #1e1b4b;
+  background: transparent;
+  text-align: right;
+  direction: rtl;
+  font-family: inherit;
+}
+.wjo-phone-input::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+.wjo-pin-pill {
+  display: inline-block;
+  padding: 7px 22px;
+  background: #ffffff;
+  border: 1.5px solid #dce0ee;
+  border-radius: 12px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+}
+.wjo-otp-wrap {
+  margin-bottom: 18px;
+  display: flex;
+  justify-content: center;
+}
+.wjo-otp-input {
+  width: 100%;
+  max-width: 280px;
+  height: 54px;
+  background: #ffffff;
+  border: 2px solid #6366f1;
+  border-radius: 16px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.35em;
+  color: #1e1b4b;
+  outline: none;
+  font-family: inherit;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+.wjo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 52px;
+  background: linear-gradient(135deg, #6366f1 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 18px;
+  font-size: 17.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(109, 40, 217, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+  margin-bottom: 16px;
+  font-family: inherit;
+}
+.wjo-btn:hover {
+  box-shadow: 0 10px 26px rgba(109, 40, 217, 0.45);
+  transform: translateY(-1px);
+}
+.wjo-btn:active {
+  transform: scale(0.985);
+}
+.wjo-resend-row {
+  margin: -6px 0 16px;
+  text-align: center;
+}
+.wjo-resend-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #6366f1;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  font-family: inherit;
+}
+.wjo-error {
+  min-height: 18px;
+  color: #ef4444;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.wjo-status {
+  min-height: 18px;
+  color: #10b981;
+  font-size: 12.5px;
+  font-weight: 600;
+  margin-bottom: 10px;
+  text-align: center;
+}
+.wjo-disclaimer {
+  font-size: 10.5px;
+  line-height: 1.65;
+  color: #64748b;
+  text-align: justify;
+  text-align-last: center;
+  margin: 0;
+  padding-top: 4px;
+  font-weight: 400;
+  direction: rtl;
+}
+`
+
+const wellnessJoOtpHtml = `
+<div class="wjo-container">
+  <div class="wjo-card">
+    <img src="/templates/wellness-jo/logo.png" alt="Wellness 360" class="wjo-logo" />
+    <img src="/templates/wellness-jo/illustration.png" alt="Fitness Illustration" class="wjo-illustration" />
+
+    <div data-otp-step="1" class="wjo-step-1">
+      <div class="wjo-title-wrap">
+        <h2 class="wjo-title">أدخل رقم هاتفك لبدء رحلتك في عالم اللياقة البدنية</h2>
+        <div class="wjo-divider"><span class="wjo-divider-dot"></span></div>
+      </div>
+
+      <div class="wjo-phone-wrap">
+        <span class="wjo-country-code">+962</span>
+        <input
+          class="wjo-phone-input"
+          data-otp-field="phone"
+          type="tel"
+          inputmode="numeric"
+          placeholder="أدخل رقم الهاتف المحمول (من 7 إلى 9 أرقام)"
+          dir="rtl"
+        />
+      </div>
+
+      <div data-otp-slot="error" class="wjo-error"></div>
+      <div data-otp-slot="status" class="wjo-status"></div>
+
+      <button type="button" data-otp-action="send" class="wjo-btn">اشترك</button>
+    </div>
+
+    <div data-otp-step="2" class="wjo-step-2">
+      <div class="wjo-pin-pill">أدخل الرقم السري</div>
+
+      <div class="wjo-otp-wrap">
+        <input
+          class="wjo-otp-input"
+          data-otp-field="otp"
+          type="text"
+          inputmode="numeric"
+          maxlength="5"
+          placeholder="• • • • •"
+          autocomplete="one-time-code"
+        />
+      </div>
+
+      <div class="wjo-resend-row">
+        <button type="button" data-otp-action="send" class="wjo-resend-btn">إعادة إرسال الرمز</button>
+      </div>
+
+      <div data-otp-slot="error" class="wjo-error"></div>
+      <div data-otp-slot="status" class="wjo-status"></div>
+
+      <button type="button" data-otp-action="verify" class="wjo-btn">تأكيد</button>
+    </div>
+
+    <p class="wjo-disclaimer">
+      مرحبًا بك في منصة Wellness360 هي منصة رقمية للصحة والعافية مدعومة بالذكاء الاصطناعي، وتوفر خدمات اللياقة البدنية، واليوغا، والتأمل، والزومبا، ومحتوى مخصصًا للعافية، بالإضافة إلى مدرب لياقة بدنية يعمل بالذكاء الاصطناعي. سعر الخدمة 0.25 دينار أردني / يومياً ويتم تجديد الاشتراك تلقائيًا. لإلغاء الاشتراك في أي وقت عن طريق الرسائل القصيرة بإرسال u25 إلى 98860 لمشتركي أورانج من خلال الاشتراك في الخدمة، فإنك تقبل جميع الشروط والأحكام وتوافق على مشاركة معلوماتك مع مزود الخدمة. للاستفادة من هذه الخدمة، يجب أن يكون عمرك أكثر من 18 عامًا أو أنك حصلت على إذن من والديك أو الشخص المفوض بدفع فاتورتك.
+    </p>
+  </div>
+</div>
+`
+
 export const OTP_STARTER_TEMPLATES = [
+  {
+    id: 'otp-wellness-jo',
+    name: 'Wellness 360 (Jordan / Arabic)',
+    description: 'Orange Jordan Wellness 360 Arabic 2-step OTP verification with +962 phone entry and 5-digit PIN.',
+    thumb: 'contact',
+    previewImage: '/templates/wellness-jo/logo.png',
+    css: wellnessJoOtpCss,
+    html: wellnessJoOtpHtml,
+  },
   {
     id: 'otp-wellness',
     name: 'Wellness 360 (Orange BF)',
