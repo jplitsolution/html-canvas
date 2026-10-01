@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useStore from '../store/useStore'
 import { PAGE_TYPE_LABELS, getCampaignPagePreviewUrl } from '../services/api/campaigns'
+import { orangeBfPageLabel } from '../components/flow/CampaignFlowBuilder'
 import Button from '../components/ui/Button'
 import { saveCampaignPage } from '../editor/services/saveCampaignPage'
 import { validateFunnelPage } from '../editor/utils/funnelGuide'
@@ -53,7 +54,9 @@ export default function CampaignBuilder() {
 
   const verificationMode = String(campaign?.verificationMode || '').toUpperCase()
   let pageLabel = PAGE_TYPE_LABELS[pageType] || pageType
-  if (String(pageType || '').toUpperCase() === 'OTP') {
+  if (verificationMode === 'ORANGE_BF') {
+    pageLabel = orangeBfPageLabel(pageType)
+  } else if (String(pageType || '').toUpperCase() === 'OTP') {
     if (step === 'number') {
       pageLabel = 'Mobile Number'
     } else if (step === 'otp' || step === 'pin') {

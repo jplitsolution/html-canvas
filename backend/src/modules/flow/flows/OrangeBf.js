@@ -39,12 +39,12 @@ export default {
       entryPage: CampaignPageType.HOME,
       startConfig: { ...this.startConfig },
       nodes: [
-        node(CampaignPageType.HOME, 160, 180),
-        node(CampaignPageType.CONFIRM, 380, 180),
-        node(CampaignPageType.OTP, 600, 180),
-        outcomeNode(CampaignPageType.THANKYOU, 40),
-        outcomeNode(CampaignPageType.BLOCKED, 160),
-        outcomeNode(CampaignPageType.ERROR, 280),
+        node(CampaignPageType.HOME, 200, 180),
+        node(CampaignPageType.CONFIRM, 460, 180),
+        node(CampaignPageType.OTP, 720, 180),
+        node(CampaignPageType.THANKYOU, 980, 180),
+        node(CampaignPageType.BLOCKED, 980, 300),
+        node(CampaignPageType.ERROR, 980, 420),
       ],
       edges: [
         edge(CampaignPageType.HOME, CampaignPageType.CONFIRM, 'SUBSCRIBE'),

@@ -11,7 +11,7 @@ import {
   useEdgesState,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Link2, Plus, Save, Trash2, Pencil, Lock, Unlock } from 'lucide-react'
+import { Link2, Plus, Save, Trash2, Pencil, Lock, Unlock, RefreshCw } from 'lucide-react'
 import Button from '../ui/Button'
 import PageNode from './PageNode'
 import StartEndNode from './StartEndNode'
@@ -63,26 +63,72 @@ function dcbPageLabel(pageType) {
   return PAGE_TYPE_LABELS[pageType] || pageType
 }
 
+export function orangeBfPageLabel(pageType) {
+  if (pageType === 'HOME') return 'Enter PIN / Number'
+  if (pageType === 'CONFIRM') return 'Confirm / Plan'
+  if (pageType === 'OTP') return 'Verify PIN / OTP'
+  if (pageType === 'THANKYOU') return 'Thank you'
+  return PAGE_TYPE_LABELS[pageType] || pageType
+}
+
+export function orangeBfPageSubtitle(pageType) {
+  if (pageType === 'HOME') return 'Enter mobile number'
+  if (pageType === 'CONFIRM') return 'Plan details & subscribe'
+  if (pageType === 'OTP') return 'Enter SMS OTP code'
+  if (pageType === 'THANKYOU') return 'Funnel finished'
+  return undefined
+}
+
 function toRfNodes(flowConfig, startConfig, mode) {
+  const isDcb = mode === 'UNIVERSE_DCB'
+  const isOrangeBf = mode === 'ORANGE_BF'
   const source =
-    mode === 'UNIVERSE_DCB' ? applyUniverseDcbGraphLayout(flowConfig) : flowConfig
+    isDcb ? applyUniverseDcbGraphLayout(flowConfig) : flowConfig
   const visual = withVisualStartEnd(source, startConfig, mode)
   return (visual.nodes || []).map((n) => {
     const isMeta = isMetaPageType(n.pageType)
+    let label = n.label
+    let subtitle = n.subtitle
+    if (
+      !label ||
+      (isOrangeBf &&
+        !isMeta &&
+        (label === 'Home' ||
+          label === 'Confirm' ||
+          label === 'OTP' ||
+          label === 'Mobile Number' ||
+          label === 'Verify OTP'))
+    ) {
+      if (isMeta) {
+        label = n.pageType
+      } else if (isDcb) {
+        label = dcbPageLabel(n.pageType)
+      } else if (isOrangeBf) {
+        label = orangeBfPageLabel(n.pageType)
+      } else {
+        label = PAGE_TYPE_LABELS[n.pageType] || n.pageType
+      }
+    }
+    if (
+      !subtitle ||
+      (isOrangeBf &&
+        !isMeta &&
+        (subtitle === 'Edit opens the HTML canvas' ||
+          subtitle === 'Enter mobile number' ||
+          subtitle === 'Enter SMS code'))
+    ) {
+      if (isOrangeBf && !isMeta) {
+        subtitle = orangeBfPageSubtitle(n.pageType)
+      }
+    }
     return {
       id: n.id,
       type: isMeta ? 'startEndNode' : 'pageNode',
       position: n.position || { x: 0, y: 0 },
       deletable: !isMeta,
       data: {
-        label:
-          n.label ||
-          (isMeta
-            ? n.pageType
-            : mode === 'UNIVERSE_DCB'
-              ? dcbPageLabel(n.pageType)
-              : PAGE_TYPE_LABELS[n.pageType] || n.pageType),
-        subtitle: n.subtitle,
+        label,
+        subtitle,
         pageType: n.pageType,
         step: n.step,
         editQuery: n.step ? { step: n.step } : undefined,
@@ -122,6 +168,8 @@ function CampaignFlowBuilder({
   const addToast = useStore((s) => s.addToast)
   const loadCampaignFlow = useStore((s) => s.loadCampaignFlow)
   const saveCampaignFlow = useStore((s) => s.saveCampaignFlow)
+  const applyCampaignDefaults = useStore((s) => s.applyCampaignDefaults)
+  const [resettingPages, setResettingPages] = useState(false)
 
   const [nodes, setNodes, onNodesChange] = useNodesState([])
   const [edges, setEdges, onEdgesChange] = useEdgesState([])
@@ -160,6 +208,25 @@ function CampaignFlowBuilder({
     applyFlowTemplate(mode, entryPage, afterIdentity)
     addToast('Flow graph reset to default template', 'success')
   }, [mode, entryPage, afterIdentity, applyFlowTemplate, addToast, isLocked])
+
+  const handleResetPages = useCallback(async () => {
+    if (
+      !window.confirm(
+        'Are you sure you want to reset all campaign pages to their default templates? Your clicks, vendor tracking, and traffic logs will NOT be deleted.',
+      )
+    ) {
+      return
+    }
+    setResettingPages(true)
+    try {
+      await applyCampaignDefaults(campaignId)
+      addToast('Pages reset to default templates successfully', 'success')
+    } catch (err) {
+      addToast(err.message || 'Failed to reset pages', 'error')
+    } finally {
+      setResettingPages(false)
+    }
+  }, [campaignId, applyCampaignDefaults, addToast])
 
   const handleModeChange = useCallback(
     (newMode) => {
@@ -272,7 +339,7 @@ function CampaignFlowBuilder({
     (pageType) => {
       if (existingPageTypes.has(pageType)) return
       const offset = nodes.length * 30
-      if (pageType === 'OTP' && mode !== 'UNIVERSE_DCB') {
+      if (pageType === 'OTP' && mode !== 'UNIVERSE_DCB' && mode !== 'ORANGE_BF') {
         setNodes((nds) => [
           ...nds,
           {
@@ -319,7 +386,14 @@ function CampaignFlowBuilder({
           id: pageType,
           type: 'pageNode',
           position: { x: 120 + offset, y: 120 + offset },
-          data: { label: PAGE_TYPE_LABELS[pageType] || pageType, pageType },
+          data: {
+            label:
+              mode === 'ORANGE_BF'
+                ? orangeBfPageLabel(pageType)
+                : PAGE_TYPE_LABELS[pageType] || pageType,
+            subtitle: mode === 'ORANGE_BF' ? orangeBfPageSubtitle(pageType) : undefined,
+            pageType,
+          },
         },
       ])
     },
@@ -532,7 +606,10 @@ function CampaignFlowBuilder({
           `Start page "${PAGE_TYPE_LABELS[entryPage] || entryPage}" must be in the flow.`,
         )
       }
-      if ((mode === 'OTP_ONLY' || mode === 'BOTH' || mode === 'UNIVERSE_DCB') && !pageTypes.has('OTP')) {
+      if (
+        (mode === 'OTP_ONLY' || mode === 'BOTH' || mode === 'UNIVERSE_DCB' || mode === 'ORANGE_BF') &&
+        !pageTypes.has('OTP')
+      ) {
         clientErrors.push(`Verification mode "${mode}" requires an OTP page node.`)
       }
 
@@ -908,13 +985,25 @@ function CampaignFlowBuilder({
           </p>
         )}
 
-        <button
-          type="button"
-          className="inline-flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-border hover:border-fg-muted rounded-md text-xs font-medium text-fg-muted hover:text-fg transition-colors cursor-pointer"
-          onClick={handleResetFlow}
-        >
-          Reset layout to default for this mode
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 border border-dashed border-border hover:border-fg-muted rounded-md text-xs font-medium text-fg-muted hover:text-fg transition-colors cursor-pointer"
+            onClick={handleResetFlow}
+          >
+            Reset layout to default for this mode
+          </button>
+          <button
+            type="button"
+            disabled={resettingPages}
+            className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 border border-accent/40 bg-accent-muted/20 hover:bg-accent-muted/40 rounded-md text-xs font-medium text-accent hover:text-accent-hover transition-colors cursor-pointer disabled:opacity-50"
+            onClick={handleResetPages}
+            title="Reset all page HTML/CSS to default without deleting any clicks or logs"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${resettingPages ? 'animate-spin' : ''}`} />
+            {resettingPages ? 'Resetting pages…' : 'Reset pages to default'}
+          </button>
+        </div>
       </div>
 
       {errors.length > 0 && (
@@ -1047,7 +1136,7 @@ function CampaignFlowBuilder({
                   key: 'runHe',
                   label: 'Header enrichment (HE)',
                   hint: 'Resolve MSISDN before showing the first page',
-                  disabled: mode === 'OTP_ONLY' || isNullIdentityMode(mode),
+                  disabled: mode === 'OTP_ONLY' || mode === 'ORANGE_BF' || isNullIdentityMode(mode),
                 },
                 {
                   key: 'runBlocklist',
@@ -1238,7 +1327,7 @@ function CampaignFlowBuilder({
               {PAGE_TYPES.filter((pt) => !existingPageTypes.has(pt)).map((pt) => (
                 <Button key={pt} variant="outline" size="sm" onClick={() => addNode(pt)}>
                   <Plus className="w-3 h-3" />
-                  {PAGE_TYPE_LABELS[pt] || pt}
+                  {mode === 'ORANGE_BF' ? orangeBfPageLabel(pt) : PAGE_TYPE_LABELS[pt] || pt}
                 </Button>
               ))}
             </div>

@@ -82,6 +82,58 @@ describe('Flow Builder 2-Step OTP visual split', () => {
     expect(otpEdges.some((e) => e.target === 'ERROR' && e.condition === 'ERROR')).toBe(true)
   })
 
+  it('does NOT split OTP node for ORANGE_BF and retains single OTP node', () => {
+    const orangeBfFlow = {
+      version: 1,
+      entryPage: 'HOME',
+      startConfig: { runHe: false, runBlocklist: true, runChecksub: true },
+      nodes: [
+        { id: 'HOME', pageType: 'HOME', position: { x: 200, y: 180 } },
+        { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 460, y: 180 } },
+        { id: 'OTP', pageType: 'OTP', position: { x: 720, y: 180 } },
+        { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 980, y: 180 } },
+        { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 980, y: 300 } },
+        { id: 'ERROR', pageType: 'ERROR', position: { x: 980, y: 420 } },
+      ],
+      edges: [
+        { id: 'e1', source: 'HOME', target: 'CONFIRM', condition: 'SUBSCRIBE' },
+        { id: 'e2', source: 'CONFIRM', target: 'OTP', condition: 'OTP_SENT' },
+        { id: 'e3', source: 'CONFIRM', target: 'THANKYOU', condition: 'ACTIVE_SUBSCRIBER' },
+        { id: 'e4', source: 'OTP', target: 'THANKYOU', condition: 'OTP_VERIFIED' },
+        { id: 'e5', source: 'OTP', target: 'BLOCKED', condition: 'BLOCKED' },
+        { id: 'e6', source: 'OTP', target: 'ERROR', condition: 'ERROR' },
+      ],
+    }
+
+    const visual = withVisualStartEnd(orangeBfFlow, orangeBfFlow.startConfig, 'ORANGE_BF')
+    const nodeIds = visual.nodes.map((n) => n.id)
+
+    expect(nodeIds).toContain(START_NODE_ID)
+    expect(nodeIds).toContain('HOME')
+    expect(nodeIds).toContain('CONFIRM')
+    expect(nodeIds).toContain('OTP')
+    expect(nodeIds).toContain('THANKYOU')
+    expect(nodeIds).toContain('BLOCKED')
+    expect(nodeIds).toContain('ERROR')
+    expect(nodeIds).toContain(END_NODE_ID)
+
+    // Should NOT have split nodes
+    expect(nodeIds).not.toContain('OTP_NUMBER')
+    expect(nodeIds).not.toContain('OTP_VERIFY')
+
+    // START connects to HOME
+    const startEdge = visual.edges.find((e) => e.source === START_NODE_ID)
+    expect(startEdge.target).toBe('HOME')
+
+    // CONFIRM connects to OTP
+    const confirmEdge = visual.edges.find((e) => e.source === 'CONFIRM' && e.target === 'OTP')
+    expect(confirmEdge).toBeDefined()
+
+    // OTP connects to THANKYOU
+    const otpEdge = visual.edges.find((e) => e.source === 'OTP' && e.target === 'THANKYOU')
+    expect(otpEdge).toBeDefined()
+  })
+
   it('campaignEditPath formats step query param correctly', () => {
     const pathNumber = campaignEditPath('JO', 'ZA', '31', 'OTP', { step: 'number' })
     expect(pathNumber).toBe('/markets/JO/ZA/campaigns/31/edit/OTP?step=number')

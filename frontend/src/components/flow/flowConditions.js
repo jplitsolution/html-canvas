@@ -25,6 +25,9 @@ const CONDITION_LABELS = {
   MSISDN_RESOLVED: 'Header injection OK',
   MSISDN_UNRESOLVED: 'Header injection missing',
   OTP_VERIFIED: 'OTP verified',
+  OTP_SENT: 'OTP sent',
+  ACTIVE_SUBSCRIBER: 'Already subscribed',
+  SUBSCRIBE: 'Subscribe',
   MSISDN_CHECKED: 'then choose pack',
   PIN_REQUESTED: 'then enter PIN',
   PIN_CONFIRMED: 'then wait for activation',
@@ -42,6 +45,9 @@ export function conditionLabel(condition) {
 export function getValidConditions(sourcePageType, verificationMode) {
   switch (sourcePageType) {
     case 'HOME':
+      if (verificationMode === 'ORANGE_BF') {
+        return ['SUBSCRIBE', 'DEFAULT', 'BLOCKED', 'ERROR']
+      }
       if (verificationMode === 'UNIVERSE_DCB') {
         return ['PIN_REQUESTED', 'ENTITLED', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
       }
@@ -57,6 +63,9 @@ export function getValidConditions(sourcePageType, verificationMode) {
       }
       return ['DEFAULT', 'SUBSCRIBED', 'PENDING', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
     case 'OTP':
+      if (verificationMode === 'ORANGE_BF') {
+        return ['OTP_VERIFIED', 'DEFAULT', 'BLOCKED', 'ERROR']
+      }
       if (verificationMode === 'UNIVERSE_DCB') {
         return ['MSISDN_CHECKED', 'PIN_CONFIRMED', 'ERROR']
       }
@@ -67,6 +76,9 @@ export function getValidConditions(sourcePageType, verificationMode) {
       }
       return ['DEFAULT']
     case 'CONFIRM':
+      if (verificationMode === 'ORANGE_BF') {
+        return ['OTP_SENT', 'DEFAULT', 'ACTIVE_SUBSCRIBER', 'BLOCKED', 'ERROR']
+      }
       return ['SUBSCRIBED', 'BLOCKED', 'ERROR', 'DEFAULT']
     default:
       return ['DEFAULT']

@@ -183,12 +183,12 @@ export const DEFAULT_FLOWS = {
   ORANGE_BF: {
     entryPage: 'HOME',
     nodes: [
-      { id: 'HOME', pageType: 'HOME', position: { x: 140, y: 180 } },
-      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 380, y: 180 } },
-      { id: 'OTP', pageType: 'OTP', position: { x: 620, y: 180 } },
-      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 860, y: 180 } },
-      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 860, y: 300 } },
-      { id: 'ERROR', pageType: 'ERROR', position: { x: 860, y: 420 } },
+      { id: 'HOME', pageType: 'HOME', position: { x: 200, y: 180 } },
+      { id: 'CONFIRM', pageType: 'CONFIRM', position: { x: 460, y: 180 } },
+      { id: 'OTP', pageType: 'OTP', position: { x: 720, y: 180 } },
+      { id: 'THANKYOU', pageType: 'THANKYOU', position: { x: 980, y: 180 } },
+      { id: 'BLOCKED', pageType: 'BLOCKED', position: { x: 980, y: 300 } },
+      { id: 'ERROR', pageType: 'ERROR', position: { x: 980, y: 420 } },
     ],
     edges: [
       flowEdge('HOME', 'CONFIRM', 'SUBSCRIBE'),
@@ -417,6 +417,9 @@ const CONDITION_LABELS = {
   HEADER_RESOLVED: 'HE ok',
   HEADER_UNRESOLVED: 'no HE',
   OTP_VERIFIED: 'OTP ok',
+  OTP_SENT: 'OTP sent',
+  ACTIVE_SUBSCRIBER: 'already subscribed',
+  SUBSCRIBE: 'subscribe',
   MSISDN_CHECKED: 'then choose pack',
   PIN_REQUESTED: 'then enter PIN',
   PIN_CONFIRMED: 'then wait for activation',

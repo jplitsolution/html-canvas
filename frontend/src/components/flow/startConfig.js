@@ -27,6 +27,13 @@ export function defaultStartConfig(mode) {
       runChecksub: m === 'OTP_ONLY',
     }
   }
+  if (m === 'ORANGE_BF') {
+    return {
+      runHe: false,
+      runBlocklist: true,
+      runChecksub: true,
+    }
+  }
   if (m === 'UNIVERSE_DCB') {
     return {
       runHe: true,
@@ -129,8 +136,9 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
   }
 
   const dcbMode = String(mode || '').toUpperCase() === 'UNIVERSE_DCB'
+  const isOrangeBf = String(mode || '').toUpperCase() === 'ORANGE_BF'
   const otpNode = (base.nodes || []).find((n) => n.pageType === 'OTP')
-  const shouldSplitOtp = Boolean(otpNode && !dcbMode)
+  const shouldSplitOtp = Boolean(otpNode && !dcbMode && !isOrangeBf)
 
   let workingNodes = [...(base.nodes || [])]
   let workingEdges = [...(base.edges || [])]
@@ -212,7 +220,9 @@ export function withVisualStartEnd(flowConfig, startConfig, mode) {
   const outcomeTypes = new Set(
     dcbMode
       ? ['THANKYOU', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
-      : ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
+      : isOrangeBf
+        ? ['THANKYOU', 'BLOCKED', 'ERROR']
+        : ['THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
   )
   const outcomeNodes = workingNodes.filter((n) => outcomeTypes.has(n.pageType))
   if (outcomeNodes.length) {

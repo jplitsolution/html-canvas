@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Workflow, ArrowRight, GitBranch, Lock, Unlock } from 'lucide-react'
 import Button from '../ui/Button'
 import { PAGE_TYPE_LABELS } from '../../services/api/campaigns'
+import { orangeBfPageLabel } from './CampaignFlowBuilder'
 import {
   VERIFICATION_MODES,
   normalizeModeId,
@@ -130,7 +131,12 @@ function CampaignFlowSummary({ campaign, onSaveMode }) {
     }
   }
 
-  const labelFor = (pageType) => PAGE_TYPE_LABELS[pageType] || pageType
+  const labelFor = (pageType) => {
+    if (draftMode === 'ORANGE_BF') {
+      return orangeBfPageLabel(pageType)
+    }
+    return PAGE_TYPE_LABELS[pageType] || pageType
+  }
   const { countryCode, operatorCode } = resolveMarketCodes({}, campaign)
   const advancedPath = campaignFlowPath(countryCode, operatorCode, campaign?.id)
   const showOtpApiExposeDocs = draftMode === 'OTP_ONLY' && isApiExposeEntry(draftEntry)

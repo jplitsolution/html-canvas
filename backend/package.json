@@ -10,6 +10,7 @@
     "start": "node src/server.js",
     "start:dev": "node --watch src/server.js",
     "start:prod": "node src/server.js",
+    "db:tunnel": "ssh -N -p 9990 -L 5432:127.0.0.1:5432 root@93.127.138.73",
     "build": "node -e \"console.log('no build (plain JS)')\"",
     "db:setup": "node scripts/setup-db.mjs",
     "db:reset": "node scripts/reset-db.mjs",

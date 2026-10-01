@@ -711,20 +711,44 @@ export const createCampaignsService = () => {
   };
 
   const applyDefaultTemplates = async (id, userId, onlyEmpty = true) => {
-    const campaign = await findOne(id, userId);
+    const campaign = await getCampaignRepo().findOne({
+      where: { id: parseInt(id, 10) },
+      relations: {
+        pages: { template: true },
+        trackings: { vendor: true },
+        marketOperator: { country: true },
+      },
+    });
+    if (!campaign) {
+      const err = new Error(`Campaign with ID ${id} not found`);
+      err.statusCode = 404;
+      throw err;
+    }
+    if (campaign.userId !== userId) {
+      const err = new Error(
+        'You do not have permission to access this campaign',
+      );
+      err.statusCode = 403;
+      throw err;
+    }
 
-    for (const page of campaign.pages) {
+    await ensureCampaignPages(campaign);
+
+    for (const page of campaign.pages || []) {
       const hasContent = pageHasContent(page);
       if (onlyEmpty && hasContent) continue;
       if (!page.templateId) continue;
 
-      const template = await getTemplateRepo().findOne({
-        where: { id: page.templateId },
-      });
+      const template =
+        page.template ||
+        (await getTemplateRepo().findOne({
+          where: { id: page.templateId },
+        }));
       if (!template) continue;
 
       template.data = defaultPageData(page.pageType, campaign);
       await getTemplateRepo().save(template);
+      page.template = template;
     }
 
     await invalidateFlowCampaignCache(campaign);
