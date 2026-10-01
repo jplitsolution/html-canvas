@@ -1247,20 +1247,15 @@ function InputFieldControls({ selected, editor, update }) {
   };
 
   const handleCountryCodeChange = (val) => {
-    let formatted = String(val || '').trim();
-    if (formatted && !formatted.startsWith('+')) {
-      formatted = `+${formatted.replace(/\D/g, '')}`;
-    } else if (formatted.startsWith('+')) {
-      formatted = `+${formatted.slice(1).replace(/\D/g, '')}`;
-    }
-    if (!formatted || formatted === '+') {
+    const raw = String(val || '').trim();
+    if (!raw) {
       selected.removeAttributes('data-country-code');
       selected.removeAttributes('data-phone-prefix');
       removeBadgeFromCanvas();
     } else {
-      selected.addAttributes({ 'data-country-code': formatted });
+      selected.addAttributes({ 'data-country-code': raw });
       if (showBadge) {
-        syncBadgeInCanvas(formatted);
+        syncBadgeInCanvas(raw);
       }
     }
     update();
@@ -1316,17 +1311,17 @@ function InputFieldControls({ selected, editor, update }) {
 
           <div>
             <label className="text-[10px] font-medium text-gray-500 mb-1 block">
-              Dial Code (e.g. +91 or +962)
+              Dial Code (e.g. 91 or +91)
             </label>
             <input
               type="text"
               className={inputClass}
               value={countryCode}
-              placeholder="e.g. +91 or +962"
+              placeholder="e.g. 91 or +91"
               onChange={(e) => handleCountryCodeChange(e.target.value)}
             />
             <p className="text-[11px] text-fg-muted pt-1">
-              Prepends to mobile number when sending OTP (e.g. 791234567 → {countryCode || '+91'}791234567).
+              Prepends to mobile number when sending OTP (e.g. 791234567 → {countryCode || '91'}791234567).
             </p>
           </div>
 
