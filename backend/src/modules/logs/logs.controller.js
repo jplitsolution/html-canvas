@@ -13,6 +13,7 @@ const buildParams = (campaignId, query) => {
     from: query.from,
     to: query.to,
     eventType: query.eventType,
+    status: query.status,
     compareEvents: query.compareEvents,
     vendorId: query.vendorId ? Number(query.vendorId) : undefined,
     affiliateId: query.affiliateId ? Number(query.affiliateId) : undefined,

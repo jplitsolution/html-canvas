@@ -10,6 +10,7 @@ function buildQuery(params = {}) {
     'from',
     'to',
     'eventType',
+    'status',
     'vendorId',
     'affiliateId',
     'clickId',

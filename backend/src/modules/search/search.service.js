@@ -125,6 +125,7 @@ export const createSearchService = () => {
       filter.push({ term: { visitId: params.visitId } });
     }
     if (params.eventType) filter.push({ term: { eventType: params.eventType } });
+    if (params.status) filter.push({ term: { status: params.status } });
     if (params.vendorId) filter.push({ term: { vendorId: params.vendorId } });
     if (params.affiliateId)
       filter.push({ term: { affiliateId: params.affiliateId } });
@@ -198,6 +199,11 @@ export const createSearchService = () => {
     if (params.eventType && !options.ignoreEventType) {
       queryBuilder.andWhere('event.eventType = :eventType', {
         eventType: params.eventType,
+      });
+    }
+    if (params.status) {
+      queryBuilder.andWhere('visit.visitStatus = :status', {
+        status: params.status,
       });
     }
     if (params.vendorId) {
@@ -294,6 +300,11 @@ export const createSearchService = () => {
         )`,
         { eventType: params.eventType },
       );
+    }
+    if (params.status) {
+      queryBuilder.andWhere('visit.visitStatus = :status', {
+        status: params.status,
+      });
     }
     if (params.q) {
       const dbQuery = params.q.replace(/\*/g, '_');

@@ -45,6 +45,7 @@ import {
   searchAllCampaignLogs,
   getAllCampaignLogAggregations,
 } from '../services/api/logs'
+import { normalizeModeId } from '../components/flow/verificationModes'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
@@ -56,31 +57,531 @@ const LOGS_DATE_PRESETS = [
 
 const COMPARE_COLORS = ['#3b82f6', '#f59e0b', '#14b8a6', '#8b5cf6']
 const MAX_COMPARE_EVENTS = 4
+
+export const FLOW_SPECS = {
+  ORANGE_BF: {
+    label: 'Orange Burkina Faso (DCB)',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'CONFIRM_VIEW',
+      'CONFIRM_CLICK',
+      'OTP_VIEW',
+      'OTP_SEND',
+      'OTP_VERIFY',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_ORANGE_BF_CHECKSUB',
+      'API_ORANGE_BF_OTP_SEND',
+      'API_ORANGE_BF_OTP_VERIFY',
+      'API_ORANGE_BF_SYNC',
+      'API_ORANGE_BF_EXPOSE_SEND_IN',
+      'API_ORANGE_BF_EXPOSE_VERIFY_IN',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'RATE_LIMIT_HIT',
+      'BRUTE_FORCE_ATTEMPT',
+      'BLOCKED_REQUEST',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'CONFIRM_SHOWN',
+      'OTP_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+      'ACTIVE',
+    ],
+    presets: [
+      { id: 'obf-funnel', label: 'Screen Funnel (Visit → Confirm → OTP → Success)', events: ['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
+      { id: 'obf-screens', label: 'Screens (Home → Confirm → OTP)', events: ['HOME_VIEW', 'CONFIRM_VIEW', 'OTP_VIEW'] },
+      { id: 'obf-otp', label: 'OTP: Send vs Verify', events: ['API_ORANGE_BF_OTP_SEND', 'API_ORANGE_BF_OTP_VERIFY'] },
+      { id: 'obf-checksub', label: 'Visit vs CheckSub', events: ['VISIT', 'API_ORANGE_BF_CHECKSUB'] },
+    ],
+    defaultCompare: ['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
+  },
+  UNIVERSE_DCB: {
+    label: 'Universe Telecom DCB',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'PLAN_VIEW',
+      'CONFIRM_VIEW',
+      'OTP_VIEW',
+      'OTP_SEND',
+      'OTP_VERIFY',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_DCB_CONFIG',
+      'API_DCB_SUBSCRIPTIONS',
+      'API_DCB_PINCODE',
+      'API_DCB_CONFIRM',
+      'API_DCB_EXPOSE_CONFIG_IN',
+      'API_DCB_EXPOSE_PINCODE_IN',
+      'API_DCB_EXPOSE_CONFIRM_IN',
+      'API_DCB_EXPOSE_STATUS_IN',
+      'API_BILLING_CALLBACK',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'RATE_LIMIT_HIT',
+      'BLOCKED_REQUEST',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'CONFIRM_SHOWN',
+      'OTP_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+      'ACTIVE',
+      'PENDING',
+    ],
+    presets: [
+      { id: 'dcb-funnel', label: 'DCB Funnel (Visit → PIN → Confirm → Success)', events: ['VISIT', 'API_DCB_PINCODE', 'API_DCB_CONFIRM', 'SUBSCRIBE_SUCCESS'] },
+      { id: 'dcb-api', label: 'PIN Send vs PIN Confirm', events: ['API_DCB_EXPOSE_PINCODE_IN', 'API_DCB_EXPOSE_CONFIRM_IN'] },
+      { id: 'dcb-conv', label: 'Success vs Postback', events: ['SUBSCRIBE_SUCCESS', 'POSTBACK_SENT'] },
+    ],
+    defaultCompare: ['VISIT', 'API_DCB_PINCODE', 'API_DCB_CONFIRM', 'SUBSCRIBE_SUCCESS'],
+  },
+  OTP_ONLY: {
+    label: 'OTP Only Flow',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'SUBSCRIBE_CLICK',
+      'OTP_VIEW',
+      'OTP_SEND',
+      'OTP_VERIFY',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_OTP_SEND',
+      'API_OTP_VERIFY',
+      'API_OTP_EXPOSE_SEND_IN',
+      'API_OTP_EXPOSE_VERIFY_IN',
+      'API_CHECKSUB',
+      'API_SUBSCRIBE',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'RATE_LIMIT_HIT',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'OTP_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+    ],
+    presets: [
+      { id: 'otp-funnel', label: 'OTP Funnel (Visit → Send → Verify → Success)', events: ['VISIT', 'OTP_SEND', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
+      { id: 'otp-screens', label: 'Visit vs Home vs OTP', events: ['VISIT', 'HOME_VIEW', 'OTP_VERIFY'] },
+    ],
+    defaultCompare: ['VISIT', 'OTP_SEND', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
+  },
+  HEADER_INJECTION: {
+    label: 'Header Injection',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'PLAN_VIEW',
+      'CONFIRM_VIEW',
+      'CONFIRM_CLICK',
+      'SUBSCRIBE_CLICK',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_HE_TOKEN',
+      'API_HE_MSISDN',
+      'API_HE_RESOLVE',
+      'API_HE_REDIRECT',
+      'API_RESOLVE_MSISDN',
+      'API_CHECKSUB',
+      'API_SUBSCRIBE',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'CONFIRM_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+    ],
+    presets: [
+      { id: 'he-funnel', label: 'HE Funnel (Visit → HE Resolve → Click → Success)', events: ['VISIT', 'API_HE_RESOLVE', 'SUBSCRIBE_CLICK', 'SUBSCRIBE_SUCCESS'] },
+    ],
+    defaultCompare: ['VISIT', 'API_HE_RESOLVE', 'SUBSCRIBE_CLICK', 'SUBSCRIBE_SUCCESS'],
+  },
+  BOTH: {
+    label: 'Header Injection + OTP',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'PLAN_VIEW',
+      'CONFIRM_VIEW',
+      'CONFIRM_CLICK',
+      'SUBSCRIBE_CLICK',
+      'OTP_VIEW',
+      'OTP_SEND',
+      'OTP_VERIFY',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_HE_TOKEN',
+      'API_HE_MSISDN',
+      'API_HE_RESOLVE',
+      'API_HE_REDIRECT',
+      'API_RESOLVE_MSISDN',
+      'API_CHECKSUB',
+      'API_SUBSCRIBE',
+      'API_OTP_SEND',
+      'API_OTP_VERIFY',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'CONFIRM_SHOWN',
+      'OTP_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+    ],
+    presets: [
+      { id: 'both-funnel', label: 'Funnel: Visit → OTP → Success', events: ['VISIT', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
+      { id: 'both-he-otp', label: 'HE vs OTP Verify', events: ['API_HE_RESOLVE', 'OTP_VERIFY'] },
+    ],
+    defaultCompare: ['VISIT', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
+  },
+  NONE: {
+    label: 'Consent Gateway / Redirect',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'SUBSCRIBE_CLICK',
+      'CG_REDIRECT',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_CG_REDIRECT',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+    ],
+    presets: [
+      { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
+      { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
+      { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
+    ],
+    defaultCompare: ['VISIT', 'CG_REDIRECT'],
+  },
+  CG_HOME: {
+    label: 'CG via Home',
+    funnelEvents: [
+      'VISIT',
+      'HOME_VIEW',
+      'SUBSCRIBE_CLICK',
+      'CG_REDIRECT',
+      'SUBSCRIBE_SUCCESS',
+      'SUBSCRIBE_FAILED',
+    ],
+    apiEvents: [
+      'API_CG_REDIRECT',
+      'CALLBACK_RECEIVED',
+      'POSTBACK_PENDING',
+      'POSTBACK_SENT',
+      'POSTBACK_FAILED',
+      'BLOCKED',
+    ],
+    statuses: [
+      'VISIT',
+      'HOME_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+    ],
+    presets: [
+      { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
+      { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
+      { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
+    ],
+    defaultCompare: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'],
+  },
+}
+
+export function isForeignFlowEvent(eventType, flowType) {
+  if (!flowType) return false
+  const t = String(eventType).toUpperCase()
+  if (flowType === 'ORANGE_BF') {
+    return t.includes('DCB') || t.includes('API_HE') || t.includes('CG_REDIRECT')
+  }
+  if (flowType === 'UNIVERSE_DCB') {
+    return t.includes('ORANGE_BF') || t.includes('API_HE') || t.includes('CG_REDIRECT')
+  }
+  if (flowType === 'OTP_ONLY') {
+    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('API_HE') || t.includes('CG_REDIRECT')
+  }
+  if (flowType === 'HEADER_INJECTION') {
+    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('CG_REDIRECT')
+  }
+  if (flowType === 'NONE' || flowType === 'CG_HOME') {
+    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('API_HE') || t.includes('OTP_')
+  }
+  return false
+}
+
 const COMPARE_PRESETS = [
   { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
   { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
   { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
 ]
 
-function eventLabel(type) {
-  const labels = {
-    VISIT: 'Visit',
-    HOME_VIEW: 'Home shown',
-    SUBSCRIBE_CLICK: 'Banner click',
-    CG_REDIRECT: 'CG redirect',
-    API_CG_REDIRECT: 'CG redirect (API)',
-    OTP_SEND: 'OTP send',
-    OTP_VERIFY: 'OTP verify',
-    SUBSCRIBE_SUCCESS: 'Subscribe success',
-    CONFIRM_CLICK: 'Confirm click',
-    API_ORANGE_BF_OTP_SEND: 'OTP send (Orange BF)',
-    API_ORANGE_BF_OTP_VERIFY: 'OTP verify (Orange BF)',
-    API_ORANGE_BF_CHECKSUB: 'CheckSub (Orange BF)',
-    API_ORANGE_BF_SYNC: 'Sync (Orange BF)',
-    API_ORANGE_BF_EXPOSE_SEND_IN: 'API OTP send',
-    API_ORANGE_BF_EXPOSE_VERIFY_IN: 'API OTP verify',
+export function eventLabel(type, flowType) {
+  if (flowType === 'ORANGE_BF') {
+    const obf = {
+      VISIT: 'Ad Visit (Landing)',
+      HOME_VIEW: 'Screen 1: Mobile Number Entry',
+      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
+      CONFIRM_CLICK: 'Screen 2: Confirm Click',
+      OTP_VIEW: 'Screen 3: Enter 4-Digit OTP',
+      OTP_SEND: 'OTP Sent to User',
+      OTP_VERIFY: 'Screen 3: OTP Verified',
+      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed & Charged',
+      SUBSCRIBE_FAILED: 'Subscription Failed',
+      API_ORANGE_BF_CHECKSUB: 'API: CheckSub (Operator)',
+      API_ORANGE_BF_OTP_SEND: 'API: Send OTP (Operator)',
+      API_ORANGE_BF_OTP_VERIFY: 'API: Verify OTP (Operator)',
+      API_ORANGE_BF_SYNC: 'API: Sync Subscription',
+      API_ORANGE_BF_EXPOSE_SEND_IN: 'API: Expose Send In',
+      API_ORANGE_BF_EXPOSE_VERIFY_IN: 'API: Expose Verify In',
+      CALLBACK_RECEIVED: 'Operator Callback Received',
+      POSTBACK_SENT: 'Affiliate Postback Sent',
+      POSTBACK_FAILED: 'Affiliate Postback Failed',
+      RATE_LIMIT_HIT: 'Rate Limit Hit',
+      BRUTE_FORCE_ATTEMPT: 'Brute Force Attempt',
+      BLOCKED_REQUEST: 'Blocked Request',
+      BLOCKED: 'Blocked Traffic',
+    }
+    if (obf[type]) return obf[type]
   }
-  return labels[type] || type.replace(/_/g, ' ')
+
+  if (flowType === 'UNIVERSE_DCB') {
+    const dcb = {
+      VISIT: 'Ad Visit (Landing)',
+      HOME_VIEW: 'Screen 1: Welcome & Overview',
+      PLAN_VIEW: 'Screen 2: Select Pack',
+      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
+      OTP_VIEW: 'Screen 3: Enter PIN Code',
+      OTP_SEND: 'PIN Requested',
+      OTP_VERIFY: 'Screen 3: Confirm PIN',
+      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed & Charged',
+      SUBSCRIBE_FAILED: 'Subscription Failed',
+      API_DCB_PINCODE: 'API: Send PIN (Universe DCB)',
+      API_DCB_CONFIRM: 'API: Confirm PIN (Universe DCB)',
+      API_DCB_CONFIG: 'API: DCB Config',
+      API_DCB_EXPOSE_PINCODE_IN: 'API: PIN Send In',
+      API_DCB_EXPOSE_CONFIRM_IN: 'API: PIN Confirm In',
+      API_BILLING_CALLBACK: 'API: Billing Callback',
+      CALLBACK_RECEIVED: 'Callback Received',
+      POSTBACK_SENT: 'Affiliate Postback Sent',
+      BLOCKED: 'Blocked Traffic',
+    }
+    if (dcb[type]) return dcb[type]
+  }
+
+  if (flowType === 'OTP_ONLY') {
+    const otpOnly = {
+      VISIT: 'Ad Visit (Landing)',
+      HOME_VIEW: 'Screen 1: Welcome & Mobile Number',
+      OTP_VIEW: 'Screen 2: Enter OTP',
+      OTP_SEND: 'OTP Sent to User',
+      OTP_VERIFY: 'Screen 2: OTP Verified',
+      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed',
+      SUBSCRIBE_FAILED: 'Subscription Failed',
+      API_OTP_SEND: 'API: Send OTP Gateway',
+      API_OTP_VERIFY: 'API: Verify OTP Gateway',
+      POSTBACK_SENT: 'Affiliate Postback Sent',
+      BLOCKED: 'Blocked Traffic',
+    }
+    if (otpOnly[type]) return otpOnly[type]
+  }
+
+  if (flowType === 'HEADER_INJECTION') {
+    const he = {
+      VISIT: 'Ad Visit (Landing)',
+      HOME_VIEW: 'Screen 1: Welcome (HE Number Resolved)',
+      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
+      SUBSCRIBE_CLICK: 'Subscribe Click',
+      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed',
+      SUBSCRIBE_FAILED: 'Subscription Failed',
+      API_HE_RESOLVE: 'API: Resolve Carrier Header',
+      API_HE_TOKEN: 'API: Carrier Token',
+      API_HE_MSISDN: 'API: Decrypt MSISDN',
+      POSTBACK_SENT: 'Affiliate Postback Sent',
+      BLOCKED: 'Blocked / Non-Carrier IP',
+    }
+    if (he[type]) return he[type]
+  }
+
+  if (flowType === 'NONE' || flowType === 'CG_HOME') {
+    const cg = {
+      VISIT: 'Ad Visit (Landing)',
+      HOME_VIEW: 'Screen 1: Landing Page',
+      SUBSCRIBE_CLICK: 'Continue / Subscribe Click',
+      CG_REDIRECT: 'Redirected to Telecom Consent Gateway',
+      SUBSCRIBE_SUCCESS: 'Conversion: Operator CG Success',
+      SUBSCRIBE_FAILED: 'Gateway Subscription Failed',
+      API_CG_REDIRECT: 'API: Consent Gateway Redirect',
+      CALLBACK_RECEIVED: 'Telecom Callback Received',
+      POSTBACK_SENT: 'Affiliate Postback Sent',
+      BLOCKED: 'Blocked Traffic',
+    }
+    if (cg[type]) return cg[type]
+  }
+
+  const standard = {
+    VISIT: 'Ad Visit (Landing)',
+    HOME_VIEW: 'Screen 1: Home Shown',
+    CONFIRM_VIEW: 'Screen 2: Confirm Shown',
+    OTP_VIEW: 'Screen 3: OTP Box',
+    OTP_SEND: 'OTP Send',
+    OTP_VERIFY: 'Screen 3: OTP Verify',
+    SUBSCRIBE_SUCCESS: 'Subscribe Success (Converted)',
+    SUBSCRIBE_FAILED: 'Subscribe Failed',
+    CG_REDIRECT: 'CG Redirect',
+    POSTBACK_SENT: 'Postback Sent',
+    BLOCKED: 'Blocked',
+  }
+  return standard[type] || type.replace(/_/g, ' ')
+}
+
+export function statusLabel(status, flowType) {
+  if (flowType === 'ORANGE_BF') {
+    const obf = {
+      VISIT: '1. Landed (Dropped at Screen 1)',
+      HOME_SHOWN: '1. Screen 1: Home / Number Shown',
+      CONFIRM_SHOWN: '2. Screen 2: Reached Pack Confirm',
+      OTP_SHOWN: '3. Screen 3: Reached OTP Screen',
+      SUBSCRIBED: '4. Subscribed & Charged (Success)',
+      SUCCESS: '4. Subscribed & Charged (Success)',
+      FAILED: 'Failed / Insufficient Balance',
+      BLOCKED: 'Blocked (Anti-Fraud / Wrong Carrier)',
+      ACTIVE: 'Already Active Subscriber',
+    }
+    if (obf[status]) return obf[status]
+  }
+
+  if (flowType === 'UNIVERSE_DCB') {
+    const dcb = {
+      VISIT: '1. Landed (Dropped at Landing)',
+      HOME_SHOWN: '1. Screen 1: Home Shown',
+      CONFIRM_SHOWN: '2. Screen 2: Reached Pack Selection',
+      OTP_SHOWN: '3. Screen 3: Reached PIN Entry',
+      SUBSCRIBED: '4. Subscribed & Charged (Success)',
+      SUCCESS: '4. Subscribed & Charged (Success)',
+      FAILED: 'Failed / Insufficient Balance',
+      BLOCKED: 'Blocked Traffic',
+      ACTIVE: 'Active Subscriber',
+      PENDING: 'Pending Confirmation',
+    }
+    if (dcb[status]) return dcb[status]
+  }
+
+  if (flowType === 'OTP_ONLY') {
+    const otp = {
+      VISIT: '1. Landed (Dropped at Landing)',
+      HOME_SHOWN: '1. Screen 1: Home Shown',
+      OTP_SHOWN: '2. Screen 2: Reached OTP Screen',
+      SUBSCRIBED: '3. Subscribed (Success)',
+      SUCCESS: '3. Subscribed (Success)',
+      FAILED: 'Failed',
+      BLOCKED: 'Blocked',
+    }
+    if (otp[status]) return otp[status]
+  }
+
+  if (flowType === 'HEADER_INJECTION') {
+    const he = {
+      VISIT: '1. Landed (Dropped at Landing)',
+      HOME_SHOWN: '1. Screen 1: Home Shown (HE Resolved)',
+      CONFIRM_SHOWN: '2. Screen 2: Reached Confirm Pack',
+      SUBSCRIBED: '3. Subscribed (Success)',
+      SUCCESS: '3. Subscribed (Success)',
+      FAILED: 'Failed',
+      BLOCKED: 'Blocked (Non-Carrier IP)',
+    }
+    if (he[status]) return he[status]
+  }
+
+  if (flowType === 'NONE' || flowType === 'CG_HOME') {
+    const cg = {
+      VISIT: '1. Landed (Dropped at Landing)',
+      HOME_SHOWN: '1. Screen 1: Home Shown',
+      SUBSCRIBED: '2. Converted (Operator CG Success)',
+      SUCCESS: '2. Success',
+      FAILED: 'Failed at Operator Gateway',
+      BLOCKED: 'Blocked Traffic',
+    }
+    if (cg[status]) return cg[status]
+  }
+
+  const standard = {
+    VISIT: 'Visit (Landed)',
+    HOME_SHOWN: 'Home Shown',
+    CONFIRM_SHOWN: 'Confirm Shown',
+    OTP_SHOWN: 'OTP Shown',
+    SUBSCRIBED: 'Subscribed (Success)',
+    SUCCESS: 'Success',
+    FAILED: 'Failed',
+    BLOCKED: 'Blocked',
+    ACTIVE: 'Active',
+    PENDING: 'Pending',
+  }
+  return standard[status] || status
 }
 
 function seriesColor(index) {
@@ -90,54 +591,22 @@ function seriesColor(index) {
 const STANDARD_EVENT_TYPES = [
   'VISIT',
   'HOME_VIEW',
-  'PLAN_VIEW',
   'CONFIRM_VIEW',
   'OTP_VIEW',
   'OTP_SEND',
   'OTP_VERIFY',
-  'OTP_SHOWN',
-  'SUBSCRIBE_CLICK',
-  'CG_REDIRECT',
-  'CONFIRM_CLICK',
   'SUBSCRIBE_SUCCESS',
   'SUBSCRIBE_FAILED',
   'API_ORANGE_BF_OTP_SEND',
   'API_ORANGE_BF_OTP_VERIFY',
   'API_ORANGE_BF_CHECKSUB',
-  'API_ORANGE_BF_SYNC',
-  'API_ORANGE_BF_EXPOSE_SEND_IN',
-  'API_ORANGE_BF_EXPOSE_VERIFY_IN',
-  'API_CHECKSUB',
-  'API_PRIORITY',
-  'API_SUBSCRIBE',
-  'API_BLOCKLIST',
-  'API_RESOLVE_MSISDN',
-  'API_HE_TOKEN',
-  'API_HE_MSISDN',
-  'API_HE_RESOLVE',
-  'API_HE_REDIRECT',
-  'API_CG_REDIRECT',
-  'API_DCB_CONFIG',
-  'API_DCB_SUBSCRIPTIONS',
   'API_DCB_PINCODE',
   'API_DCB_CONFIRM',
-  'API_DCB_EXPOSE_CONFIG_IN',
-  'API_DCB_EXPOSE_PINCODE_IN',
-  'API_DCB_EXPOSE_CONFIRM_IN',
-  'API_DCB_EXPOSE_STATUS_IN',
-  'API_BILLING_CALLBACK',
-  'API_VENDOR_POSTBACK',
-  'API_OTP_SEND',
-  'API_OTP_VERIFY',
-  'API_OTP_EXPOSE_SEND_IN',
-  'API_OTP_EXPOSE_VERIFY_IN',
+  'API_HE_RESOLVE',
+  'CG_REDIRECT',
   'CALLBACK_RECEIVED',
-  'POSTBACK_PENDING',
   'POSTBACK_SENT',
   'POSTBACK_FAILED',
-  'RATE_LIMIT_HIT',
-  'BRUTE_FORCE_ATTEMPT',
-  'BLOCKED_REQUEST',
   'BLOCKED',
 ]
 
@@ -300,11 +769,12 @@ function CampaignLogsPage() {
   }, [navigate])
 
   const [datePreset, setDatePreset] = useState(paramPreset || (paramFrom && paramTo ? 'custom' : 'today'))
-  const [compareEvents, setCompareEvents] = useState(['VISIT', 'CG_REDIRECT'])
+  const [compareEvents, setCompareEvents] = useState(['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'])
   const [filters, setFilters] = useState(() => {
     const range = getDateRangeForPreset(paramPreset || 'today', timezone)
     return {
       eventType: paramEventType || '',
+      status: '',
       vendorId: paramVendorId || '',
       clickId: '',
       q: '',
@@ -320,6 +790,42 @@ function CampaignLogsPage() {
 
   const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
   const isHourly = chartInterval === 'hour'
+
+  const selectedCampaign = useMemo(() => {
+    if (!selectedId || selectedId === 'all') return null
+    return campaigns.find((item) => String(item.id) === String(selectedId)) || null
+  }, [campaigns, selectedId])
+
+  const flowType = useMemo(() => {
+    if (!selectedCampaign) return null
+    return normalizeModeId(selectedCampaign.verificationMode)
+  }, [selectedCampaign])
+
+  const currentFlowSpec = useMemo(() => {
+    if (!flowType) return null
+    return FLOW_SPECS[flowType] || null
+  }, [flowType])
+
+  const activePresets = useMemo(() => {
+    if (currentFlowSpec?.presets) return currentFlowSpec.presets
+    return COMPARE_PRESETS
+  }, [currentFlowSpec])
+
+  // Synchronize compare events and active filter when switching campaigns/flow
+  useEffect(() => {
+    if (!currentFlowSpec) return
+    const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
+    const hasInvalid = compareEvents.some((ev) => !allowed.has(ev))
+    if (hasInvalid && currentFlowSpec.defaultCompare) {
+      setCompareEvents(currentFlowSpec.defaultCompare)
+    }
+    if (filters.eventType && !allowed.has(filters.eventType)) {
+      setFilters((f) => ({ ...f, eventType: '' }))
+    }
+    if (filters.status && currentFlowSpec.statuses && !currentFlowSpec.statuses.includes(filters.status)) {
+      setFilters((f) => ({ ...f, status: '' }))
+    }
+  }, [currentFlowSpec])
 
   const getCampaignLabel = useCallback((campaignId) => {
     if (!campaignId) return '—'
@@ -412,6 +918,21 @@ function CampaignLogsPage() {
   }
 
   const eventTypeOptions = useMemo(() => {
+    if (currentFlowSpec) {
+      const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
+      if (aggs?.byEventType) {
+        aggs.byEventType.forEach((item) => {
+          if (item.key && !isForeignFlowEvent(item.key, flowType)) {
+            allowed.add(item.key)
+          }
+        })
+      }
+      if (filters.eventType) {
+        allowed.add(filters.eventType)
+      }
+      return Array.from(allowed)
+    }
+
     const set = new Set(STANDARD_EVENT_TYPES)
     if (aggs?.byEventType) {
       aggs.byEventType.forEach((item) => {
@@ -422,7 +943,69 @@ function CampaignLogsPage() {
       set.add(filters.eventType)
     }
     return Array.from(set).sort()
-  }, [aggs, filters.eventType])
+  }, [aggs, filters.eventType, currentFlowSpec, flowType])
+
+  const statusOptions = useMemo(() => {
+    if (currentFlowSpec?.statuses) {
+      const set = new Set(currentFlowSpec.statuses)
+      if (aggs?.byStatus) {
+        aggs.byStatus.forEach((item) => {
+          if (item.key && item.count > 0) set.add(item.key)
+        })
+      }
+      if (filters.status && !set.has(filters.status)) {
+        set.add(filters.status)
+      }
+      return Array.from(set)
+    }
+    const defaultStatuses = [
+      'VISIT',
+      'HOME_SHOWN',
+      'CONFIRM_SHOWN',
+      'OTP_SHOWN',
+      'SUBSCRIBED',
+      'SUCCESS',
+      'FAILED',
+      'BLOCKED',
+      'ACTIVE',
+      'PENDING',
+    ]
+    const set = new Set(defaultStatuses)
+    if (aggs?.byStatus) {
+      aggs.byStatus.forEach((item) => {
+        if (item.key && item.count > 0) set.add(item.key)
+      })
+    }
+    if (filters.status && !set.has(filters.status)) {
+      set.add(filters.status)
+    }
+    return Array.from(set)
+  }, [currentFlowSpec, aggs, filters.status])
+
+  const [chartEventCategory, setChartEventCategory] = useState('funnel')
+
+  const eventsByTypeData = useMemo(() => {
+    const raw = aggs?.byEventType || []
+    if (!currentFlowSpec) return raw
+
+    if (chartEventCategory === 'funnel') {
+      const funnelSet = new Set(currentFlowSpec.funnelEvents)
+      return raw.filter((item) => funnelSet.has(item.key) && item.count > 0)
+    }
+
+    const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
+    return raw.filter(
+      (item) => (allowed.has(item.key) || !isForeignFlowEvent(item.key, flowType)) && item.count > 0,
+    )
+  }, [aggs, currentFlowSpec, flowType, chartEventCategory])
+
+  const statusDistributionData = useMemo(() => {
+    const raw = aggs?.byStatus || []
+    if (!currentFlowSpec) return raw.filter((item) => item.count > 0)
+    const allowed = new Set(currentFlowSpec.statuses)
+    return raw.filter((item) => allowed.has(item.key) && item.count > 0)
+  }, [aggs, currentFlowSpec])
+
   const totalPages = Math.max(1, Math.ceil((logs.total || 0) / PAGE_SIZE))
 
   const timeSeriesData = useMemo(() => {
@@ -603,16 +1186,63 @@ function CampaignLogsPage() {
               </select>
             </div>
             <div>
-              <label className="block text-xs font-bold text-gray-500 mb-1.5">Event Type</label>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5 flex items-center justify-between">
+                <span>Event Type</span>
+                {currentFlowSpec && (
+                  <span className="text-[10px] text-indigo-600 font-semibold">{currentFlowSpec.label}</span>
+                )}
+              </label>
               <select
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
                 value={filters.eventType}
                 onChange={(e) => updateFilter('eventType', e.target.value)}
               >
                 <option value="">— All Event Types —</option>
-                {eventTypeOptions.map((type) => (
-                  <option key={type} value={type}>
-                    {type}
+                {currentFlowSpec ? (
+                  <>
+                    <optgroup label="Screens & Funnel Steps">
+                      {currentFlowSpec.funnelEvents
+                        .filter((t) => eventTypeOptions.includes(t))
+                        .map((type) => (
+                          <option key={type} value={type}>
+                            {eventLabel(type)}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="API & Background Events">
+                      {eventTypeOptions
+                        .filter(
+                          (t) =>
+                            !currentFlowSpec.funnelEvents.includes(t) &&
+                            (currentFlowSpec.apiEvents.includes(t) || !isForeignFlowEvent(t, flowType))
+                        )
+                        .map((type) => (
+                          <option key={type} value={type}>
+                            {eventLabel(type)}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </>
+                ) : (
+                  eventTypeOptions.map((type) => (
+                    <option key={type} value={type}>
+                      {eventLabel(type)} ({type})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-500 mb-1.5">Verification Status</label>
+              <select
+                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
+                value={filters.status || ''}
+                onChange={(e) => updateFilter('status', e.target.value)}
+              >
+                <option value="">— All Statuses —</option>
+                {statusOptions.map((st) => (
+                  <option key={st} value={st}>
+                    {statusLabel(st, flowType)}
                   </option>
                 ))}
               </select>
@@ -686,7 +1316,7 @@ function CampaignLogsPage() {
           }
         >
           <div className="flex flex-wrap gap-2 mb-3">
-            {COMPARE_PRESETS.map((preset) => {
+            {activePresets.map((preset) => {
               const active =
                 preset.events.length === compareEvents.length &&
                 preset.events.every((e, i) => e === compareEvents[i])
@@ -905,14 +1535,70 @@ function CampaignLogsPage() {
             </div>
           </SectionCard>
 
-          <SectionCard title="Events by type">
+          <SectionCard
+            title="Events by type"
+            actions={
+              currentFlowSpec ? (
+                <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setChartEventCategory('funnel')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      chartEventCategory === 'funnel'
+                        ? 'bg-white text-indigo-600 shadow-xs'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    Screen Funnel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChartEventCategory('all')}
+                    className={`px-2.5 py-1 rounded-md transition-all ${
+                      chartEventCategory === 'all'
+                        ? 'bg-white text-indigo-600 shadow-xs'
+                        : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    All Events
+                  </button>
+                </div>
+              ) : null
+            }
+          >
             <div style={{ width: '100%', height: 260 }}>
               <ResponsiveContainer>
-                <BarChart data={aggs?.byEventType || []} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
+                <BarChart data={eventsByTypeData} margin={{ top: 10, right: 10, left: -20, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                  <XAxis dataKey="key" stroke="#94a3b8" tick={{ fontSize: 9, fontWeight: 500 }} interval={0} angle={-15} textAnchor="end" height={50} />
+                  <XAxis
+                    dataKey="key"
+                    stroke="#94a3b8"
+                    tick={{ fontSize: 9, fontWeight: 500 }}
+                    tickFormatter={(v) => eventLabel(v, flowType)}
+                    interval={0}
+                    angle={-15}
+                    textAnchor="end"
+                    height={50}
+                  />
                   <YAxis stroke="#94a3b8" tick={{ fontSize: 10, fontWeight: 500 }} allowDecimals={false} />
-                  <Tooltip content={<CustomTooltip />} />
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const row = payload[0]?.payload
+                        return (
+                          <div className="rounded-xl border border-gray-800 bg-gray-900/95 p-3 text-white shadow-xl backdrop-blur-md">
+                            <p className="text-[10px] font-semibold text-gray-300">
+                              {eventLabel(row.key, flowType)}
+                            </p>
+                            <p className="text-xs font-bold mt-1 text-indigo-300">
+                              Count: <span className="font-mono text-white">{row.count}</span>
+                            </p>
+                          </div>
+                        )
+                      }
+                      return null
+                    }}
+                  />
                   <Bar dataKey="count" name="Frequency" fill="#3b82f6" radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -924,7 +1610,7 @@ function CampaignLogsPage() {
               <ResponsiveContainer>
                 <PieChart>
                   <Pie
-                    data={aggs?.byStatus || []}
+                    data={statusDistributionData}
                     dataKey="count"
                     nameKey="key"
                     cx="50%"
@@ -933,11 +1619,13 @@ function CampaignLogsPage() {
                     outerRadius={85}
                     paddingAngle={3}
                   >
-                    {(aggs?.byStatus || []).map((entry, i) => (
+                    {statusDistributionData.map((entry, i) => (
                       <Cell key={entry.key} fill={PIE_COLORS[i % PIE_COLORS.length]} stroke="#fff" strokeWidth={2} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    formatter={(value, name) => [value, statusLabel(name, flowType)]}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             </div>
