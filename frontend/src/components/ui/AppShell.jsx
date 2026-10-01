@@ -1,6 +1,6 @@
 import { memo, useState, useEffect, useRef } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook, Send, LayoutDashboard } from 'lucide-react'
+import { LogIn, LogOut, Menu, X, BarChart3, FolderKanban, Store, User, UserCog, Webhook, Send, LayoutDashboard, Database } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import { logout } from '../../services/api/auth'
 import Button from './Button'
@@ -19,7 +19,10 @@ const footerNavLinks = [
   { to: '/docs/callbacks', label: 'Callbacks', icon: Webhook },
 ]
 
-const adminNavLink = { to: '/users', label: 'User Management', icon: UserCog }
+const adminNavLinks = [
+  { to: '/users', label: 'User Management', icon: UserCog },
+  { to: '/admin/cache', label: 'Redis Cache', icon: Database },
+]
 
 function NavLinkItem({ to, label, icon: Icon, pathname }) {
   const active = pathname === to || pathname.startsWith(`${to}/`)
@@ -40,7 +43,7 @@ function AppShell({ children, actions, minimal = false }) {
   const { isAuthenticated, user, loading, isAdmin } = useAuth()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const navRef = useRef(null)
-  const navLinks = isAdmin ? [...baseNavLinks, adminNavLink] : baseNavLinks
+  const navLinks = isAdmin ? [...baseNavLinks, ...adminNavLinks] : baseNavLinks
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

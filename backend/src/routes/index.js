@@ -19,11 +19,13 @@ import flowRoutes from '../modules/flow/flow.routes.js';
 import otpRoutes from '../modules/otp/otp.routes.js';
 import analyticsRoutes from '../modules/analytics/analytics.routes.js';
 import logsRoutes from '../modules/logs/logs.routes.js';
+import adminRoutes from '../modules/admin/admin.routes.js';
 import testRoutes from '../modules/test/test.routes.js';
 
 export function registerRoutes(app) {
   app.use('/api/auth', authRoutes);
   app.use('/api/users', usersRoutes);
+  app.use('/api/admin', adminRoutes);
   app.use('/api/uploads', uploadRoutes);
   app.use('/api/templates', templatesRoutes);
   app.use('/api/partners', partnersRoutes);

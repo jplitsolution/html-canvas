@@ -22,6 +22,7 @@ import PostbackDayLogsPage from '../pages/PostbackDayLogsPage'
 import PostbackDetailPage from '../pages/PostbackDetailPage'
 import ProfilePage from '../pages/ProfilePage'
 import UsersPage from '../pages/UsersPage'
+import CacheManagementPage from '../pages/CacheManagementPage'
 import RequireAdmin from '../components/auth/RequireAdmin'
 
 function Protected({ children }) {
@@ -87,6 +88,8 @@ function App() {
               <Route path="/docs/callbacks" element={<Protected><CallbackDocsPage /></Protected>} />
               <Route path="/profile" element={<Protected><ProfilePage /></Protected>} />
               <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
+              <Route path="/admin/cache" element={<AdminOnly><CacheManagementPage /></AdminOnly>} />
+              <Route path="/cache" element={<Navigate to="/admin/cache" replace />} />
               <Route path="/subscription" element={<SubscriptionPage />} />
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
