@@ -241,6 +241,9 @@ export function getCampaignPagePreviewUrl(campaign, pageType = 'HOME', options =
     params.set('msisdn', String(options.msisdn))
   }
 
+  // Cache-busting timestamp so browser immediately loads freshly saved page content
+  params.set('_t', String(Date.now()))
+
   return `/subscription?${params.toString()}`
 }
 

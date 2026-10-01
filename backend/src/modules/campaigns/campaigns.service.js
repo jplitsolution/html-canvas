@@ -87,38 +87,75 @@ export const createCampaignsService = () => {
     if (!campaignOrPartial) return;
 
     let campaign = campaignOrPartial;
-    if (
+    const isIdOnly =
       typeof campaignOrPartial === 'number' ||
-      typeof campaignOrPartial === 'string'
-    ) {
-      const id = parseInt(campaignOrPartial, 10);
-      if (!id || Number.isNaN(id)) return;
-      const keys = [
-        `flow:campaign:id:${id}`,
-        `flow:config:${id}`,
-      ];
+      typeof campaignOrPartial === 'string';
+
+    const id = isIdOnly
+      ? parseInt(campaignOrPartial, 10)
+      : campaign?.id
+        ? parseInt(campaign.id, 10)
+        : null;
+
+    if (!id || Number.isNaN(id)) return;
+
+    if (isIdOnly || !campaign?.country || !campaign?.operator || !campaign?.trackingId) {
       try {
-        await Promise.all(keys.map((k) => redisService.del(k)));
+        const found = await getCampaignRepo().findOne({
+          where: { id },
+          relations: {
+            marketOperator: { country: true },
+          },
+        });
+        if (found) {
+          campaign = found;
+          withTrackingId(campaign);
+        }
       } catch (err) {
-        console.warn('invalidateFlowCampaignCache error:', err?.message || err);
+        console.warn('Failed to load campaign for cache invalidation:', err?.message || err);
       }
-      return;
     } else if (campaign?.id && !campaign.trackingId) {
       withTrackingId(campaign);
     }
 
-    if (!campaign?.id) return;
+    const cc1 = campaign?.country ? String(campaign.country).toLowerCase() : '';
+    const oc1 = campaign?.operator ? String(campaign.operator).toLowerCase() : '';
+    const cc2 = campaign?.marketOperator?.country?.name
+      ? String(campaign.marketOperator.country.name).toLowerCase()
+      : '';
+    const oc2 = campaign?.marketOperator?.name
+      ? String(campaign.marketOperator.name).toLowerCase()
+      : '';
+    const cc3 = campaign?.marketOperator?.country?.code
+      ? String(campaign.marketOperator.country.code).toLowerCase()
+      : '';
+    const oc3 = campaign?.marketOperator?.code
+      ? String(campaign.marketOperator.code).toLowerCase()
+      : '';
 
     const keys = [
-      `flow:campaign:id:${campaign.id}`,
-      campaign.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
-      campaign.country && campaign.operator
-        ? `flow:campaign:co:${String(campaign.country).toLowerCase()}:${String(campaign.operator).toLowerCase()}`
-        : null,
-      `flow:config:${campaign.id}`,
+      `flow:campaign:id:${id}`,
+      `flow:config:${id}`,
+      campaign?.trackingId ? `flow:campaign:id:${campaign.trackingId}` : null,
+      cc1 && oc1 ? `flow:campaign:co:${cc1}:${oc1}` : null,
+      cc2 && oc2 ? `flow:campaign:co:${cc2}:${oc2}` : null,
+      cc3 && oc3 ? `flow:campaign:co:${cc3}:${oc3}` : null,
+      cc1 && oc3 ? `flow:campaign:co:${cc1}:${oc3}` : null,
+      cc3 && oc1 ? `flow:campaign:co:${cc3}:${oc1}` : null,
     ].filter(Boolean);
+
+    const uniqueKeys = Array.from(new Set(keys));
+
     try {
-      await Promise.all(keys.map((k) => redisService.del(k)));
+      await Promise.all(uniqueKeys.map((k) => redisService.del(k)));
+      if (typeof redisService.deletePattern === 'function') {
+        await Promise.all([
+          redisService.deletePattern(`flow:campaign:id:${id}*`).catch(() => {}),
+          campaign?.trackingId
+            ? redisService.deletePattern(`flow:campaign:id:${campaign.trackingId}*`).catch(() => {})
+            : Promise.resolve(),
+        ]);
+      }
     } catch (err) {
       console.warn('invalidateFlowCampaignCache error:', err?.message || err);
     }
@@ -786,11 +823,10 @@ export const createCampaignsService = () => {
 
     page.template = template;
     page.updatedAt = new Date();
+    await getCampaignPageRepo().save(page);
 
-    // Fast asynchronous cache invalidation
-    invalidateFlowCampaignCache(campaignId).catch((e) =>
-      console.warn('invalidateFlowCampaignCache:', e?.message || e),
-    );
+    // Fast synchronous cache invalidation so preview and live updates instantly
+    await invalidateFlowCampaignCache(campaignId);
 
     return page;
   };
