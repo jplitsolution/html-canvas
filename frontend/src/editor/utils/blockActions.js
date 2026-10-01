@@ -95,6 +95,20 @@ export function getComponentKind(component) {
     return 'button'
   }
 
+  if (
+    tag === 'input' ||
+    tag === 'textarea' ||
+    tag === 'select' ||
+    tcType === 'input' ||
+    attrs['data-otp-field'] ||
+    attrs['data-dcb-field'] ||
+    attrs['data-field'] === 'phone' ||
+    attrs['data-field'] === 'otp' ||
+    attrs['data-field'] === 'pin'
+  ) {
+    return 'input'
+  }
+
   if (['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span'].includes(tag) || type === 'text') return 'text'
   if (['section', 'header', 'footer', 'nav', 'main'].includes(tag)) return 'section'
   if (tag === 'form') return 'form'

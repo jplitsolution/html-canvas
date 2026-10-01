@@ -432,16 +432,23 @@ body {
 }
 .wjo-phone-wrap {
   width: 100%;
+  max-width: 320px;
   display: flex;
   align-items: center;
+  justify-content: center;
   background: #ffffff;
   border: 1.5px solid #dce0ee;
   border-radius: 16px;
   height: 52px;
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
   padding: 0 16px;
   overflow: hidden;
   box-sizing: border-box;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.wjo-phone-wrap:focus-within {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 .wjo-phone-input {
   width: 100%;
@@ -449,19 +456,23 @@ body {
   border: none;
   outline: none;
   padding: 0;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   color: #1e1b4b;
   background: transparent;
-  text-align: right;
-  direction: rtl;
+  text-align: center;
+  direction: ltr;
   font-family: inherit;
   box-sizing: border-box;
 }
 .wjo-phone-input::placeholder {
   color: #94a3b8;
   font-weight: 500;
-  text-align: right;
+  font-size: 13.5px;
+  letter-spacing: normal;
+  text-align: center;
+  direction: rtl;
 }
 .wjo-pin-pill {
   display: inline-block;
@@ -586,10 +597,15 @@ const wellnessJoOtpHtml = `
         <input
           class="wjo-phone-input"
           data-otp-field="phone"
+          data-input-restriction="numbers"
+          data-min-length="7"
+          data-max-length="10"
+          minlength="7"
+          maxlength="10"
           type="tel"
           inputmode="numeric"
           placeholder="أدخل رقم الهاتف المحمول (من 7 إلى 9 أرقام)"
-          dir="rtl"
+          dir="ltr"
         />
       </div>
 
@@ -606,9 +622,13 @@ const wellnessJoOtpHtml = `
         <input
           class="wjo-otp-input"
           data-otp-field="otp"
+          data-input-restriction="numbers"
+          data-min-length="4"
+          data-max-length="5"
+          minlength="4"
+          maxlength="5"
           type="text"
           inputmode="numeric"
-          maxlength="5"
           placeholder="• • • • •"
           autocomplete="one-time-code"
         />

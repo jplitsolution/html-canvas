@@ -53,7 +53,15 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   }
 
   const handlePhoneInput = (e) => {
-    const val = e.target.value.trim().replace(/\D/g, '')
+    let val = e.target.value.trim().replace(/\D/g, '')
+    const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && val.length > max) {
+      val = val.slice(0, max)
+    }
+    if (e.target.value !== val) {
+      e.target.value = val
+    }
     if (phoneRef) phoneRef.current = val
     if (setPhone) setPhone(val)
     if (val) persistPhone(val)
@@ -250,6 +258,20 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       return
     }
 
+    const minAttr = phoneInput?.getAttribute('minlength') || phoneInput?.getAttribute('data-min-length')
+    const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
+    if (Number.isFinite(min) && min > 0 && cleanBasePhone.length < min) {
+      setSlotText(errorSlot, `Mobile number must be at least ${min} digits`, true)
+      return
+    }
+
+    const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && cleanBasePhone.length > max) {
+      setSlotText(errorSlot, `Mobile number cannot exceed ${max} digits`, true)
+      return
+    }
+
     // Use number as entered — do not invent a country code.
     const msisdn = cleanBasePhone
     
@@ -406,7 +428,20 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       setSlotText(errorSlot, 'Please enter the verification code', true)
       return
     }
-    // OTP length is partner-defined (4, 5, 6, …) — do not enforce a fixed size.
+
+    const minAttr = otpInput?.getAttribute('minlength') || otpInput?.getAttribute('data-min-length')
+    const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
+    if (Number.isFinite(min) && min > 0 && code.length < min) {
+      setSlotText(errorSlot, `Code must be at least ${min} characters`, true)
+      return
+    }
+
+    const maxAttr = otpInput?.getAttribute('maxlength') || otpInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && code.length > max) {
+      setSlotText(errorSlot, `Code cannot exceed ${max} characters`, true)
+      return
+    }
 
     const originalStatusText = statusSlot ? statusSlot.textContent : ''
 
@@ -484,16 +519,20 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   }
 
   const handleOtpInput = (e) => {
-    const val = e.target.value.trim()
-    // Auto-submit only when the template sets maxlength (e.g. 4 or 6).
-    // Never hardcode 6 — PIN length is campaign/partner specific.
-    const maxAttr = e.target.getAttribute('maxlength')
+    let val = e.target.value.trim().replace(/\D/g, '')
+    const maxAttr = e.target.getAttribute('maxlength') || e.target.getAttribute('data-max-length')
     const max =
       maxAttr != null && maxAttr !== ''
         ? parseInt(maxAttr, 10)
         : Number(e.target.maxLength) > 0 && Number(e.target.maxLength) < 100000
           ? Number(e.target.maxLength)
           : NaN
+    if (Number.isFinite(max) && max > 0 && val.length > max) {
+      val = val.slice(0, max)
+    }
+    if (e.target.value !== val) {
+      e.target.value = val
+    }
     if (Number.isFinite(max) && max > 0 && val.length === max) {
       handleVerifyClick({ preventDefault: () => {} })
     }

@@ -14,6 +14,7 @@ import {
 import { runPriorityChain } from './runPriorityChain'
 import { isDcbFlowContext, setupDcbBindings } from './setupDcbBindings'
 import { setupOtpBindings } from './setupOtpBindings'
+import { attachInputRestrictions } from '../../editor/utils/inputRestrictions'
 import { getSelectedPackFromShadow, mountPageInShadow, syncPackPicker, syncPhoneDisplay } from './shadowDom'
 import { pickLivePageData } from '../../editor/services/deviceLayouts'
 import { resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
@@ -452,6 +453,8 @@ function useShadowInteractions({
       })
     }
 
+    const detachRestrictions = attachInputRestrictions(shadow)
+
     shadow.addEventListener('click', handlePackClick)
     shadow.addEventListener('click', handleClick)
     shadow.addEventListener('click', handleAnchorClick)
@@ -459,6 +462,7 @@ function useShadowInteractions({
       shadow.removeEventListener('click', handlePackClick)
       shadow.removeEventListener('click', handleClick)
       shadow.removeEventListener('click', handleAnchorClick)
+      if (detachRestrictions) detachRestrictions()
       if (flowCleanup) flowCleanup()
     }
   }, [pageData, mobileViewport, country, operator, campid, trackingCampid, cachePage, loadPage, setSearchParams, warnIfHeUnresolved])

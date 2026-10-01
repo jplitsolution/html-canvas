@@ -10,6 +10,7 @@ import {
   TEXT_SIZE_ALIGN_CANVAS_CSS,
 } from '../utils/textSizeAlign'
 import { OVERLAY_STACKING_CANVAS_CSS, freezeHotspotToPixels, markAsAbsoluteOverlay } from '../utils/overlayStacking'
+import { attachInputRestrictions } from '../utils/inputRestrictions'
 
 function getCanvasFrameEl(editor) {
   if (!editor?.Canvas?.getFrameEl) return null
@@ -367,14 +368,27 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
       `
   }
 
+  const bindFrameRestrictions = (frameWin) => {
+    try {
+      const doc = frameWin?.document || frameWin?.contentDocument
+      if (doc) attachInputRestrictions(doc)
+    } catch (_) {
+      /* noop */
+    }
+  }
+
   editor.on('canvas:frame:load', ({ window: frameWin }) => {
     injectCanvasStyles(frameWin)
+    bindFrameRestrictions(frameWin)
 
     const currentDevice = editor.Devices.getSelected()
     const afterLoad = () => {
       if (!alive) return
       const frame = editor.Canvas.getFrameEl?.()
-      if (frame?.contentWindow) injectCanvasStyles(frame.contentWindow)
+      if (frame?.contentWindow) {
+        injectCanvasStyles(frame.contentWindow)
+        bindFrameRestrictions(frame.contentWindow)
+      }
       const devName = currentDevice ? String(currentDevice.get('name')) : 'Desktop'
       applyDeviceViewport(editor, devName)
       syncCanvasFrameHeight(editor)
@@ -386,7 +400,10 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   // Ensure styles exist even if frame:load already fired before this plugin bound
   try {
     const existing = editor.Canvas.getFrameEl?.()
-    if (existing?.contentWindow) injectCanvasStyles(existing.contentWindow)
+    if (existing?.contentWindow) {
+      injectCanvasStyles(existing.contentWindow)
+      bindFrameRestrictions(existing.contentWindow)
+    }
   } catch (_) {
     /* noop */
   }
@@ -424,6 +441,8 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
     resetCanvasHeightFloor(editor)
     setTimeout(() => {
       if (!alive) return
+      const frame = editor.Canvas.getFrameEl?.()
+      if (frame?.contentWindow) bindFrameRestrictions(frame.contentWindow)
       syncCanvasFrameHeight(editor, { allowShrink: true })
     }, 80)
   })

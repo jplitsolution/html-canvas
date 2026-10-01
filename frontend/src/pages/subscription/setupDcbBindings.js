@@ -319,6 +319,21 @@ function setupDcbBindings(
       setSlot(errorSlot, 'Please enter the PIN', true)
       return
     }
+
+    const minAttr = pinInput?.getAttribute('minlength') || pinInput?.getAttribute('data-min-length')
+    const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
+    if (Number.isFinite(min) && min > 0 && pin.length < min) {
+      setSlot(errorSlot, `PIN must be at least ${min} characters`, true)
+      return
+    }
+
+    const maxAttr = pinInput?.getAttribute('maxlength') || pinInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && pin.length > max) {
+      setSlot(errorSlot, `PIN cannot exceed ${max} characters`, true)
+      return
+    }
+
     run(async () => {
       const response = await confirmDcbPincode({
         ...commonPayload(),
@@ -341,6 +356,21 @@ function setupDcbBindings(
       setSlot(errorSlot, 'Please enter a valid mobile number', true)
       return
     }
+
+    const minAttr = phoneInput?.getAttribute('minlength') || phoneInput?.getAttribute('data-min-length')
+    const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
+    if (Number.isFinite(min) && min > 0 && phone.length < min) {
+      setSlot(errorSlot, `Mobile number must be at least ${min} digits`, true)
+      return
+    }
+
+    const maxAttr = phoneInput?.getAttribute('maxlength') || phoneInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && phone.length > max) {
+      setSlot(errorSlot, `Mobile number cannot exceed ${max} digits`, true)
+      return
+    }
+
     run(async () => {
       await sendOtp({ phone, visitId: visitIdRef.current })
       setSlot(statusSlot, 'OTP sent. Check the server log or enter 1234.')
@@ -354,6 +384,20 @@ function setupDcbBindings(
     const otp = String(pinInput?.value || '').trim()
     if (!otp) {
       setSlot(errorSlot, 'Please enter the OTP', true)
+      return
+    }
+
+    const minAttr = pinInput?.getAttribute('minlength') || pinInput?.getAttribute('data-min-length')
+    const min = minAttr != null && minAttr !== '' ? parseInt(minAttr, 10) : NaN
+    if (Number.isFinite(min) && min > 0 && otp.length < min) {
+      setSlot(errorSlot, `OTP must be at least ${min} characters`, true)
+      return
+    }
+
+    const maxAttr = pinInput?.getAttribute('maxlength') || pinInput?.getAttribute('data-max-length')
+    const max = maxAttr != null && maxAttr !== '' ? parseInt(maxAttr, 10) : NaN
+    if (Number.isFinite(max) && max > 0 && otp.length > max) {
+      setSlot(errorSlot, `OTP cannot exceed ${max} characters`, true)
       return
     }
     run(async () => {
