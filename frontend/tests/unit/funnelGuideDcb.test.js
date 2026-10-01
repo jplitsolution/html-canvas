@@ -27,4 +27,25 @@ describe('getFunnelPageGuide', () => {
     const result = validateFunnelPage(editor, 'OTP', 'UNIVERSE_DCB')
     expect(result.ok).toBe(true)
   })
+
+  it('does not require phone number box on Orange BF OTP page', () => {
+    const guide = getFunnelPageGuide('OTP', 'ORANGE_BF')
+    expect(guide.required.find((item) => item.id === 'phone-field')).toBeUndefined()
+    expect(guide.required.find((item) => item.id === 'otp-field')).toBeDefined()
+
+    const editor = {
+      getHtml: () => `
+        <div class="bf-wellness-container">
+          <input class="bf-otp-code-input" data-otp-field="otp" />
+          <button type="button" data-otp-action="send">Renvoyer</button>
+          <div data-otp-slot="error"></div>
+          <div data-otp-slot="status"></div>
+          <button type="button" data-otp-action="verify">Vérifier</button>
+        </div>
+      `,
+    }
+    const result = validateFunnelPage(editor, 'OTP', 'ORANGE_BF')
+    expect(result.ok).toBe(true)
+    expect(result.missing).toHaveLength(0)
+  })
 })

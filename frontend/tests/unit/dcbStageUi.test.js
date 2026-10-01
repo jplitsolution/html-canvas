@@ -92,4 +92,24 @@ describe('setDcbEditorPreview', () => {
     expect(phoneGroup.style.display).toBe('none')
     expect(otpGroup.style.display).not.toBe('none')
   })
+
+  it('restores all fields and buttons when mode is all', async () => {
+    const { setDcbEditorPreview } = await import('../../src/services/flow/dcbStageUi')
+    const fakeDoc = document.implementation.createHTMLDocument('Editor Canvas')
+    fakeDoc.body.innerHTML = `
+      <div class="bf-field-group"><input class="bf-otp-code-input" data-otp-field="otp" /></div>
+      <button type="button" data-otp-action="send" class="bf-resend-btn">Renvoyer</button>
+      <button type="button" data-otp-action="verify" class="bf-primary-btn">Vérifier</button>
+    `
+    const fakeEditor = { Canvas: { getDocument: () => fakeDoc } }
+
+    setDcbEditorPreview(fakeEditor, 'number')
+    expect(fakeDoc.querySelector('.bf-field-group').style.display).toBe('none')
+    expect(fakeDoc.querySelector('.bf-primary-btn').style.display).toBe('none')
+
+    setDcbEditorPreview(fakeEditor, 'all')
+    expect(fakeDoc.querySelector('.bf-field-group').style.display).toBe('')
+    expect(fakeDoc.querySelector('.bf-primary-btn').style.display).toBe('')
+    expect(fakeDoc.querySelector('.bf-resend-btn').style.display).toBe('')
+  })
 })

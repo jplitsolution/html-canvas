@@ -186,8 +186,19 @@ export const FUNNEL_PAGE_GUIDES = {
 
 export function getFunnelPageGuide(pageType, verificationMode) {
   const base = pageType ? FUNNEL_PAGE_GUIDES[pageType] ?? null : null
-  if (!base) return null
-  if (String(verificationMode || '').toUpperCase() !== 'UNIVERSE_DCB') return base
+  const mode = String(verificationMode || '').toUpperCase()
+  if (mode === 'ORANGE_BF') {
+    if (pageType === 'OTP') {
+      return {
+        ...base,
+        title: 'OTP verification page',
+        summary: 'Enter the 4-digit OTP code sent via SMS to verify subscription.',
+        required: base.required.filter((item) => item.id !== 'phone-field'),
+      }
+    }
+  }
+
+  if (mode !== 'UNIVERSE_DCB') return base
 
   if (pageType === 'OTP') {
     return {

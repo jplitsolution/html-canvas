@@ -219,9 +219,8 @@ export const createCampaignsService = () => {
 
       const html = template.data?.html || '';
       const isDefault = isDefaultTemplateHtml(page.pageType, html);
-      const isOrangeBf = mode === 'ORANGE_BF';
 
-      if (isDefault || isOrangeBf) {
+      if (isDefault) {
         const newData = defaultPageData(page.pageType, campaign);
         if (newData && newData.html && template.data?.html !== newData.html) {
           template.data = newData;

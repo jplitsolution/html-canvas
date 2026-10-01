@@ -914,7 +914,11 @@ export default function TemplateEditor({
       }
 
       if (String(funnelPageType || '').toUpperCase() === 'OTP') {
-        setDcbEditorPreview(ed, step || 'number')
+        if (String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB') {
+          setDcbEditorPreview(ed, step || 'number')
+        } else {
+          setDcbEditorPreview(ed, 'all')
+        }
       }
 
       requestAnimationFrame(() => {
@@ -961,7 +965,11 @@ export default function TemplateEditor({
         injectStylesheetsIntoCanvas(ed)
         syncCanvasFrameHeight(ed)
         if (String(funnelPageType || '').toUpperCase() === 'OTP') {
-          setDcbEditorPreview(ed, step || 'number')
+          if (String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB') {
+            setDcbEditorPreview(ed, step || 'number')
+          } else {
+            setDcbEditorPreview(ed, 'all')
+          }
         }
       }, delay)
     })
@@ -992,6 +1000,10 @@ export default function TemplateEditor({
 
   useEffect(() => {
     if (!editor || String(funnelPageType || '').toUpperCase() !== 'OTP') return undefined
+    if (String(verificationMode || '').toUpperCase() !== 'UNIVERSE_DCB') {
+      setDcbEditorPreview(editor, 'all')
+      return undefined
+    }
     const currentStep = step || 'number'
     const apply = () => setDcbEditorPreview(editor, currentStep)
     apply()
@@ -1003,7 +1015,7 @@ export default function TemplateEditor({
       editor.off('canvas:ready', apply)
       editor.off('component:mount', apply)
     }
-  }, [editor, funnelPageType, step])
+  }, [editor, funnelPageType, step, verificationMode])
 
   const contextValue = {
     editor,

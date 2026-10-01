@@ -209,9 +209,13 @@ export function setDcbEditorPreview(editor, mode) {
     const style = doc.getElementById(DCB_OTP_PREVIEW_STYLE_ID)
     if (style) style.textContent = ''
     try {
-      doc.querySelectorAll('[data-otp-action], [data-otp-step], [data-dcb-action], [data-dcb-stage]').forEach((el) => {
-        el.style.removeProperty('display')
-      })
+      doc
+        .querySelectorAll(
+          '[data-otp-action], [data-otp-step], [data-dcb-action], [data-dcb-stage], [data-otp-field], [data-dcb-field], [data-field], [class*="field-group"], [class*="otp-input-wrap"], [class*="resend-row"], [class*="primary-btn"], button',
+        )
+        .forEach((el) => {
+          el.style.removeProperty('display')
+        })
     } catch (_) {}
     return
   }
