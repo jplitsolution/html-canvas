@@ -2,7 +2,7 @@ import { sendOtp, verifyOtp } from '../../services/api/otp'
 import { persistPhone, resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
-function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError: _setError, pageCacheRef, transitionLockRef }) {
+function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef, transitionLockRef }) {
   const sendBtn = shadow.querySelector('[data-action="send-otp"], [data-otp-action="send"]')
   const verifyBtn = shadow.querySelector('[data-action="verify-otp"], [data-otp-action="verify"]')
   const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
@@ -14,10 +14,88 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   let isSending = false
   let isVerifying = false
 
+  const isErrorSlot = (el) => {
+    if (!el) return false
+    return (
+      el.matches?.(
+        '[data-otp-slot="error"], [data-slot="error"], [data-dcb-slot="error"], .wjo-error, .bf-error-slot, .dcb-error-slot, .otp-error-slot, .otp-error',
+      ) ||
+      el.getAttribute?.('data-otp-slot') === 'error' ||
+      el.getAttribute?.('data-slot') === 'error' ||
+      el.getAttribute?.('data-dcb-slot') === 'error'
+    )
+  }
+
+  const setErrorText = (text) => {
+    const errorSlots = shadow.querySelectorAll(
+      '[data-otp-slot="error"], [data-slot="error"], [data-dcb-slot="error"], .wjo-error, .bf-error-slot, .dcb-error-slot, .otp-error-slot, .otp-error',
+    )
+    if (errorSlots.length > 0) {
+      errorSlots.forEach((slot) => {
+        slot.textContent = text || ''
+        slot.style.color = '#dc2626'
+        if (text) {
+          slot.hidden = false
+          if (slot.style.display === 'none') {
+            slot.style.display = ''
+          }
+        }
+      })
+    } else if (text && verifyBtn && verifyBtn.parentNode) {
+      let fallbackSlot = shadow.querySelector('.otp-injected-error-slot')
+      if (!fallbackSlot) {
+        fallbackSlot = document.createElement('div')
+        fallbackSlot.className = 'otp-injected-error-slot'
+        fallbackSlot.style.cssText =
+          'min-height:18px;color:#dc2626;font-size:13px;font-weight:600;margin:8px 0;text-align:center;'
+        verifyBtn.parentNode.insertBefore(fallbackSlot, verifyBtn)
+      }
+      fallbackSlot.textContent = text
+      fallbackSlot.hidden = false
+      fallbackSlot.style.display = ''
+    } else {
+      const fallbackSlot = shadow.querySelector('.otp-injected-error-slot')
+      if (fallbackSlot) {
+        fallbackSlot.textContent = ''
+      }
+    }
+
+    if (typeof setError === 'function') {
+      if (errorSlots.length === 0 && !shadow.querySelector('.otp-injected-error-slot')) {
+        setError(text || '')
+      } else {
+        setError('')
+      }
+    }
+  }
+
+  const setStatusText = (text) => {
+    const statusSlots = shadow.querySelectorAll(
+      '[data-otp-slot="status"], [data-slot="status"], [data-dcb-slot="status"], .wjo-status, .bf-status-slot, .dcb-status-slot, .otp-status-slot, .otp-status',
+    )
+    if (statusSlots.length > 0) {
+      statusSlots.forEach((slot) => {
+        slot.textContent = text || ''
+        slot.style.color = '#4b5563'
+        if (text) {
+          slot.hidden = false
+          if (slot.style.display === 'none') {
+            slot.style.display = ''
+          }
+        }
+      })
+    } else if (statusSlot) {
+      statusSlot.textContent = text || ''
+      statusSlot.style.color = '#4b5563'
+    }
+  }
+
   const setSlotText = (slot, text, isError = false) => {
-    if (!slot) return
-    slot.textContent = text || ''
-    slot.style.color = isError ? '#dc2626' : '#4b5563'
+    if (isError || isErrorSlot(slot)) {
+      setErrorText(text)
+    } else {
+      setStatusText(text)
+    }
   }
 
   // Load resendAttempts from sessionStorage
@@ -519,6 +597,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
   }
 
   const handleOtpInput = (e) => {
+    setErrorText('')
     let val = e.target.value.trim().replace(/\D/g, '')
     const maxAttr = e.target.getAttribute('maxlength') || e.target.getAttribute('data-max-length')
     const max =

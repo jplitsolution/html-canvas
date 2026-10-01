@@ -182,10 +182,37 @@ function setupDcbBindings(
   adaptDcbStageUi(shadow, currentStage, { phoneInput, pinInput })
   if (phoneInput && phoneRef.current) phoneInput.value = phoneRef.current
 
+  const isErrorSlot = (el) => {
+    if (!el) return false
+    return (
+      el.matches?.(
+        '[data-dcb-slot="error"], [data-otp-slot="error"], [data-slot="error"], .dcb-error-slot, .bf-error-slot, .wjo-error',
+      ) ||
+      el.getAttribute?.('data-dcb-slot') === 'error' ||
+      el.getAttribute?.('data-otp-slot') === 'error' ||
+      el.getAttribute?.('data-slot') === 'error'
+    )
+  }
+
   const setSlot = (slot, text, error = false) => {
-    if (!slot) return
-    slot.textContent = text || ''
-    slot.style.color = error ? '#dc2626' : '#4b5563'
+    const isErr = error || isErrorSlot(slot)
+    const selector = isErr
+      ? '[data-dcb-slot="error"], [data-otp-slot="error"], [data-slot="error"], .dcb-error-slot, .bf-error-slot, .wjo-error'
+      : '[data-dcb-slot="status"], [data-otp-slot="status"], [data-slot="status"], .dcb-status-slot, .bf-status-slot, .wjo-status'
+    const slots = shadow.querySelectorAll(selector)
+    if (slots.length > 0) {
+      slots.forEach((s) => {
+        s.textContent = text || ''
+        s.style.color = isErr ? '#dc2626' : '#4b5563'
+        if (text) {
+          s.hidden = false
+          if (s.style.display === 'none') s.style.display = ''
+        }
+      })
+    } else if (slot) {
+      slot.textContent = text || ''
+      slot.style.color = isErr ? '#dc2626' : '#4b5563'
+    }
   }
   const commonPayload = (phone) => ({
     visitId: visitIdRef.current,

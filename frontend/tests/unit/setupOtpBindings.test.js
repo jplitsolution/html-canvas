@@ -283,4 +283,66 @@ describe('setupOtpBindings after OTP verify', () => {
       )
     })
   })
+
+  it('displays error in step 2 error slot when verify fails with wrong pin', async () => {
+    document.body.innerHTML = `
+      <div id="host">
+        <div data-otp-step="1" class="step-1">
+          <input data-otp-field="phone" value="962791234567" />
+          <div data-otp-slot="error" class="error-step1"></div>
+          <button type="button" data-otp-action="send">Send</button>
+        </div>
+        <div data-otp-step="2" class="step-2">
+          <input data-otp-field="otp" value="" />
+          <div data-otp-slot="error" class="error-step2"></div>
+          <button type="button" data-otp-action="verify">Verify & Continue</button>
+        </div>
+      </div>
+    `
+    const host = document.getElementById('host')
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = host.innerHTML
+    host.innerHTML = ''
+
+    const { sendOtp } = await import('../../src/services/api/otp')
+    sendOtp.mockResolvedValueOnce({ success: true })
+    verifyOtp.mockRejectedValueOnce(new Error('wrong pin'))
+
+    setupOtpBindings(shadow, {
+      transitionFlow: vi.fn(),
+      cachePage: vi.fn(),
+      loadPage: vi.fn(),
+      country: 'Jordan',
+      operator: 'Zain',
+      campid: '36',
+      trackingCampid: 'JO-ZA-36',
+      visitIdRef: { current: 1234 },
+      phoneRef: { current: '962791234567' },
+      packRef: { current: 'daily' },
+      setPhone: vi.fn(),
+      setTransitioning: vi.fn(),
+      setError: vi.fn(),
+      pageCacheRef: { current: new Map() },
+      transitionLockRef: { current: false },
+    })
+
+    const sendBtn = shadow.querySelector('[data-otp-action="send"]')
+    sendBtn.click()
+
+    await vi.waitFor(() => {
+      expect(shadow.querySelector('.step-2').hidden).toBe(false)
+    })
+
+    const otpInput = shadow.querySelector('[data-otp-field="otp"]')
+    otpInput.value = '12345'
+
+    const verifyBtn = shadow.querySelector('[data-otp-action="verify"]')
+    verifyBtn.click()
+
+    await vi.waitFor(() => {
+      const errorStep2 = shadow.querySelector('.error-step2')
+      expect(errorStep2.textContent).toBe('wrong pin')
+    })
+  })
 })
+
