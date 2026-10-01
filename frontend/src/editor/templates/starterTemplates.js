@@ -422,7 +422,16 @@ body {
   background: #6366f1;
   box-shadow: 0 0 10px rgba(99, 102, 241, 0.7);
 }
+.wjo-step-1,
+.wjo-step-2 {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  box-sizing: border-box;
+}
 .wjo-phone-wrap {
+  width: 100%;
   display: flex;
   align-items: center;
   background: #ffffff;
@@ -430,38 +439,29 @@ body {
   border-radius: 16px;
   height: 52px;
   margin-bottom: 16px;
-  overflow: hidden;
-  direction: ltr;
-}
-.wjo-country-code {
-  background: #f0f4ff;
-  color: #3b82f6;
-  font-weight: 700;
-  font-size: 15px;
   padding: 0 16px;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-right: 1.5px solid #dce0ee;
-  user-select: none;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .wjo-phone-input {
-  flex: 1;
+  width: 100%;
+  height: 100%;
   border: none;
   outline: none;
-  padding: 0 14px;
-  font-size: 13.5px;
+  padding: 0;
+  font-size: 14px;
   font-weight: 600;
   color: #1e1b4b;
   background: transparent;
   text-align: right;
   direction: rtl;
   font-family: inherit;
+  box-sizing: border-box;
 }
 .wjo-phone-input::placeholder {
   color: #94a3b8;
   font-weight: 500;
+  text-align: right;
 }
 .wjo-pin-pill {
   display: inline-block;
@@ -472,13 +472,15 @@ body {
   font-size: 14.5px;
   font-weight: 700;
   color: #374151;
-  margin-bottom: 20px;
+  margin: 0 auto 20px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+  align-self: center;
 }
 .wjo-otp-wrap {
   margin-bottom: 18px;
   display: flex;
   justify-content: center;
+  width: 100%;
 }
 .wjo-otp-input {
   width: 100%;
@@ -495,13 +497,14 @@ body {
   outline: none;
   font-family: inherit;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+  box-sizing: border-box;
 }
 .wjo-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 52px;
+  width: 100% !important;
+  min-height: 52px;
   background: linear-gradient(135deg, #6366f1 0%, #6d28d9 100%);
   color: #ffffff;
   border: none;
@@ -513,6 +516,8 @@ body {
   transition: transform 0.15s, box-shadow 0.15s;
   margin-bottom: 16px;
   font-family: inherit;
+  box-sizing: border-box;
+  align-self: stretch;
 }
 .wjo-btn:hover {
   box-shadow: 0 10px 26px rgba(109, 40, 217, 0.45);
@@ -578,7 +583,6 @@ const wellnessJoOtpHtml = `
       </div>
 
       <div class="wjo-phone-wrap">
-        <span class="wjo-country-code">+962</span>
         <input
           class="wjo-phone-input"
           data-otp-field="phone"
@@ -592,7 +596,7 @@ const wellnessJoOtpHtml = `
       <div data-otp-slot="error" class="wjo-error"></div>
       <div data-otp-slot="status" class="wjo-status"></div>
 
-      <button type="button" data-otp-action="send" class="wjo-btn">اشترك</button>
+      <button type="button" data-otp-action="send" class="wjo-btn" style="width: 100%; min-height: 52px;">اشترك</button>
     </div>
 
     <div data-otp-step="2" class="wjo-step-2">
@@ -617,7 +621,7 @@ const wellnessJoOtpHtml = `
       <div data-otp-slot="error" class="wjo-error"></div>
       <div data-otp-slot="status" class="wjo-status"></div>
 
-      <button type="button" data-otp-action="verify" class="wjo-btn">تأكيد</button>
+      <button type="button" data-otp-action="verify" class="wjo-btn" style="width: 100%; min-height: 52px;">تأكيد</button>
     </div>
 
     <p class="wjo-disclaimer">
@@ -631,7 +635,7 @@ export const OTP_STARTER_TEMPLATES = [
   {
     id: 'otp-wellness-jo',
     name: 'Wellness 360 (Jordan / Arabic)',
-    description: 'Orange Jordan Wellness 360 Arabic 2-step OTP verification with +962 phone entry and 5-digit PIN.',
+    description: 'Orange Jordan Wellness 360 Arabic 2-step OTP verification with mobile entry and 5-digit PIN.',
     thumb: 'contact',
     previewImage: '/templates/wellness-jo/logo.png',
     css: wellnessJoOtpCss,

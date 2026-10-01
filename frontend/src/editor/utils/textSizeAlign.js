@@ -137,8 +137,7 @@ function stripAbsoluteStyleAttribute(component) {
 /** Prefer an explicit resized width; default full-bleed CTA stays 100%. */
 function resolveFlowButtonWidth(style = {}, el = null) {
   const raw = String(style.width || '').trim()
-  if (!raw || raw === 'auto') return 'auto'
-  if (/^100(\.0+)?%$/.test(raw)) return '100%'
+  if (raw === '100%' || /^100(\.0+)?%$/.test(raw)) return '100%'
 
   const px = parsePx(raw)
   if (px != null && String(raw).includes('%') && el && el.offsetWidth > 0) {
@@ -147,6 +146,28 @@ function resolveFlowButtonWidth(style = {}, el = null) {
   if (px != null && String(raw).endsWith('px')) {
     return `${Math.max(MIN_BTN_WIDTH, Math.round(px))}px`
   }
+  if (raw && raw !== 'auto') {
+    return raw
+  }
+
+  if (el) {
+    const inlineW = String(el.style?.width || '').trim()
+    if (inlineW && inlineW !== 'auto') {
+      if (/^100(\.0+)?%$/.test(inlineW)) return '100%'
+      const inlinePx = parsePx(inlineW)
+      if (inlinePx != null) return `${Math.max(MIN_BTN_WIDTH, Math.round(inlinePx))}px`
+      return inlineW
+    }
+    try {
+      if (el.parentElement && el.offsetWidth > 0 && el.parentElement.offsetWidth > 0) {
+        if (el.offsetWidth >= el.parentElement.offsetWidth * 0.85) {
+          return '100%'
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (!raw || raw === 'auto') return 'auto'
   return raw
 }
 
@@ -164,7 +185,7 @@ function syncFlowButtonDom(el, minHeightPx, width = '100%') {
   el.style.boxSizing = 'border-box'
   // inline-flex + align-self so parent flex stretch cannot force full row width
   if (el.style.display !== 'none') {
-    el.style.display = 'inline-flex'
+    el.style.display = custom ? 'inline-flex' : 'flex'
   }
   el.style.alignItems = 'center'
   el.style.justifyContent = 'center'
@@ -228,7 +249,7 @@ export function keepFlowButtonInFlow(component) {
     String(prev.width || '') === width &&
     String(prev['min-height'] || '') === `${minH}px` &&
     String(prev['min-width'] || '') === minWidth &&
-    String(prev.display || '') === 'inline-flex' &&
+    String(prev.display || '') === (customWidth ? 'inline-flex' : 'flex') &&
     String(prev['align-self'] || '') === alignSelf
 
   if (alreadyInFlow) return
@@ -239,7 +260,7 @@ export function keepFlowButtonInFlow(component) {
     'max-width': '100%',
     'min-width': minWidth,
     'min-height': `${minH}px`,
-    display: 'inline-flex',
+    display: customWidth ? 'inline-flex' : 'flex',
     'align-items': 'center',
     'justify-content': 'center',
     'align-self': alignSelf,
