@@ -16,3 +16,6 @@ deploy.env
 frontend/.env.production
 
 safwap-server-backup
+
+# reports / generated files
+*.xlsx
