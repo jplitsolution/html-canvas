@@ -760,7 +760,20 @@ function CampaignLogsPage() {
   const paramEventType = searchParams.get('eventType')
   const paramVendorId = searchParams.get('vendorId')
 
-  const [selectedId, setSelectedId] = useState('')
+  const cachedState = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('tc_campaign_logs_filter_state')
+      return raw ? JSON.parse(raw) : null
+    } catch {
+      return null
+    }
+  }, [])
+
+  const [selectedId, setSelectedId] = useState(() => {
+    if (paramCampaignId) return Number(paramCampaignId)
+    if (cachedState?.selectedId != null && cachedState.selectedId !== '') return cachedState.selectedId
+    return ''
+  })
   const [esEnabled, setEsEnabled] = useState(true)
 
   const openVisitDetail = useCallback((visitId) => {
@@ -768,21 +781,69 @@ function CampaignLogsPage() {
     navigate(`/analytics/visits/${visitId}`)
   }, [navigate])
 
-  const [datePreset, setDatePreset] = useState(paramPreset || (paramFrom && paramTo ? 'custom' : 'today'))
-  const [compareEvents, setCompareEvents] = useState(['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'])
+  const [datePreset, setDatePreset] = useState(() => {
+    if (paramPreset) return paramPreset
+    if (paramFrom && paramTo) return 'custom'
+    if (cachedState?.datePreset) return cachedState.datePreset
+    return 'today'
+  })
+  const [compareEvents, setCompareEvents] = useState(() => {
+    if (cachedState?.compareEvents && Array.isArray(cachedState.compareEvents) && cachedState.compareEvents.length > 0) {
+      return cachedState.compareEvents
+    }
+    return ['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS']
+  })
   const [filters, setFilters] = useState(() => {
-    const range = getDateRangeForPreset(paramPreset || 'today', timezone)
+    const hasParam = paramPreset || paramFrom || paramTo || paramEventType || paramVendorId
+    if (hasParam) {
+      const range = getDateRangeForPreset(paramPreset || 'today', timezone)
+      return {
+        eventType: paramEventType || '',
+        status: '',
+        vendorId: paramVendorId || '',
+        clickId: '',
+        q: '',
+        from: paramFrom || range.from,
+        to: paramTo || range.to,
+      }
+    }
+    if (cachedState?.filters) {
+      return cachedState.filters
+    }
+    const range = getDateRangeForPreset('today', timezone)
     return {
-      eventType: paramEventType || '',
+      eventType: '',
       status: '',
-      vendorId: paramVendorId || '',
+      vendorId: '',
       clickId: '',
       q: '',
-      from: paramFrom || range.from,
-      to: paramTo || range.to,
+      from: range.from,
+      to: range.to,
     }
   })
-  const [page, setPage] = useState(1)
+  const [page, setPage] = useState(() => {
+    if (cachedState?.page && Number(cachedState.page) > 0) {
+      return Number(cachedState.page)
+    }
+    return 1
+  })
+
+  // Persist filter state across visit detail view & navigation
+  useEffect(() => {
+    if (!selectedId) return
+    try {
+      sessionStorage.setItem(
+        'tc_campaign_logs_filter_state',
+        JSON.stringify({
+          selectedId,
+          datePreset,
+          compareEvents,
+          filters,
+          page,
+        }),
+      )
+    } catch {}
+  }, [selectedId, datePreset, compareEvents, filters, page])
 
   const [aggs, setAggs] = useState(null)
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
@@ -848,13 +909,15 @@ function CampaignLogsPage() {
       .then(() => {
         if (paramCampaignId) {
           setSelectedId(Number(paramCampaignId))
+        } else if (cachedState?.selectedId != null && cachedState.selectedId !== '') {
+          setSelectedId(cachedState.selectedId)
         } else {
-          setSelectedId('all')
+          setSelectedId((prev) => prev || 'all')
         }
       })
       .catch(() => {})
     fetchVendors().catch(() => {})
-  }, [addToast, paramCampaignId, fetchCampaigns, fetchVendors])
+  }, [addToast, paramCampaignId, cachedState, fetchCampaigns, fetchVendors])
 
   // Keep Today/Week/Month ranges aligned when profile timezone changes
   useEffect(() => {

@@ -82,6 +82,21 @@ export const createOrangeBfProvider = ({ httpClient = axios } = {}) => {
       }
     }
 
+    let fullRequestUrl = url;
+    if (reqOptions.params && Object.keys(reqOptions.params).length > 0) {
+      try {
+        if (typeof httpClient?.getUri === 'function') {
+          fullRequestUrl = httpClient.getUri(reqOptions);
+        } else {
+          const qs = new URLSearchParams(reqOptions.params).toString();
+          fullRequestUrl = url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
+        }
+      } catch {
+        const qs = new URLSearchParams(reqOptions.params).toString();
+        fullRequestUrl = url.includes('?') ? `${url}&${qs}` : `${url}?${qs}`;
+      }
+    }
+
     try {
       const response = await httpClient(reqOptions);
       const latencyMs = Date.now() - startedAt;
@@ -91,7 +106,7 @@ export const createOrangeBfProvider = ({ httpClient = axios } = {}) => {
         httpStatus: response.status,
         rawResponse: response.data,
         latencyMs,
-        requestUrl: url,
+        requestUrl: fullRequestUrl,
         requestParams: reqOptions.params || null,
         requestBody: reqOptions.data || null,
       };
@@ -106,7 +121,7 @@ export const createOrangeBfProvider = ({ httpClient = axios } = {}) => {
         error: error.message || 'Network error',
         rawResponse: rawData || null,
         latencyMs,
-        requestUrl: url,
+        requestUrl: fullRequestUrl,
         requestParams: reqOptions.params || null,
         requestBody: reqOptions.data || null,
       };

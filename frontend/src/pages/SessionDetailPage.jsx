@@ -208,6 +208,22 @@ function eventDescription(eventType) {
   }
 }
 
+function getRequestPayload(call) {
+  if (!call) return null
+  if (call.requestBody != null && call.requestBody !== '') {
+    return call.requestBody
+  }
+  if (call.requestUrl && call.requestUrl.includes('?')) {
+    try {
+      const qIndex = call.requestUrl.indexOf('?')
+      const search = call.requestUrl.slice(qIndex + 1)
+      const params = Object.fromEntries(new URLSearchParams(search).entries())
+      if (Object.keys(params).length > 0) return params
+    } catch {}
+  }
+  return null
+}
+
 function JsonBlock({ value, label, fallbackText }) {
   const [copied, setCopied] = useState(false)
 
@@ -451,11 +467,11 @@ function ApiCallCard({ call, defaultOpen }) {
             )}
 
             <JsonBlock
-              value={call.requestBody}
+              value={getRequestPayload(call)}
               label="Request Body / Parameters"
               fallbackText={
                 call.requestUrl
-                  ? 'No body payload (parameters passed in query string above)'
+                  ? 'No body payload or parameters recorded'
                   : 'No request payload recorded'
               }
             />
@@ -696,7 +712,7 @@ function TimelineItemCard({ item, apiById, visit }) {
               : ''}
           </p>
         )}
-        {item.kind === 'api' && apiCall?.requestBody != null && (
+        {item.kind === 'api' && getRequestPayload(apiCall) != null && (
           <JsonBlock
             label="Request"
             value={
@@ -711,7 +727,7 @@ function TimelineItemCard({ item, apiById, visit }) {
                         ? billingBody.reason
                         : undefined),
                   }
-                : apiCall.requestBody
+                : getRequestPayload(apiCall)
             }
           />
         )}
@@ -838,7 +854,13 @@ function SessionDetailPage() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => navigate('/analytics')}
+          onClick={() => {
+            if (window.history.length > 1) {
+              navigate(-1)
+            } else {
+              navigate('/analytics')
+            }
+          }}
           className="flex items-center gap-1.5"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

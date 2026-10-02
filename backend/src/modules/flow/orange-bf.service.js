@@ -590,8 +590,9 @@ export const createOrangeBfService = () => {
             msisdn,
             callType: ApiCallType.ORANGE_BF_SYNC || 'orange_bf_sync',
             requestUrl: syncResult.requestUrl,
-            requestParams: syncResult.requestParams,
-            requestBody: syncResult.requestBody ? (typeof syncResult.requestBody === 'string' ? syncResult.requestBody : JSON.stringify(syncResult.requestBody)) : null,
+            requestBody: syncResult.requestBody
+              ? (typeof syncResult.requestBody === 'string' ? syncResult.requestBody : JSON.stringify(syncResult.requestBody))
+              : (syncResult.requestParams ? JSON.stringify(syncResult.requestParams) : null),
             responseStatus: syncResult.httpStatus,
             responseBody: syncResult.rawResponse,
             success: syncResult.success,
