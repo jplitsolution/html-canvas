@@ -54,7 +54,7 @@ run_backend() {
   ensure_deps "$BACKEND_DIR" "backend"
   (
     cd "$BACKEND_DIR"
-    npm run db:tunnel
+    # npm run db:tunnel
     npm run start:dev 2>&1 | sed -e "s/^/$(printf "${C_BE}[backend]${C_RESET} ")/"
   ) &
   pids+=($!)
