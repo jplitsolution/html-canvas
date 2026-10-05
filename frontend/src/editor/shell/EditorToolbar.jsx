@@ -34,7 +34,7 @@ export function EditorToolbar({
   onExportCurrent,
   onExportAll,
 }) {
-  const { editor, device, setDevice, switchDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight } = useEditor();
+  const { editor, device, setDevice, switchDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight, funnelPageType } = useEditor();
   const [exportOpen, setExportOpen] = useState(false);
   const exportRef = useRef(null);
 
@@ -114,51 +114,58 @@ export function EditorToolbar({
       {/* Center Section: Device Switcher & Zoom Controls */}
       <div className="hidden lg:flex items-center gap-3">
         {/* Device Switcher Pills */}
-        <div className="flex items-center gap-1.5">
-          {devices.map(({ id, icon: Icon, label }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => {
-                if (switchDevice) switchDevice(id);
-                else {
-                  editor?.setDevice(id);
-                  setDevice(id);
-                }
-              }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
-                device === id
-                  ? 'bg-indigo-50/80 border-2 border-indigo-600 text-indigo-700 shadow-sm font-bold'
-                  : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50'
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{label}</span>
-            </button>
-          ))}
+        {funnelPageType ? (
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-50/80 border-2 border-indigo-600 text-indigo-700 text-xs font-bold shadow-sm">
+            <Smartphone className="w-3.5 h-3.5" />
+            <span>Mobile (375px)</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            {devices.map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => {
+                  if (switchDevice) switchDevice(id);
+                  else {
+                    editor?.setDevice(id);
+                    setDevice(id);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all duration-200 ${
+                  device === id
+                    ? 'bg-indigo-50/80 border-2 border-indigo-600 text-indigo-700 shadow-sm font-bold'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{label}</span>
+              </button>
+            ))}
 
-          {device === 'Custom' && (
-            <div className="flex items-center gap-1 ml-1 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-sm">
-              <input
-                type="number"
-                value={customWidth}
-                onChange={(e) => setCustomWidth(e.target.value)}
-                className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
-                placeholder="W"
-                title="Width (px)"
-              />
-              <span className="text-slate-400 text-xs">×</span>
-              <input
-                type="number"
-                value={customHeight}
-                onChange={(e) => setCustomHeight(e.target.value)}
-                className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
-                placeholder="H"
-                title="Height (px)"
-              />
-            </div>
-          )}
-        </div>
+            {device === 'Custom' && (
+              <div className="flex items-center gap-1 ml-1 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-sm">
+                <input
+                  type="number"
+                  value={customWidth}
+                  onChange={(e) => setCustomWidth(e.target.value)}
+                  className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
+                  placeholder="W"
+                  title="Width (px)"
+                />
+                <span className="text-slate-400 text-xs">×</span>
+                <input
+                  type="number"
+                  value={customHeight}
+                  onChange={(e) => setCustomHeight(e.target.value)}
+                  className="w-12 text-xs rounded text-slate-800 text-center focus:outline-none font-medium"
+                  placeholder="H"
+                  title="Height (px)"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Zoom Control */}
         <div className="flex items-center gap-1 px-2 py-1 rounded-xl bg-white border border-slate-200 shadow-sm">
