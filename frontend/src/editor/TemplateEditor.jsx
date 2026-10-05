@@ -235,10 +235,16 @@ export default function TemplateEditor({
           }
           injectStylesheetsIntoCanvas(ed)
           ensureAllTextEditable(ed)
+          if (String(funnelPageType || '').toUpperCase() === 'OTP') {
+            setDcbEditorPreview(ed, step || 'number')
+          }
         } finally {
           window.setTimeout(() => {
             layoutSwitchRef.current = false
             syncCanvasFrameHeight(ed, { allowShrink: true })
+            if (String(funnelPageType || '').toUpperCase() === 'OTP') {
+              setDcbEditorPreview(ed, step || 'number')
+            }
           }, 80)
         }
       }
