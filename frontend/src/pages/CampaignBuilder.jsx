@@ -75,7 +75,7 @@ export default function CampaignBuilder() {
     async (editor, meta) => {
       if (!id || !pageType) return null
 
-      const { ok, missing } = validateFunnelPage(editor, pageType, campaign?.verificationMode)
+      const { ok, missing } = validateFunnelPage(editor, pageType, campaign?.verificationMode, step)
       if (!ok) {
         useStore.getState().addToast(
           `Warning: missing ${missing.map((m) => m.label).join(', ')}. Save anyway — subscription may not work until you restore them.`,
@@ -87,7 +87,7 @@ export default function CampaignBuilder() {
       await afterPageSaved(id, pageType, saved)
       return { id, pageType }
     },
-    [id, pageType, afterPageSaved, campaign?.verificationMode],
+    [id, pageType, afterPageSaved, campaign?.verificationMode, step],
   )
 
   const handleEditorSave = useCallback(() => {

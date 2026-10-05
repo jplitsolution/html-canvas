@@ -32,6 +32,10 @@ button[data-action="verify-otp"] {
 [data-otp-step="2"],
 .otp-step-2,
 .both-step-2,
+.wjo-step-2,
+.wjo-pin-pill,
+.wjo-otp-wrap,
+.wjo-resend-row,
 .otp-resend-row,
 .otp-step2-actions,
 [data-dcb-stage="pin"] {
@@ -58,6 +62,7 @@ button[data-otp-action="send"],
 .flow-btn[data-otp-action="send"],
 .both-flow-btn[data-otp-action="send"],
 .otp-flow-btn[data-otp-action="send"],
+.wjo-btn[data-otp-action="send"],
 [data-dcb-action="manual-check"],
 button[data-dcb-action="manual-check"],
 [data-action="send-otp"],
@@ -79,6 +84,8 @@ button[data-action="send-otp"] {
 [data-otp-step="1"],
 .otp-step-1,
 .both-step-1,
+.wjo-step-1,
+.wjo-phone-wrap,
 [data-dcb-stage="number"] {
   display: none !important;
 }
@@ -238,10 +245,10 @@ export function setDcbEditorPreview(editor, mode) {
       '[data-otp-action="verify"], button[data-otp-action="verify"], [data-dcb-action="confirm-pin"], [data-action="verify-otp"]'
     )
     const step1Els = doc.querySelectorAll(
-      '[data-otp-step="1"], .otp-step-1, .both-step-1, [data-dcb-stage="number"]'
+      '[data-otp-step="1"], .otp-step-1, .both-step-1, .wjo-step-1, .wjo-phone-wrap, [data-dcb-stage="number"]'
     )
     const step2Els = doc.querySelectorAll(
-      '[data-otp-step="2"], .otp-step-2, .both-step-2, [data-dcb-stage="pin"], .otp-resend-row, .otp-step2-actions'
+      '[data-otp-step="2"], .otp-step-2, .both-step-2, .wjo-step-2, .wjo-pin-pill, .wjo-otp-wrap, .wjo-resend-row, [data-dcb-stage="pin"], .otp-resend-row, .otp-step2-actions'
     )
     const phoneFields = doc.querySelectorAll(
       '[data-otp-field="phone"], [data-dcb-field="phone"], [data-field="phone"]'

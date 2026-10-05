@@ -4,9 +4,9 @@ import { useEditor } from '../context/EditorContext'
 import { insertFunnelPart, validateFunnelPage } from '../utils/funnelGuide'
 
 export function FunnelGuideBanner({ pageType }) {
-  const { editor, verificationMode } = useEditor()
+  const { editor, verificationMode, step } = useEditor()
   const [expanded, setExpanded] = useState(false)
-  const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType, verificationMode))
+  const [status, setStatus] = useState(() => validateFunnelPage(editor, pageType, verificationMode, step))
 
   useEffect(() => {
     if (!editor || !pageType) return
@@ -14,7 +14,7 @@ export function FunnelGuideBanner({ pageType }) {
     let lastKey = ''
 
     const refresh = () => {
-      const next = validateFunnelPage(editor, pageType, verificationMode)
+      const next = validateFunnelPage(editor, pageType, verificationMode, step)
       setStatus(next)
 
       const key = `${next.ok}:${next.missing.map((m) => m.id).join(',')}`
@@ -53,7 +53,7 @@ export function FunnelGuideBanner({ pageType }) {
       editor.off('component:update', refresh)
       editor.off('change:changesCount', refresh)
     }
-  }, [editor, pageType, verificationMode])
+  }, [editor, pageType, verificationMode, step])
 
 
   const { guide, ok, missing } = status
@@ -61,7 +61,7 @@ export function FunnelGuideBanner({ pageType }) {
 
   const handleAddBack = (req) => {
     insertFunnelPart(editor, req.snippet)
-    setStatus(validateFunnelPage(editor, pageType, verificationMode))
+    setStatus(validateFunnelPage(editor, pageType, verificationMode, step))
   }
 
   return (

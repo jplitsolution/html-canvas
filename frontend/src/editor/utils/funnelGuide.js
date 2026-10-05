@@ -184,8 +184,29 @@ export const FUNNEL_PAGE_GUIDES = {
   },
 }
 
-export function getFunnelPageGuide(pageType, verificationMode) {
+export function getFunnelPageGuide(pageType, verificationMode, step) {
   const base = pageType ? FUNNEL_PAGE_GUIDES[pageType] ?? null : null
+  if (!base) return null
+
+  if (pageType === 'OTP') {
+    if (step === 'number') {
+      return {
+        ...base,
+        title: 'Step 1: Mobile Number screen',
+        summary: 'First screen of the OTP flow. User enters their phone number to receive an SMS code.',
+        required: base.required.filter((item) => item.id === 'phone-field' || item.id === 'send-otp'),
+      }
+    }
+    if (step === 'otp' || step === 'pin') {
+      return {
+        ...base,
+        title: 'Step 2: Verification PIN / OTP screen',
+        summary: 'Second screen of the OTP flow. User enters the received verification code and confirms.',
+        required: base.required.filter((item) => item.id === 'otp-field' || item.id === 'verify-otp'),
+      }
+    }
+  }
+
   const mode = String(verificationMode || '').toUpperCase()
   if (mode === 'ORANGE_BF') {
     if (pageType === 'OTP') {
@@ -277,8 +298,9 @@ export function validateFunnelPage(
   editor,
   pageType,
   verificationMode,
+  step,
 ) {
-  const guide = getFunnelPageGuide(pageType, verificationMode)
+  const guide = getFunnelPageGuide(pageType, verificationMode, step)
   if (!guide || !editor) return { ok: true, missing: [], guide }
 
   const html = getPageHtml(editor)

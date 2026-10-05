@@ -16,7 +16,19 @@ import {
 import { RawHtmlPanel } from './RawHtmlPanel'
 import { useEditor } from '../context/EditorContext'
 import { TemplateCard } from './BlockCard'
-import { STARTER_TEMPLATES, OTP_STARTER_TEMPLATES, CONFIRM_STARTER_TEMPLATES, HOME_STARTER_TEMPLATES, THANKYOU_STARTER_TEMPLATES, INPROGRESS_STARTER_TEMPLATES, LOW_BALANCE_STARTER_TEMPLATES, BLOCKED_STARTER_TEMPLATES, ERROR_STARTER_TEMPLATES } from '../templates/starterTemplates'
+import {
+  STARTER_TEMPLATES,
+  OTP_STARTER_TEMPLATES,
+  OTP_NUMBER_STARTER_TEMPLATES,
+  OTP_VERIFY_STARTER_TEMPLATES,
+  CONFIRM_STARTER_TEMPLATES,
+  HOME_STARTER_TEMPLATES,
+  THANKYOU_STARTER_TEMPLATES,
+  INPROGRESS_STARTER_TEMPLATES,
+  LOW_BALANCE_STARTER_TEMPLATES,
+  BLOCKED_STARTER_TEMPLATES,
+  ERROR_STARTER_TEMPLATES,
+} from '../templates/starterTemplates'
 import { applyStarterTemplate } from '../utils/blockActions'
 import { ensureLayerManagerMounted, filterBlockElements } from '../plugins/dragAndDrop'
 import { startAssetDrag } from '../plugins/assetDrag'
@@ -64,9 +76,9 @@ function updateBackgroundText(editor, text) {
 const SIDEBAR_COLLAPSED_KEY = 'tc-editor-sidebar-collapsed'
 
 export function EditorSidebar() {
-  const { editor, funnelPageType, verificationMode, campaignId } = useEditor()
+  const { editor, funnelPageType, verificationMode, campaignId, step } = useEditor()
   const updateCampaign = useStore((s) => s.updateCampaign)
-  const flowGuide = funnelPageType ? getFunnelPageGuide(funnelPageType, verificationMode) : undefined
+  const flowGuide = funnelPageType ? getFunnelPageGuide(funnelPageType, verificationMode, step) : undefined
   const hasFlowParts = Boolean(
     flowGuide && ((flowGuide.required?.length || 0) + (flowGuide.optional?.length || 0) > 0)
   )
@@ -355,7 +367,13 @@ export function EditorSidebar() {
                   if (funnelPageType === 'HOME') {
                     list = HOME_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'OTP') {
-                    list = OTP_STARTER_TEMPLATES;
+                    if (step === 'number') {
+                      list = OTP_NUMBER_STARTER_TEMPLATES;
+                    } else if (step === 'otp' || step === 'pin') {
+                      list = OTP_VERIFY_STARTER_TEMPLATES;
+                    } else {
+                      list = OTP_STARTER_TEMPLATES;
+                    }
                   } else if (funnelPageType === 'CONFIRM') {
                     list = CONFIRM_STARTER_TEMPLATES;
                   } else if (funnelPageType === 'THANKYOU') {
@@ -381,6 +399,7 @@ export function EditorSidebar() {
                         applyStarterTemplate(editor, t, {
                           campaignId,
                           updateCampaign,
+                          step,
                         })
                       }
                     />

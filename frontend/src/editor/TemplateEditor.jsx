@@ -63,11 +63,11 @@ export default function TemplateEditor({
   const cleanupExperienceRef = useRef(null)
   const layoutsRef = useRef(parseDeviceLayouts(initialData?.projectData, initialData?.html, initialData?.css))
   const layoutSwitchRef = useRef(false)
-  const deviceRef = useRef(initialData?.projectData?.customWidth ? 'Custom' : 'Desktop')
+  const deviceRef = useRef('Mobile')
 
   const [editor, setEditor] = useState(null)
   const [isEmpty, setIsEmpty] = useState(true)
-  const [device, setDevice] = useState(() => (initialData?.projectData?.customWidth ? 'Custom' : 'Desktop'))
+  const [device, setDevice] = useState('Mobile')
   const [zoom, setZoom] = useState(100)
   const [advancedMode, setAdvancedMode] = useState(false)
   const [selectionVersion, setSelectionVersion] = useState(0)
@@ -914,16 +914,15 @@ export default function TemplateEditor({
       }
 
       if (String(funnelPageType || '').toUpperCase() === 'OTP') {
-        if (String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB') {
-          setDcbEditorPreview(ed, step || 'number')
-        } else {
-          setDcbEditorPreview(ed, 'all')
-        }
+        setDcbEditorPreview(ed, step || 'number')
       }
 
       requestAnimationFrame(() => {
         ensureBlockManagerMounted(ed)
         filterBlockElements(ed, 'sections', '')
+        try {
+          ed.setDevice('Mobile')
+        } catch (_) {}
         const selectedDev = ed.Devices.getSelected()
         if (selectedDev) {
           applyDeviceViewport(ed, String(selectedDev.get('name')))
@@ -942,11 +941,13 @@ export default function TemplateEditor({
     }
 
     try {
+      const mobileLayout = layoutsRef.current?.mobile
       const desktopLayout = layoutsRef.current?.desktop
+      const layoutToLoad = mobileLayout?.html ? mobileLayout : (desktopLayout?.html ? desktopLayout : null)
       loadIntoEditor(
         ed,
-        desktopLayout?.html
-          ? { html: desktopLayout.html, css: desktopLayout.css, projectData: initialData.projectData }
+        layoutToLoad?.html
+          ? { html: layoutToLoad.html, css: layoutToLoad.css, projectData: initialData.projectData }
           : initialData,
       )
     } catch (err) {
@@ -965,11 +966,7 @@ export default function TemplateEditor({
         injectStylesheetsIntoCanvas(ed)
         syncCanvasFrameHeight(ed)
         if (String(funnelPageType || '').toUpperCase() === 'OTP') {
-          if (String(verificationMode || '').toUpperCase() === 'UNIVERSE_DCB') {
-            setDcbEditorPreview(ed, step || 'number')
-          } else {
-            setDcbEditorPreview(ed, 'all')
-          }
+          setDcbEditorPreview(ed, step || 'number')
         }
       }, delay)
     })
@@ -1000,22 +997,22 @@ export default function TemplateEditor({
 
   useEffect(() => {
     if (!editor || String(funnelPageType || '').toUpperCase() !== 'OTP') return undefined
-    if (String(verificationMode || '').toUpperCase() !== 'UNIVERSE_DCB') {
-      setDcbEditorPreview(editor, 'all')
-      return undefined
-    }
     const currentStep = step || 'number'
     const apply = () => setDcbEditorPreview(editor, currentStep)
     apply()
     editor.on('canvas:frame:load', apply)
     editor.on('canvas:ready', apply)
     editor.on('component:mount', apply)
+    editor.on('component:add', apply)
+    editor.on('component:update', apply)
     return () => {
       editor.off('canvas:frame:load', apply)
       editor.off('canvas:ready', apply)
       editor.off('component:mount', apply)
+      editor.off('component:add', apply)
+      editor.off('component:update', apply)
     }
-  }, [editor, funnelPageType, step, verificationMode])
+  }, [editor, funnelPageType, step])
 
   const contextValue = {
     editor,
@@ -1025,6 +1022,7 @@ export default function TemplateEditor({
     advancedMode,
     funnelPageType,
     verificationMode,
+    step,
     campaignId,
     countryCode,
     operatorCode,

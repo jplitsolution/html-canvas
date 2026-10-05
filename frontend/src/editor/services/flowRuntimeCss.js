@@ -255,7 +255,9 @@ export const FLOW_HOST_CSS = `
      use data-tc-absolute="1". Do NOT force display:flex on .page-wrapper. */
   .home-card:not([data-tc-absolute="1"]),
   .otp-card:not([data-tc-absolute="1"]),
-  .confirm-card:not([data-tc-absolute="1"]) {
+  .confirm-card:not([data-tc-absolute="1"]),
+  .wjo-card:not([data-tc-absolute="1"]),
+  .bf-wellness-container:not([data-tc-absolute="1"]) {
     position: relative !important;
     left: auto !important;
     right: auto !important;

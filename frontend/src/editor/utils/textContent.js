@@ -142,8 +142,15 @@ export function setTextContent(component, value, _editor) {
   if (component.get('type') !== 'text' && shouldConfigureAsText(component)) {
     configureAsTextComponent(component);
   }
+  const children = component.components?.();
+  if (children && children.length > 0) {
+    try {
+      children.reset();
+    } catch (_) {}
+  }
   setModelContent(component, value);
   syncComponentDomText(component, value);
+  refreshComponentView(component, _editor);
 }
 
 /** Buttons / links / CTAs whose label is edited from the property panel. */

@@ -669,10 +669,160 @@ const wellnessJoOtpHtml = `
 </div>
 `
 
+const wellnessJoNumberHtml = `
+<div class="wjo-container">
+  <div class="wjo-card">
+    <img src="/templates/wellness-jo/logo.png" alt="Wellness 360" class="wjo-logo" />
+    <img src="/templates/wellness-jo/illustration.png" alt="Fitness Illustration" class="wjo-illustration" />
+
+    <div data-otp-step="1" class="wjo-step-1">
+      <div class="wjo-title-wrap">
+        <h2 class="wjo-title">أدخل رقم هاتفك لبدء رحلتك في عالم اللياقة البدنية</h2>
+        <div class="wjo-divider"><span class="wjo-divider-dot"></span></div>
+      </div>
+
+      <div class="wjo-phone-wrap">
+        <span class="wjo-country-code" data-country-code="+962">+962</span>
+        <input
+          class="wjo-phone-input"
+          data-otp-field="phone"
+          data-country-code="+962"
+          data-input-restriction="numbers"
+          data-min-length="7"
+          data-max-length="10"
+          minlength="7"
+          maxlength="10"
+          type="tel"
+          inputmode="numeric"
+          placeholder="أدخل رقم الهاتف المحمول (من 7 إلى 9 أرقام)"
+          dir="ltr"
+        />
+      </div>
+
+      <div data-otp-slot="error" class="wjo-error"></div>
+      <div data-otp-slot="status" class="wjo-status"></div>
+
+      <button type="button" data-otp-action="send" class="wjo-btn" style="width: 100%; min-height: 52px;">اشترك</button>
+    </div>
+
+    <p class="wjo-disclaimer">
+      مرحبًا بك في منصة Wellness360 هي منصة رقمية للصحة والعافية مدعومة بالذكاء الاصطناعي، وتوفر خدمات اللياقة البدنية، واليوغا، والتأمل، والزومبا، ومحتوى مخصصًا للعافية، بالإضافة إلى مدرب لياقة بدنية يعمل بالذكاء الاصطناعي. سعر الخدمة 0.25 دينار أردني / يومياً ويتم تجديد الاشتراك تلقائيًا. لإلغاء الاشتراك في أي وقت عن طريق الرسائل القصيرة بإرسال u25 إلى 98860 لمشتركي أورانج من خلال الاشتراك في الخدمة، فإنك تقبل جميع الشروط والأحكام وتوافق على مشاركة معلوماتك مع مزود الخدمة. للاستفادة من هذه الخدمة، يجب أن يكون عمرك أكثر من 18 عامًا أو أنك حصلت على إذن من والديك أو الشخص المفوض بدفع فاتورتك.
+    </p>
+  </div>
+</div>
+`
+
+const wellnessJoVerifyHtml = `
+<div class="wjo-container">
+  <div class="wjo-card">
+    <img src="/templates/wellness-jo/logo.png" alt="Wellness 360" class="wjo-logo" />
+    <img src="/templates/wellness-jo/illustration.png" alt="Fitness Illustration" class="wjo-illustration" />
+
+    <div data-otp-step="2" class="wjo-step-2">
+      <div class="wjo-title-wrap">
+        <h2 class="wjo-title">أدخل رمز التحقق لتأكيد اشتراكك</h2>
+        <div class="wjo-divider"><span class="wjo-divider-dot"></span></div>
+      </div>
+
+      <div class="wjo-pin-pill">أدخل الرقم السري</div>
+
+      <div class="wjo-otp-wrap">
+        <input
+          class="wjo-otp-input"
+          data-otp-field="otp"
+          data-input-restriction="numbers"
+          data-min-length="4"
+          data-max-length="5"
+          minlength="4"
+          maxlength="5"
+          type="text"
+          inputmode="numeric"
+          placeholder="• • • • •"
+          autocomplete="one-time-code"
+        />
+      </div>
+
+      <div class="wjo-resend-row">
+        <button type="button" data-otp-action="send" class="wjo-resend-btn">إعادة إرسال الرمز</button>
+      </div>
+
+      <div data-otp-slot="error" class="wjo-error"></div>
+      <div data-otp-slot="status" class="wjo-status"></div>
+
+      <button type="button" data-otp-action="verify" class="wjo-btn" style="width: 100%; min-height: 52px;">تأكيد</button>
+    </div>
+
+    <p class="wjo-disclaimer">
+      مرحبًا بك في منصة Wellness360 هي منصة رقمية للصحة والعافية مدعومة بالذكاء الاصطناعي، وتوفر خدمات اللياقة البدنية، واليوغا، والتأمل، والزومبا، ومحتوى مخصصًا للعافية، بالإضافة إلى مدرب لياقة بدنية يعمل بالذكاء الاصطناعي. سعر الخدمة 0.25 دينار أردني / يومياً ويتم تجديد الاشتراك تلقائيًا. لإلغاء الاشتراك في أي وقت عن طريق الرسائل القصيرة بإرسال u25 إلى 98860 لمشتركي أورانج من خلال الاشتراك في الخدمة، فإنك تقبل جميع الشروط والأحكام وتوافق على مشاركة معلوماتك مع مزود الخدمة. للاستفادة من هذه الخدمة، يجب أن يكون عمرك أكثر من 18 عامًا أو أنك حصلت على إذن من والديك أو الشخص المفوض بدفع فاتورتك.
+    </p>
+  </div>
+</div>
+`
+
+export const OTP_NUMBER_STARTER_TEMPLATES = [
+  {
+    id: 'otp-wellness-jo-number',
+    name: 'Wellness 360 (Mobile Number)',
+    description: 'Jordan Zain / Orange Wellness 360 Arabic Step 1: Mobile number entry screen.',
+    thumb: 'contact',
+    previewImage: '/templates/wellness-jo/logo.png',
+    css: wellnessJoOtpCss,
+    html: wellnessJoNumberHtml,
+  },
+  {
+    id: 'otp-royal-number',
+    name: 'Classic Royal Blue (Number)',
+    description: 'Clean phone entry card with solid CTA.',
+    thumb: 'contact',
+    previewImage: '',
+    css: otpTemplate1Css,
+    html: otpTemplate1Html,
+  },
+]
+
+export const OTP_VERIFY_STARTER_TEMPLATES = [
+  {
+    id: 'otp-wellness-jo-verify',
+    name: 'Wellness 360 (Verify OTP)',
+    description: 'Jordan Zain / Orange Wellness 360 Arabic Step 2: 5-digit PIN / OTP verification screen.',
+    thumb: 'contact',
+    previewImage: '/templates/wellness-jo/logo.png',
+    css: wellnessJoOtpCss,
+    html: wellnessJoVerifyHtml,
+  },
+  {
+    id: 'otp-royal-verify',
+    name: 'Classic Royal Blue (Verify)',
+    description: 'Clean OTP verification card with verify button.',
+    thumb: 'contact',
+    previewImage: '',
+    css: otpTemplate1Css,
+    html: otpTemplate1Html,
+  },
+]
+
 export const OTP_STARTER_TEMPLATES = [
   {
+    id: 'otp-wellness-jo-number',
+    name: 'Wellness 360 (Mobile Number)',
+    description: 'Jordan Zain / Orange Wellness 360 Arabic Step 1: Mobile number entry screen.',
+    thumb: 'contact',
+    previewImage: '/templates/wellness-jo/logo.png',
+    css: wellnessJoOtpCss,
+    html: wellnessJoNumberHtml,
+  },
+  {
+    id: 'otp-wellness-jo-verify',
+    name: 'Wellness 360 (Verify OTP)',
+    description: 'Jordan Zain / Orange Wellness 360 Arabic Step 2: 5-digit PIN / OTP verification screen.',
+    thumb: 'contact',
+    previewImage: '/templates/wellness-jo/logo.png',
+    css: wellnessJoOtpCss,
+    html: wellnessJoVerifyHtml,
+  },
+  {
     id: 'otp-wellness-jo',
-    name: 'Wellness 360 (Jordan / Arabic)',
+    name: 'Wellness 360 (Jordan / Arabic 2-Step)',
     description: 'Orange Jordan Wellness 360 Arabic 2-step OTP verification with mobile entry and 5-digit PIN.',
     thumb: 'contact',
     previewImage: '/templates/wellness-jo/logo.png',

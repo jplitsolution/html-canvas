@@ -74,11 +74,16 @@ export async function saveCampaignPage(
   const layouts = editor.__tcLayouts || parseDeviceLayouts({}, currentSnapshot.html, currentSnapshot.css)
   
   layouts[currentKey] = currentSnapshot
-  if (!layouts.desktop) {
+  if (currentKey === 'mobile' || deviceName === 'Mobile') {
+    layouts.mobile = currentSnapshot
     layouts.desktop = currentSnapshot
-  }
-  if (!layouts.mobile) {
-    layouts.mobile = cloneLayout(currentSnapshot, { customWidth: '375' })
+  } else {
+    if (!layouts.desktop) {
+      layouts.desktop = currentSnapshot
+    }
+    if (!layouts.mobile) {
+      layouts.mobile = cloneLayout(currentSnapshot, { customWidth: '375' })
+    }
   }
   editor.__tcLayouts = layouts
 

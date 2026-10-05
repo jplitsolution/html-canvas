@@ -1,6 +1,7 @@
 import { encodeNonAscii } from './styleUtils'
 import { applyTextSizeAlignment, healFlowButtonsInEditor } from './textSizeAlign'
 import { ensureAllTextEditable } from './textContent'
+import { setDcbEditorPreview } from '../../services/flow/dcbStageUi'
 
 export function insertBlock(editor, blockId) {
   const block = editor.BlockManager.get(blockId)
@@ -23,16 +24,22 @@ export function insertBlock(editor, blockId) {
   editor.select(wrapper?.components().at(-1) || undefined)
 }
 
-export function applyStarterHtml(editor, html, css = '') {
+export function applyStarterHtml(editor, html, css = '', { step } = {}) {
   const safeHtml = encodeNonAscii(html)
   editor.setStyle(css)
   editor.setComponents(safeHtml)
   editor.UndoManager.clear()
+  if (step) {
+    setDcbEditorPreview(editor, step)
+  }
   // Defer so component:add handlers finish first, then wire text/CTAs for editing
   setTimeout(() => {
     try {
       ensureAllTextEditable(editor)
       healFlowButtonsInEditor(editor)
+      if (step) {
+        setDcbEditorPreview(editor, step)
+      }
       editor.Canvas?.refresh?.()
     } catch (_) {
       /* best-effort */
@@ -44,10 +51,10 @@ export function applyStarterHtml(editor, html, css = '') {
 export async function applyStarterTemplate(
   editor,
   template,
-  { campaignId, updateCampaign } = {},
+  { campaignId, updateCampaign, step } = {},
 ) {
   if (!editor || !template) return
-  applyStarterHtml(editor, template.html, template.css)
+  applyStarterHtml(editor, template.html, template.css, { step })
   if (
     template.id === 'home-packs' &&
     campaignId &&
