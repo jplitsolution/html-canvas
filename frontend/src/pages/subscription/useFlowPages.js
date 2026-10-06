@@ -24,7 +24,6 @@ function useFlowPages({
   setPageData,
   pageData,
   booting,
-  getSavedSession,
   saveSession,
   phoneRef,
   phoneResolvingRef,
@@ -321,29 +320,20 @@ function useFlowPages({
     }
 
     async function boot() {
-      const savedSession = getSavedSession()
       const landingParams = new URLSearchParams(window.location.search)
       const urlStep = landingParams.get('step')
-      const urlVisitId = landingParams.get('visitId')
+      // Editor "open this page" adds _t. Live funnel also writes ?step=OTP&msisdn=
+      // after the first OTP — that bookmark must not skip CONFIRM on refresh
+      // or when the same (or another) number is entered again.
+      const explicitPagePreview = Boolean(urlStep) && landingParams.has('_t')
 
-      // Resume OTP/CONFIRM only when this URL is already mid-funnel.
-      // A fresh campaign click (no step) must start at HOME, otherwise testers
-      // and new clicks skip Confirm after an earlier OTP attempt in the same tab.
-      if (savedSession?.visitId && (urlStep || urlVisitId)) {
-        visitIdRef.current = savedSession.visitId
-        if (savedSession.phone) {
-          phoneRef.current = savedSession.phone
-          setPhone(savedSession.phone)
-        }
+      if (explicitPagePreview) {
         setBooting(true)
-        const resumeStep = urlStep || savedSession.step || entryPageRef.current || 'HOME'
-        if (isHeSuppressedFunnelPage(resumeStep)) {
+        if (isHeSuppressedFunnelPage(urlStep)) {
           await waitForHeDetect()
           if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
         }
-        if (!cancelled) {
-          await loadPage(resumeStep)
-        }
+        if (!cancelled) await loadPageRef.current?.(urlStep)
         return
       }
 
@@ -354,15 +344,6 @@ function useFlowPages({
       pageDataRef.current = null
       setPageData(null)
       setBooting(true)
-
-      if (urlStep) {
-        if (isHeSuppressedFunnelPage(urlStep)) {
-          await waitForHeDetect()
-          if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
-        }
-        if (!cancelled) await loadPage(urlStep)
-        return
-      }
 
       // API HE may redirect away — do not paint HOME until detect settles.
       await waitForHeDetect()
@@ -386,16 +367,16 @@ function useFlowPages({
       try {
         if (detectPage) {
           entryPageRef.current = detectPage
-          await loadPage(detectPage)
+          await loadPageRef.current?.(detectPage)
           return
         }
         const { entryPage } = await fetchFlowEntry({ country, operator, campid, trackingCampid })
         if (cancelled || heExitPendingRef.current || heOnlyModeRef.current) return
         entryPageRef.current = entryPage || 'HOME'
-        await loadPage(entryPageRef.current)
+        await loadPageRef.current?.(entryPageRef.current)
       } catch {
         if (!cancelled && !heExitPendingRef.current && !heOnlyModeRef.current) {
-          await loadPage(detectPage || 'HOME')
+          await loadPageRef.current?.(detectPage || 'HOME')
         }
       }
     }
@@ -404,7 +385,9 @@ function useFlowPages({
     return () => {
       cancelled = true
     }
-  }, [country, operator, campid, trackingCampid, loadPage, getSavedSession])
+    // loadPage identity changes when the URL gains click_id / step. Depending on
+    // it restarts boot, clears the page, and the screen flashes then stays blank.
+  }, [country, operator, campid, trackingCampid])
 
   // Sync step changes from browser history / page-link navigation.
   const urlStep = (searchParams.get('step') || '').toUpperCase()
