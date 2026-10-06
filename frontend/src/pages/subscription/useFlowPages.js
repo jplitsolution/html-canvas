@@ -322,9 +322,14 @@ function useFlowPages({
 
     async function boot() {
       const savedSession = getSavedSession()
-      const urlStep = new URLSearchParams(window.location.search).get('step')
+      const landingParams = new URLSearchParams(window.location.search)
+      const urlStep = landingParams.get('step')
+      const urlVisitId = landingParams.get('visitId')
 
-      if (savedSession?.visitId) {
+      // Resume OTP/CONFIRM only when this URL is already mid-funnel.
+      // A fresh campaign click (no step) must start at HOME, otherwise testers
+      // and new clicks skip Confirm after an earlier OTP attempt in the same tab.
+      if (savedSession?.visitId && (urlStep || urlVisitId)) {
         visitIdRef.current = savedSession.visitId
         if (savedSession.phone) {
           phoneRef.current = savedSession.phone
