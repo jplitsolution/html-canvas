@@ -9,8 +9,9 @@ import {
  * Orange Burkina Faso Flow Definition.
  *
  * Multi-step French VAS Flow:
- * - HOME: Plan details (50 FCFA/day) & features
- * - OTP: MSISDN entry (+226) & 4-digit SMS OTP verification (with CheckSub auto-forward)
+ * - HOME: MSISDN entry (+226)
+ * - CONFIRM: Plan details (50 FCFA/day) & S'abonner (send OTP)
+ * - OTP: 4-digit SMS OTP verification
  * - THANKYOU: Confirmation / Success screen
  */
 export default {
@@ -59,9 +60,9 @@ export default {
     };
   },
 
-  resolveHomeSubscribeNext({ fromGraph, resolvedPhone } = {}) {
+  resolveHomeSubscribeNext({ resolvedPhone } = {}) {
     return {
-      nextPage: (fromGraph && (fromGraph('SUBSCRIBE', CampaignPageType.CONFIRM) || fromGraph('DEFAULT', CampaignPageType.CONFIRM))) || CampaignPageType.CONFIRM,
+      nextPage: CampaignPageType.CONFIRM,
       resolvedPhone,
     };
   },

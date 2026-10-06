@@ -4,6 +4,7 @@ import { campaignsService } from '../../campaigns/campaigns.service.js';
 import { analyticsService } from '../../analytics/analytics.service.js';
 import { createHandleHomeSubscribe } from './transition-home.js';
 import { createHandleConfirm } from './transition-confirm.js';
+import { createHandleConfirmOtpSent } from './transition-confirm-otp.js';
 import { createHandleOtpContinue } from './transition-otp.js';
 import { createHandleSubscribeRoute } from './transition-subscribe-route.js';
 import { recordCgRedirectHop } from './cg-redirect-log.js';
@@ -25,6 +26,7 @@ export function createFlowTransition(deps) {
 
   const handleHomeSubscribe = createHandleHomeSubscribe(deps);
   const handleConfirm = createHandleConfirm(deps);
+  const handleConfirmOtpSent = createHandleConfirmOtpSent(deps);
   const handleOtpContinue = createHandleOtpContinue(deps);
   const handleSubscribeRoute = createHandleSubscribeRoute(deps);
 
@@ -107,6 +109,13 @@ export function createFlowTransition(deps) {
     // Single-page subscribe + client-side outcome routing (any funnel page).
     if (input.action === 'SUBSCRIBE_ROUTE') {
       return handleSubscribeRoute(input, campaign, apiConfig, phone, serviceId);
+    }
+
+    if (
+      input.fromPage === CampaignPageType.CONFIRM &&
+      (input.action === 'OTP_SENT' || input.action === 'ACTIVE_SUBSCRIBER')
+    ) {
+      return handleConfirmOtpSent(input, campaign, phone, serviceId);
     }
 
     if (input.action === 'CONFIRM' || (input.action === 'SUBSCRIBE' && input.planId)) {

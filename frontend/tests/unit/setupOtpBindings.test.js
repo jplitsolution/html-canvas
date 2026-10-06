@@ -18,7 +18,7 @@ vi.mock('../../src/services/flow/resolvePhoneNumber', async (importOriginal) => 
 })
 
 import { verifyOtp } from '../../src/services/api/otp'
-import { setupOtpBindings } from '../../src/pages/subscription/setupOtpBindings'
+import { capturePhoneFromShadow, getCountryCodeFromDom, setupOtpBindings } from '../../src/pages/subscription/setupOtpBindings'
 
 function mountOtpDom() {
   document.body.innerHTML = `
@@ -125,6 +125,22 @@ describe('setupOtpBindings after OTP verify', () => {
     await vi.waitFor(() => {
       expect(loadPage).toHaveBeenCalledWith('HOME', { direct: true })
     })
+  })
+
+  it('reads +226 from .bf-country-prefix and builds a full MSISDN', () => {
+    document.body.innerHTML = `
+      <div id="host">
+        <div class="bf-country-prefix">+226</div>
+        <input data-otp-field="phone" value="70123456" />
+      </div>
+    `
+    const host = document.getElementById('host')
+    const shadow = host.attachShadow({ mode: 'open' })
+    shadow.innerHTML = host.innerHTML
+    host.innerHTML = ''
+    const phoneInput = shadow.querySelector('[data-otp-field="phone"]')
+    expect(getCountryCodeFromDom(phoneInput, shadow)).toBe('+226')
+    expect(capturePhoneFromShadow(shadow, phoneInput)).toBe('22670123456')
   })
 
   it('uses phoneRef when phoneInput is not on the page (e.g. on CONFIRM step)', async () => {

@@ -107,4 +107,15 @@ describe('getDefaultFlowConfig packs_on_home', () => {
     const { ok, errors } = flowEngineService.validate(cfg, 'HEADER_INJECTION');
     assert.equal(ok, true, errors.join(' '));
   });
+
+  it('ORANGE_BF goes HOME → CONFIRM → OTP', () => {
+    const cfg = flowEngineService.getDefaultFlowConfig('ORANGE_BF');
+    assert.equal(cfg.entryPage, 'HOME');
+    assert.equal(flowEngineService.nextPage(cfg, 'HOME', 'SUBSCRIBE'), 'CONFIRM');
+    assert.equal(flowEngineService.nextPage(cfg, 'CONFIRM', 'OTP_SENT'), 'OTP');
+    assert.equal(
+      flowEngineService.nextPage(cfg, 'OTP', 'OTP_VERIFIED'),
+      'THANKYOU',
+    );
+  });
 });

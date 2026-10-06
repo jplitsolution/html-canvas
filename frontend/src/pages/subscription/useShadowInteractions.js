@@ -13,11 +13,11 @@ import {
 } from './flowHelpers'
 import { runPriorityChain } from './runPriorityChain'
 import { isDcbFlowContext, setupDcbBindings } from './setupDcbBindings'
-import { setupOtpBindings } from './setupOtpBindings'
+import { capturePhoneFromShadow, setupOtpBindings } from './setupOtpBindings'
 import { attachInputRestrictions } from '../../editor/utils/inputRestrictions'
 import { getSelectedPackFromShadow, mountPageInShadow, syncPackPicker, syncPhoneDisplay } from './shadowDom'
 import { pickLivePageData } from '../../editor/services/deviceLayouts'
-import { resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
+import { persistPhone, resolvePhoneFromStorage } from '../../services/flow/resolvePhoneNumber'
 
 /**
  * Shadow DOM click routing (Layer C + bridge to Layer B).
@@ -360,11 +360,12 @@ function useShadowInteractions({
 
       const phoneInput = shadow.querySelector('[data-otp-field="phone"], [data-field="phone"], input[type="tel"]')
       if (phoneInput && phoneInput.value.trim()) {
-        const cleanVal = phoneInput.value.trim().replace(/\D/g, '')
-        if (cleanVal) {
-          phoneRef.current = cleanVal
-          if (setPhone) setPhone(cleanVal)
-          if (saveSession) saveSession({ phone: cleanVal })
+        const fullMsisdn = capturePhoneFromShadow(shadow, phoneInput)
+        if (fullMsisdn) {
+          phoneRef.current = fullMsisdn
+          if (setPhone) setPhone(fullMsisdn)
+          persistPhone(fullMsisdn)
+          if (saveSession) saveSession({ phone: fullMsisdn })
         }
       }
 

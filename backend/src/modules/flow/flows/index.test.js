@@ -40,6 +40,12 @@ describe('backend flow registry', () => {
     assert.equal(resolveFlow('OTP_ONLY').allowsHe, false);
     assert.equal(resolveFlow('HEADER_INJECTION').allowsHe, true);
     assert.equal(resolveFlow('ORANGE_BF').conversionRule, 'otp_payout');
+    assert.equal(
+      resolveFlow('ORANGE_BF').resolveHomeSubscribeNext({
+        resolvedPhone: '70123456',
+      }).nextPage,
+      'CONFIRM',
+    );
     assert.equal(resolveFlow('NONE').conversionRule, 'operator_callback');
     assert.equal(resolveFlow('CG_HOME').conversionRule, 'operator_callback');
   });

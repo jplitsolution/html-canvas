@@ -36,7 +36,7 @@ export const VERIFICATION_MODES = [
     id: 'ORANGE_BF',
     label: 'Orange Burkina Faso',
     hint: 'Multi-step French VAS flow for Orange BF (+226) with CheckSub auto-forward, Auth OTP & async Unsub.',
-    pathHint: 'HOME (Plan) → OTP (MSISDN + 4-Box Code) → THANKYOU / Success Redirect',
+    pathHint: 'HOME (number) → CONFIRM (plan + send OTP) → OTP (verify) → THANKYOU',
     isLocked: true,
   },
   {

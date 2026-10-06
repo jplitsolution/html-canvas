@@ -7,6 +7,9 @@ import {
 } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
+const COUNTRY_CODE_SELECTORS =
+  '[data-country-code], [data-phone-prefix], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .country-code, .bf-country-prefix'
+
 export function getCountryCodeFromDom(phoneInput, shadow) {
   if (phoneInput) {
     const attr =
@@ -15,15 +18,25 @@ export function getCountryCodeFromDom(phoneInput, shadow) {
     if (attr && attr.trim()) return attr.trim()
   }
   if (shadow) {
-    const badge = shadow.querySelector(
-      '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .country-code',
-    )
+    const badge = shadow.querySelector(COUNTRY_CODE_SELECTORS)
     if (badge) {
-      const val = badge.getAttribute('data-country-code') || badge.textContent || ''
+      const val =
+        badge.getAttribute('data-country-code') ||
+        badge.getAttribute('data-phone-prefix') ||
+        badge.textContent ||
+        ''
       if (val && val.trim()) return val.trim()
     }
   }
   return ''
+}
+
+export function capturePhoneFromShadow(shadow, phoneInput) {
+  const raw = (phoneInput?.value || '').trim()
+  const cleanVal = raw.replace(/\D/g, '')
+  if (!cleanVal) return ''
+  const countryCode = getCountryCodeFromDom(phoneInput, shadow)
+  return formatMsisdnWithCountryCode(cleanVal, countryCode) || cleanVal
 }
 
 function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country, operator, campid, trackingCampid, visitIdRef, phoneRef, packRef, setPhone, setTransitioning, setError, pageCacheRef, transitionLockRef }) {
@@ -147,7 +160,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       const cleanCode = normalizeMsisdn(countryCode)
       const hasVisibleBadge = Boolean(
         shadow.querySelector(
-          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge',
+          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .bf-country-prefix',
         ),
       )
       if (
@@ -325,7 +338,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       const cleanCode = normalizeMsisdn(activeCountryCode)
       const hasVisibleBadge = Boolean(
         shadow.querySelector(
-          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge',
+          '[data-country-code], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .bf-country-prefix',
         ),
       )
       if (

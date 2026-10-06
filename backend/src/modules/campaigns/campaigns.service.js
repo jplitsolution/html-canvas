@@ -184,28 +184,31 @@ export const createCampaignsService = () => {
   };
 
 
-  const ensureFlowPages = async (campaign) => {
-    let changed = false;
+  const ensureOrangeBfFlowGraph = async (campaign) => {
     const mode = flowEngineService.normalizeMode(campaign.verificationMode);
-    if (mode === 'ORANGE_BF') {
-      const parsedFlow = flowEngineService.parseFlowConfig(campaign.flowConfig);
-      if (
-        !parsedFlow ||
-        !parsedFlow.nodes?.some((n) => n.pageType === CampaignPageType.CONFIRM) ||
-        !parsedFlow.edges?.some(
-          (e) => e.source === 'HOME' && e.target === 'CONFIRM',
-        )
-      ) {
-        campaign.flowConfig = JSON.stringify(
-          flowEngineService.getDefaultFlowConfig('ORANGE_BF'),
-        );
-        await getCampaignRepo().update(
-          { id: campaign.id },
-          { flowConfig: campaign.flowConfig },
-        );
-        changed = true;
-      }
+    if (mode !== 'ORANGE_BF') return false;
+    const parsedFlow = flowEngineService.parseFlowConfig(campaign.flowConfig);
+    if (
+      parsedFlow &&
+      parsedFlow.nodes?.some((n) => n.pageType === CampaignPageType.CONFIRM) &&
+      parsedFlow.edges?.some(
+        (e) => e.source === 'HOME' && e.target === 'CONFIRM',
+      )
+    ) {
+      return false;
     }
+    campaign.flowConfig = JSON.stringify(
+      flowEngineService.getDefaultFlowConfig('ORANGE_BF'),
+    );
+    await getCampaignRepo().update(
+      { id: campaign.id },
+      { flowConfig: campaign.flowConfig },
+    );
+    return true;
+  };
+
+  const ensureFlowPages = async (campaign) => {
+    let changed = await ensureOrangeBfFlowGraph(campaign);
 
     for (const page of campaign.pages || []) {
       if (!page.templateId) continue;
@@ -415,6 +418,9 @@ export const createCampaignsService = () => {
     });
     if (campaign) {
       await ensureCampaignPages(campaign);
+      if (await ensureOrangeBfFlowGraph(campaign)) {
+        await invalidateFlowCampaignCache(campaign);
+      }
       return withTrackingId(campaign);
     }
     return null;
