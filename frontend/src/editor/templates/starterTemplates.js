@@ -1369,9 +1369,9 @@ const wellnessHomeHtml = `
   <div class="bf-field-group">
     <label class="bf-input-label">ENTREZ VOTRE NUMÉRO DE MOBILE</label>
     <div class="bf-phone-input-wrap">
-      <div class="bf-country-prefix" data-country-code="+226">+226</div>
+      <div class="bf-country-prefix">+226</div>
       <div class="bf-input-divider"></div>
-      <input class="bf-phone-input" data-otp-field="phone" data-country-code="+226" inputmode="numeric" maxlength="8" data-min-length="8" data-max-length="8" placeholder="XX XX XX XX" />
+      <input class="bf-phone-input" data-otp-field="phone" inputmode="numeric" maxlength="8" data-min-length="8" data-max-length="8" placeholder="XX XX XX XX" />
     </div>
   </div>
   <button type="button" data-action="SUBSCRIBE" class="bf-primary-btn">Continuer</button>

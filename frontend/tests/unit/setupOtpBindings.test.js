@@ -127,7 +127,7 @@ describe('setupOtpBindings after OTP verify', () => {
     })
   })
 
-  it('reads +226 from .bf-country-prefix and builds a full MSISDN', () => {
+  it('does not prepend a visual-only +226 badge; only explicit data-country-code', () => {
     document.body.innerHTML = `
       <div id="host">
         <div class="bf-country-prefix">+226</div>
@@ -139,6 +139,10 @@ describe('setupOtpBindings after OTP verify', () => {
     shadow.innerHTML = host.innerHTML
     host.innerHTML = ''
     const phoneInput = shadow.querySelector('[data-otp-field="phone"]')
+    expect(getCountryCodeFromDom(phoneInput, shadow)).toBe('')
+    expect(capturePhoneFromShadow(shadow, phoneInput)).toBe('70123456')
+
+    phoneInput.setAttribute('data-country-code', '+226')
     expect(getCountryCodeFromDom(phoneInput, shadow)).toBe('+226')
     expect(capturePhoneFromShadow(shadow, phoneInput)).toBe('22670123456')
   })

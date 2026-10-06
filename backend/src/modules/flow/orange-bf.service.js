@@ -18,10 +18,7 @@ import {
   shouldPayoutOtp,
 } from '../otp/helpers/payout.js';
 import { orangeBfProvider, ORANGE_BF_DEFAULTS } from './orange-bf.provider.js';
-import {
-  ORANGE_BF_OUTCOMES,
-  normalizeOrangeBfMsisdn,
-} from './helpers/orange-bf-normalizer.js';
+import { ORANGE_BF_OUTCOMES } from './helpers/orange-bf-normalizer.js';
 import { interpretChecksubResponse } from './helpers/checksub-rules.js';
 import { analyticsService } from '../analytics/analytics.service.js';
 import { VisitEventType } from '../../database/entities/visit-event.entity.js';
@@ -260,7 +257,7 @@ export const createOrangeBfService = () => {
 
   return {
     startOrCheckSub: async ({ phone, campaignId, visitId, vendorId, language = '_E' }) => {
-      const msisdn = normalizeOrangeBfMsisdn(phone);
+      const msisdn = cleanPhone(phone);
       if (!msisdn) {
         return { success: false, error: 'MSISDN is required' };
       }
@@ -475,7 +472,7 @@ export const createOrangeBfService = () => {
     },
 
     verifyOtp: async ({ phone, otp, campaignId, visitId, vendorId }) => {
-      const msisdn = normalizeOrangeBfMsisdn(phone);
+      const msisdn = cleanPhone(phone);
       if (!msisdn || !otp) {
         return { success: false, error: 'Phone and OTP are required' };
       }
@@ -701,7 +698,7 @@ export const createOrangeBfService = () => {
     },
 
     checkSub: async ({ phone, campaignId, visitId, vendorId }) => {
-      const msisdn = normalizeOrangeBfMsisdn(phone);
+      const msisdn = cleanPhone(phone);
       let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
       if (!resolvedVendorId && visitId) {
         try {
@@ -752,7 +749,7 @@ export const createOrangeBfService = () => {
     },
 
     unsubscribe: async ({ phone, campaignId, visitId, vendorId }) => {
-      const msisdn = normalizeOrangeBfMsisdn(phone);
+      const msisdn = cleanPhone(phone);
       let resolvedVendorId = vendorId ? parseInt(vendorId, 10) : null;
       if (!resolvedVendorId && visitId) {
         try {

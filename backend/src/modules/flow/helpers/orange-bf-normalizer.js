@@ -28,18 +28,6 @@ export const ORANGE_BF_RESPONSE_CODES = Object.freeze({
   500: 'Internal server error',
 });
 
-const ORANGE_BF_CC = '226';
-
-/** Local 8-digit BF numbers must go to the operator as 226XXXXXXXX. */
-export function normalizeOrangeBfMsisdn(val) {
-  let digits = String(val || '').replace(/\D/g, '');
-  if (!digits) return '';
-  digits = digits.replace(/^0+/, '');
-  if (digits.startsWith(ORANGE_BF_CC)) return digits;
-  if (digits.length === 8) return `${ORANGE_BF_CC}${digits}`;
-  return digits;
-}
-
 export function normalizeOrangeBfResponse(raw, config = {}) {
   if (!raw || typeof raw !== 'object') {
     return {

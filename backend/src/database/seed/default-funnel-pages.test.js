@@ -55,7 +55,6 @@ describe('Universe DCB default funnel pages', () => {
     const orangeBfOtp = getDefaultFunnelPageData('OTP', { verificationMode: 'ORANGE_BF' });
     assert.match(orangeBfHome.html, /bf-wellness-container/);
     assert.match(orangeBfHome.html, /Orange Burkina Faso/);
-    assert.match(orangeBfHome.html, /data-country-code="\+226"/);
     assert.match(orangeBfHome.html, /data-action="SUBSCRIBE"/);
     assert.match(orangeBfOtp.html, /Vérifiez votre/);
 

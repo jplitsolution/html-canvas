@@ -7,9 +7,6 @@ import {
 } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
 
-const COUNTRY_CODE_SELECTORS =
-  '[data-country-code], [data-phone-prefix], .wjo-country-code, .country-code-prefix, .phone-prefix-badge, .country-code, .bf-country-prefix'
-
 export function getCountryCodeFromDom(phoneInput, shadow) {
   if (phoneInput) {
     const attr =
@@ -18,12 +15,11 @@ export function getCountryCodeFromDom(phoneInput, shadow) {
     if (attr && attr.trim()) return attr.trim()
   }
   if (shadow) {
-    const badge = shadow.querySelector(COUNTRY_CODE_SELECTORS)
+    const badge = shadow.querySelector('[data-country-code], [data-phone-prefix]')
     if (badge) {
       const val =
         badge.getAttribute('data-country-code') ||
         badge.getAttribute('data-phone-prefix') ||
-        badge.textContent ||
         ''
       if (val && val.trim()) return val.trim()
     }
