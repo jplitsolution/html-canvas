@@ -31,6 +31,25 @@ export const ALL_CAMPAIGN_PAGE_TYPES = [
   CampaignPageType.ERROR,
 ];
 
+export const INACTIVE_OR_NEW_STATUSES = new Set([
+  'new',
+  'unknown',
+  'failed',
+  'unsubscribed',
+  'un_subscribed',
+  'un_sub',
+  'inactive',
+  'deactivated',
+  'expired',
+  'cancelled',
+  'canceled',
+  'terminated',
+  'none',
+  'parked',
+  'low_balance',
+  '',
+]);
+
 /** Safwap checksub status → funnel page (null = continue subscribe funnel). */
 export const pageTypeForSubscriptionStatus = (status, isActive = false) => {
   const s = String(status || '')
@@ -39,10 +58,10 @@ export const pageTypeForSubscriptionStatus = (status, isActive = false) => {
   if (isActive || s === 'active') return CampaignPageType.THANKYOU;
   if (s === 'pending') return CampaignPageType.INPROGRESS;
   if (s === 'grace' || s === 'parking') return CampaignPageType.LOW_BALANCE;
-  if (s && s !== 'new' && s !== 'unknown' && s !== 'failed') {
-    return CampaignPageType.INPROGRESS;
+  if (INACTIVE_OR_NEW_STATUSES.has(s)) {
+    return null;
   }
-  return null;
+  return CampaignPageType.INPROGRESS;
 };
 
 export const CampaignPageSchema = new EntitySchema({

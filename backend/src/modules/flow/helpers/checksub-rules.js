@@ -1,4 +1,7 @@
-import { CampaignPageType } from '../../../database/entities/campaign-page.entity.js';
+import {
+  CampaignPageType,
+  INACTIVE_OR_NEW_STATUSES,
+} from '../../../database/entities/campaign-page.entity.js';
 
 const PAGE_TYPES = new Set(Object.values(CampaignPageType));
 
@@ -221,9 +224,10 @@ export function mapLegacyChecksubBody(rawData) {
     status = 'new';
   }
 
+  const isInactive = !isActive && INACTIVE_OR_NEW_STATUSES.has(status);
+
   const shouldSkipSubscribe =
-    isActive ||
-    (Boolean(status) && status !== 'new' && status !== 'unknown');
+    isActive || (!isInactive && Boolean(status));
 
   return {
     currentStatus: currentStatus || null,

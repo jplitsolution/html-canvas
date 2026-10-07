@@ -135,6 +135,13 @@ export function createFlowRouting(deps) {
       return { nextPage, sub };
     }
     const skipPage = resolveSkipPage(flowConfig, fromPage, sub);
+    if (
+      fromPage === CampaignPageType.HOME &&
+      nextPage === CampaignPageType.CONFIRM &&
+      skipPage === CampaignPageType.OTP
+    ) {
+      return { nextPage: CampaignPageType.CONFIRM, sub };
+    }
     return { nextPage: skipPage || CampaignPageType.THANKYOU, sub };
   };
   

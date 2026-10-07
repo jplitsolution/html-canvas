@@ -151,6 +151,22 @@ describe('mapLegacyChecksubBody', () => {
     const r = mapLegacyChecksubBody('{"currentStatus":"new"}');
     assert.equal(r.status, 'new');
   });
+
+  it('maps unSubscribed as continue funnel (not skip)', () => {
+    const r = mapLegacyChecksubBody({
+      currentStatus: 'unSubscribed',
+      subscriptionStatus: 'inactive',
+    });
+    assert.equal(r.status, 'unsubscribed');
+    assert.equal(r.isActive, false);
+    assert.equal(r.shouldSkipSubscribe, false);
+  });
+
+  it('maps inactive / deactivated as continue funnel', () => {
+    const r = mapLegacyChecksubBody({ currentStatus: 'inactive' });
+    assert.equal(r.isActive, false);
+    assert.equal(r.shouldSkipSubscribe, false);
+  });
 });
 
 describe('interpretChecksubResponse', () => {
