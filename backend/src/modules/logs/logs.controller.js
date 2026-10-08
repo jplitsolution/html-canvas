@@ -18,6 +18,7 @@ const buildParams = (campaignId, query) => {
     vendorId: query.vendorId ? Number(query.vendorId) : undefined,
     affiliateId: query.affiliateId ? Number(query.affiliateId) : undefined,
     clickId: query.clickId,
+    rcid: query.rcid,
     q: query.q,
     page: query.page ? Number(query.page) : undefined,
     size: query.size ? Number(query.size) : undefined,
@@ -41,6 +42,14 @@ export const logsController = {
     res.json(data);
   }),
 
+  campaignExport: asyncHandler(async (req, res) => {
+    const campaignId = parseInt(req.params.campaignId, 10);
+    await campaignsService.findOne(campaignId, req.user.id);
+    const params = buildParams(campaignId, req.query || {});
+    const format = req.query.format === 'xlsx' ? 'xlsx' : 'csv';
+    return searchService.exportLogs(params, format, res);
+  }),
+
   campaignAggregations: asyncHandler(async (req, res) => {
     const campaignId = parseInt(req.params.campaignId, 10);
     await campaignsService.findOne(campaignId, req.user.id);
@@ -60,6 +69,14 @@ export const logsController = {
       buildParams(campaignIds, req.query || {}),
     );
     res.json(data);
+  }),
+
+  allExport: asyncHandler(async (req, res) => {
+    const campaigns = await campaignsService.findAll(req.user.id);
+    const campaignIds = campaigns.map((c) => c.id);
+    const params = buildParams(campaignIds, req.query || {});
+    const format = req.query.format === 'xlsx' ? 'xlsx' : 'csv';
+    return searchService.exportLogs(params, format, res);
   }),
 
   allAggregations: asyncHandler(async (req, res) => {

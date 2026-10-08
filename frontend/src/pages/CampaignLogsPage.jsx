@@ -32,6 +32,8 @@ import {
   KeyRound,
   Percent,
   Shield,
+  Download,
+  FileSpreadsheet,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -44,6 +46,7 @@ import {
   getCampaignLogAggregations,
   searchAllCampaignLogs,
   getAllCampaignLogAggregations,
+  downloadLogsExport,
 } from '../services/api/logs'
 import { normalizeModeId } from '../components/flow/verificationModes'
 
@@ -848,6 +851,25 @@ function CampaignLogsPage() {
   const [aggs, setAggs] = useState(null)
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
+  const [exportingFormat, setExportingFormat] = useState(null)
+
+  const handleExport = useCallback(async (format = 'csv') => {
+    if (!selectedId || exportingFormat) return
+    setExportingFormat(format)
+    try {
+      const exportParams = { ...filters, timezone, view: 'sessions' }
+      if (datePreset === 'all') {
+        delete exportParams.from
+        delete exportParams.to
+      }
+      await downloadLogsExport(selectedId, exportParams, format)
+      addToast(`Campaign logs exported successfully (${format.toUpperCase()})`, 'success')
+    } catch (err) {
+      addToast(err.message || 'Failed to export logs', 'error')
+    } finally {
+      setExportingFormat(null)
+    }
+  }, [selectedId, filters, datePreset, timezone, exportingFormat, addToast])
 
   const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
   const isHourly = chartInterval === 'hour'
@@ -1161,6 +1183,29 @@ function CampaignLogsPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+            <div className="inline-flex rounded-xl shadow-2xs border border-gray-200/80 bg-white overflow-hidden p-0.5">
+              <button
+                type="button"
+                onClick={() => handleExport('csv')}
+                disabled={loading || Boolean(exportingFormat)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-indigo-600 hover:bg-indigo-50/60 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                title="Export all filtered clicks without pagination as CSV"
+              >
+                <Download className={`w-3.5 h-3.5 ${exportingFormat === 'csv' ? 'animate-bounce text-indigo-600' : 'text-gray-500'}`} />
+                {exportingFormat === 'csv' ? 'Exporting...' : 'Export CSV'}
+              </button>
+              <div className="w-[1px] bg-gray-200 my-1" />
+              <button
+                type="button"
+                onClick={() => handleExport('xlsx')}
+                disabled={loading || Boolean(exportingFormat)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:text-emerald-600 hover:bg-emerald-50/60 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer"
+                title="Export all filtered clicks without pagination as Excel (.xlsx)"
+              >
+                <FileSpreadsheet className={`w-3.5 h-3.5 ${exportingFormat === 'xlsx' ? 'animate-bounce text-emerald-600' : 'text-gray-500'}`} />
+                {exportingFormat === 'xlsx' ? 'Exporting...' : 'Excel'}
+              </button>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -1717,7 +1762,39 @@ function CampaignLogsPage() {
         </div>
 
         {/* Click ID list */}
-        <SectionCard title="Clicks (one row per click ID)">
+        <SectionCard
+          title="Clicks (one row per click ID)"
+          actions={
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline-block text-[11px] text-gray-400 font-medium">
+                Total: <strong className="text-gray-700 font-bold">{logs.total || 0}</strong> clicks
+              </span>
+              <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => handleExport('csv')}
+                  disabled={loading || Boolean(exportingFormat) || logs.total === 0}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:text-indigo-600 hover:bg-indigo-50/50 rounded-md transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                  title="Export all rows with selected filters without pagination"
+                >
+                  <Download className={`w-3.5 h-3.5 ${exportingFormat === 'csv' ? 'animate-bounce text-indigo-600' : 'text-indigo-500'}`} />
+                  {exportingFormat === 'csv' ? 'Exporting...' : 'Export (Full)'}
+                </button>
+                <div className="w-[1px] bg-gray-200 my-1" />
+                <button
+                  type="button"
+                  onClick={() => handleExport('xlsx')}
+                  disabled={loading || Boolean(exportingFormat) || logs.total === 0}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-700 hover:text-emerald-600 hover:bg-emerald-50/50 rounded-md transition-colors disabled:opacity-40 disabled:pointer-events-none cursor-pointer"
+                  title="Export all rows with selected filters as Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className={`w-3.5 h-3.5 ${exportingFormat === 'xlsx' ? 'animate-bounce text-emerald-600' : 'text-emerald-500'}`} />
+                  {exportingFormat === 'xlsx' ? 'Exporting...' : 'XLSX'}
+                </button>
+              </div>
+            </div>
+          }
+        >
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 gap-3">
               <RefreshCw className="w-8 h-8 text-indigo-500 animate-spin" />

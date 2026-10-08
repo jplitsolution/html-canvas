@@ -1,4 +1,4 @@
-import { apiClient } from './client'
+import { apiClient, getApiBase, getAuthToken } from './client'
 
 export async function getLogsStatus() {
   return apiClient('/logs/status')
@@ -14,6 +14,7 @@ function buildQuery(params = {}) {
     'vendorId',
     'affiliateId',
     'clickId',
+    'rcid',
     'q',
     'page',
     'size',
@@ -22,6 +23,7 @@ function buildQuery(params = {}) {
     'timezone',
     'view',
     'compareEvents',
+    'format',
   ]
   for (const key of keys) {
     if (params[key] !== undefined && params[key] !== null && params[key] !== '') {
@@ -52,4 +54,40 @@ export async function getAllCampaignLogAggregations(params = {}) {
 
 export async function getVisitDetail(visitId) {
   return apiClient(`/analytics/visits/${visitId}`)
+}
+
+export async function downloadLogsExport(campaignId, params = {}, format = 'csv') {
+  const token = getAuthToken()
+  const isAll = campaignId === 'all' || !campaignId
+  const urlPath = isAll ? `/logs/all/export` : `/logs/campaign/${campaignId}/export`
+  const queryParams = { ...params, format, view: 'sessions' }
+  const fullUrl = `${getApiBase()}${urlPath}${buildQuery(queryParams)}`
+
+  const res = await fetch(fullUrl, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: res.statusText }))
+    throw new Error(error.message || 'Export failed')
+  }
+
+  let filename = `campaign_logs_${campaignId || 'all'}.${format}`
+  const disposition = res.headers.get('content-disposition')
+  if (disposition && disposition.includes('filename=')) {
+    const match = disposition.match(/filename="?([^"]+)"?/)
+    if (match && match[1]) filename = match[1]
+  }
+
+  const blob = await res.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
 }

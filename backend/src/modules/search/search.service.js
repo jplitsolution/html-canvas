@@ -3,6 +3,8 @@ import { Brackets } from 'typeorm';
 import { getDataSource, getRepository } from '../../database/index.js';
 import { VisitEvent } from '../../database/entities/visit-event.entity.js';
 import { Visit } from '../../database/entities/visit.entity.js';
+import { Campaign } from '../../database/entities/campaign.entity.js';
+import { Vendor } from '../../database/entities/vendor.entity.js';
 import getConfig from '../../config/configuration.js';
 import {
   DEFAULT_TIMEZONE,
@@ -737,12 +739,256 @@ export const createSearchService = () => {
     return aggregationsFromDb(params, interval, timeZone);
   };
 
+  const exportLogs = async (params, format, res) => {
+    const campaignRepo = getRepository(Campaign);
+    const vendorRepo = getRepository(Vendor);
+
+    const [allCampaigns, allVendors] = await Promise.all([
+      campaignRepo.find({ select: ['id', 'name', 'country', 'operator'] }),
+      vendorRepo.find({ select: ['id', 'name', 'code'] }),
+    ]);
+
+    const campaignMap = new Map();
+    allCampaigns.forEach((c) => {
+      campaignMap.set(c.id, c.name || `${c.country} / ${c.operator}`);
+    });
+
+    const vendorMap = new Map();
+    allVendors.forEach((v) => {
+      vendorMap.set(v.id, v.name ? `${v.name} (${v.code})` : v.code);
+    });
+
+    const queryBuilder = getRepository(Visit).createQueryBuilder('visit');
+    applyVisitFilters(queryBuilder, params);
+
+    queryBuilder
+      .orderBy('visit.createdAt', 'DESC')
+      .addOrderBy('visit.id', 'DESC')
+      .take(100000);
+
+    const visits = await queryBuilder.getMany();
+    const ids = visits.map((v) => v.id).filter(Boolean);
+
+    const eventCountByVisit = new Map();
+    const lastEventByVisit = new Map();
+    const chunkSize = 2000;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const counts = await getRepository(VisitEvent)
+        .createQueryBuilder('e')
+        .select('e.visitId', 'visitId')
+        .addSelect('COUNT(e.id)', 'cnt')
+        .where('e.visitId IN (:...chunk)', { chunk })
+        .groupBy('e.visitId')
+        .getRawMany();
+      for (const row of counts) {
+        eventCountByVisit.set(Number(row.visitId), Number(row.cnt) || 0);
+      }
+
+      const dbType = getDataSource().options.type;
+      if (dbType === 'postgres') {
+        const lasts = await getRepository(VisitEvent)
+          .createQueryBuilder('e')
+          .distinctOn(['e.visitId'])
+          .where('e.visitId IN (:...chunk)', { chunk })
+          .orderBy('e.visitId', 'ASC')
+          .addOrderBy('e.createdAt', 'DESC')
+          .getMany();
+        for (const e of lasts) {
+          lastEventByVisit.set(e.visitId, e.eventType);
+        }
+      } else {
+        for (const id of chunk) {
+          const last = await getRepository(VisitEvent).findOne({
+            where: { visitId: id },
+            order: { createdAt: 'DESC' },
+          });
+          if (last) lastEventByVisit.set(id, last.eventType);
+        }
+      }
+    }
+
+    const tz = params.timezone || 'Asia/Kolkata';
+    const formatLocalTime = (date) => {
+      if (!date) return '';
+      try {
+        const d = date instanceof Date ? date : new Date(date);
+        return new Intl.DateTimeFormat('sv-SE', {
+          timeZone: tz,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }).format(d);
+      } catch {
+        return (date.toISOString ? date.toISOString() : String(date)).replace('T', ' ').substring(0, 19);
+      }
+    };
+
+    const rows = visits.map((visit) => {
+      const eventType = lastEventByVisit.get(visit.id) || '';
+      const eventCount = eventCountByVisit.get(visit.id) || 0;
+      const campaignName = campaignMap.get(visit.campaignId) || (visit.campaignId ? `Campaign #${visit.campaignId}` : '');
+      const vendorName = vendorMap.get(visit.vendorId) || visit.vidRaw || '';
+      const localTime = formatLocalTime(visit.createdAt || visit.updatedAt);
+      const utcTime = (visit.createdAt || visit.updatedAt)?.toISOString?.() || '';
+
+      return {
+        visitId: visit.id,
+        clickId: visit.clickId || '',
+        rcid: visit.rcid || '',
+        localTime,
+        utcTime,
+        campaignId: visit.campaignId || '',
+        campaignName,
+        country: visit.country || '',
+        operator: visit.operator || '',
+        vendorId: visit.vendorId || '',
+        vendorName,
+        campid: visit.campid || '',
+        trackingCampid: visit.trackingCampid || '',
+        phone: visit.phone || '',
+        lastEvent: eventType,
+        eventCount,
+        status: visit.visitStatus || '',
+        ip: visit.ipAddress || '',
+        userAgent: visit.userAgent || '',
+      };
+    });
+
+    const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+    const filenameBase = `campaign-logs-${Array.isArray(params.campaignId) ? 'all' : params.campaignId || 'all'}-${timestampStr}`;
+
+    if (format === 'xlsx') {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'TemplateCraft';
+      const sheet = workbook.addWorksheet('Campaign Logs');
+
+      sheet.columns = [
+        { header: 'Visit ID', key: 'visitId', width: 12 },
+        { header: 'Click ID', key: 'clickId', width: 28 },
+        { header: 'RCID', key: 'rcid', width: 36 },
+        { header: `Time (${tz})`, key: 'localTime', width: 20 },
+        { header: 'UTC Time', key: 'utcTime', width: 24 },
+        { header: 'Campaign ID', key: 'campaignId', width: 14 },
+        { header: 'Campaign Name', key: 'campaignName', width: 24 },
+        { header: 'Country', key: 'country', width: 16 },
+        { header: 'Operator', key: 'operator', width: 16 },
+        { header: 'Vendor ID', key: 'vendorId', width: 12 },
+        { header: 'Vendor Name', key: 'vendorName', width: 20 },
+        { header: 'Campid', key: 'campid', width: 16 },
+        { header: 'Tracking Campid', key: 'trackingCampid', width: 18 },
+        { header: 'MSISDN', key: 'phone', width: 18 },
+        { header: 'Last Event', key: 'lastEvent', width: 18 },
+        { header: 'Event Count', key: 'eventCount', width: 12 },
+        { header: 'Status', key: 'status', width: 16 },
+        { header: 'IP Address', key: 'ip', width: 18 },
+        { header: 'User Agent', key: 'userAgent', width: 40 },
+      ];
+
+      sheet.getRow(1).font = { bold: true };
+      sheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE0E7FF' },
+      };
+
+      rows.forEach((row) => sheet.addRow(row));
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filenameBase}.xlsx"`,
+      );
+      const buffer = await workbook.xlsx.writeBuffer();
+      return res.send(Buffer.from(buffer));
+    }
+
+    const headers = [
+      'Visit ID',
+      'Click ID',
+      'RCID',
+      `Time (${tz})`,
+      'UTC Time',
+      'Campaign ID',
+      'Campaign Name',
+      'Country',
+      'Operator',
+      'Vendor ID',
+      'Vendor Name',
+      'Campid',
+      'Tracking Campid',
+      'MSISDN',
+      'Last Event',
+      'Event Count',
+      'Status',
+      'IP Address',
+      'User Agent',
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '';
+      const str = String(val);
+      if (
+        str.includes(',') ||
+        str.includes('"') ||
+        str.includes('\n') ||
+        str.includes('\r')
+      ) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    let csvContent = '\uFEFF' + headers.map(escapeCsv).join(',') + '\r\n';
+    for (const r of rows) {
+      const line = [
+        r.visitId,
+        r.clickId,
+        r.rcid,
+        r.localTime,
+        r.utcTime,
+        r.campaignId,
+        r.campaignName,
+        r.country,
+        r.operator,
+        r.vendorId,
+        r.vendorName,
+        r.campid,
+        r.trackingCampid,
+        r.phone,
+        r.lastEvent,
+        r.eventCount,
+        r.status,
+        r.ip,
+        r.userAgent,
+      ]
+        .map(escapeCsv)
+        .join(',');
+      csvContent += line + '\r\n';
+    }
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${filenameBase}.csv"`,
+    );
+    return res.send(csvContent);
+  };
+
   return {
     isEnabled,
     init,
     indexEvent,
     search,
     aggregations,
+    exportLogs,
   };
 };
 
