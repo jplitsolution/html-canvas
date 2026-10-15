@@ -90,10 +90,7 @@ $ docker-compose up -d
 # Create database (first time)
 $ npm run db:setup
 
-# Fresh install / after schema changes — drops and recreates the database
-$ npm run db:reset
-
-# Migrations run automatically on startup (single file: InitialSchema)
+# Start backend dev server
 $ npm run start:dev
 ```
 

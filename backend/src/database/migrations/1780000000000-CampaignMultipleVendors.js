@@ -82,30 +82,7 @@ export class CampaignMultipleVendors1780000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-
-    if (isPostgres) {
-      if (!(await queryRunner.hasColumn('campaigns', 'vendor_id'))) {
-        await queryRunner.query(
-          `ALTER TABLE "campaigns" ADD COLUMN "vendor_id" integer`,
-        );
-        await this.safeQuery(
-          queryRunner,
-          `UPDATE "campaigns" c SET "vendor_id" = (SELECT "vendor_id" FROM "campaign_vendors" cv WHERE cv."campaign_id" = c."id" LIMIT 1)`,
-        );
-      }
-      await this.safeQuery(queryRunner, `DROP TABLE "campaign_vendors"`);
-    } else {
-      if (!(await queryRunner.hasColumn('campaigns', 'vendor_id'))) {
-        await queryRunner.query(
-          `ALTER TABLE \`campaigns\` ADD COLUMN \`vendor_id\` int NULL`,
-        );
-        await this.safeQuery(
-          queryRunner,
-          `UPDATE \`campaigns\` c SET \`vendor_id\` = (SELECT \`vendor_id\` FROM \`campaign_vendors\` cv WHERE cv.\`campaign_id\` = c.\`id\` LIMIT 1)`,
-        );
-      }
-      await this.safeQuery(queryRunner, `DROP TABLE \`campaign_vendors\``);
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

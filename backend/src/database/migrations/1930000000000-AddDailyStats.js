@@ -84,11 +84,7 @@ export class AddDailyStats1930000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-    if (isPostgres) {
-      await queryRunner.query(`DROP TABLE IF EXISTS "daily_stats"`);
-    } else {
-      await queryRunner.query(`DROP TABLE IF EXISTS \`daily_stats\``);
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

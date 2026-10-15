@@ -218,26 +218,7 @@ export class InitialSchema1730000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-
-    if (isPostgres) {
-      await queryRunner.query(`DROP TABLE IF EXISTS "visit_events"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "visits"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "api_configs"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "campaign_pages"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "campaigns"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "templates"`);
-      await queryRunner.query(`DROP TABLE IF EXISTS "users"`);
-    } else {
-      await queryRunner.query(`SET FOREIGN_KEY_CHECKS = 0`);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`visit_events\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`visits\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`api_configs\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`campaign_pages\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`campaigns\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`templates\``);
-      await queryRunner.query(`DROP TABLE IF EXISTS \`users\``);
-      await queryRunner.query(`SET FOREIGN_KEY_CHECKS = 1`);
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

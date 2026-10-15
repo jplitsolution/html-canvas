@@ -38,7 +38,8 @@ export class CampaignTrackings1780000000001 {
             queryRunner,
             `INSERT INTO "campaign_trackings" ("campaign_id", "vendor_id") SELECT "campaign_id", "vendor_id" FROM "campaign_vendors"`
           );
-          await this.safeQuery(queryRunner, `DROP TABLE "campaign_vendors"`);
+          // Table drops disabled to prevent accidental data loss
+          // await this.safeQuery(queryRunner, `DROP TABLE "campaign_vendors"`);
         }
       }
     } else {
@@ -65,13 +66,15 @@ export class CampaignTrackings1780000000001 {
             queryRunner,
             `INSERT INTO \`campaign_trackings\` (\`campaign_id\`, \`vendor_id\`) SELECT \`campaign_id\`, \`vendor_id\` FROM \`campaign_vendors\``
           );
-          await this.safeQuery(queryRunner, `DROP TABLE \`campaign_vendors\``);
+          // Table drops disabled to prevent accidental data loss
+          // await this.safeQuery(queryRunner, `DROP TABLE \`campaign_vendors\``);
         }
       }
     }
   }
 
   async down(queryRunner) {
-    await this.safeQuery(queryRunner, `DROP TABLE \`campaign_trackings\``);
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

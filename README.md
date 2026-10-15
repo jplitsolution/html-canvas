@@ -58,9 +58,6 @@ Or from repo root: `./dev.sh`
 
 ```bash
 cd backend
-npm run db:reset      # drop/recreate DB
-npm run db:cleanup    # schema cleanup helper
-npm run db:seed       # seed_clean.js
 npm run test:api      # API smoke test
 node scripts/e2e-detect-flow.mjs   # detect/checksub E2E
 node scripts/reset-otp-local.mjs   # force local mock OTP

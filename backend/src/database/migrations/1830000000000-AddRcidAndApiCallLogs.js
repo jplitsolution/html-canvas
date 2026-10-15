@@ -87,17 +87,7 @@ export class AddRcidAndApiCallLogs1830000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-    if (isPostgres) {
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "api_call_logs"`);
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "conversion_postbacks" DROP COLUMN IF EXISTS "rcid"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "visits" DROP COLUMN IF EXISTS "rcid"`,
-      );
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

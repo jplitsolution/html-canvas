@@ -87,29 +87,7 @@ export class AddPostbacksAndHe1820000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-    if (isPostgres) {
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "conversion_postbacks"`);
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "vendors" DROP COLUMN IF EXISTS "postback_url"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "affiliates" DROP COLUMN IF EXISTS "postback_url"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "campaigns" DROP COLUMN IF EXISTS "cg_redirect_url"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "api_configs" DROP COLUMN IF EXISTS "he_provider"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "api_configs" DROP COLUMN IF EXISTS "he_config_json"`,
-      );
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

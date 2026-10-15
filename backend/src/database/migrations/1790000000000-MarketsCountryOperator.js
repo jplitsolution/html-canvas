@@ -301,42 +301,7 @@ export class MarketsCountryOperator1790000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-    if (isPostgres) {
-      await this.safeQuery(queryRunner, `DROP INDEX IF EXISTS "IDX_campaigns_operator_name"`);
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "campaigns" DROP CONSTRAINT IF EXISTS "FK_campaigns_operator"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "campaigns" DROP COLUMN IF EXISTS "operator_id"`,
-      );
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "operators"`);
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "countries"`);
-      await this.safeQuery(
-        queryRunner,
-        `CREATE UNIQUE INDEX "IDX_CAMPAIGNS_COUNTRY_OPERATOR" ON "campaigns" ("country", "operator")`,
-      );
-    } else {
-      await this.safeQuery(
-        queryRunner,
-        `DROP INDEX \`IDX_campaigns_operator_name\` ON \`campaigns\``,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE \`campaigns\` DROP FOREIGN KEY \`FK_campaigns_operator\``,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE \`campaigns\` DROP COLUMN \`operator_id\``,
-      );
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS \`operators\``);
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS \`countries\``);
-      await this.safeQuery(
-        queryRunner,
-        `CREATE UNIQUE INDEX \`IDX_CAMPAIGNS_COUNTRY_OPERATOR\` ON \`campaigns\` (\`country\`, \`operator\`)`,
-      );
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

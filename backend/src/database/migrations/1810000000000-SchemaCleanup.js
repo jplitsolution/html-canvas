@@ -23,7 +23,8 @@ export class SchemaCleanup1810000000000 {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
 
     if (isPostgres) {
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "otp_requests" CASCADE`);
+      // Table drops disabled to prevent accidental data loss
+      // await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS "otp_requests" CASCADE`);
 
       if (await queryRunner.hasColumn('api_configs', 'user_api')) {
         await queryRunner.query(`ALTER TABLE "api_configs" DROP COLUMN "user_api"`);
@@ -71,7 +72,8 @@ export class SchemaCleanup1810000000000 {
         );
       }
     } else {
-      await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS \`otp_requests\``);
+      // Table drops disabled to prevent accidental data loss
+      // await this.safeQuery(queryRunner, `DROP TABLE IF EXISTS \`otp_requests\``);
 
       if (await queryRunner.hasColumn('api_configs', 'user_api')) {
         await queryRunner.query(`ALTER TABLE \`api_configs\` DROP COLUMN \`user_api\``);
@@ -96,20 +98,7 @@ export class SchemaCleanup1810000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-    if (isPostgres) {
-      await this.safeQuery(
-        queryRunner,
-        `DROP INDEX IF EXISTS "UQ_campaign_trackings_camp_vendor_aff"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "api_configs" ADD COLUMN IF NOT EXISTS "user_api" varchar`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "api_configs" ADD COLUMN IF NOT EXISTS "otp_provider" varchar(32)`,
-      );
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }

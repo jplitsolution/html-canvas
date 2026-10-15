@@ -246,44 +246,7 @@ export class AddPartnersFlowAndAttribution1770000000000 {
   }
 
   async down(queryRunner) {
-    const isPostgres = queryRunner.connection.options.type === 'postgres';
-
-    if (isPostgres) {
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "api_configs" DROP COLUMN "resolve_msisdn_url"`,
-      );
-      await this.safeQuery(queryRunner, `DROP INDEX IF EXISTS "IDX_visits_click"`);
-      await this.safeQuery(queryRunner, `DROP INDEX IF EXISTS "IDX_visits_affiliate"`);
-      await this.safeQuery(queryRunner, `DROP INDEX IF EXISTS "IDX_visits_vendor"`);
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "visits" DROP COLUMN "vendor_id", DROP COLUMN "affiliate_id", DROP COLUMN "click_id", DROP COLUMN "vid_raw", DROP COLUMN "aff_raw"`,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE "campaigns" DROP COLUMN "vendor_id", DROP COLUMN "verification_mode", DROP COLUMN "flow_config"`,
-      );
-      await this.safeQuery(queryRunner, `DROP TABLE "affiliates"`);
-      await queryRunner.query(`DROP TABLE "vendors"`);
-    } else {
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE \`api_configs\` DROP COLUMN \`resolve_msisdn_url\``,
-      );
-      await this.safeQuery(queryRunner, `DROP INDEX \`IDX_visits_click\` ON \`visits\``);
-      await this.safeQuery(queryRunner, `DROP INDEX \`IDX_visits_affiliate\` ON \`visits\``);
-      await this.safeQuery(queryRunner, `DROP INDEX \`IDX_visits_vendor\` ON \`visits\``);
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE \`visits\` DROP COLUMN \`vendor_id\`, DROP COLUMN \`affiliate_id\`, DROP COLUMN \`click_id\`, DROP COLUMN \`vid_raw\`, DROP COLUMN \`aff_raw\``,
-      );
-      await this.safeQuery(
-        queryRunner,
-        `ALTER TABLE \`campaigns\` DROP COLUMN \`vendor_id\`, DROP COLUMN \`verification_mode\`, DROP COLUMN \`flow_config\``,
-      );
-      await this.safeQuery(queryRunner, `DROP TABLE \`affiliates\``);
-      await this.safeQuery(queryRunner, `DROP TABLE \`vendors\``);
-    }
+    // Disabled down migration to protect tables from accidental drop/data loss
+    throw new Error('Down migrations are disabled to prevent accidental table drops.');
   }
 }
