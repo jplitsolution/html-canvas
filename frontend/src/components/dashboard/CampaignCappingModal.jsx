@@ -3,7 +3,12 @@ import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import useStore from '../../store/useStore'
 import { isApiExposeCampaign } from '../flow/verificationModes'
-import { getEligibleFallbackCampaigns, calculateVendorCoverage, CAPPING_INTERVALS } from '../../utils/capping'
+import {
+  getEligibleFallbackCampaigns,
+  calculateVendorCoverage,
+  CAPPING_INTERVALS,
+  CAPPING_METRICS,
+} from '../../utils/capping'
 
 function CampaignCappingModal({ isOpen, onClose, campaignId }) {
   const campaign = useStore((s) => s.campaign)
@@ -12,6 +17,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
 
   const [cappingEnabledDraft, setCappingEnabledDraft] = useState(false)
+  const [cappingMetricDraft, setCappingMetricDraft] = useState('conversions')
   const [cappingLimitDraft, setCappingLimitDraft] = useState('')
   const [cappingActionDraft, setCappingActionDraft] = useState('stop')
   const [fallbackCampaignIdDraft, setFallbackCampaignIdDraft] = useState('')
@@ -27,6 +33,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
   useEffect(() => {
     if (!campaign || String(campaign.id) !== String(campaignId)) return
     setCappingEnabledDraft(Boolean(campaign.cappingEnabled))
+    setCappingMetricDraft(campaign.cappingMetric || 'conversions')
     setCappingLimitDraft(
       campaign.cappingLimit != null ? String(campaign.cappingLimit) : '',
     )
@@ -39,6 +46,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
     campaignId,
     campaign?.id,
     campaign?.cappingEnabled,
+    campaign?.cappingMetric,
     campaign?.cappingLimit,
     campaign?.cappingAction,
     campaign?.fallbackCampaignId,
@@ -63,6 +71,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
 
   const hasCappingChanges =
     cappingEnabledDraft !== Boolean(campaign?.cappingEnabled) ||
+    cappingMetricDraft !== (campaign?.cappingMetric || 'conversions') ||
     cappingLimitDraft !==
       (campaign?.cappingLimit != null ? String(campaign.cappingLimit) : '') ||
     cappingActionDraft !== (campaign?.cappingAction || 'stop') ||
@@ -76,6 +85,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
     try {
       await updateCampaign(campaign.id, {
         cappingEnabled: cappingEnabledDraft,
+        cappingMetric: cappingMetricDraft,
         cappingLimit: cappingLimitDraft !== '' ? parseInt(cappingLimitDraft, 10) : null,
         cappingAction: cappingActionDraft,
         fallbackCampaignId: fallbackCampaignIdDraft ? parseInt(fallbackCampaignIdDraft, 10) : null,
@@ -103,9 +113,9 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
         {/* Header Switch */}
         <div className="flex items-center justify-between pb-4 border-b border-border">
           <div>
-            <h3 className="text-sm font-semibold text-fg">Enable Click Capping</h3>
+            <h3 className="text-sm font-semibold text-fg">Enable Offer Capping</h3>
             <p className="text-xs text-fg-muted mt-0.5">
-              Set traffic click limits for this offer. When the cap is reached, traffic can be stopped or redirected to another compatible offer.
+              Set conversion or click limits for this offer. When the cap is reached, traffic can be stopped or redirected to another compatible offer.
             </p>
           </div>
           <button
@@ -131,10 +141,49 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
 
         {cappingEnabledDraft ? (
           <div className="space-y-4">
+            {/* Capping Metric Selector */}
+            <div>
+              <label className="block text-xs font-semibold text-fg mb-1.5">
+                Cap Target Metric
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {CAPPING_METRICS.map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => setCappingMetricDraft(m.id)}
+                    className={`text-left rounded-lg border px-3 py-2.5 transition-colors ${
+                      cappingMetricDraft === m.id
+                        ? 'border-accent bg-accent-muted/40 ring-1 ring-accent/30'
+                        : 'border-border bg-bg-elevated hover:border-fg-subtle/40'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${
+                          cappingMetricDraft === m.id
+                            ? 'border-accent bg-accent'
+                            : 'border-border bg-bg'
+                        }`}
+                      >
+                        {cappingMetricDraft === m.id && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </span>
+                      <span className="text-xs font-semibold text-fg">{m.label}</span>
+                    </div>
+                    <p className="text-[11px] text-fg-muted mt-1 ml-5.5 leading-snug">
+                      {m.description}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-fg mb-1">
-                  Click Cap Limit
+                  {cappingMetricDraft === 'conversions' ? 'Conversion Cap Limit' : 'Click Cap Limit'}
                 </label>
                 <input
                   type="number"
@@ -142,10 +191,12 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg font-mono focus:outline-none focus:border-accent"
                   value={cappingLimitDraft}
                   onChange={(e) => setCappingLimitDraft(e.target.value)}
-                  placeholder="e.g. 200"
+                  placeholder={cappingMetricDraft === 'conversions' ? 'e.g. 50' : 'e.g. 200'}
                 />
                 <p className="text-[11px] text-fg-muted mt-1">
-                  Maximum number of accepted clicks/requests before action triggers.
+                  {cappingMetricDraft === 'conversions'
+                    ? 'Maximum number of successful subscriptions/conversions before action triggers.'
+                    : 'Maximum number of accepted clicks/requests before action triggers.'}
                 </p>
               </div>
 
@@ -165,7 +216,7 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
                   ))}
                 </select>
                 <p className="text-[11px] text-fg-muted mt-1">
-                  Whether the click count resets daily, weekly, monthly (at 00:00 IST), or accumulates as a lifetime cap.
+                  Whether the count resets daily, weekly, monthly (at 00:00 IST), or accumulates as a lifetime cap.
                 </p>
               </div>
             </div>
@@ -186,7 +237,9 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
                 >
                   <p className="text-sm font-semibold text-fg">Stop Traffic</p>
                   <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Clicks are immediately stopped. No DB visit is logged, and an &quot;Offer Stopped&quot; message is served.
+                    {cappingMetricDraft === 'conversions'
+                      ? 'New traffic is immediately stopped once the conversion limit is reached.'
+                      : 'Clicks are immediately stopped. No DB visit is logged, and an "Offer Stopped" message is served.'}
                   </p>
                 </button>
 
@@ -201,7 +254,9 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
                 >
                   <p className="text-sm font-semibold text-fg">Fallback / Redirect</p>
                   <p className="text-[11px] text-fg-muted mt-1 leading-snug">
-                    Forward traffic to another offer. Current offer click count is preserved; target offer records and counts the clicks.
+                    {cappingMetricDraft === 'conversions'
+                      ? 'Forward new traffic to another offer once the conversion limit is reached. Current offer conversions are preserved.'
+                      : 'Forward traffic to another offer. Current offer click count is preserved; target offer records and counts the clicks.'}
                   </p>
                 </button>
               </div>

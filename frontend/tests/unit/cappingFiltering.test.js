@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { isApiExposeCampaign } from '../../src/components/flow/verificationModes'
-import { getEligibleFallbackCampaigns, calculateVendorCoverage, CAPPING_INTERVALS } from '../../src/utils/capping'
+import {
+  getEligibleFallbackCampaigns,
+  calculateVendorCoverage,
+  CAPPING_INTERVALS,
+  CAPPING_METRICS,
+} from '../../src/utils/capping'
 
 describe('Offer Capping & Traffic Fallback Rules', () => {
   const webpageCampaign1 = {
@@ -104,6 +109,19 @@ describe('Offer Capping & Traffic Fallback Rules', () => {
       expect(CAPPING_INTERVALS.find((i) => i.id === 'daily')?.label).toContain('IST')
       expect(CAPPING_INTERVALS.find((i) => i.id === 'weekly')?.label).toContain('Monday at 00:00 IST')
       expect(CAPPING_INTERVALS.find((i) => i.id === 'monthly')?.label).toContain('1st of every month at 00:00 IST')
+    })
+  })
+
+  describe('Capping Metrics (Conversions vs Clicks)', () => {
+    it('defines both conversions and clicks metrics with appropriate labels', () => {
+      const metricIds = CAPPING_METRICS.map((m) => m.id)
+      expect(metricIds).toEqual(['conversions', 'clicks'])
+      const conv = CAPPING_METRICS.find((m) => m.id === 'conversions')
+      expect(conv.label).toContain('Conversions')
+      expect(conv.limitLabel).toContain('Conversion Cap Limit')
+      const click = CAPPING_METRICS.find((m) => m.id === 'clicks')
+      expect(click.label).toContain('Clicks')
+      expect(click.limitLabel).toContain('Click Cap Limit')
     })
   })
 })

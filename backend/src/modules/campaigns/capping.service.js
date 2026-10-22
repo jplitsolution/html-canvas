@@ -1,7 +1,7 @@
 import { getRepository } from '../../database/index.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
 import { CampaignTracking } from '../../database/entities/campaign-tracking.entity.js';
-import { Visit } from '../../database/entities/visit.entity.js';
+import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { partnersService } from '../partners/partners.service.js';
 import { DEFAULT_TIMEZONE, zonedDayBound } from '../../common/zoned-day.js';
@@ -50,13 +50,22 @@ export const getMondayYmd = (ymd) => {
  * - monthly: resets on 1st of every month at 00:00 IST
  * - total: lifetime / no automatic reset
  */
-export const getPeriodMetadata = (campaignId, interval = 'daily', now = new Date()) => {
+export const getPeriodMetadata = (
+  campaignId,
+  interval = 'daily',
+  now = new Date(),
+  metric = 'clicks',
+) => {
   const normInterval = String(interval || 'daily').toLowerCase();
+  const normMetric =
+    String(metric || 'clicks').toLowerCase() === 'conversions'
+      ? 'conv'
+      : 'count';
   const { year, month, ymd } = getZonedDateParts(now, DEFAULT_TIMEZONE);
 
   if (normInterval === 'total' || normInterval === 'lifetime') {
     return {
-      redisKey: `capping:count:${campaignId}:total`,
+      redisKey: `capping:${normMetric}:${campaignId}:total`,
       periodStart: null,
       ttl: 86400 * 365,
     };
@@ -65,7 +74,7 @@ export const getPeriodMetadata = (campaignId, interval = 'daily', now = new Date
   if (normInterval === 'weekly') {
     const mondayYmd = getMondayYmd(ymd);
     return {
-      redisKey: `capping:count:${campaignId}:weekly:${mondayYmd}`,
+      redisKey: `capping:${normMetric}:${campaignId}:weekly:${mondayYmd}`,
       periodStart: zonedDayBound(mondayYmd, DEFAULT_TIMEZONE, 'start'),
       ttl: 86400 * 14,
     };
@@ -74,7 +83,7 @@ export const getPeriodMetadata = (campaignId, interval = 'daily', now = new Date
   if (normInterval === 'monthly') {
     const firstDayYmd = `${year}-${month}-01`;
     return {
-      redisKey: `capping:count:${campaignId}:monthly:${year}-${month}`,
+      redisKey: `capping:${normMetric}:${campaignId}:monthly:${year}-${month}`,
       periodStart: zonedDayBound(firstDayYmd, DEFAULT_TIMEZONE, 'start'),
       ttl: 86400 * 60,
     };
@@ -82,7 +91,7 @@ export const getPeriodMetadata = (campaignId, interval = 'daily', now = new Date
 
   // Default: daily
   return {
-    redisKey: `capping:count:${campaignId}:daily:${ymd}`,
+    redisKey: `capping:${normMetric}:${campaignId}:daily:${ymd}`,
     periodStart: zonedDayBound(ymd, DEFAULT_TIMEZONE, 'start'),
     ttl: 86400 * 2,
   };
@@ -132,7 +141,12 @@ export const createCappingService = () => {
   };
 
   const incrementCampaignClickCount = async (campaignId, interval = 'daily') => {
-    const { redisKey, ttl } = getPeriodMetadata(campaignId, interval);
+    const { redisKey, ttl } = getPeriodMetadata(
+      campaignId,
+      interval,
+      new Date(),
+      'clicks',
+    );
     try {
       const nextVal = await redisService.incr(redisKey, ttl);
       if (nextVal > 0) return nextVal;
@@ -143,7 +157,87 @@ export const createCappingService = () => {
       return manualNext;
     } catch (err) {
       console.warn(
-        `Failed to increment capping count for campaign ${campaignId}: ${err.message}`,
+        `Failed to increment click count for campaign ${campaignId}: ${err.message}`,
+      );
+      return null;
+    }
+  };
+
+  const getCampaignConversionCount = async (campaignId, interval = 'daily') => {
+    const { redisKey, periodStart, ttl } = getPeriodMetadata(
+      campaignId,
+      interval,
+      new Date(),
+      'conversions',
+    );
+    try {
+      const cached = await redisService.get(redisKey);
+      if (cached !== null && cached !== undefined) {
+        return parseInt(cached, 10) || 0;
+      }
+    } catch {
+      // redis error fallback to db
+    }
+
+    // DB Fallback count from visits table for completed conversions
+    let count = 0;
+    try {
+      const qb = getVisitRepo()
+        .createQueryBuilder('v')
+        .where('v.campaign_id = :campaignId', { campaignId })
+        .andWhere(
+          '(v.visit_status IN (:...convStatuses) OR v.otp_verified_at IS NOT NULL)',
+          {
+            convStatuses: [
+              VisitStatus.SUCCESS,
+              VisitStatus.SUBSCRIBED,
+              'OTP_VERIFIED',
+              'CONFIRMED',
+            ],
+          },
+        );
+
+      if (periodStart) {
+        qb.andWhere('v.created_at >= :periodStart', { periodStart });
+      }
+
+      count = await qb.getCount();
+
+      try {
+        await redisService.set(redisKey, count, ttl);
+      } catch {
+        // ignore redis error
+      }
+    } catch (err) {
+      console.warn(
+        `Failed to get conversion count for campaign ${campaignId}: ${err.message}`,
+      );
+    }
+
+    return count;
+  };
+
+  const incrementCampaignConversionCount = async (
+    campaignId,
+    interval = 'daily',
+  ) => {
+    const { redisKey, ttl } = getPeriodMetadata(
+      campaignId,
+      interval,
+      new Date(),
+      'conversions',
+    );
+    try {
+      const nextVal = await redisService.incr(redisKey, ttl);
+      if (nextVal > 0) return nextVal;
+      // If redis is not connected or returned 0, fallback
+      const curr = await getCampaignConversionCount(campaignId, interval);
+      const manualNext = curr + 1;
+      await redisService.set(redisKey, manualNext, ttl);
+      return manualNext;
+    } catch (err) {
+      console.warn(
+        `Failed to increment conversion count for campaign ${campaignId}: ${err.message}`,
       );
       return null;
     }
@@ -173,7 +267,7 @@ export const createCappingService = () => {
   };
 
   /**
-   * Evaluate if campaign reached its click capping limit, and determine action.
+   * Evaluate if campaign reached its capping limit (clicks or conversions), and determine action.
    * Returns:
    *  - { isCapped: false, action: 'allow' }
    *  - { isCapped: true, action: 'stop', reason: string }
@@ -191,10 +285,14 @@ export const createCappingService = () => {
     }
 
     const interval = campaign.cappingInterval || 'daily';
-    const currentCount = await getCampaignClickCount(campaign.id, interval);
+    const metric = String(campaign.cappingMetric || 'conversions').toLowerCase();
+    const currentCount =
+      metric === 'clicks'
+        ? await getCampaignClickCount(campaign.id, interval)
+        : await getCampaignConversionCount(campaign.id, interval);
 
     if (currentCount < limit) {
-      return { isCapped: false, action: 'allow', currentCount, limit };
+      return { isCapped: false, action: 'allow', currentCount, limit, metric };
     }
 
     // Cap limit reached!
@@ -228,6 +326,36 @@ export const createCappingService = () => {
       };
     }
 
+    // Check if target fallback campaign itself has reached its capping limit
+    if (
+      fallbackCampaign.cappingEnabled &&
+      fallbackCampaign.cappingLimit != null
+    ) {
+      const targetLimit = Number(fallbackCampaign.cappingLimit);
+      if (targetLimit > 0) {
+        const targetInterval = fallbackCampaign.cappingInterval || 'daily';
+        const targetMetric = String(
+          fallbackCampaign.cappingMetric || 'conversions',
+        ).toLowerCase();
+        const targetCount =
+          targetMetric === 'clicks'
+            ? await getCampaignClickCount(fallbackCampaign.id, targetInterval)
+            : await getCampaignConversionCount(fallbackCampaign.id, targetInterval);
+
+        if (targetCount >= targetLimit) {
+          return {
+            isCapped: true,
+            action: 'stop',
+            currentCount,
+            limit,
+            metric,
+            fallbackCampaignId: fallbackCampaign.id,
+            reason: 'FALLBACK_CAMPAIGN_CAPPED',
+          };
+        }
+      }
+    }
+
     // Check Vendor Assignment on Fallback Campaign
     const resolvedVendorId = await resolveVendorId(vid, vendorId);
     if (!resolvedVendorId) {
@@ -237,6 +365,7 @@ export const createCappingService = () => {
         action: 'stop',
         currentCount,
         limit,
+        metric,
         reason: 'VENDOR_NOT_FOUND',
       };
     }
@@ -251,6 +380,7 @@ export const createCappingService = () => {
         action: 'stop',
         currentCount,
         limit,
+        metric,
         resolvedVendorId,
         fallbackCampaignId: fallbackCampaign.id,
         reason: 'VENDOR_NOT_ASSIGNED',
@@ -263,6 +393,7 @@ export const createCappingService = () => {
       targetCampaign: fallbackCampaign,
       currentCount,
       limit,
+      metric,
       resolvedVendorId,
     };
   };
@@ -270,6 +401,8 @@ export const createCappingService = () => {
   return {
     getCampaignClickCount,
     incrementCampaignClickCount,
+    getCampaignConversionCount,
+    incrementCampaignConversionCount,
     resolveVendorId,
     isVendorAssignedToCampaign,
     evaluateCapping,

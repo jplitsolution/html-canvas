@@ -1130,6 +1130,11 @@ export const createOtpService = () => {
       { id: visit.id },
       { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
     );
+    const convCampaignId = visit.campaignId || cId;
+    await cappingService.incrementCampaignConversionCount(
+      convCampaignId,
+      campaign.cappingInterval,
+    );
     await redisService.del(exposePendingKey(cId, vendor.id, phone));
 
     if (held) {

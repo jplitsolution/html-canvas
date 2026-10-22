@@ -99,6 +99,12 @@ export const CampaignSchema = new EntitySchema({
       type: 'boolean',
       default: false,
     },
+    cappingMetric: {
+      name: 'capping_metric',
+      type: 'varchar',
+      length: 16,
+      default: 'conversions',
+    },
     cappingLimit: {
       name: 'capping_limit',
       type: 'int',

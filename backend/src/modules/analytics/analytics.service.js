@@ -7,6 +7,7 @@ import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.
 import { ApiCallLog } from '../../database/entities/api-call-log.entity.js';
 import { ConversionPostback, ConversionPostbackStatus } from '../../database/entities/conversion-postback.entity.js';
 import { campaignsService } from '../campaigns/campaigns.service.js';
+import { cappingService } from '../campaigns/capping.service.js';
 import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { campaignVendorPerf } from '../otp/helpers/conversion.js';
@@ -131,9 +132,12 @@ export const createAnalyticsService = () => {
 
   const updateVisit = async (id, status, pageType, phone) => {
     if (!id || Number.isNaN(Number(id))) return null;
-    const visit = await getVisitRepo().findOne({ where: { id: parseInt(id, 10) } });
+    const visit = await getVisitRepo().findOne({
+      where: { id: parseInt(id, 10) },
+    });
     if (!visit) return null;
 
+    const prevStatus = visit.visitStatus;
     visit.visitStatus = status;
     if (pageType) {
       visit.pageType = pageType;
@@ -143,6 +147,17 @@ export const createAnalyticsService = () => {
     }
 
     const saved = await getVisitRepo().save(visit);
+
+    if (
+      status === VisitStatus.SUBSCRIBED &&
+      prevStatus !== VisitStatus.SUBSCRIBED &&
+      visit.campaignId
+    ) {
+      cappingService
+        .incrementCampaignConversionCount(visit.campaignId)
+        .catch(() => {});
+    }
+
     return saved;
   };
 

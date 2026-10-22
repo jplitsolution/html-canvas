@@ -622,6 +622,10 @@ export const createCampaignsService = () => {
     if (dto.cappingEnabled !== undefined) {
       campaign.cappingEnabled = Boolean(dto.cappingEnabled);
     }
+    if (dto.cappingMetric !== undefined) {
+      const metric = String(dto.cappingMetric || '').trim().toLowerCase();
+      campaign.cappingMetric = metric === 'clicks' ? 'clicks' : 'conversions';
+    }
     if (dto.cappingLimit !== undefined) {
       campaign.cappingLimit =
         dto.cappingLimit !== null && dto.cappingLimit !== ''
@@ -999,6 +1003,7 @@ export const createCampaignsService = () => {
       funnelLayout: campaign.funnelLayout,
       allowedCallbackStatuses: campaign.allowedCallbackStatuses || null,
       cappingEnabled: Boolean(campaign.cappingEnabled),
+      cappingMetric: campaign.cappingMetric || 'conversions',
       cappingLimit: campaign.cappingLimit != null ? Number(campaign.cappingLimit) : null,
       cappingAction: campaign.cappingAction || 'stop',
       fallbackCampaignId: campaign.fallbackCampaignId != null ? Number(campaign.fallbackCampaignId) : null,

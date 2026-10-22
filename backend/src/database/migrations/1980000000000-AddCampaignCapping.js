@@ -18,6 +18,11 @@ export class AddCampaignCapping1980000000000 {
           `ALTER TABLE "campaigns" ADD COLUMN "capping_enabled" boolean NOT NULL DEFAULT false`,
         );
       }
+      if (!(await queryRunner.hasColumn('campaigns', 'capping_metric'))) {
+        await queryRunner.query(
+          `ALTER TABLE "campaigns" ADD COLUMN "capping_metric" varchar(16) NOT NULL DEFAULT 'conversions'`,
+        );
+      }
       if (!(await queryRunner.hasColumn('campaigns', 'capping_limit'))) {
         await queryRunner.query(
           `ALTER TABLE "campaigns" ADD COLUMN "capping_limit" int NULL`,
@@ -42,6 +47,11 @@ export class AddCampaignCapping1980000000000 {
       if (!(await queryRunner.hasColumn('campaigns', 'capping_enabled'))) {
         await queryRunner.query(
           `ALTER TABLE \`campaigns\` ADD COLUMN \`capping_enabled\` tinyint(1) NOT NULL DEFAULT 0`,
+        );
+      }
+      if (!(await queryRunner.hasColumn('campaigns', 'capping_metric'))) {
+        await queryRunner.query(
+          `ALTER TABLE \`campaigns\` ADD COLUMN \`capping_metric\` varchar(16) NOT NULL DEFAULT 'conversions'`,
         );
       }
       if (!(await queryRunner.hasColumn('campaigns', 'capping_limit'))) {
@@ -71,6 +81,7 @@ export class AddCampaignCapping1980000000000 {
     const isPostgres = queryRunner.connection.options.type === 'postgres';
     const cols = [
       'capping_enabled',
+      'capping_metric',
       'capping_limit',
       'capping_action',
       'fallback_campaign_id',

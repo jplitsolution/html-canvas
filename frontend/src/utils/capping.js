@@ -58,3 +58,21 @@ export const CAPPING_INTERVALS = [
   { id: 'monthly', label: 'Monthly (Resets on 1st of every month at 00:00 IST)' },
   { id: 'total', label: 'Lifetime / Total (No automatic reset)' },
 ]
+
+export const CAPPING_METRICS = [
+  {
+    id: 'conversions',
+    label: 'Conversions (Subscribers)',
+    description: 'Cap triggers when successful subscribers reach limit.',
+    limitLabel: 'Conversion Cap Limit',
+    limitHelp: 'Maximum number of successful subscriptions/conversions before action triggers.',
+  },
+  {
+    id: 'clicks',
+    label: 'Clicks (Traffic)',
+    description: 'Cap triggers when incoming clicks/requests reach limit.',
+    limitLabel: 'Click Cap Limit',
+    limitHelp: 'Maximum number of accepted incoming clicks/requests before action triggers.',
+  },
+]
+
