@@ -4,7 +4,7 @@
  * - capping_limit: int
  * - capping_action: 'stop' | 'fallback'
  * - fallback_campaign_id: int
- * - capping_interval: 'daily' | 'total'
+ * - capping_interval: 'daily' | 'weekly' | 'monthly' | 'total'
  */
 export class AddCampaignCapping1980000000000 {
   name = 'AddCampaignCapping1980000000000';

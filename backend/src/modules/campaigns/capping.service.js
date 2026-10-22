@@ -4,27 +4,99 @@ import { CampaignTracking } from '../../database/entities/campaign-tracking.enti
 import { Visit } from '../../database/entities/visit.entity.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { partnersService } from '../partners/partners.service.js';
+import { DEFAULT_TIMEZONE, zonedDayBound } from '../../common/zoned-day.js';
+
+const pad = (n) => String(n).padStart(2, '0');
+
+/** Get YYYY, MM, DD, and weekday for current instant in target timezone (IST Asia/Kolkata) */
+export const getZonedDateParts = (date = new Date(), timeZone = DEFAULT_TIMEZONE) => {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    weekday: 'short',
+    hourCycle: 'h23',
+  });
+  const bag = {};
+  for (const part of fmt.formatToParts(date)) {
+    if (part.type !== 'literal') bag[part.type] = part.value;
+  }
+  return {
+    year: bag.year,
+    month: pad(bag.month),
+    day: pad(bag.day),
+    ymd: `${bag.year}-${pad(bag.month)}-${pad(bag.day)}`,
+    weekday: bag.weekday,
+  };
+};
+
+/**
+ * For a given YYYY-MM-DD in IST, find the Monday of that week in IST.
+ */
+export const getMondayYmd = (ymd) => {
+  const [y, m, d] = ymd.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  const dayOfWeek = dt.getUTCDay(); // 0 = Sun, 1 = Mon, ..., 6 = Sat
+  const diffToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  dt.setUTCDate(dt.getUTCDate() - diffToMonday);
+  return `${dt.getUTCFullYear()}-${pad(dt.getUTCMonth() + 1)}-${pad(dt.getUTCDate())}`;
+};
+
+/**
+ * Returns { redisKey, periodStart, ttl } for a campaign and interval in IST.
+ * - daily: resets every day at 00:00 IST
+ * - weekly: resets every Monday at 00:00 IST
+ * - monthly: resets on 1st of every month at 00:00 IST
+ * - total: lifetime / no automatic reset
+ */
+export const getPeriodMetadata = (campaignId, interval = 'daily', now = new Date()) => {
+  const normInterval = String(interval || 'daily').toLowerCase();
+  const { year, month, ymd } = getZonedDateParts(now, DEFAULT_TIMEZONE);
+
+  if (normInterval === 'total' || normInterval === 'lifetime') {
+    return {
+      redisKey: `capping:count:${campaignId}:total`,
+      periodStart: null,
+      ttl: 86400 * 365,
+    };
+  }
+
+  if (normInterval === 'weekly') {
+    const mondayYmd = getMondayYmd(ymd);
+    return {
+      redisKey: `capping:count:${campaignId}:weekly:${mondayYmd}`,
+      periodStart: zonedDayBound(mondayYmd, DEFAULT_TIMEZONE, 'start'),
+      ttl: 86400 * 14,
+    };
+  }
+
+  if (normInterval === 'monthly') {
+    const firstDayYmd = `${year}-${month}-01`;
+    return {
+      redisKey: `capping:count:${campaignId}:monthly:${year}-${month}`,
+      periodStart: zonedDayBound(firstDayYmd, DEFAULT_TIMEZONE, 'start'),
+      ttl: 86400 * 60,
+    };
+  }
+
+  // Default: daily
+  return {
+    redisKey: `capping:count:${campaignId}:daily:${ymd}`,
+    periodStart: zonedDayBound(ymd, DEFAULT_TIMEZONE, 'start'),
+    ttl: 86400 * 2,
+  };
+};
 
 export const createCappingService = () => {
   const getCampaignRepo = () => getRepository(Campaign);
   const getTrackingRepo = () => getRepository(CampaignTracking);
   const getVisitRepo = () => getRepository(Visit);
 
-  const getTodayUtcString = () => {
-    return new Date().toISOString().slice(0, 10); // YYYY-MM-DD
-  };
-
-  const getRedisKey = (campaignId, interval = 'daily') => {
-    if (interval === 'total') {
-      return `capping:count:${campaignId}:total`;
-    }
-    return `capping:count:${campaignId}:${getTodayUtcString()}`;
-  };
-
   const getCampaignClickCount = async (campaignId, interval = 'daily') => {
-    const key = getRedisKey(campaignId, interval);
+    const { redisKey, periodStart, ttl } = getPeriodMetadata(campaignId, interval);
     try {
-      const cached = await redisService.get(key);
+      const cached = await redisService.get(redisKey);
       if (cached !== null && cached !== undefined) {
         return parseInt(cached, 10) || 0;
       }
@@ -39,20 +111,14 @@ export const createCappingService = () => {
         .createQueryBuilder('v')
         .where('v.campaign_id = :campaignId', { campaignId });
 
-      if (interval === 'daily') {
-        const startOfDay = new Date();
-        startOfDay.setUTCHours(0, 0, 0, 0);
-        qb.andWhere('v.created_at >= :startOfDay', { startOfDay });
+      if (periodStart) {
+        qb.andWhere('v.created_at >= :periodStart', { periodStart });
       }
 
       count = await qb.getCount();
 
       try {
-        await redisService.set(
-          key,
-          count,
-          interval === 'daily' ? 86400 * 2 : 86400 * 7,
-        );
+        await redisService.set(redisKey, count, ttl);
       } catch {
         // ignore redis error
       }
@@ -66,15 +132,14 @@ export const createCappingService = () => {
   };
 
   const incrementCampaignClickCount = async (campaignId, interval = 'daily') => {
-    const key = getRedisKey(campaignId, interval);
-    const ttl = interval === 'daily' ? 86400 * 2 : 86400 * 7;
+    const { redisKey, ttl } = getPeriodMetadata(campaignId, interval);
     try {
-      const nextVal = await redisService.incr(key, ttl);
+      const nextVal = await redisService.incr(redisKey, ttl);
       if (nextVal > 0) return nextVal;
       // If redis is not connected or returned 0, fallback
       const curr = await getCampaignClickCount(campaignId, interval);
       const manualNext = curr + 1;
-      await redisService.set(key, manualNext, ttl);
+      await redisService.set(redisKey, manualNext, ttl);
       return manualNext;
     } catch (err) {
       console.warn(

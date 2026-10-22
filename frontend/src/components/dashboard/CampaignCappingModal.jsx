@@ -3,7 +3,7 @@ import Modal from '../common/Modal'
 import Button from '../ui/Button'
 import useStore from '../../store/useStore'
 import { isApiExposeCampaign } from '../flow/verificationModes'
-import { getEligibleFallbackCampaigns, calculateVendorCoverage } from '../../utils/capping'
+import { getEligibleFallbackCampaigns, calculateVendorCoverage, CAPPING_INTERVALS } from '../../utils/capping'
 
 function CampaignCappingModal({ isOpen, onClose, campaignId }) {
   const campaign = useStore((s) => s.campaign)
@@ -158,11 +158,14 @@ function CampaignCappingModal({ isOpen, onClose, campaignId }) {
                   onChange={(e) => setCappingIntervalDraft(e.target.value)}
                   className="w-full text-sm border border-border rounded-lg px-3 py-2 bg-bg-elevated text-fg focus:outline-none focus:border-accent"
                 >
-                  <option value="daily">Daily (Resets every day at 00:00 UTC)</option>
-                  <option value="total">Lifetime / Total (No automatic reset)</option>
+                  {CAPPING_INTERVALS.map((opt) => (
+                    <option key={opt.id} value={opt.id}>
+                      {opt.label}
+                    </option>
+                  ))}
                 </select>
                 <p className="text-[11px] text-fg-muted mt-1">
-                  Whether the click count resets daily or accumulates as a lifetime cap.
+                  Whether the click count resets daily, weekly, monthly (at 00:00 IST), or accumulates as a lifetime cap.
                 </p>
               </div>
             </div>

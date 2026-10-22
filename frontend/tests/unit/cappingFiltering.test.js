@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { isApiExposeCampaign } from '../../src/components/flow/verificationModes'
-import { getEligibleFallbackCampaigns, calculateVendorCoverage } from '../../src/utils/capping'
+import { getEligibleFallbackCampaigns, calculateVendorCoverage, CAPPING_INTERVALS } from '../../src/utils/capping'
 
 describe('Offer Capping & Traffic Fallback Rules', () => {
   const webpageCampaign1 = {
@@ -94,6 +94,16 @@ describe('Offer Capping & Traffic Fallback Rules', () => {
       expect(coverage.totalAssigned).toBe(2)
       expect(coverage.mappedCount).toBe(2)
       expect(coverage.unmappedCount).toBe(0)
+    })
+  })
+
+  describe('Capping Intervals and Reset Schedule', () => {
+    it('defines daily, weekly, monthly, and lifetime intervals in IST (Asia/Kolkata)', () => {
+      const ids = CAPPING_INTERVALS.map((i) => i.id)
+      expect(ids).toEqual(['daily', 'weekly', 'monthly', 'total'])
+      expect(CAPPING_INTERVALS.find((i) => i.id === 'daily')?.label).toContain('IST')
+      expect(CAPPING_INTERVALS.find((i) => i.id === 'weekly')?.label).toContain('Monday at 00:00 IST')
+      expect(CAPPING_INTERVALS.find((i) => i.id === 'monthly')?.label).toContain('1st of every month at 00:00 IST')
     })
   })
 })

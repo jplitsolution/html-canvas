@@ -51,3 +51,10 @@ export function calculateVendorCoverage(currentCampaign, targetCampaign) {
     unmappedCount: total - mapped,
   }
 }
+
+export const CAPPING_INTERVALS = [
+  { id: 'daily', label: 'Daily (Resets every day at 00:00 IST)' },
+  { id: 'weekly', label: 'Weekly (Resets every Monday at 00:00 IST)' },
+  { id: 'monthly', label: 'Monthly (Resets on 1st of every month at 00:00 IST)' },
+  { id: 'total', label: 'Lifetime / Total (No automatic reset)' },
+]
