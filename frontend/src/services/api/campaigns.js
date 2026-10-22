@@ -103,6 +103,21 @@ function mapCampaign(campaign) {
     })(),
     allowedCallbackStatuses:
       campaign.allowedCallbackStatuses || campaign.allowed_callback_statuses || null,
+    cappingEnabled: Boolean(
+      campaign.cappingEnabled ?? campaign.capping_enabled ?? false,
+    ),
+    cappingLimit:
+      (campaign.cappingLimit ?? campaign.capping_limit) != null
+        ? Number(campaign.cappingLimit ?? campaign.capping_limit)
+        : null,
+    cappingAction:
+      campaign.cappingAction || campaign.capping_action || 'stop',
+    fallbackCampaignId:
+      (campaign.fallbackCampaignId ?? campaign.fallback_campaign_id) != null
+        ? Number(campaign.fallbackCampaignId ?? campaign.fallback_campaign_id)
+        : null,
+    cappingInterval:
+      campaign.cappingInterval || campaign.capping_interval || 'daily',
     pages,
     requiredComplete,
     flowConfig,

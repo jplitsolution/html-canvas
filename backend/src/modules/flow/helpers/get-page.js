@@ -13,6 +13,7 @@ import { redisService } from '../../../common/services/redis.service.js';
 import { flowHasConfirmNode, isPacksOnHome } from './funnel-layout.js';
 import { recordCgRedirectHop } from './cg-redirect-log.js';
 import { resolveFlowOrBoth, wapBlockedError } from '../flows/index.js';
+import { cappingService } from '../../campaigns/capping.service.js';
 
 export function createGetPage(deps) {
   const {
@@ -61,6 +62,64 @@ export function createGetPage(deps) {
       null,
       null,
     );
+
+    // Initial click landing: evaluate capping & vendor assignment
+    if (!input.visitId) {
+      const cappingResult = await cappingService.evaluateCapping(campaign, {
+        vid: input.vid,
+      });
+
+      if (cappingResult.isCapped) {
+        if (
+          cappingResult.action === 'fallback' &&
+          cappingResult.targetCampaign
+        ) {
+          const target = cappingResult.targetCampaign;
+          const targetCountry =
+            target.marketOperator?.country?.name || target.country;
+          const targetOperator =
+            target.marketOperator?.name || target.operator;
+
+          const queryParams = new URLSearchParams();
+          if (targetCountry) queryParams.set('country', targetCountry);
+          if (targetOperator) queryParams.set('operator', targetOperator);
+          queryParams.set('campid', String(target.id));
+          if (input.vid) queryParams.set('vid', input.vid);
+          if (input.affId) queryParams.set('aff_id', input.affId);
+          if (input.clickId) queryParams.set('click_id', input.clickId);
+          if (input.rcid) queryParams.set('rcid', input.rcid);
+          if (input.pack) queryParams.set('pack', input.pack);
+
+          const fallbackUrl = `/subscription?${queryParams.toString()}`;
+
+          // Immediately redirect browser to target campaign without creating visit on Offer 1
+          return {
+            campaignId: campaign.id,
+            visitId: null,
+            pageType: CampaignPageType.HOME,
+            entryPage: flowEngineService.getEntryPage(flowConfigEarly),
+            templateId: null,
+            html: '',
+            css: '',
+            variables: {},
+            actions: [],
+            pack: normalizePack(input.pack),
+            projectData: {},
+            cgRedirectUrl: null,
+            subscriptionUrl: null,
+            externalRedirect: fallbackUrl,
+            clickId: input.clickId || null,
+            rcid: input.rcid || null,
+          };
+        }
+
+        // Action is STOP (or vendor was not assigned to target offer)
+        const err = new Error('This offer has been stopped');
+        err.statusCode = 403;
+        err.code = 'OFFER_STOPPED';
+        throw err;
+      }
+    }
 
     const apiConfigCacheKey = `flow:config:${campaign.id}`;
     let apiConfig = null;
@@ -159,6 +218,10 @@ export function createGetPage(deps) {
         phone,
       });
       visitId = landing.visitId;
+      await cappingService.incrementCampaignClickCount(
+        campaign.id,
+        campaign.cappingInterval,
+      );
 
       const cgOnCreate = await maybeNullFlowCgRedirect(campaign, visitId, input);
       if (cgOnCreate) {

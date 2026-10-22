@@ -16,6 +16,7 @@ import {
   FileCode,
   Calendar,
   RefreshCw,
+  SlidersHorizontal,
 } from 'lucide-react'
 import useStore from '../store/useStore'
 import AppShell from '../components/ui/AppShell'
@@ -35,6 +36,7 @@ import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbE
 import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/verificationModes'
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
+import CampaignCappingModal from '../components/dashboard/CampaignCappingModal'
 import { formatDate, getDateRangeForPreset, DEFAULT_TIMEZONE, shiftDateString } from '../utils/date'
 
 const VENDOR_DATE_PRESETS = [
@@ -124,6 +126,7 @@ function CampaignDetailPage() {
   const fetchVendors = useStore((s) => s.fetchVendors)
   const [showApiConfig, setShowApiConfig] = useState(false)
   const [showVendorModal, setShowVendorModal] = useState(false)
+  const [showCappingModal, setShowCappingModal] = useState(false)
   const [activating, setActivating] = useState(false)
   const [assigningVendor, setAssigningVendor] = useState(false)
   const [copiedId, setCopiedId] = useState(null)
@@ -589,6 +592,19 @@ function CampaignDetailPage() {
       <Button variant="outline" size="sm" onClick={() => setShowVendorModal(true)}>
         <Store className="w-4 h-4" />
         Vendors
+      </Button>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setShowCappingModal(true)}
+        className={campaign?.cappingEnabled ? 'border-accent text-accent font-medium' : ''}
+        title="Offer Capping & Traffic Fallback"
+      >
+        <SlidersHorizontal className="w-4 h-4" />
+        Capping
+        {campaign?.cappingEnabled && (
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+        )}
       </Button>
       <Button variant="outline" size="sm" onClick={() => setShowApiConfig(true)}>
         <Settings className="w-4 h-4" />
@@ -1193,6 +1209,12 @@ function CampaignDetailPage() {
         onClose={() => setShowApiConfig(false)}
         campaignId={campaign.id}
         campaign={campaign}
+      />
+
+      <CampaignCappingModal
+        isOpen={showCappingModal}
+        onClose={() => setShowCappingModal(false)}
+        campaignId={campaign.id}
       />
     </AppShell>
   )

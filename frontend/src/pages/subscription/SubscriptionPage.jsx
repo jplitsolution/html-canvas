@@ -24,7 +24,10 @@ function deriveOverlayFlags({ phoneResolving, heExitPending, heFunnelSuppressed,
   const showBootSpinner = (booting && !pageData) || hideHomeForHe
   const showFatalError = Boolean(error && !pageData && !hideHomeForHe && !(booting && !pageData))
   const notAvailable =
-    showFatalError && (/not available|not active|inactive/i.test(error) || error === 'This offer is not available')
+    showFatalError &&
+    (/not available|not active|inactive|stopped/i.test(error) ||
+      error === 'This offer is not available' ||
+      error === 'This offer has been stopped')
 
   return { hideHomeForHe, showBootSpinner, showFatalError, notAvailable }
 }

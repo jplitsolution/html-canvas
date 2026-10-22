@@ -14,6 +14,7 @@ import { apiCallLogService } from '../flow/api-call-log.service.js';
 import { orangeBfService } from '../flow/orange-bf.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { searchService } from '../search/search.service.js';
+import { cappingService } from '../campaigns/capping.service.js';
 import {
   HELD_OTP_MESSAGE,
   parsePayoutPercent,
@@ -728,13 +729,47 @@ export const createOtpService = () => {
       throw err;
     }
 
+    // Evaluate capping & vendor assignment
+    let activeCampaign = campaign;
+    let activeCId = cId;
+    const cappingResult = await cappingService.evaluateCapping(campaign, {
+      vendorId,
+    });
+
+    if (cappingResult.isCapped) {
+      if (
+        cappingResult.action === 'fallback' &&
+        cappingResult.targetCampaign
+      ) {
+        activeCampaign = cappingResult.targetCampaign;
+        activeCId = activeCampaign.id;
+      } else {
+        const stoppedMsg = 'Offer is stopped due to capping limit';
+        await logInboundExpose({
+          callType: ApiCallType.OTP_EXPOSE_SEND_IN,
+          campaignId: cId,
+          phone: msisdn,
+          requestUrl: inboundUrl,
+          requestBody: inboundBody,
+          responseStatus: 403,
+          success: false,
+          errorMessage: stoppedMsg,
+          statusLabel: 'OFFER_STOPPED',
+        });
+        const err = new Error(stoppedMsg);
+        err.statusCode = 403;
+        err.code = 'OFFER_STOPPED';
+        throw err;
+      }
+    }
+
     let vendor;
     try {
-      ({ vendor } = await resolveAssignedVendor(campaign, vendorId));
+      ({ vendor } = await resolveAssignedVendor(activeCampaign, vendorId));
     } catch (err) {
       await logInboundExpose({
         callType: ApiCallType.OTP_EXPOSE_SEND_IN,
-        campaignId: cId,
+        campaignId: activeCId,
         phone: msisdn,
         requestUrl: inboundUrl,
         requestBody: inboundBody,
@@ -746,7 +781,7 @@ export const createOtpService = () => {
     }
 
     const visit = await ensureExposeVisit({
-      campaign,
+      campaign: activeCampaign,
       phone: msisdn,
       clientIp,
       landingUrl: inboundUrl,
@@ -754,7 +789,12 @@ export const createOtpService = () => {
       vendorId: vendor.id,
     });
 
-    const apiConfig = await getApiConfigForCampaign(cId);
+    await cappingService.incrementCampaignClickCount(
+      activeCId,
+      activeCampaign.cappingInterval,
+    );
+
+    const apiConfig = await getApiConfigForCampaign(activeCId);
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
 
     if (!(providerConfig.sendUrl || providerConfig.send_url || providerConfig.url)) {

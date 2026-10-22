@@ -94,6 +94,33 @@ export const CampaignSchema = new EntitySchema({
       type: 'text',
       nullable: true,
     },
+    cappingEnabled: {
+      name: 'capping_enabled',
+      type: 'boolean',
+      default: false,
+    },
+    cappingLimit: {
+      name: 'capping_limit',
+      type: 'int',
+      nullable: true,
+    },
+    cappingAction: {
+      name: 'capping_action',
+      type: 'varchar',
+      length: 16,
+      default: 'stop',
+    },
+    fallbackCampaignId: {
+      name: 'fallback_campaign_id',
+      type: 'int',
+      nullable: true,
+    },
+    cappingInterval: {
+      name: 'capping_interval',
+      type: 'varchar',
+      length: 16,
+      default: 'daily',
+    },
     createdAt: {
       name: 'created_at',
       type: 'timestamp',

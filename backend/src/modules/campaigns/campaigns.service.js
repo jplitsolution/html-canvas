@@ -619,6 +619,29 @@ export const createCampaignsService = () => {
           ? dto.allowedCallbackStatuses.trim() || null
           : null;
     }
+    if (dto.cappingEnabled !== undefined) {
+      campaign.cappingEnabled = Boolean(dto.cappingEnabled);
+    }
+    if (dto.cappingLimit !== undefined) {
+      campaign.cappingLimit =
+        dto.cappingLimit !== null && dto.cappingLimit !== ''
+          ? parseInt(dto.cappingLimit, 10)
+          : null;
+    }
+    if (dto.cappingAction !== undefined) {
+      const action = String(dto.cappingAction || '').trim().toLowerCase();
+      campaign.cappingAction = action === 'fallback' ? 'fallback' : 'stop';
+    }
+    if (dto.fallbackCampaignId !== undefined) {
+      campaign.fallbackCampaignId =
+        dto.fallbackCampaignId !== null && dto.fallbackCampaignId !== ''
+          ? parseInt(dto.fallbackCampaignId, 10)
+          : null;
+    }
+    if (dto.cappingInterval !== undefined) {
+      const interval = String(dto.cappingInterval || '').trim().toLowerCase();
+      campaign.cappingInterval = interval === 'total' ? 'total' : 'daily';
+    }
     if (dto.trackings !== undefined) {
       await getTrackingRepo().delete({ campaignId: campaign.id });
       if (dto.trackings && dto.trackings.length > 0) {
@@ -975,6 +998,11 @@ export const createCampaignsService = () => {
       postbackRegisterAt: campaign.postbackRegisterAt,
       funnelLayout: campaign.funnelLayout,
       allowedCallbackStatuses: campaign.allowedCallbackStatuses || null,
+      cappingEnabled: Boolean(campaign.cappingEnabled),
+      cappingLimit: campaign.cappingLimit != null ? Number(campaign.cappingLimit) : null,
+      cappingAction: campaign.cappingAction || 'stop',
+      fallbackCampaignId: campaign.fallbackCampaignId != null ? Number(campaign.fallbackCampaignId) : null,
+      cappingInterval: campaign.cappingInterval || 'daily',
       createdAt: campaign.createdAt,
       updatedAt: campaign.updatedAt,
       pages: campaign.pages || [],

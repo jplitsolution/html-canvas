@@ -12,6 +12,7 @@ import { universeDcbProvider } from './universe-dcb.provider.js';
 import { apiCallLogService } from './api-call-log.service.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { searchService } from '../search/search.service.js';
+import { cappingService } from '../campaigns/capping.service.js';
 import {
   DCB_OUTCOMES,
   getNestedValue,
@@ -529,12 +530,35 @@ export const createUniverseDcbExposeService = (
   }) => {
     const cId = parseInt(campaignId, 10);
     if (!cId) throw httpError('campaignId is required', 400, 'CAMPAIGN_REQUIRED');
-    const campaign = await getCampaignRepo().findOne({ where: { id: cId } });
+    let campaign = await getCampaignRepo().findOne({ where: { id: cId } });
     assertDcbApiExpose(campaign);
-    const { vendor, tracking } = await resolveAssignedVendor(campaign, vendorId);
 
     let correlation = null;
     const incomingRequestId = pickDcbExposeRequestId({ requestId });
+
+    // Initial PIN request: evaluate capping
+    if (!incomingRequestId) {
+      const cappingResult = await cappingService.evaluateCapping(campaign, {
+        vendorId,
+      });
+      if (cappingResult.isCapped) {
+        if (
+          cappingResult.action === 'fallback' &&
+          cappingResult.targetCampaign
+        ) {
+          campaign = cappingResult.targetCampaign;
+        } else {
+          throw httpError(
+            'Offer is stopped due to capping limit',
+            403,
+            'OFFER_STOPPED',
+          );
+        }
+      }
+    }
+
+    const { vendor, tracking } = await resolveAssignedVendor(campaign, vendorId);
+
     if (incomingRequestId) {
       correlation = await loadCorrelation(
         requestCorrelationKey(campaign.id, vendor.id, incomingRequestId),
@@ -561,7 +585,7 @@ export const createUniverseDcbExposeService = (
     }
 
     const apiConfig = await getApiConfigRepo().findOne({
-      where: { campaignId: cId },
+      where: { campaignId: campaign.id },
     });
     const config = parseConfig(apiConfig?.dcbConfigJson);
     const visit = await ensureExposeVisit({
@@ -574,6 +598,13 @@ export const createUniverseDcbExposeService = (
       reuseVisitId: correlation?.visitId,
       allowMissingMsisdn: true,
     });
+
+    if (!incomingRequestId) {
+      await cappingService.incrementCampaignClickCount(
+        campaign.id,
+        campaign.cappingInterval,
+      );
+    }
     if (!phone) throw httpError('MSISDN is required', 400, 'MSISDN_REQUIRED');
 
     const rawChannel = String(
