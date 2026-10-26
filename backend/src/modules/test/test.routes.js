@@ -14,4 +14,6 @@ router.get('/dcb/config/public', testController.dummyDcbPublicConfig);
 router.get('/dcb/subscriptions', testController.dummyDcbSubscriptions);
 router.post('/dcb/pincode', testController.dummyDcbPincode);
 router.post('/dcb/confirm', testController.dummyDcbConfirm);
+router.put('/dcb/confirmation', testController.dummyDcbConfirm);
+router.post('/dcb/confirmation', testController.dummyDcbConfirm);
 export default router;

@@ -973,14 +973,29 @@ export const createOtpService = () => {
       throw err;
     }
 
+    let activeCampaign = campaign;
+    let activeCId = cId;
+    const cappingResult = await cappingService.evaluateCapping(campaign, {
+      vendorId,
+    });
+
+    if (
+      cappingResult.isCapped &&
+      cappingResult.action === 'fallback' &&
+      cappingResult.targetCampaign
+    ) {
+      activeCampaign = cappingResult.targetCampaign;
+      activeCId = activeCampaign.id;
+    }
+
     let vendor;
     let tracking;
     try {
-      ({ vendor, tracking } = await resolveAssignedVendor(campaign, vendorId));
+      ({ vendor, tracking } = await resolveAssignedVendor(activeCampaign, vendorId));
     } catch (err) {
       await logInboundExpose({
         callType: ApiCallType.OTP_EXPOSE_VERIFY_IN,
-        campaignId: cId,
+        campaignId: activeCId,
         phone: msisdn,
         requestUrl: inboundUrl,
         requestBody: inboundBody,
@@ -992,7 +1007,7 @@ export const createOtpService = () => {
     }
 
     const visit = await ensureExposeVisit({
-      campaign,
+      campaign: activeCampaign,
       phone: msisdn,
       clientIp,
       landingUrl: inboundUrl,
@@ -1000,7 +1015,7 @@ export const createOtpService = () => {
       vendorId: vendor.id,
     });
 
-    const apiConfig = await getApiConfigForCampaign(cId);
+    const apiConfig = await getApiConfigForCampaign(activeCId);
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
 
     if (!(providerConfig.verifyUrl || providerConfig.verify_url)) {
@@ -1009,7 +1024,7 @@ export const createOtpService = () => {
       await logInboundExpose({
         callType: ApiCallType.OTP_EXPOSE_VERIFY_IN,
         visit,
-        campaignId: cId,
+        campaignId: activeCId,
         phone: msisdn,
         requestUrl: inboundUrl,
         requestBody: inboundBody,
@@ -1023,7 +1038,9 @@ export const createOtpService = () => {
     }
 
     let providerRequestId = '';
-    const pending = await redisService.get(exposePendingKey(cId, vendor.id, phone));
+    const pending =
+      (await redisService.get(exposePendingKey(activeCId, vendor.id, phone))) ||
+      (await redisService.get(exposePendingKey(cId, vendor.id, phone)));
     if (pending?.providerRequestId) {
       providerRequestId = pending.providerRequestId;
     }
@@ -1130,11 +1147,12 @@ export const createOtpService = () => {
       { id: visit.id },
       { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
     );
-    const convCampaignId = visit.campaignId || cId;
+    const convCampaignId = visit.campaignId || activeCId;
     await cappingService.incrementCampaignConversionCount(
       convCampaignId,
-      campaign.cappingInterval,
+      activeCampaign.cappingInterval,
     );
+    await redisService.del(exposePendingKey(activeCId, vendor.id, phone));
     await redisService.del(exposePendingKey(cId, vendor.id, phone));
 
     if (held) {

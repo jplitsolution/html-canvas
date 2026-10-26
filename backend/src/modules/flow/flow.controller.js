@@ -172,7 +172,7 @@ export const flowController = {
       operator: q.operator,
       campid: camp.campid,
       trackingCampid: camp.trackingCampid,
-      pageType: String(q.page || CampaignPageType.HOME).toUpperCase(),
+      pageType: String(q.page || q.step || CampaignPageType.HOME).toUpperCase(),
       phone: resolved.phone,
       visitId: q.visitId ? Number(q.visitId) : undefined,
       pack: q.pack,
