@@ -303,6 +303,14 @@ function useHeDetect({
                   ...saved,
                   msisdnSource: 'HE',
                   transactionChannel: 'HE',
+                  ...(String(flowContext?.stage || '').toUpperCase() === 'PIN_REQUIRED'
+                    ? {
+                        dcbStage: 'PIN_REQUIRED',
+                        ...(flowContext?.purchaseTypeId
+                          ? { purchaseTypeId: flowContext.purchaseTypeId }
+                          : {}),
+                      }
+                    : {}),
                 })
               )
             } catch {

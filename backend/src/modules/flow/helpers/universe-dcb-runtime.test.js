@@ -4,6 +4,7 @@ import {
   decorateUniverseDcbDetectResponse,
   decorateUniverseDcbPageResponse,
   dcbFlowContextForPage,
+  isExplicitHomeDestination,
 } from './universe-dcb-runtime.js';
 
 describe('Universe DCB detect runtime', () => {
@@ -101,6 +102,37 @@ describe('Universe DCB page runtime', () => {
     assert.equal(
       dcbFlowContextForPage('ERROR', '555').outcome,
       'TERMINAL_FAILURE',
+    );
+  });
+});
+
+describe('isExplicitHomeDestination', () => {
+  it('treats a rule that names HOME as explicit', () => {
+    assert.equal(
+      isExplicitHomeDestination('NEW', {
+        rules: [{ value: 'NEW', go: 'page', page: 'HOME' }],
+      }),
+      true,
+    );
+  });
+
+  it('treats continue-to-plan as the default pack step', () => {
+    assert.equal(
+      isExplicitHomeDestination('NEW', {
+        rules: [{ value: 'NEW', go: 'continue' }],
+      }),
+      false,
+    );
+  });
+
+  it('treats an unmatched miss that opens HOME as explicit', () => {
+    assert.equal(
+      isExplicitHomeDestination('OTHER', {
+        rules: [{ value: 'SPECIAL', go: 'page', page: 'OTP' }],
+        missGo: 'page',
+        missPage: 'HOME',
+      }),
+      true,
     );
   });
 });

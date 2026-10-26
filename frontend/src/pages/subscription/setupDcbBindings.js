@@ -268,11 +268,13 @@ function setupDcbBindings(
       persistPhone(phone)
       const responseStage = String(response?.stage || response?.flowContext?.stage || '').toUpperCase()
       const authOtp = responseStage === 'AUTH_OTP' || response?.authorization === 'PARTNER_OTP'
+      const pinReady = responseStage === 'PIN_REQUIRED'
       saveSession({
         phone,
         msisdnSource: 'MANUAL',
         transactionChannel: 'Wifi',
-        dcbStage: authOtp ? 'AUTH_OTP' : 'PLAN_SELECT',
+        dcbStage: authOtp ? 'AUTH_OTP' : pinReady ? 'PIN_REQUIRED' : 'PLAN_SELECT',
+        ...(response?.purchaseTypeId ? { purchaseTypeId: response.purchaseTypeId } : {}),
       })
       if (authOtp) {
         currentStage = 'AUTH_OTP'
@@ -284,13 +286,19 @@ function setupDcbBindings(
         }
         return
       }
+      if (pinReady) {
+        currentStage = 'PIN_REQUIRED'
+        setSlot(statusSlot, 'PIN sent')
+        await loadPage('OTP', { direct: true })
+        return
+      }
       setSlot(statusSlot, 'Number checked')
       const target = await routeDcbResponse(response, {
         currentPage: pageData.pageType,
         cachePage,
         loadPage,
       })
-      // If response did not route to a different outcome page (e.g. THANKYOU or custom rule), go to HOME to choose pack
+      // Pack page is HOME. OTP here is not the PIN stage — that case returned above.
       if (!target || target === 'OTP') {
         await loadPage('HOME', { direct: true })
       }

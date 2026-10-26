@@ -76,6 +76,17 @@ describe('Universe DCB campaign config', () => {
     expect(parsed.request.pinField).toBe('otp')
     expect(parsed.request.requestIdField).toBe('txnId')
     expect(parsed.responsePaths.items).toBe('payload.subscriptions')
+    expect(parsed.skipSinglePackPage).toBe(false)
+  })
+
+  it('persists the single-pack page skip flag', () => {
+    const serialized = serializeDcbConfig({
+      ...DEFAULT_DCB_CONFIG,
+      skipSinglePackPage: true,
+    })
+    expect(JSON.parse(serialized).skipSinglePackPage).toBe(true)
+    expect(parseDcbConfig(serialized).skipSinglePackPage).toBe(true)
+    expect(parseDcbConfig({ skipSinglePackPage: 'yes' }).skipSinglePackPage).toBe(false)
   })
 
   it('fills PIN and confirm endpoint defaults for older saved configs', () => {

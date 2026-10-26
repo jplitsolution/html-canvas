@@ -88,6 +88,37 @@ describe('setupDcbBindings', () => {
     expect(options.saveSession).toHaveBeenCalledWith(expect.objectContaining({ transactionChannel: 'Wifi' }))
   })
 
+  it('opens the PIN page when a single pack already sent the PIN', async () => {
+    const shadow = createShadow(`
+      <input data-otp-field="phone" value="9647701234567" />
+      <button data-otp-action="send">Continue</button>
+      <div data-otp-slot="error"></div>
+      <div data-otp-slot="status"></div>
+    `)
+    const options = bindingsOptions({
+      pageType: 'OTP',
+      verificationMode: 'UNIVERSE_DCB',
+      flowContext: { stage: 'MANUAL_MSISDN', mode: 'UNIVERSE_DCB' },
+    })
+    checkDcbMsisdn.mockResolvedValue({
+      outcome: 'PENDING',
+      nextPage: 'OTP',
+      stage: 'PIN_REQUIRED',
+      purchaseTypeId: '2',
+    })
+
+    setupDcbBindings(shadow, options)
+    shadow.querySelector('button').click()
+
+    await vi.waitFor(() => {
+      expect(options.loadPage).toHaveBeenCalledWith('OTP', { direct: true })
+    })
+    expect(options.loadPage).not.toHaveBeenCalledWith('HOME', { direct: true })
+    expect(options.saveSession).toHaveBeenCalledWith(
+      expect.objectContaining({ dcbStage: 'PIN_REQUIRED', purchaseTypeId: '2' })
+    )
+  })
+
   it('maps a selected pack to purchaseTypeId and confirms PIN without a requestId', async () => {
     const planShadow = createShadow(`
       <button data-action="SUBSCRIBE" data-pack="daily"><span>Buy daily</span></button>

@@ -20,6 +20,50 @@ export function mergePurchaseTypeMappings(
     }));
 }
 
+function uniquePurchaseTypes(mappings = []) {
+  const seen = new Set();
+  const usable = [];
+  for (const item of Array.isArray(mappings) ? mappings : []) {
+    const purchaseTypeId = String(item?.purchaseTypeId ?? '').trim();
+    if (!purchaseTypeId || seen.has(purchaseTypeId)) continue;
+    seen.add(purchaseTypeId);
+    usable.push({
+      ...item,
+      packKey: String(item.packKey || item.pack || '').trim(),
+      label: String(item.label || item.packKey || item.pack || '').trim(),
+      purchaseTypeId,
+    });
+  }
+  return usable;
+}
+
+/** Campaign mappings, or the provider intersection when a catalog array is passed. */
+export function usablePurchaseTypes(configured = [], providerPurchaseTypes) {
+  if (Array.isArray(providerPurchaseTypes)) {
+    return uniquePurchaseTypes(
+      mergePurchaseTypeMappings(configured, providerPurchaseTypes),
+    );
+  }
+  return uniquePurchaseTypes(configured);
+}
+
+/**
+ * skipSinglePackPage is opt-in.
+ * pin: exactly one usable pack — send PIN, do not open the pack page.
+ * none: flag is on and no usable pack remains.
+ * show: keep the pack page.
+ */
+export function resolveSinglePackPlan(config, providerPurchaseTypes) {
+  if (config?.skipSinglePackPage !== true) return { action: 'show' };
+  const packs = usablePurchaseTypes(
+    config?.purchaseTypeMappings,
+    providerPurchaseTypes,
+  );
+  if (packs.length === 1) return { action: 'pin', pack: packs[0] };
+  if (packs.length === 0) return { action: 'none' };
+  return { action: 'show' };
+}
+
 export function toVendorPurchaseTypes(mappings = []) {
   return (Array.isArray(mappings) ? mappings : [])
     .filter((item) => String(item?.purchaseTypeId || '').trim())

@@ -13,8 +13,14 @@ import {
   normalizeUniverseDcbResponse,
 } from './helpers/universe-dcb-normalizer.js';
 import { buildUniverseDcbLogRecord } from './helpers/universe-dcb-log.js';
-import { mergePurchaseTypeMappings } from './helpers/universe-dcb-purchase-types.js';
-import { resolveDcbNextPage } from './helpers/universe-dcb-runtime.js';
+import {
+  mergePurchaseTypeMappings,
+  resolveSinglePackPlan,
+} from './helpers/universe-dcb-purchase-types.js';
+import {
+  isExplicitHomeDestination,
+  resolveDcbNextPage,
+} from './helpers/universe-dcb-runtime.js';
 
 const localCorrelations = new Map();
 const localConfirmLocks = new Set();
@@ -303,6 +309,7 @@ export const createUniverseDcbService = (
       purchaseTypeMappings: Array.isArray(ctx.config.purchaseTypeMappings)
         ? ctx.config.purchaseTypeMappings
         : [],
+      skipSinglePackPage: ctx.config.skipSinglePackPage === true,
       checksubConfig: ctx.checksubConfig || null,
     };
   };
@@ -374,8 +381,62 @@ export const createUniverseDcbService = (
       Array.isArray(ctx.checksubConfig.rules) &&
       ctx.checksubConfig.rules.length > 0,
     );
-    // If a custom status rule is defined, honor it; otherwise the user must choose a pack on HOME
+    // Custom status rules win. Otherwise a new subscriber lands on the pack page.
     const nextPage = hasCustomRules && customNextPage ? customNextPage : 'HOME';
+    const offerPlan =
+      nextPage === 'HOME' &&
+      !isExplicitHomeDestination(result.status, ctx.checksubConfig);
+
+    if (offerPlan && ctx.config.skipSinglePackPage === true) {
+      const providerTypes = await readProviderPurchaseTypes(ctx);
+      const decision = resolveSinglePackPlan(ctx.config, providerTypes);
+      const canBill =
+        result.outcome === DCB_OUTCOMES.NEW ||
+        result.outcome === DCB_OUTCOMES.PENDING;
+      if (decision.action === 'pin' && canBill) {
+        const pinned = await requestPincode({
+          ...input,
+          purchaseTypeId: decision.pack.purchaseTypeId,
+          transactionChannel: ctx.transactionChannel || 'Wifi',
+        });
+        return {
+          ...pinned,
+          checksubConfig: ctx.checksubConfig || null,
+        };
+      }
+      if (decision.action === 'none' && canBill) {
+        throw httpError(
+          'No packs are available for this campaign.',
+          409,
+          'DCB_NO_PACKS',
+        );
+      }
+      // One pack (or none): low balance, failure, and other outcomes skip the picker.
+      if (decision.action === 'pin' || decision.action === 'none') {
+        const realPage = resolveDcbNextPage(
+          result.outcome,
+          result.status,
+          ctx.checksubConfig,
+        );
+        if (realPage && realPage !== 'HOME') {
+          return {
+            campaignId: ctx.campaign.id,
+            serviceId: ctx.serviceId,
+            ...result,
+            nextPage: realPage,
+            checksubConfig: ctx.checksubConfig || null,
+            stage: realPage,
+            flowContext: {
+              provider: 'UNIVERSE_DCB',
+              verificationMode: 'UNIVERSE_DCB',
+              stage: realPage,
+              outcome: result.outcome,
+              status: result.status,
+            },
+          };
+        }
+      }
+    }
 
     return {
       campaignId: ctx.campaign.id,
@@ -440,13 +501,65 @@ export const createUniverseDcbService = (
       outcome: DCB_OUTCOMES.PENDING,
       stage: 'PIN_REQUIRED',
       nextPage: 'OTP',
+      purchaseTypeId: ctx.purchaseTypeId,
       flowContext: {
         provider: 'UNIVERSE_DCB',
         verificationMode: 'UNIVERSE_DCB',
         stage: 'PIN_REQUIRED',
         outcome: DCB_OUTCOMES.PENDING,
+        purchaseTypeId: ctx.purchaseTypeId,
       },
     };
+  };
+
+  const readProviderPurchaseTypes = async (ctx) => {
+    try {
+      const response = await provider.getPublicConfig(
+        ctx.config,
+        providerInput(ctx),
+      );
+      const envelopePath = ctx.config.responsePaths?.envelope;
+      const providerConfig = envelopePath
+        ? getNestedValue(response.data, envelopePath)
+        : response.data;
+      const safeProviderConfig = stripProviderRequestIds(providerConfig);
+      if (!Array.isArray(safeProviderConfig?.purchaseTypes)) return undefined;
+      return safeProviderConfig.purchaseTypes;
+    } catch (err) {
+      console.warn(
+        `Universe DCB pack catalog unavailable, using campaign mappings: ${err.message}`,
+      );
+      return undefined;
+    }
+  };
+
+  /**
+   * When skipSinglePackPage is on and exactly one pack is usable, send its PIN.
+   * Returns null to keep the pack page. Throws when no pack remains or the PIN request fails.
+   */
+  const pinSinglePackIfEnabled = async (input) => {
+    const ctx = await loadContext(input, {
+      requireMsisdn: true,
+      requireVisit: true,
+    });
+    if (ctx.config.skipSinglePackPage !== true) return null;
+    if (isExplicitHomeDestination(input.status, ctx.checksubConfig)) return null;
+    const providerTypes = await readProviderPurchaseTypes(ctx);
+    const decision = resolveSinglePackPlan(ctx.config, providerTypes);
+    if (decision.action === 'none') {
+      throw httpError(
+        'No packs are available for this campaign.',
+        409,
+        'DCB_NO_PACKS',
+      );
+    }
+    if (decision.action !== 'pin') return null;
+    const channel = ctx.transactionChannel || 'Wifi';
+    return requestPincode({
+      ...input,
+      purchaseTypeId: decision.pack.purchaseTypeId,
+      transactionChannel: channel,
+    });
   };
 
   const confirm = async (input) => {
@@ -529,6 +642,7 @@ export const createUniverseDcbService = (
     getPublicConfig,
     getRuntimeConfig,
     manualCheck,
+    pinSinglePackIfEnabled,
     requestPincode,
     confirm,
     status,

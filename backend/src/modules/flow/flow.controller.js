@@ -16,6 +16,7 @@ import { flowEngineService } from './flow-engine.service.js';
 import {
   decorateUniverseDcbDetectResponse,
   decorateUniverseDcbPageResponse,
+  isExplicitHomeDestination,
 } from './helpers/universe-dcb-runtime.js';
 
 const dcbInput = (req, dcbSource) => {
@@ -126,6 +127,55 @@ export const flowController = {
         normalizedStatus,
         runtime,
       );
+      const planPage =
+        result.nextPage === 'HOME' &&
+        (result.dcbOutcome === 'NEW' || result.dcbOutcome === 'PENDING') &&
+        result.phone &&
+        result.visitId &&
+        !isExplicitHomeDestination(
+          result.flowContext?.status,
+          result.flowContext?.checksubConfig,
+        );
+      if (planPage && runtime.skipSinglePackPage === true) {
+        try {
+          const pinned = await universeDcbService.pinSinglePackIfEnabled({
+            ...detectInput,
+            msisdn: result.phone,
+            visitId: result.visitId,
+            transactionChannel: 'HE',
+            status: result.flowContext?.status,
+          });
+          if (pinned) {
+            result = {
+              ...result,
+              nextPage: 'OTP',
+              subscribed: false,
+              isActive: false,
+              flowContext: {
+                ...result.flowContext,
+                ...pinned.flowContext,
+                stage: 'PIN_REQUIRED',
+              },
+            };
+          }
+        } catch (err) {
+          if (err.code !== 'DCB_NO_PACKS' && err.code !== 'DCB_PROVIDER_ERROR') {
+            throw err;
+          }
+          result = {
+            ...result,
+            nextPage: 'ERROR',
+            subscribed: false,
+            isActive: false,
+            flowContext: {
+              ...result.flowContext,
+              stage: 'ERROR',
+              outcome: 'TERMINAL_FAILURE',
+              reason: err.message,
+            },
+          };
+        }
+      }
     }
 
     res.json({

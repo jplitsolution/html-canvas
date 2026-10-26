@@ -1067,6 +1067,20 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
               + Add mapping
             </button>
           </div>
+          <label className="flex items-start gap-2 rounded-lg border border-border bg-bg-subtle/40 px-3 py-2.5 text-sm text-fg">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={dcbConfig.skipSinglePackPage === true}
+              onChange={(event) => setDcbField('skipSinglePackPage', event.target.checked)}
+            />
+            <span>
+              <span className="font-medium">Skip pack page when only one pack</span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-fg-muted">
+                After the number check, send the PIN for that pack and open the PIN page. Two or more packs still show the pack page. Low balance and other operator outcomes open their own page instead of the pack picker.
+              </span>
+            </span>
+          </label>
           {dcbConfig.purchaseTypeMappings.map((mapping, index) => (
             <div
               key={`${mapping.packKey}-${index}`}

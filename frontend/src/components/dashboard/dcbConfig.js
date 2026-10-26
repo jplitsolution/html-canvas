@@ -42,6 +42,7 @@ const DEFAULT_DCB_CONFIG = {
   operatorCode: 'WM',
   confirmMethod: 'PUT',
   purchaseTypeMappings: DEFAULT_PURCHASE_TYPE_MAPPINGS,
+  skipSinglePackPage: false,
   pollIntervalMs: 2000,
   pollTimeoutMs: 60000,
   endpoints: { ...DEFAULT_DCB_ENDPOINTS },
@@ -130,6 +131,7 @@ function parseDcbConfig(raw) {
       purchaseTypeMappings: normalizeMappings(
         parsed.purchaseTypeMappings || parsed.purchaseTypes || parsed.purchaseTypeMap
       ),
+      skipSinglePackPage: parsed.skipSinglePackPage === true,
       pollIntervalMs: Number.isFinite(pollIntervalMs) && pollIntervalMs > 0 ? pollIntervalMs : fallback.pollIntervalMs,
       pollTimeoutMs: Number.isFinite(pollTimeoutMs) && pollTimeoutMs > 0 ? pollTimeoutMs : fallback.pollTimeoutMs,
       endpoints: {
@@ -164,6 +166,7 @@ function serializeDcbConfig(config) {
         purchaseTypeId: String(item.purchaseTypeId || '').trim(),
       }))
       .filter((item) => item.packKey && item.purchaseTypeId),
+    skipSinglePackPage: normalized.skipSinglePackPage === true,
     endpoints: {
       ...Object.fromEntries(
         Object.entries(normalized.endpoints).map(([key, value]) => [key, String(value || '').trim() || DEFAULT_DCB_ENDPOINTS[key]])

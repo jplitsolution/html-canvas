@@ -32,6 +32,26 @@ export function resolveDcbNextPage(outcome, status, checksubConfig = null) {
   return DCB_DETECT_PAGES[outcome] || 'ERROR';
 }
 
+/** True when a checksub rule names HOME itself, not the default "continue to pack" path. */
+export function isExplicitHomeDestination(status, checksubConfig) {
+  if (!checksubConfig || typeof checksubConfig !== 'object') return false;
+  const normStatus = String(status || '').trim().toUpperCase();
+  const rules = Array.isArray(checksubConfig.rules) ? checksubConfig.rules : [];
+  const matched = rules.some(
+    (rule) => String(rule?.value || '').trim().toUpperCase() === normStatus,
+  );
+  if (matched) {
+    return rules.some((rule) => {
+      if (String(rule?.value || '').trim().toUpperCase() !== normStatus) return false;
+      return rule.go === 'page' && String(rule.page || '').trim().toUpperCase() === 'HOME';
+    });
+  }
+  return (
+    checksubConfig.missGo === 'page' &&
+    String(checksubConfig.missPage || '').trim().toUpperCase() === 'HOME'
+  );
+}
+
 const baseContext = (runtime = {}) => ({
   provider: 'UNIVERSE_DCB',
   mode: 'UNIVERSE_DCB',
