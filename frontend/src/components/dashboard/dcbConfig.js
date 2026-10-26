@@ -19,7 +19,7 @@ const DEFAULT_DCB_ENDPOINTS = {
   publicConfig: '/api/dcb/config/public',
   subscriptions: '/api/dcb/subscriptions',
   pincode: '/api/dcb/pincode',
-  confirm: '/api/dcb/confirm',
+  confirm: '/api/dcb/confirmation',
 }
 
 const DEFAULT_DCB_REQUEST_FIELDS = {
@@ -40,6 +40,7 @@ const DEFAULT_DCB_CONFIG = {
   merchantId: '169',
   serviceId: '581',
   operatorCode: 'WM',
+  confirmMethod: 'PUT',
   purchaseTypeMappings: DEFAULT_PURCHASE_TYPE_MAPPINGS,
   pollIntervalMs: 2000,
   pollTimeoutMs: 60000,
@@ -115,17 +116,26 @@ function parseDcbConfig(raw) {
     const responsePaths = parsed.responsePaths || parsed.paths || {}
     const pollIntervalMs = Number(parsed.pollIntervalMs)
     const pollTimeoutMs = Number(parsed.pollTimeoutMs)
+    const rawConfirmMethod = String(
+      parsed.confirmMethod || parsed.endpoints?.confirmMethod || fallback.confirmMethod || 'PUT',
+    ).trim().toUpperCase()
+    const confirmMethod = ['PUT', 'POST', 'GET'].includes(rawConfirmMethod) ? rawConfirmMethod : 'PUT'
+
     return {
       baseUrl: String(parsed.baseUrl || fallback.baseUrl),
       merchantId: String(parsed.merchantId ?? fallback.merchantId),
       serviceId: String(parsed.serviceId ?? fallback.serviceId),
       operatorCode: String(parsed.operatorCode || fallback.operatorCode),
+      confirmMethod,
       purchaseTypeMappings: normalizeMappings(
         parsed.purchaseTypeMappings || parsed.purchaseTypes || parsed.purchaseTypeMap
       ),
       pollIntervalMs: Number.isFinite(pollIntervalMs) && pollIntervalMs > 0 ? pollIntervalMs : fallback.pollIntervalMs,
       pollTimeoutMs: Number.isFinite(pollTimeoutMs) && pollTimeoutMs > 0 ? pollTimeoutMs : fallback.pollTimeoutMs,
-      endpoints: normalizeEndpoints(parsed.endpoints, fallback.endpoints),
+      endpoints: {
+        ...normalizeEndpoints(parsed.endpoints, fallback.endpoints),
+        confirmMethod,
+      },
       request: normalizeNamed(parsed.request || parsed.requestFields, fallback.request),
       responsePaths: {
         ...fallback.responsePaths,
@@ -139,12 +149,14 @@ function parseDcbConfig(raw) {
 
 function serializeDcbConfig(config) {
   const normalized = parseDcbConfig(config)
+  const confirmMethod = normalized.confirmMethod || 'PUT'
   return JSON.stringify({
     ...normalized,
     baseUrl: normalized.baseUrl.trim().replace(/\/+$/, ''),
     merchantId: normalized.merchantId.trim(),
     serviceId: normalized.serviceId.trim(),
     operatorCode: normalized.operatorCode.trim(),
+    confirmMethod,
     purchaseTypeMappings: normalized.purchaseTypeMappings
       .map((item) => ({
         packKey: String(item.packKey || '').trim(),
@@ -152,9 +164,12 @@ function serializeDcbConfig(config) {
         purchaseTypeId: String(item.purchaseTypeId || '').trim(),
       }))
       .filter((item) => item.packKey && item.purchaseTypeId),
-    endpoints: Object.fromEntries(
-      Object.entries(normalized.endpoints).map(([key, value]) => [key, String(value || '').trim() || DEFAULT_DCB_ENDPOINTS[key]])
-    ),
+    endpoints: {
+      ...Object.fromEntries(
+        Object.entries(normalized.endpoints).map(([key, value]) => [key, String(value || '').trim() || DEFAULT_DCB_ENDPOINTS[key]])
+      ),
+      confirmMethod,
+    },
     request: Object.fromEntries(
       Object.entries(normalized.request).map(([key, value]) => [
         key,
@@ -213,6 +228,7 @@ function buildDcbApiGuide(config) {
   const confirmUrl = joinUrl(current.baseUrl, ep.confirm)
   const subUrl = joinUrl(current.baseUrl, ep.subscriptions)
   const publicUrl = joinUrl(current.baseUrl, ep.publicConfig)
+  const confirmMethod = current.confirmMethod || current.endpoints?.confirmMethod || 'PUT'
   const pinBody = JSON.stringify(previewPincodePayload(current), null, 2)
   const confirmBody = JSON.stringify(previewConfirmPayload(current), null, 2)
   const packs = current.purchaseTypeMappings
@@ -306,7 +322,7 @@ Save the provider request ID at path \`${current.responsePaths.requestId || 'dat
 Submits the subscriber's PIN to Universe Telecom.
 
 \`\`\`http
-POST ${ep.confirm}
+${confirmMethod} ${ep.confirm}
 Content-Type: application/json
 \`\`\`
 
@@ -325,7 +341,7 @@ Full URL: \`${confirmUrl}\`
 ### Example request
 
 \`\`\`bash
-curl -X POST '${confirmUrl}' \\
+curl -X ${confirmMethod} '${confirmUrl}' \\
   -H 'Content-Type: application/json' \\
   -d @payload.json
 \`\`\`

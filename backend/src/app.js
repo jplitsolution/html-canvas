@@ -66,6 +66,11 @@ export const createApp = async () => {
 
   app.use('/api/media', express.static(localUploadDir));
 
+  const publicDir = join(process.cwd(), 'public');
+  if (existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+  }
+
   if (config.environment !== 'production') {
     const openapi = {
       openapi: '3.0.0',

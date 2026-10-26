@@ -87,7 +87,8 @@ describe('Universe DCB campaign config', () => {
       publicConfig: '/api/dcb/config/public',
       subscriptions: '/api/dcb/subscriptions',
       pincode: '/api/dcb/pincode',
-      confirm: '/api/dcb/confirm',
+      confirm: '/api/dcb/confirmation',
+      confirmMethod: 'PUT',
     })
     expect(parsed.request.pinField).toBe('pinCode')
     expect(parsed.request.merchantIdField).toBe('merchantId')
@@ -164,7 +165,7 @@ describe('Universe DCB campaign config', () => {
       },
     })
     expect(md).toContain('POST /api/dcb/pincode')
-    expect(md).toContain('POST /api/dcb/confirm')
+    expect(md).toContain('PUT /api/dcb/confirm')
     expect(md).toContain('`otp`')
     expect(md).toContain('`txnId`')
     expect(md).toContain('merchantId')

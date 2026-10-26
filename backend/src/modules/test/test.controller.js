@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { redisService } from '../../common/services/redis.service.js';
 import {
   createDummyDcbHandlers,
@@ -135,6 +136,38 @@ export const testController = {
       });
     } catch (error) {
       return res.status(500).json({ success: false, message: error.message });
+    }
+  },
+
+  proxyDcbRequest: async (req, res) => {
+    try {
+      const { method = 'GET', url, data, params, headers = {} } = req.body || {};
+      if (!url || !/^https?:\/\//i.test(url)) {
+        return res.status(400).json({ error: 'Valid URL is required' });
+      }
+      const started = Date.now();
+      const upstream = await axios({
+        method: String(method).toUpperCase(),
+        url,
+        data,
+        params,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        timeout: 30000,
+        validateStatus: () => true,
+      });
+      return res.status(upstream.status).json({
+        status: upstream.status,
+        latencyMs: Date.now() - started,
+        data: upstream.data,
+      });
+    } catch (err) {
+      return res.status(502).json({
+        error: err.message,
+        details: err.response?.data || null,
+      });
     }
   },
 

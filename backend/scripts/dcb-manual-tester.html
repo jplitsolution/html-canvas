@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Universe DCB Gateway — Manual Test Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --border: rgba(148, 163, 184, 0.15);
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --success: #10b981;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --code-bg: #090d16;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      background-image: radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                        radial-gradient(at 100% 100%, rgba(16, 185, 129, 0.1) 0px, transparent 50%);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      min-height: 100vh;
+      padding: 24px 16px;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    h1 span.badge {
+      font-size: 11px;
+      background: rgba(59, 130, 246, 0.2);
+      color: #60a5fa;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+    .card {
+      background: var(--card-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    }
+    .card h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 14px;
+    }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+    input, select {
+      width: 100%;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 9px 12px;
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+    }
+    .step-box {
+      background: rgba(15, 23, 42, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      margin-bottom: 16px;
+      transition: all 0.2s ease;
+    }
+    .step-box.highlight {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px rgba(59, 130, 246, 0.2);
+    }
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .step-title {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .step-num {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .btn {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+    .btn:hover { background: var(--accent-hover); }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-success { background: var(--success); }
+    .btn-warning { background: var(--warning); color: #000; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 12px;
+    }
+    .eval-box {
+      margin-top: 12px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid var(--border);
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .eval-item {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .eval-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .eval-val {
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tag {
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      display: inline-block;
+    }
+    .tag-entitled { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .tag-pending { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+    .tag-low_balance { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .tag-new { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); }
+    .tag-error { background: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+
+    pre.code-view {
+      background: var(--code-bg);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #cbd5e1;
+      max-height: 220px;
+      overflow-y: auto;
+      margin-top: 10px;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-panel {
+      margin-top: 20px;
+    }
+    .log-item {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      padding: 8px 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .log-time { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+    .status-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .status-200 { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .status-400, .status-500, .status-502 { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <h1>
+          Universe DCB Gateway
+          <span class="badge">Live Test Tool</span>
+        </h1>
+        <p style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">
+          Spring Boot Microservice Alignment (API 06 Pincode &bull; API 07 Confirmation [PUT] &bull; API 13 Subscriptions)
+        </p>
+      </div>
+      <div>
+        <button class="btn btn-outline btn-sm" onclick="clearLogs()">Clear Logs</button>
+      </div>
+    </header>
+
+    <div class="grid">
+      <!-- Settings Card -->
+      <div class="card">
+        <h2>Gateway Configuration</h2>
+        
+        <div class="form-group">
+          <label>Base URL</label>
+          <input type="text" id="baseUrl" value="https://bilunipal.tickhighs.com" />
+        </div>
+
+        <div class="form-group">
+          <label>MSISDN / Mobile Number</label>
+          <input type="text" id="msisdn" value="566891023" />
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>Service ID</label>
+            <input type="text" id="serviceId" value="581" />
+          </div>
+          <div class="form-group">
+            <label>Merchant ID</label>
+            <input type="text" id="merchantId" value="169" />
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label>Operator</label>
+            <input type="text" id="operator" value="WM" />
+          </div>
+          <div class="form-group">
+            <label>Purchase Type ID</label>
+            <select id="purchaseTypeId">
+              <option value="2" selected>2 - RenewalDaily (Supported)</option>
+              <option value="3">3 - RenewalWeekly</option>
+              <option value="4">4 - RenewalMonthly</option>
+              <option value="10">10 - RenewalYearly</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="toggle-row">
+          <input type="checkbox" id="useProxy" checked style="width: auto;" />
+          <label for="useProxy" style="margin-bottom: 0; cursor: pointer;">
+            Proxy via Backend (prevents browser CORS errors)
+          </label>
+        </div>
+
+        <div style="margin-top: 16px; padding: 12px; background: rgba(59, 130, 246, 0.08); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2); font-size: 11px; line-height: 1.5; color: #93c5fd;">
+          💡 <strong>Deployment Note:</strong> Service 581 in this deployment active purchaseTypeId is <code>2</code>. API 06 returns <code>providerRequestId</code> which must be submitted via <code>PUT /api/dcb/confirmation</code>.
+        </div>
+      </div>
+
+      <!-- Execution Panel -->
+      <div class="card">
+        <h2>Live API Execution</h2>
+
+        <!-- Step 1 -->
+        <div class="step-box" id="boxStep1">
+          <div class="step-header">
+            <div class="step-title">
+              <span class="step-num">1</span>
+              <span>Request PIN (API 06 - POST /api/dcb/pincode)</span>
+            </div>
+            <button class="btn btn-sm" id="btnStep1" onclick="executeStep1()">
+              Send PIN Request
+            </button>
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            Calls <code>POST /api/dcb/pincode</code> and extracts <code>providerRequestId</code>.
+          </div>
+          <pre class="code-view" id="resStep1" style="display: none;"></pre>
+        </div>
+
+        <!-- Step 2 -->
+        <div class="step-box" id="boxStep2">
+          <div class="step-header">
+            <div class="step-title">
+              <span class="step-num">2</span>
+              <span>Confirm PIN (API 07 - <span id="confirmMethodLabel" style="color: #60a5fa; font-weight: 700;">PUT</span> /api/dcb/confirmation)</span>
+            </div>
+            <button class="btn btn-sm btn-success" id="btnStep2" onclick="executeStep2()">
+              Confirm PIN
+            </button>
+          </div>
+          <div style="display: grid; grid-template-columns: 110px 2fr 1fr; gap: 10px; margin-bottom: 8px;">
+            <div>
+              <label>HTTP Method</label>
+              <select id="confirmMethodSelect" onchange="document.getElementById('confirmMethodLabel').textContent = this.value">
+                <option value="PUT" selected>PUT</option>
+                <option value="POST">POST</option>
+                <option value="GET">GET</option>
+              </select>
+            </div>
+            <div>
+              <label>Provider Request ID (id)</label>
+              <input type="text" id="confirmRequestId" placeholder="Auto-filled from Step 1" />
+            </div>
+            <div>
+              <label>PIN Code</label>
+              <input type="text" id="confirmPin" value="0000" />
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            Submits with payload: <code>{ "id": "...", "pinCode": "..." }</code> using selected method (PUT / POST / GET).
+          </div>
+          <pre class="code-view" id="resStep2" style="display: none;"></pre>
+        </div>
+
+        <!-- Step 3 -->
+        <div class="step-box" id="boxStep3">
+          <div class="step-header">
+            <div class="step-title">
+              <span class="step-num">3</span>
+              <span>Check Subscriptions (API 13 - GET /api/dcb/subscriptions)</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-warning" id="btnStep3" onclick="executeStep3()">
+                Check Status
+              </button>
+              <button class="btn btn-sm btn-outline" id="btnPoll" onclick="togglePolling()">
+                Auto-Poll (20s)
+              </button>
+            </div>
+          </div>
+          <div style="font-size: 12px; color: var(--text-muted);">
+            Authoritative entitlement query with real-time normalizer evaluation.
+          </div>
+          <div class="eval-box" id="evalBox" style="display: none;">
+            <div class="eval-item">
+              <span class="eval-label">Normalized Outcome</span>
+              <span class="eval-val" id="evalOutcome">-</span>
+            </div>
+            <div class="eval-item">
+              <span class="eval-label">Provider Status</span>
+              <span class="eval-val" id="evalStatus">-</span>
+            </div>
+            <div class="eval-item">
+              <span class="eval-label">Entitlement Active</span>
+              <span class="eval-val" id="evalEntitled">-</span>
+            </div>
+            <div class="eval-item">
+              <span class="eval-label">Current Flag</span>
+              <span class="eval-val" id="evalCurrent">-</span>
+            </div>
+          </div>
+          <pre class="code-view" id="resStep3" style="display: none;"></pre>
+        </div>
+
+        <!-- Live Activity Log -->
+        <div class="log-panel">
+          <h2 style="font-size: 13px;">Session Activity Log</h2>
+          <div id="logContainer" style="background: var(--code-bg); border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); max-height: 200px; overflow-y: auto;">
+            <div style="padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center;" id="logEmpty">
+              No requests made yet. Click Step 1 or Step 3 to start testing.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const logContainer = document.getElementById('logContainer');
+    let pollingTimer = null;
+
+    function addLog(method, url, status, latencyMs, summary) {
+      const empty = document.getElementById('logEmpty');
+      if (empty) empty.remove();
+      const item = document.createElement('div');
+      item.className = 'log-item';
+      const time = new Date().toLocaleTimeString();
+      const statusClass = status >= 200 && status < 300 ? 'status-200' : 'status-400';
+      item.innerHTML = `
+        <span class="log-time">${time}</span>
+        <span class="status-badge ${statusClass}">${status || 'ERR'}</span>
+        <span style="color: #60a5fa; font-weight: 600;">${method}</span>
+        <span style="color: #cbd5e1; flex: 1; word-break: break-all;">${url} (${latencyMs}ms) &bull; ${summary}</span>
+      `;
+      logContainer.prepend(item);
+    }
+
+    function clearLogs() {
+      logContainer.innerHTML = '<div style="padding: 12px; font-size: 12px; color: var(--text-muted); text-align: center;" id="logEmpty">Logs cleared.</div>';
+    }
+
+    async function makeRequest({ method, url, data, params }) {
+      const useProxy = document.getElementById('useProxy').checked;
+      const started = Date.now();
+      
+      if (useProxy) {
+        // Post to backend proxy
+        const res = await fetch('/api/test/dcb/proxy', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method, url, data, params }),
+        });
+        const latency = Date.now() - started;
+        const result = await res.json();
+        return {
+          status: result.status || res.status,
+          data: result.data !== undefined ? result.data : result,
+          latencyMs: result.latencyMs || latency,
+        };
+      } else {
+        // Direct browser fetch
+        let fullUrl = url;
+        if (params && Object.keys(params).length > 0) {
+          const qs = new URLSearchParams(params).toString();
+          fullUrl += (fullUrl.includes('?') ? '&' : '?') + qs;
+        }
+        const res = await fetch(fullUrl, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: data ? JSON.stringify(data) : undefined,
+        });
+        const latency = Date.now() - started;
+        const text = await res.text();
+        let parsed = text;
+        try { parsed = JSON.parse(text); } catch {}
+        return { status: res.status, data: parsed, latencyMs: latency };
+      }
+    }
+
+    function extractRequestId(data) {
+      if (!data || typeof data !== 'object') return null;
+      return (
+        data.providerRequestId ||
+        data.PinInfo?.ID ||
+        data.PinInfo?.Id ||
+        data.providerResponse?.PinInfo?.ID ||
+        data.providerResponse?.PinInfo?.Id ||
+        data.data?.PinInfo?.ID ||
+        data.data?.providerRequestId ||
+        data.data?.requestId ||
+        data.requestId ||
+        data.id ||
+        null
+      );
+    }
+
+    function normalizeEvaluation(payload, requestedServiceId) {
+      if (!payload || typeof payload !== 'object') return { outcome: 'PARSE_ERROR', status: null };
+      if (!Array.isArray(payload) && (payload.success === false || payload.Success === false)) {
+        return { outcome: 'PARSE_ERROR', reason: 'UPSTREAM_UNSUCCESSFUL' };
+      }
+      let items = Array.isArray(payload) ? payload : null;
+      if (!items) {
+        if (Array.isArray(payload.content)) items = payload.content;
+        else if (Array.isArray(payload.data?.content)) items = payload.data.content;
+        else if (Array.isArray(payload.data)) items = payload.data;
+        else if (Array.isArray(payload.items)) items = payload.items;
+        else if (Array.isArray(payload.subscriptions)) items = payload.subscriptions;
+        else if (Array.isArray(payload.subscription)) items = payload.subscription;
+        else if (payload.content && typeof payload.content === 'object') items = [payload.content];
+        else if (payload.subscription && typeof payload.subscription === 'object') items = [payload.subscription];
+        else if (payload.status) items = [payload];
+      }
+      if (!Array.isArray(items) || items.length === 0) {
+        return { outcome: 'NEW', status: null, entitlementActive: false, current: false };
+      }
+      const item = items[0];
+      const status = String(item.status || item.state || '').trim().toUpperCase();
+      const current = item.current === undefined ? true : item.current === true;
+      const entitledSet = new Set(['ACTIVE', 'TRIAL_ACTIVE']);
+      const pendingSet = new Set(['PENDING', 'PENDING_PIN', 'PENDING_CONFIRMATION', 'WAITING']);
+      const lowBalSet = new Set(['PARKED_NO_BALANCE', 'SUSPENDED']);
+      const terminalSet = new Set(['DEACTIVATED', 'EXPIRED', 'FAILED', 'CANCELLED']);
+      const entitlementActive = item.entitlementActive === undefined ? entitledSet.has(status) : item.entitlementActive === true;
+
+      let outcome = 'UNKNOWN';
+      if (entitledSet.has(status)) outcome = (entitlementActive && current) ? 'ENTITLED' : 'NEW';
+      else if (pendingSet.has(status)) outcome = 'PENDING';
+      else if (lowBalSet.has(status)) outcome = 'LOW_BALANCE';
+      else if (terminalSet.has(status)) outcome = 'TERMINAL_FAILURE';
+      else if (status === 'NEW') outcome = 'NEW';
+
+      return { outcome, status, entitlementActive, current };
+    }
+
+    async function executeStep1() {
+      const btn = document.getElementById('btnStep1');
+      const resView = document.getElementById('resStep1');
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      const msisdn = document.getElementById('msisdn').value.trim();
+      const serviceId = document.getElementById('serviceId').value.trim();
+      const merchantId = document.getElementById('merchantId').value.trim();
+      const operator = document.getElementById('operator').value.trim();
+      const purchaseTypeId = document.getElementById('purchaseTypeId').value;
+
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      resView.style.display = 'block';
+      resView.textContent = 'Contacting Universe DCB Gateway...';
+
+      try {
+        const url = `${baseUrl.replace(/\/+$/, '')}/api/dcb/pincode`;
+        const payload = {
+          merchantId: Number(merchantId) || merchantId,
+          serviceId: Number(serviceId) || serviceId,
+          purchaseTypeId: Number(purchaseTypeId) || purchaseTypeId,
+          msisdn,
+          transactionChannel: 'Wifi',
+          operator,
+          subscription: '',
+        };
+
+        const res = await makeRequest({ method: 'POST', url, data: payload });
+        resView.textContent = `HTTP ${res.status} (${res.latencyMs}ms)\n` + JSON.stringify(res.data, null, 2);
+
+        const reqId = extractRequestId(res.data);
+        if (reqId) {
+          document.getElementById('confirmRequestId').value = reqId;
+          const box2 = document.getElementById('boxStep2');
+          box2.classList.add('highlight');
+          setTimeout(() => box2.classList.remove('highlight'), 2000);
+          addLog('POST', url, res.status, res.latencyMs, `Request ID: ${reqId}`);
+        } else {
+          addLog('POST', url, res.status, res.latencyMs, res.data?.message || 'No request ID');
+        }
+      } catch (err) {
+        resView.textContent = `Request failed: ${err.message}`;
+        addLog('POST', '/api/dcb/pincode', 500, 0, err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send PIN Request';
+      }
+    }
+
+    async function executeStep2() {
+      const btn = document.getElementById('btnStep2');
+      const resView = document.getElementById('resStep2');
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      const reqId = document.getElementById('confirmRequestId').value.trim();
+      const pin = document.getElementById('confirmPin').value.trim();
+      const method = (document.getElementById('confirmMethodSelect')?.value || 'PUT').toUpperCase();
+
+      if (!reqId) {
+        alert('Please provide a Provider Request ID (Run Step 1 first or enter manually)');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Confirming...';
+      resView.style.display = 'block';
+      resView.textContent = `Sending ${method} confirmation...`;
+
+      try {
+        const url = `${baseUrl.replace(/\/+$/, '')}/api/dcb/confirmation`;
+        const payload = {
+          id: reqId,
+          pinCode: pin,
+        };
+
+        const res = await makeRequest({
+          method,
+          url,
+          data: method === 'GET' ? undefined : payload,
+          params: method === 'GET' ? payload : undefined,
+        });
+        resView.textContent = `HTTP ${res.status} (${res.latencyMs}ms)\n` + JSON.stringify(res.data, null, 2);
+        addLog(method, url, res.status, res.latencyMs, res.status === 200 ? 'PIN confirmed' : 'Confirmation response');
+      } catch (err) {
+        resView.textContent = `Confirmation failed: ${err.message}`;
+        addLog(method, '/api/dcb/confirmation', 500, 0, err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Confirm PIN';
+      }
+    }
+
+    async function executeStep3() {
+      const btn = document.getElementById('btnStep3');
+      const resView = document.getElementById('resStep3');
+      const evalBox = document.getElementById('evalBox');
+      const baseUrl = document.getElementById('baseUrl').value.trim();
+      const msisdn = document.getElementById('msisdn').value.trim();
+      const serviceId = document.getElementById('serviceId').value.trim();
+
+      btn.disabled = true;
+      resView.style.display = 'block';
+
+      try {
+        const url = `${baseUrl.replace(/\/+$/, '')}/api/dcb/subscriptions`;
+        const params = {
+          msisdn: msisdn.replace(/\D/g, ''),
+          serviceId: Number(serviceId) || serviceId,
+          current: true,
+        };
+
+        const res = await makeRequest({ method: 'GET', url, params });
+        resView.textContent = `HTTP ${res.status} (${res.latencyMs}ms)\n` + JSON.stringify(res.data, null, 2);
+
+        const evalRes = normalizeEvaluation(res.data, serviceId);
+        evalBox.style.display = 'flex';
+        
+        const outcomeEl = document.getElementById('evalOutcome');
+        const outcomeTag = evalRes.outcome.toLowerCase();
+        outcomeEl.innerHTML = `<span class="tag tag-${outcomeTag}">${evalRes.outcome}</span>`;
+        document.getElementById('evalStatus').textContent = evalRes.status || 'N/A';
+        document.getElementById('evalEntitled').textContent = String(evalRes.entitlementActive);
+        document.getElementById('evalCurrent').textContent = String(evalRes.current);
+
+        addLog('GET', url, res.status, res.latencyMs, `Outcome: ${evalRes.outcome} (${evalRes.status || 'N/A'})`);
+        return evalRes;
+      } catch (err) {
+        resView.textContent = `Query failed: ${err.message}`;
+        addLog('GET', '/api/dcb/subscriptions', 500, 0, err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function togglePolling() {
+      const btn = document.getElementById('btnPoll');
+      if (pollingTimer) {
+        clearInterval(pollingTimer);
+        pollingTimer = null;
+        btn.textContent = 'Auto-Poll (20s)';
+        btn.classList.remove('btn-warning');
+        return;
+      }
+
+      let elapsed = 0;
+      btn.textContent = 'Stop Polling (20s)';
+      btn.classList.add('btn-warning');
+
+      executeStep3();
+      pollingTimer = setInterval(async () => {
+        elapsed += 2;
+        if (elapsed >= 20) {
+          clearInterval(pollingTimer);
+          pollingTimer = null;
+          btn.textContent = 'Auto-Poll (20s)';
+          btn.classList.remove('btn-warning');
+          return;
+        }
+        btn.textContent = `Polling (${20 - elapsed}s)...`;
+        const evalRes = await executeStep3();
+        if (evalRes && evalRes.outcome === 'ENTITLED') {
+          clearInterval(pollingTimer);
+          pollingTimer = null;
+          btn.textContent = 'Auto-Poll (20s)';
+          btn.classList.remove('btn-warning');
+          alert('🎉 Subscriber became ENTITLED (ACTIVE)! Flow complete.');
+        }
+      }, 2000);
+    }
+  </script>
+</body>
+</html>

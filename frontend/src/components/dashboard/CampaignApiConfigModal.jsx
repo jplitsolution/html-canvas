@@ -949,13 +949,40 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
               User sirf SMS PIN type karta hai.
             </p>
           </div>
-          <Field label="Confirm API path" hint="POST">
-            <Input
-              value={dcbConfig.endpoints.confirm}
-              onChange={(event) => setEndpoint('confirm', event.target.value)}
-              placeholder="/api/dcb/confirm"
-            />
-          </Field>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4 items-end">
+            <div className="sm:col-span-1">
+              <Field label="HTTP Method" hint="PUT / POST / GET">
+                <select
+                  className="w-full rounded-lg border border-border bg-bg-base px-3 py-2 text-sm text-fg outline-none focus:border-primary cursor-pointer"
+                  value={dcbConfig.confirmMethod || dcbConfig.endpoints?.confirmMethod || 'PUT'}
+                  onChange={(event) => {
+                    const method = event.target.value
+                    setDcbConfig((current) => ({
+                      ...current,
+                      confirmMethod: method,
+                      endpoints: { ...current.endpoints, confirmMethod: method },
+                    }))
+                  }}
+                >
+                  <option value="PUT">PUT</option>
+                  <option value="POST">POST</option>
+                  <option value="GET">GET</option>
+                </select>
+              </Field>
+            </div>
+            <div className="sm:col-span-3">
+              <Field
+                label="Confirm API path"
+                hint={dcbConfig.confirmMethod || dcbConfig.endpoints?.confirmMethod || 'PUT'}
+              >
+                <Input
+                  value={dcbConfig.endpoints.confirm}
+                  onChange={(event) => setEndpoint('confirm', event.target.value)}
+                  placeholder="/api/dcb/confirmation"
+                />
+              </Field>
+            </div>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Confirm body ID field" hint="verify payload key">
               <Input

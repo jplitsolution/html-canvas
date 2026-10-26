@@ -196,4 +196,60 @@ describe('normalizeUniverseDcbResponse', () => {
     assert.equal(activeResult.status, 'ACTIVE');
     assert.equal(activeResult.current, true);
   });
+
+  it('supports Spring Data page responses ({ content: [ ... ], totalElements: 1 })', () => {
+    const pageResponse = {
+      content: [
+        {
+          id: 101,
+          msisdn: '+972566891023',
+          serviceId: 581,
+          status: 'PARKED_NO_BALANCE',
+          entitlementActive: false,
+          current: true,
+        },
+      ],
+      totalElements: 1,
+      totalPages: 1,
+      size: 20,
+      number: 0,
+    };
+    const result = normalizeUniverseDcbResponse(pageResponse, {}, { serviceId: '581' });
+    assert.equal(result.outcome, DCB_OUTCOMES.LOW_BALANCE);
+    assert.equal(result.status, 'PARKED_NO_BALANCE');
+  });
+
+  it('supports subscription envelope and single subscription object', () => {
+    const envelopeResponse = {
+      subscription: [
+        {
+          id: 102,
+          serviceId: 581,
+          status: 'ACTIVE',
+          entitlementActive: true,
+        },
+      ],
+    };
+    const envelopeResult = normalizeUniverseDcbResponse(envelopeResponse, {}, { serviceId: '581' });
+    assert.equal(envelopeResult.outcome, DCB_OUTCOMES.ENTITLED);
+    assert.equal(envelopeResult.status, 'ACTIVE');
+
+    const singleObject = {
+      status: 'PARKED_NO_BALANCE',
+      serviceId: 581,
+    };
+    const singleResult = normalizeUniverseDcbResponse(singleObject, {}, { serviceId: '581' });
+    assert.equal(singleResult.outcome, DCB_OUTCOMES.LOW_BALANCE);
+    assert.equal(singleResult.status, 'PARKED_NO_BALANCE');
+  });
+
+  it('handles Capital S Success: false in normalizer', () => {
+    const result = normalizeUniverseDcbResponse({
+      Success: false,
+      ErrorCode: 'UnknownSubscriber',
+    });
+    assert.equal(result.outcome, DCB_OUTCOMES.PARSE_ERROR);
+    assert.equal(result.reason, 'UPSTREAM_UNSUCCESSFUL');
+  });
 });
+

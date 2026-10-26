@@ -14,7 +14,7 @@ export const UNIVERSE_DCB_NORMALIZER_DEFAULTS = Object.freeze({
   currentPath: 'current',
   serviceIdPath: 'serviceId',
   entitledStatuses: ['ACTIVE', 'TRIAL_ACTIVE'],
-  pendingStatuses: ['PENDING_PIN', 'PENDING_CONFIRMATION'],
+  pendingStatuses: ['PENDING', 'PENDING_PIN', 'PENDING_CONFIRMATION', 'WAITING'],
   lowBalanceStatuses: ['PARKED_NO_BALANCE', 'SUSPENDED'],
   terminalStatuses: ['DEACTIVATED', 'EXPIRED', 'FAILED', 'CANCELLED'],
   newStatuses: ['NEW'],
@@ -100,7 +100,10 @@ export function normalizeUniverseDcbResponse(
   if (!payload || typeof payload !== 'object') {
     return parseError('MALFORMED_RESPONSE');
   }
-  if (!Array.isArray(payload) && payload.success === false) {
+  if (
+    !Array.isArray(payload) &&
+    (payload.success === false || payload.Success === false)
+  ) {
     return parseError('UPSTREAM_UNSUCCESSFUL');
   }
 
@@ -110,10 +113,17 @@ export function normalizeUniverseDcbResponse(
     : getNestedValue(payload, cfg.itemsPath);
 
   if (!Array.isArray(items) && typeof payload === 'object') {
-    if (Array.isArray(payload.data)) items = payload.data;
+    if (Array.isArray(payload.content)) items = payload.content;
+    else if (Array.isArray(payload.data?.content)) items = payload.data.content;
+    else if (Array.isArray(payload.data)) items = payload.data;
     else if (Array.isArray(payload.items)) items = payload.items;
     else if (Array.isArray(payload.subscriptions)) items = payload.subscriptions;
+    else if (Array.isArray(payload.subscription)) items = payload.subscription;
     else if (Array.isArray(payload.result)) items = payload.result;
+    else if (payload.content && typeof payload.content === 'object' && !Array.isArray(payload.content)) items = [payload.content];
+    else if (payload.subscription && typeof payload.subscription === 'object' && !Array.isArray(payload.subscription)) items = [payload.subscription];
+    else if (payload.status) items = [payload];
+    else if (payload.data && typeof payload.data === 'object' && !Array.isArray(payload.data) && payload.data.status) items = [payload.data];
   }
 
   if (!Array.isArray(items)) return parseError('ITEMS_NOT_ARRAY');
@@ -140,7 +150,9 @@ export function normalizeUniverseDcbResponse(
     if (configured !== undefined && configured !== null) return configured;
     return (
       getNestedValue(item, 'providerServiceId') ??
-      getNestedValue(item, 'serviceId')
+      getNestedValue(item, 'serviceId') ??
+      getNestedValue(item, 'serviceID') ??
+      getNestedValue(item, 'ServiceId')
     );
   };
   let candidates = items;
@@ -168,9 +180,19 @@ export function normalizeUniverseDcbResponse(
   }
 
   const selected =
-    candidates.find((item) => getNestedValue(item, cfg.currentPath) === true) ||
-    candidates[0];
-  const rawStatus = getNestedValue(selected, cfg.statusPath);
+    candidates.find((item) => {
+      const cur =
+        getNestedValue(item, cfg.currentPath) ??
+        getNestedValue(item, 'current') ??
+        getNestedValue(item, 'Current');
+      return cur === true;
+    }) || candidates[0];
+  const rawStatus =
+    getNestedValue(selected, cfg.statusPath) ??
+    getNestedValue(selected, 'status') ??
+    getNestedValue(selected, 'Status') ??
+    getNestedValue(selected, 'state') ??
+    getNestedValue(selected, 'State');
   const status =
     typeof rawStatus === 'string' || typeof rawStatus === 'number'
       ? String(rawStatus).trim().toUpperCase()
@@ -181,8 +203,14 @@ export function normalizeUniverseDcbResponse(
     cfg.entitledStatuses,
     UNIVERSE_DCB_NORMALIZER_DEFAULTS.entitledStatuses,
   );
-  const rawEntitlement = getNestedValue(selected, cfg.entitlementActivePath);
-  const rawCurrent = getNestedValue(selected, cfg.currentPath);
+  const rawEntitlement =
+    getNestedValue(selected, cfg.entitlementActivePath) ??
+    getNestedValue(selected, 'entitlementActive') ??
+    getNestedValue(selected, 'EntitlementActive');
+  const rawCurrent =
+    getNestedValue(selected, cfg.currentPath) ??
+    getNestedValue(selected, 'current') ??
+    getNestedValue(selected, 'Current');
   const current = rawCurrent === undefined ? true : rawCurrent === true;
   const entitlementActive =
     rawEntitlement === undefined
