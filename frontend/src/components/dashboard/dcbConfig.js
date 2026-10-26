@@ -508,6 +508,24 @@ ${previewPinSuccessResponse(current)}
 }
 \`\`\`
 
+##### 🟡 429 Too Many Requests — Rate Limit Exceeded
+\`\`\`json
+{
+  "success": false,
+  "error": "TOO_MANY_REQUESTS",
+  "message": "Too many PIN requests from this client. Please wait before retrying."
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Provider Gateway Error
+\`\`\`json
+{
+  "success": false,
+  "error": "BAD_GATEWAY",
+  "message": "Failed to communicate with Universe Telecom upstream gateway"
+}
+\`\`\`
+
 ---
 
 ### 3.4 Confirm the Subscription PIN
@@ -572,6 +590,24 @@ ${previewConfirmSuccessResponse(current)}
 }
 \`\`\`
 
+##### 🟡 429 Too Many Requests — Rate Limit Exceeded
+\`\`\`json
+{
+  "success": false,
+  "error": "TOO_MANY_REQUESTS",
+  "message": "Too many confirmation attempts. Please wait before retrying."
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Provider Confirmation Gateway Error
+\`\`\`json
+{
+  "success": false,
+  "error": "BAD_GATEWAY",
+  "message": "Upstream telco gateway error during PIN confirmation"
+}
+\`\`\`
+
 ---
 
 ## 4. Post-Confirmation Polling Lifecycle
@@ -598,6 +634,21 @@ GET ${subUrl}?${f.msisdnField}={msisdn}&${f.serviceIdField}=${current.serviceId}
 
 - Endpoints, request field names, response paths, merchant/service/operator, and pack -> purchaseTypeId mappings live under **Campaign -> API -> Universe Telecom DCB**.
 - If the provider adds or renames fields, update them there and re-download this guide to keep your documentation in sync.
+
+---
+
+## 6. Standard HTTP Status Codes & Error Handling Reference
+
+| Status Code | Status Name | Description & Action |
+|---|---|---|
+| \`200 OK\` | Success | Request succeeded. Check body payload or outcome. |
+| \`400 / 422 Bad Request\` | Validation Error | Missing parameters, invalid MSISDN or incorrect PIN code. Do not retry without correcting input. |
+| \`401 / 403 Forbidden\` | Unauthorized / Inactive | Unauthorized request or campaign access restricted. |
+| \`404 Not Found\` | Not Found | Requested endpoint or resource was not found. |
+| \`429 Too Many Requests\` | Rate Limited | Request rate limit exceeded. Back off and respect polling interval. |
+| \`500 Internal Server Error\` | Server Error | Internal processing error. Retry with exponential backoff. |
+| \`502 Bad Gateway\` | Gateway Error | Upstream carrier DCB gateway timed out or failed. |
+| \`503 Service Unavailable\` | Service Unavailable | Service is temporarily unavailable or undergoing maintenance. |
 `
 }
 

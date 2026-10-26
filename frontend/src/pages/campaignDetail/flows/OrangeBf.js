@@ -97,12 +97,47 @@ curl -X POST '${base}/check?campid=${cid}' \\
 \`\`\`
 
 #### Responses
-##### 🟢 200 OK
+##### 🟢 200 OK — Eligible / Not Subscribed
 \`\`\`json
 {
   "success": true,
   "outcome": "NOT_SUBSCRIBED",
   "message": "User is eligible to subscribe"
+}
+\`\`\`
+
+##### 🔴 400 Bad Request — Missing Phone or Campid
+\`\`\`json
+{
+  "success": false,
+  "error": "Phone / MSISDN is required"
+}
+\`\`\`
+
+##### 🔴 401 Unauthorized — Invalid Vendor API Key
+\`\`\`json
+{
+  "statusCode": 401,
+  "error": "INVALID_API_KEY",
+  "message": "Invalid Vendor API key"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "CAMPAIGN_NOT_FOUND",
+  "message": "Campaign not found"
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Operator Query Failure
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Upstream operator check subscription failed"
 }
 \`\`\`
 
@@ -125,12 +160,65 @@ curl -X POST '${base}/check?campid=${cid}' \\
   | \`visitId\` | number | No | \`1\` | Tracking visit identifier |
 
 #### Responses
-##### 🟢 200 OK
+##### 🟢 200 OK — OTP Sent
 \`\`\`json
 {
   "success": true,
   "status": "OTP_SENT",
   "message": "OTP sent successfully"
+}
+\`\`\`
+
+##### 🔴 400 Bad Request — Missing Phone or Parameters
+\`\`\`json
+{
+  "success": false,
+  "error": "Phone / MSISDN is required"
+}
+\`\`\`
+
+##### 🔴 401 Unauthorized — Invalid API Key
+\`\`\`json
+{
+  "statusCode": 401,
+  "error": "INVALID_API_KEY",
+  "message": "Invalid Vendor API key"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "CAMPAIGN_NOT_FOUND",
+  "message": "Campaign not found"
+}
+\`\`\`
+
+##### 🟡 429 Too Many Requests — Rate Limit Exceeded
+\`\`\`json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Too many requests. Please wait a minute before requesting another OTP."
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Upstream SMS Failure
+\`\`\`json
+{
+  "statusCode": 502,
+  "error": "Error",
+  "message": "Orange BF SMS dispatch gateway failure"
 }
 \`\`\`
 
@@ -153,12 +241,65 @@ curl -X POST '${base}/check?campid=${cid}' \\
   | \`visitId\` | number | No | \`1\` | Tracking visit identifier |
 
 #### Responses
-##### 🟢 200 OK
+##### 🟢 200 OK — Verified Successfully
 \`\`\`json
 {
   "success": true,
   "status": "SUCCESS",
   "message": "OTP verified successfully. Conversion registered."
+}
+\`\`\`
+
+##### 🔴 400 Bad Request — Invalid or Expired OTP
+\`\`\`json
+{
+  "success": false,
+  "error": "Invalid or expired OTP code"
+}
+\`\`\`
+
+##### 🔴 401 Unauthorized — Invalid API Key
+\`\`\`json
+{
+  "statusCode": 401,
+  "error": "INVALID_API_KEY",
+  "message": "Invalid Vendor API key"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "CAMPAIGN_NOT_FOUND",
+  "message": "Campaign not found"
+}
+\`\`\`
+
+##### 🟡 429 Too Many Requests — Brute-Force Rate Limit
+\`\`\`json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Too many failed verification attempts. Please try again later."
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Upstream Verification Gateway Failure
+\`\`\`json
+{
+  "statusCode": 502,
+  "error": "Error",
+  "message": "Orange BF verification gateway failure"
 }
 \`\`\`
 
@@ -179,13 +320,64 @@ curl -X POST '${base}/check?campid=${cid}' \\
   | \`campid\` | number | Yes | \`${cid}\` | Campaign ID |
 
 #### Responses
-##### 🟢 200 OK
+##### 🟢 200 OK — Unsubscribed Successfully
 \`\`\`json
 {
   "success": true,
   "message": "Unsubscribed successfully"
 }
 \`\`\`
+
+##### 🔴 400 Bad Request — Missing Phone
+\`\`\`json
+{
+  "success": false,
+  "error": "Phone / MSISDN is required"
+}
+\`\`\`
+
+##### 🔴 401 Unauthorized — Invalid API Key
+\`\`\`json
+{
+  "statusCode": 401,
+  "error": "INVALID_API_KEY",
+  "message": "Invalid Vendor API key"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "CAMPAIGN_NOT_FOUND",
+  "message": "Campaign not found"
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Upstream Unsubscribe Failure
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Failed to unsubscribe mobile number upstream"
+}
+\`\`\`
+
+---
+
+## 3. Standard HTTP Status Codes & Error Handling Reference
+
+| Status Code | Status Name | Description & Vendor Action |
+|---|---|---|
+| \`200 OK\` | Success | Request was successful. Check \`success\` flag in response body. |
+| \`400 Bad Request\` | Client Error | Missing or invalid phone/OTP parameters. Do NOT retry without correcting input. |
+| \`401 Unauthorized\` | Unauthorized | Missing or invalid API key (\`x-api-key\`). Check vendor API credentials. |
+| \`403 Forbidden\` | Forbidden / Capped | Campaign cap reached or vendor access suspended. Pause traffic immediately. |
+| \`404 Not Found\` | Not Found | Campaign ID was not found. Check the \`campid\` query or body parameter. |
+| \`429 Too Many Requests\` | Rate Limited | Too many requests sent from client IP. Throttle requests and retry. |
+| \`500 Internal Server Error\` | Server Error | Internal processing error. Retry with exponential backoff. |
+| \`502 Bad Gateway\` | Upstream Gateway Error | Orange BF carrier gateway timed out or rejected request. Retry after delay. |
+| \`503 Service Unavailable\` | Service Unavailable | Operator gateway service is temporarily unavailable or in maintenance. |
 `
 }
 

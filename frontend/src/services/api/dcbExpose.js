@@ -160,6 +160,7 @@ curl -X GET '${urls.configUrl}' \\
 #### Responses
 
 ##### 🟢 200 OK — Success
+Active purchase types and polling parameters returned.
 \`\`\`json
 {
   "purchaseTypes": [
@@ -169,6 +170,42 @@ curl -X GET '${urls.configUrl}' \\
   ],
   "pollIntervalMs": 2000,
   "pollTimeoutMs": 60000
+}
+\`\`\`
+
+##### 🔴 400 Bad Request — Invalid Request
+\`\`\`json
+{
+  "statusCode": 400,
+  "error": "Error",
+  "message": "This campaign does not expose DCB billing APIs"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign or Vendor Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "Error",
+  "message": "Campaign or Vendor not found"
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
+##### 🔴 503 Service Unavailable — DCB Not Configured
+\`\`\`json
+{
+  "statusCode": 503,
+  "error": "Error",
+  "message": "Universe DCB is not configured or disabled"
 }
 \`\`\`
 
@@ -224,9 +261,54 @@ curl -X POST '${urls.pincodeUrl}' \\
 ##### 🔴 400 Bad Request — Invalid MSISDN
 \`\`\`json
 {
-  "sent": false,
-  "error": "INVALID_MSISDN",
+  "statusCode": 400,
+  "error": "Error",
   "message": "Subscriber mobile number is invalid or unsupported"
+}
+\`\`\`
+
+##### 🔴 403 Forbidden — Offer Stopped / Capping Limit
+\`\`\`json
+{
+  "statusCode": 403,
+  "error": "Error",
+  "message": "Offer is stopped due to capping limit"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Campaign or Vendor Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "Error",
+  "message": "Campaign or Vendor not found"
+}
+\`\`\`
+
+##### 🟡 429 Too Many Requests — Rate Limit Exceeded
+\`\`\`json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Too many requests. Please wait a minute before requesting another PIN."
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Upstream DCB Gateway Error
+\`\`\`json
+{
+  "statusCode": 502,
+  "error": "Error",
+  "message": "Upstream telco gateway error while dispatching PIN"
 }
 \`\`\`
 
@@ -275,9 +357,54 @@ curl -X POST '${urls.confirmUrl}' \\
 ##### 🔴 400 Bad Request — Invalid PIN
 \`\`\`json
 {
-  "verified": false,
-  "error": "INVALID_PIN",
+  "statusCode": 400,
+  "error": "Error",
   "message": "Incorrect or expired PIN entered"
+}
+\`\`\`
+
+##### 🔴 403 Forbidden — Offer Inactive / Capping Limit
+\`\`\`json
+{
+  "statusCode": 403,
+  "error": "Error",
+  "message": "Offer is stopped due to capping limit"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Request ID or Vendor Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "Error",
+  "message": "Provider request ID or Vendor not found"
+}
+\`\`\`
+
+##### 🟡 429 Too Many Requests — Verification Limit Exceeded
+\`\`\`json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Too many failed confirmation attempts. Please try again later."
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
+##### 🔴 502 Bad Gateway — Upstream Confirmation Failure
+\`\`\`json
+{
+  "statusCode": 502,
+  "error": "Error",
+  "message": "Upstream error confirming subscription PIN"
 }
 \`\`\`
 
@@ -337,6 +464,42 @@ curl -X GET '${urls.statusUrl}566891023' \\
 }
 \`\`\`
 
+##### 🔴 400 Bad Request — Missing MSISDN
+\`\`\`json
+{
+  "statusCode": 400,
+  "error": "Error",
+  "message": "MSISDN query parameter is required"
+}
+\`\`\`
+
+##### 🔴 404 Not Found — Session or Campaign Not Found
+\`\`\`json
+{
+  "statusCode": 404,
+  "error": "Error",
+  "message": "Campaign or Subscription record not found"
+}
+\`\`\`
+
+##### 🟡 429 Too Many Requests — Polling Rate Limit Exceeded
+\`\`\`json
+{
+  "statusCode": 429,
+  "error": "Too Many Requests",
+  "message": "Polling frequency exceeded. Maintain a minimum 2-second interval."
+}
+\`\`\`
+
+##### 🔴 500 Internal Server Error — Server Error
+\`\`\`json
+{
+  "statusCode": 500,
+  "error": "Error",
+  "message": "Internal Server Error"
+}
+\`\`\`
+
 ---
 
 ## 4. Polling & Status Outcome Guide
@@ -347,6 +510,22 @@ curl -X GET '${urls.statusUrl}566891023' \\
 | \`PENDING\` | \`false\` | **In Progress**: Continue polling every 2s until timeout (60s). |
 | \`LOW_BALANCE\` | \`false\` | **Low Balance**: Subscriber lacks credit to renew. Prompt recharge. |
 | \`TERMINAL_FAILURE\` | \`false\` | **Failed**: Activation rejected or expired. Stop polling. |
+
+---
+
+## 5. Standard HTTP Status Codes & Error Handling Reference
+
+| Status Code | Status Name | Description & Vendor Action |
+|---|---|---|
+| \`200 OK\` | Success | Request succeeded. Check JSON body outcome / stage. |
+| \`400 Bad Request\` | Client Error | Invalid or missing request parameters. Do NOT retry without correcting input. |
+| \`401 Unauthorized\` | Unauthorized | Missing or invalid API authentication credentials. |
+| \`403 Forbidden\` | Forbidden / Capped | Offer is capped or vendor is inactive. Pause traffic dispatch immediately. |
+| \`404 Not Found\` | Not Found | Campaign ID or Vendor ID was not found. Check your endpoint URL. |
+| \`429 Too Many Requests\` | Rate Limited | Polling or request limit exceeded. Back off and respect polling interval (2s). |
+| \`500 Internal Server Error\` | Server Error | Internal server processing error. Retry with exponential backoff. |
+| \`502 Bad Gateway\` | Upstream Gateway Error | Upstream carrier DCB gateway timed out or rejected request. Retry after delay. |
+| \`503 Service Unavailable\` | Service Unavailable | Universe DCB integration is not configured or under maintenance. |
 `
 }
 
