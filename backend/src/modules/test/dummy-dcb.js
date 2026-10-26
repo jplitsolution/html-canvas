@@ -258,11 +258,9 @@ export const createDummyDcbHandlers = ({
 
     const pinRequestId = String(Math.floor(10_000_000 + Math.random() * 90_000_000));
     const pin = String(Math.floor(1000 + Math.random() * 9000));
-    await writeStore(
-      pinKey(msisdn),
-      { pin, requestId: pinRequestId, purchaseTypeId, msisdn },
-      PIN_TTL_SECONDS,
-    );
+    const pinData = { pin, requestId: pinRequestId, purchaseTypeId, msisdn };
+    await writeStore(pinKey(msisdn), pinData, PIN_TTL_SECONDS);
+    await writeStore(`dummy:dcb:by-req:${pinRequestId}`, pinData, PIN_TTL_SECONDS);
 
     log(
       `[Dummy DCB] billing PIN for ${msisdn}: ${pin}  (PinInfo.ID=${pinRequestId}, purchaseTypeId=${purchaseTypeId})`,
@@ -292,13 +290,16 @@ export const createDummyDcbHandlers = ({
     const pin = String(body.pinCode || body.pin || body.otp || '').trim();
     const requestId = String(body.id || body.requestId || '').trim();
     const purchaseTypeId = String(body.purchaseTypeId || '').trim();
-    if (!msisdn || !pin || !requestId) {
+    if (!pin || (!requestId && !msisdn)) {
       return res
         .status(400)
-        .json(failure('requestId, pinCode and msisdn are required'));
+        .json(failure('requestId and pinCode are required'));
     }
 
-    const saved = await readStore(pinKey(msisdn));
+    let saved = msisdn ? await readStore(pinKey(msisdn)) : null;
+    if (!saved && requestId) {
+      saved = await readStore(`dummy:dcb:by-req:${requestId}`);
+    }
     if (!saved) {
       return res.status(409).json(failure('PIN request expired or missing'));
     }
@@ -319,8 +320,9 @@ export const createDummyDcbHandlers = ({
       return res.status(422).json(failure('Invalid PIN'));
     }
 
+    const targetMsisdn = msisdn || saved.msisdn;
     await writeStore(
-      stateKey(msisdn),
+      stateKey(targetMsisdn),
       {
         status: 'PENDING_CONFIRMATION',
         entitlementActive: false,
@@ -331,7 +333,7 @@ export const createDummyDcbHandlers = ({
       STATE_TTL_SECONDS,
     );
     log(
-      `[Dummy DCB] PIN confirmed for ${msisdn}. Next subscription polls will stay pending, then become ACTIVE.`,
+      `[Dummy DCB] PIN confirmed for ${targetMsisdn}. Next subscription polls will stay pending, then become ACTIVE.`,
     );
     return res.json(
       envelope('PIN confirmed', { success: true }, { requestId }),

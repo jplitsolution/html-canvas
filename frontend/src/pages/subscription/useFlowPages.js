@@ -56,7 +56,7 @@ function useFlowPages({
       // CG / partner leave: keep the current (mobile) HTML on screen until navigation.
       // Transition payloads omit deviceLayouts, so painting them flashes the laptop HTML.
       const leaveUrl = String(data?.externalRedirect || '').trim()
-      if (isExternalHttpRedirect(leaveUrl)) {
+      if (isExternalHttpRedirect(leaveUrl) || leaveUrl.startsWith('/subscription')) {
         if (data.visitId) visitIdRef.current = data.visitId
         if (data.clickId) clickIdRef.current = String(data.clickId)
         if (data.rcid) rcidRef.current = String(data.rcid)
@@ -171,9 +171,9 @@ function useFlowPages({
 
   // Null-flow CG: backend sends externalRedirect with click_id → leave immediately
   useEffect(() => {
-    const dest = pageData?.externalRedirect
-    if (isExternalHttpRedirect(dest)) {
-      window.location.assign(String(dest).trim())
+    const dest = String(pageData?.externalRedirect || '').trim()
+    if (isExternalHttpRedirect(dest) || dest.startsWith('/subscription')) {
+      window.location.assign(dest)
     }
   }, [pageData?.externalRedirect])
 
