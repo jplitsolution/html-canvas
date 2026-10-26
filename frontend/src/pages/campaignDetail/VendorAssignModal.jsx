@@ -16,8 +16,9 @@ import AllowedCallbackStatusesField, {
   effectiveCallbackStatuses,
 } from '../../components/partners/AllowedCallbackStatusesField'
 import { buildTrackingUrl } from '../../services/api/partners'
-import { buildOtpExposeApiGuide, clampPayoutPercent } from '../../services/api/otp'
-import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../../services/api/dcbExpose'
+import { buildOtpExposeApiGuide, buildOtpExposeMarkdownGuide, clampPayoutPercent } from '../../services/api/otp'
+import { buildDcbExposeApiGuide, buildDcbExposeMarkdownGuide, buildDcbExposeUrls } from '../../services/api/dcbExpose'
+import { buildOrangeBfExposeMarkdownGuide } from './flows/OrangeBf'
 import { downloadTextFile } from '../../utils/download'
 import useStore from '../../store/useStore'
 
@@ -56,20 +57,27 @@ export default function VendorAssignModal({
   const downloadVendorApiGuide = (t, vendor) => {
     const vendorId = vendor?.id || t.vendor?.id
     const kind = actions.downloadApiGuide
-    const payload =
-      kind === 'dcb'
-        ? buildDcbExposeApiGuide({ origin, campaign, vendor, vendorId })
-        : buildOtpExposeApiGuide({ origin, campaign, vendor, vendorId })
+    let payload = ''
+    let prefix = 'api-guide'
+    if (kind === 'dcb') {
+      prefix = 'dcb-api-guide'
+      payload = buildDcbExposeMarkdownGuide({ origin, campaign, vendor, vendorId })
+    } else if (kind === 'orange-bf') {
+      prefix = 'orange-bf-api-guide'
+      payload = buildOrangeBfExposeMarkdownGuide({ origin, campaign, vendor, vendorId })
+    } else {
+      prefix = 'otp-api-guide'
+      payload = buildOtpExposeMarkdownGuide({ origin, campaign, vendor, vendorId })
+    }
     const safeName = String(vendor?.code || vendor?.name || vendorId || 'vendor')
       .replace(/[^a-zA-Z0-9_-]+/g, '-')
       .toLowerCase()
-    const prefix = kind === 'dcb' ? 'dcb-billing-api' : 'otp-api'
     downloadTextFile(
-      `${prefix}-campaign-${campaign.id}-vendor-${safeName}.json`,
+      `${prefix}-campaign-${campaign.id}-vendor-${safeName}.md`,
       payload,
-      'application/json;charset=utf-8',
+      'text/markdown;charset=utf-8',
     )
-    addToast('API payload downloaded', 'success')
+    addToast('API guide downloaded', 'success')
   }
 
   const downloadVendorHtmlScreen = async (t, vendor) => {
@@ -246,7 +254,7 @@ export default function VendorAssignModal({
                     {actions.downloadApiGuide ? (
                       <IconButton
                         onClick={() => downloadVendorApiGuide(t, vendor)}
-                        title="Download API payload"
+                        title="Download API guide"
                       >
                         <Download className="w-3.5 h-3.5" />
                       </IconButton>

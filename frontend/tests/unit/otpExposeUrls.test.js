@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildOtpExposeApiGuide,
+  buildOtpExposeMarkdownGuide,
   buildOtpExposeUrls,
   clampPayoutPercent,
 } from '../../src/services/api/otp.js'
@@ -47,5 +48,22 @@ describe('buildOtpExposeApiGuide', () => {
     expect(raw).not.toContain('Payout')
     expect(raw).not.toContain('Track My Ads')
     expect(raw).not.toContain('Vendor conv %')
+  })
+
+  it('builds Swagger-like markdown specification with request and response schemas', () => {
+    const md = buildOtpExposeMarkdownGuide({
+      origin: 'https://app.example',
+      campaign: { id: 16, name: 'Wellness' },
+      vendor: { id: 6, name: 'Track My Ads', code: 'tma' },
+      vendorId: 6,
+    })
+    expect(md).toContain('# Vendor OTP API Specification')
+    expect(md).toContain('https://app.example/api/otp/16/6/send')
+    expect(md).toContain('https://app.example/api/otp/16/6/verify')
+    expect(md).toContain('200 OK')
+    expect(md).toContain('400 Bad Request')
+    expect(md).toContain('Content-Type: application/json')
+    expect(md).toContain('Send OTP')
+    expect(md).toContain('Verify OTP')
   })
 })

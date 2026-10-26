@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../../src/services/api/dcbExpose.js'
+import {
+  buildDcbExposeApiGuide,
+  buildDcbExposeMarkdownGuide,
+  buildDcbExposeUrls,
+} from '../../src/services/api/dcbExpose.js'
 
 describe('buildDcbExposeUrls', () => {
   it('builds vendor-scoped pincode/confirm/status URLs', () => {
@@ -50,5 +54,24 @@ describe('buildDcbExposeApiGuide', () => {
     expect(raw).not.toContain('Payout')
     expect(raw).not.toContain('Acme')
     expect(raw).not.toContain('Demo DCB')
+  })
+
+  it('builds Swagger-like markdown specification with request and response schemas', () => {
+    const md = buildDcbExposeMarkdownGuide({
+      origin: 'https://app.example',
+      campaign: { id: 33, name: 'Wellness 360' },
+      vendor: { id: 2, name: 'Mobite', code: 'mobite' },
+      vendorId: 2,
+    })
+    expect(md).toContain('# Vendor DCB API Specification')
+    expect(md).toContain('https://app.example/api/flow/dcb/33/2/config')
+    expect(md).toContain('https://app.example/api/flow/dcb/33/2/pincode')
+    expect(md).toContain('https://app.example/api/flow/dcb/33/2/confirm')
+    expect(md).toContain('https://app.example/api/flow/dcb/33/2/status?msisdn=')
+    expect(md).toContain('200 OK')
+    expect(md).toContain('400 Bad Request')
+    expect(md).toContain('Content-Type: application/json')
+    expect(md).toContain('ENTITLED')
+    expect(md).toContain('16726123')
   })
 })

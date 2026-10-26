@@ -31,8 +31,9 @@ import {
 } from '../utils/routes'
 import { getCampaignPreviewUrl, getCampaignVendorStats } from '../services/api/campaigns'
 import { buildTrackingUrl } from '../services/api/partners'
-import { buildOtpExposeApiGuide, buildOtpExposeUrls, clampPayoutPercent } from '../services/api/otp'
-import { buildDcbExposeApiGuide, buildDcbExposeUrls } from '../services/api/dcbExpose'
+import { buildOtpExposeApiGuide, buildOtpExposeMarkdownGuide, buildOtpExposeUrls, clampPayoutPercent } from '../services/api/otp'
+import { buildDcbExposeApiGuide, buildDcbExposeMarkdownGuide, buildDcbExposeUrls } from '../services/api/dcbExpose'
+import { buildOrangeBfExposeMarkdownGuide } from './campaignDetail/flows/OrangeBf'
 import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/verificationModes'
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
@@ -398,29 +399,43 @@ function CampaignDetailPage() {
 
   const downloadVendorApiGuide = (t, vendor) => {
     const vendorId = vendor?.id || t.vendor?.id
-    const payload = dcbApiExpose
-      ? buildDcbExposeApiGuide({
-          origin: window.location.origin,
-          campaign,
-          vendor,
-          vendorId,
-        })
-      : buildOtpExposeApiGuide({
-          origin: window.location.origin,
-          campaign,
-          vendor,
-          vendorId,
-        })
+    const isOrange = String(campaign?.flowConfig?.flowType || campaign?.country?.code || '').toUpperCase() === 'ORANGE_BF' || String(campaign?.country?.code || '').toUpperCase() === 'BF'
+    let payload = ''
+    let prefix = 'api-guide'
+    if (dcbApiExpose) {
+      prefix = 'dcb-api-guide'
+      payload = buildDcbExposeMarkdownGuide({
+        origin: window.location.origin,
+        campaign,
+        vendor,
+        vendorId,
+      })
+    } else if (isOrange) {
+      prefix = 'orange-bf-api-guide'
+      payload = buildOrangeBfExposeMarkdownGuide({
+        origin: window.location.origin,
+        campaign,
+        vendor,
+        vendorId,
+      })
+    } else {
+      prefix = 'otp-api-guide'
+      payload = buildOtpExposeMarkdownGuide({
+        origin: window.location.origin,
+        campaign,
+        vendor,
+        vendorId,
+      })
+    }
     const safeName = String(vendor?.code || vendor?.name || vendorId || 'vendor')
       .replace(/[^a-zA-Z0-9_-]+/g, '-')
       .toLowerCase()
-    const prefix = dcbApiExpose ? 'dcb-billing-api' : 'otp-api'
     downloadTextFile(
-      `${prefix}-campaign-${campaign.id}-vendor-${safeName}.json`,
+      `${prefix}-campaign-${campaign.id}-vendor-${safeName}.md`,
       payload,
-      'application/json;charset=utf-8',
+      'text/markdown;charset=utf-8',
     )
-    useStore.getState().addToast('API payload downloaded', 'success')
+    useStore.getState().addToast('API guide downloaded', 'success')
   }
 
   const downloadVendorHtmlScreen = async (t, vendor) => {
@@ -1127,7 +1142,7 @@ function CampaignDetailPage() {
                       {apiExpose && (
                         <IconButton
                           onClick={() => downloadVendorApiGuide(t, vendor)}
-                          title="Download API payload"
+                          title="Download API guide"
                         >
                           <Download className="w-3.5 h-3.5" />
                         </IconButton>
