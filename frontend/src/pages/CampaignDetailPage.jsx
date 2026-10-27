@@ -38,6 +38,7 @@ import { isApiExposeCampaign, isDcbApiExposeCampaign } from '../components/flow/
 import { downloadTextFile } from '../utils/download'
 import CampaignApiConfigModal from '../components/dashboard/CampaignApiConfigModal'
 import CampaignCappingModal from '../components/dashboard/CampaignCappingModal'
+import FailedBreakdownBadge from './campaignDetail/FailedBreakdownBadge'
 import { formatDate, getDateRangeForPreset, DEFAULT_TIMEZONE, shiftDateString } from '../utils/date'
 
 const VENDOR_DATE_PRESETS = [
@@ -98,18 +99,33 @@ const PIN_COLUMNS = [
   { key: 'pinValRequest', label: 'Pin_Val Request', hint: 'PIN validate API calls received' },
   { key: 'uniquePinValRequest', label: 'Unique Pin_Val Request', hint: 'Distinct MSISDN attempting validation', tint: 'bg-accent-muted/40' },
   { key: 'pinValSuccess', label: 'Pin_Val Success', hint: 'PIN validated by the operator' },
+  { key: 'failedVerify', label: 'Failed Pin_Val', hint: 'PIN validations failed with reason breakdown', tint: 'bg-danger-muted/30' },
   { key: 'uniquePinVal', label: 'Unique Pin_Val', hint: 'Distinct MSISDN validated', tint: 'bg-accent-muted/40' },
   { key: 'sendConversion', label: 'Send Conversion', hint: 'Validations forwarded to the vendor after the payout cut', tint: 'bg-success-muted/50' },
 ]
 
 function sumPinColumns(rows) {
   const totals = Object.fromEntries(PIN_COLUMNS.map((col) => [col.key, 0]))
+  const failedVerifyBreakdown = {}
+  const failedBreakdown = {}
   for (const row of rows) {
     for (const col of PIN_COLUMNS) totals[col.key] += Number(row?.[col.key]) || 0
+    const vbd = row?.failedVerifyBreakdown || row?.failedBreakdown || {}
+    for (const [reason, count] of Object.entries(vbd)) {
+      failedVerifyBreakdown[reason] =
+        (failedVerifyBreakdown[reason] || 0) + (Number(count) || 0)
+    }
+    const fbd = row?.failedBreakdown || {}
+    for (const [reason, count] of Object.entries(fbd)) {
+      failedBreakdown[reason] =
+        (failedBreakdown[reason] || 0) + (Number(count) || 0)
+    }
   }
   const cr = (num) => (totals.pinRequest > 0 ? (num / totals.pinRequest) * 100 : 0)
   return {
     ...totals,
+    failedVerifyBreakdown,
+    failedBreakdown,
     advCrPercent: cr(totals.pinValSuccess),
     pubCrPercent: cr(totals.sendConversion),
   }
@@ -519,6 +535,11 @@ function CampaignDetailPage() {
         requestedApi: stats?.requestedApi ?? 0,
         verifiedApi: stats?.verifiedApi ?? 0,
         failedApi: stats?.failedApi ?? 0,
+        failedVerify: stats?.failedVerify ?? stats?.pinValFailed ?? 0,
+        failedSend: stats?.failedSend ?? 0,
+        failedBreakdown: stats?.failedBreakdown || {},
+        failedVerifyBreakdown: stats?.failedVerifyBreakdown || {},
+        failedSendBreakdown: stats?.failedSendBreakdown || {},
         convPercent: stats?.convPercent ?? 0,
         pubConvPercent: stats?.pubConvPercent ?? 0,
         pinRequest: stats?.pinRequest ?? 0,
@@ -527,6 +548,7 @@ function CampaignDetailPage() {
         pinValRequest: stats?.pinValRequest ?? 0,
         uniquePinValRequest: stats?.uniquePinValRequest ?? 0,
         pinValSuccess: stats?.pinValSuccess ?? 0,
+        pinValFailed: stats?.pinValFailed ?? stats?.failedVerify ?? 0,
         uniquePinVal: stats?.uniquePinVal ?? 0,
         sendConversion: stats?.sendConversion ?? 0,
         advCrPercent: stats?.advCrPercent ?? 0,
@@ -914,6 +936,12 @@ function CampaignDetailPage() {
                               <th className="col-num">Total clicks</th>
                               <th className="col-num">Conv %</th>
                               <th className="col-num">Pub conv %</th>
+                              <th
+                                className="col-num bg-danger-muted/30"
+                                title="Failed OTP / API requests with reason breakdown"
+                              >
+                                Failed API
+                              </th>
                             </>
                           )}
                         </tr>
@@ -939,7 +967,14 @@ function CampaignDetailPage() {
                                 </td>
                                 {PIN_COLUMNS.map((col) => (
                                   <td key={col.key} className={`col-num ${col.tint || ''}`}>
-                                    {row[col.key] ?? 0}
+                                    {col.key === 'failedVerify' ? (
+                                      <FailedBreakdownBadge
+                                        count={row.failedVerify ?? row.pinValFailed ?? 0}
+                                        breakdown={row.failedVerifyBreakdown || row.failedBreakdown}
+                                      />
+                                    ) : (
+                                      row[col.key] ?? 0
+                                    )}
                                   </td>
                                 ))}
                                 <td className="col-num">{Number(row.advCrPercent || 0).toFixed(1)}%</td>
@@ -950,6 +985,12 @@ function CampaignDetailPage() {
                                 <td className="col-num">{row.totalClicks ?? 0}</td>
                                 <td className="col-num">{Number(row.convPercent || 0).toFixed(1)}%</td>
                                 <td className="col-num">{Number(row.pubConvPercent || 0).toFixed(1)}%</td>
+                                <td className="col-num bg-danger-muted/30">
+                                  <FailedBreakdownBadge
+                                    count={row.failedApi ?? 0}
+                                    breakdown={row.failedBreakdown}
+                                  />
+                                </td>
                               </>
                             )}
                           </tr>
@@ -962,11 +1003,36 @@ function CampaignDetailPage() {
                             <td className="col-num text-fg-muted">–</td>
                             {PIN_COLUMNS.map((col) => (
                               <td key={col.key} className={`col-num ${col.tint || ''}`}>
-                                {pinTotals[col.key]}
+                                {col.key === 'failedVerify' ? (
+                                  <FailedBreakdownBadge
+                                    count={pinTotals.failedVerify ?? 0}
+                                    breakdown={pinTotals.failedVerifyBreakdown}
+                                  />
+                                ) : (
+                                  pinTotals[col.key]
+                                )}
                               </td>
                             ))}
                             <td className="col-num">{pinTotals.advCrPercent.toFixed(1)}%</td>
                             <td className="col-num">{pinTotals.pubCrPercent.toFixed(1)}%</td>
+                          </tr>
+                        </tfoot>
+                      )}
+                      {!apiExpose && vendorRows.length > 1 && (
+                        <tfoot>
+                          <tr className="bg-bg-subtle font-medium">
+                            <td className="col-text">Total</td>
+                            <td className="col-num">
+                              {vendorRows.reduce((sum, r) => sum + (Number(r.totalClicks) || 0), 0)}
+                            </td>
+                            <td className="col-num">–</td>
+                            <td className="col-num">–</td>
+                            <td className="col-num bg-danger-muted/30">
+                              <FailedBreakdownBadge
+                                count={vendorRows.reduce((sum, r) => sum + (Number(r.failedApi) || 0), 0)}
+                                breakdown={pinTotals.failedBreakdown}
+                              />
+                            </td>
                           </tr>
                         </tfoot>
                       )}

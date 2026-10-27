@@ -47,6 +47,7 @@ export const apiExposePinStats = ({
   pinValSuccess = 0,
   uniquePinVal = 0,
   held = 0,
+  failedVerify = 0,
 } = {}) => {
   const sendSuccess = clampInt(pinSendSuccess);
   const sendRequest = Math.max(clampInt(pinRequest), sendSuccess);
@@ -54,6 +55,7 @@ export const apiExposePinStats = ({
   const valRequest = Math.max(clampInt(pinValRequest), valSuccess);
   const valHeld = Math.min(valSuccess, clampInt(held));
   const sendConversion = valSuccess - valHeld;
+  const pinValFailed = clampInt(failedVerify);
 
   return {
     pinRequest: sendRequest,
@@ -62,6 +64,7 @@ export const apiExposePinStats = ({
     pinValRequest: valRequest,
     uniquePinValRequest: Math.min(valRequest, clampInt(uniquePinValRequest)),
     pinValSuccess: valSuccess,
+    pinValFailed,
     uniquePinVal: Math.min(valSuccess, clampInt(uniquePinVal)),
     held: valHeld,
     sendConversion,
@@ -84,12 +87,19 @@ export const campaignVendorPerf = ({
   liveVerified = 0,
   held = 0,
   failedApi = 0,
+  failedVerify = 0,
+  failedSend = 0,
+  failedBreakdown = {},
+  failedVerifyBreakdown = {},
+  failedSendBreakdown = {},
   apiExpose = false,
   conversionRule,
   pinRequest = 0,
+  pinSendSuccess = 0,
   uniquePinSend = 0,
   pinValRequest = 0,
   uniquePinValRequest = 0,
+  pinValSuccess = 0,
   uniquePinVal = 0,
   homeView = 0,
   subscribeClick = 0,
@@ -110,6 +120,7 @@ export const campaignVendorPerf = ({
     pinValSuccess: otp.verifiedLive,
     uniquePinVal,
     held: otp.held,
+    failedVerify,
   });
   const rule =
     conversionRule || (apiExpose ? 'api_expose' : 'subscribe_or_callback');
@@ -139,6 +150,11 @@ export const campaignVendorPerf = ({
     requestedApi: otp.requested,
     verifiedApi: otp.verifiedLive,
     failedApi: Math.max(0, Number(failedApi) || 0),
+    failedVerify: Math.max(0, Number(failedVerify) || 0),
+    failedSend: Math.max(0, Number(failedSend) || 0),
+    failedBreakdown: failedBreakdown || {},
+    failedVerifyBreakdown: failedVerifyBreakdown || {},
+    failedSendBreakdown: failedSendBreakdown || {},
     pubConvPercent,
     homeView: Math.max(0, Number(homeView) || 0),
     subscribeClick: Math.max(0, Number(subscribeClick) || 0),

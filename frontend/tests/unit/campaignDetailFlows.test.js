@@ -188,6 +188,23 @@ describe('pinApiColumns render', () => {
     expect(byKey.pinRequest.footer(totals)).toBe(20)
     expect(totals.advCrPercent).toBe(50)
     expect(totals.pubCrPercent).toBe(25)
+
+    // Failed verify column exists in PIN columns
+    expect(byKey.failedVerify).toBeDefined()
+    expect(byKey.failedVerify.label).toBe('Failed Pin_Val')
+
+    // Sums failedVerify and merges breakdown
+    const rowsWithFailures = [
+      { pinRequest: 10, pinValSuccess: 5, failedVerify: 4, failedVerifyBreakdown: { 'Wrong PIN': 3, 'Expired / Timeout': 1 } },
+      { pinRequest: 10, pinValSuccess: 4, failedVerify: 3, failedVerifyBreakdown: { 'Wrong PIN': 1, 'Provider Error': 2 } },
+    ]
+    const failureTotals = sumPinColumns(rowsWithFailures)
+    expect(failureTotals.failedVerify).toBe(7)
+    expect(failureTotals.failedVerifyBreakdown).toEqual({
+      'Wrong PIN': 4,
+      'Expired / Timeout': 1,
+      'Provider Error': 2,
+    })
   })
 })
 

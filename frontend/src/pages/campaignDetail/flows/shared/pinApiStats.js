@@ -1,6 +1,7 @@
 /**
  * PIN send/validate vendor table — OTP API expose and DCB API expose.
  */
+import FailedBreakdownBadge from '../../FailedBreakdownBadge.jsx'
 
 export const PIN_VENDOR_HINT =
   'PIN send and PIN validate legs, with unique MSISDN per leg. Send conversion is what the vendor gets after the payout cut. Adv CR is Pin_Val success ÷ Pin request; Pub CR is send conversion ÷ Pin request. Traffic counts only — we do not hold any amount.'
@@ -23,6 +24,12 @@ export const PIN_COLUMNS = [
   },
   { key: 'pinValSuccess', label: 'Pin_Val Success', hint: 'PIN validated by the operator' },
   {
+    key: 'failedVerify',
+    label: 'Failed Pin_Val',
+    hint: 'PIN validations failed with reason breakdown (Wrong PIN, timeout, provider error, etc.)',
+    tint: 'bg-danger-muted/30',
+  },
+  {
     key: 'uniquePinVal',
     label: 'Unique Pin_Val',
     hint: 'Distinct MSISDN validated',
@@ -36,14 +43,25 @@ export const PIN_COLUMNS = [
   },
 ]
 
+export function renderFailedBreakdown(count, breakdown = {}) {
+  return FailedBreakdownBadge({ count, breakdown })
+}
+
 export function sumPinColumns(rows) {
   const totals = Object.fromEntries(PIN_COLUMNS.map((col) => [col.key, 0]))
+  const failedVerifyBreakdown = {}
   for (const row of rows) {
     for (const col of PIN_COLUMNS) totals[col.key] += Number(row?.[col.key]) || 0
+    const vbd = row?.failedVerifyBreakdown || row?.failedBreakdown || {}
+    for (const [reason, count] of Object.entries(vbd)) {
+      failedVerifyBreakdown[reason] =
+        (failedVerifyBreakdown[reason] || 0) + (Number(count) || 0)
+    }
   }
   const cr = (num) => (totals.pinRequest > 0 ? (num / totals.pinRequest) * 100 : 0)
   return {
     ...totals,
+    failedVerifyBreakdown,
     advCrPercent: cr(totals.pinValSuccess),
     pubCrPercent: cr(totals.sendConversion),
   }
@@ -59,8 +77,20 @@ export const pinApiColumns = [
   },
   ...PIN_COLUMNS.map((col) => ({
     ...col,
-    render: (row) => row[col.key] ?? 0,
-    footer: (totals) => totals[col.key],
+    render: (row) =>
+      col.key === 'failedVerify'
+        ? renderFailedBreakdown(
+            row.failedVerify ?? row.pinValFailed ?? 0,
+            row.failedVerifyBreakdown || row.failedBreakdown,
+          )
+        : row[col.key] ?? 0,
+    footer: (totals) =>
+      col.key === 'failedVerify'
+        ? renderFailedBreakdown(
+            totals.failedVerify ?? 0,
+            totals.failedVerifyBreakdown,
+          )
+        : totals[col.key],
   })),
   {
     key: 'advCrPercent',

@@ -109,7 +109,7 @@ describe('campaignVendorPerf', () => {
     assert.equal(row.pubConvPercent, 40);
   });
 
-  it('carries the PIN leg breakdown for API expose rows', () => {
+  it('carries the PIN leg breakdown for API expose rows including failure breakdown', () => {
     const row = campaignVendorPerf({
       clicks: 120,
       requested: 90,
@@ -121,6 +121,9 @@ describe('campaignVendorPerf', () => {
       pinValRequest: 60,
       uniquePinValRequest: 45,
       uniquePinVal: 33,
+      failedVerify: 7,
+      failedVerifyBreakdown: { 'Wrong PIN': 4, 'Provider Error': 3 },
+      failedBreakdown: { 'Wrong PIN': 4, 'Provider Error': 3 },
     });
     assert.equal(row.pinRequest, 120);
     assert.equal(row.pinSendSuccess, 90);
@@ -128,6 +131,10 @@ describe('campaignVendorPerf', () => {
     assert.equal(row.pinValRequest, 60);
     assert.equal(row.uniquePinValRequest, 45);
     assert.equal(row.pinValSuccess, 40);
+    assert.equal(row.pinValFailed, 7);
+    assert.equal(row.failedVerify, 7);
+    assert.deepEqual(row.failedVerifyBreakdown, { 'Wrong PIN': 4, 'Provider Error': 3 });
+    assert.deepEqual(row.failedBreakdown, { 'Wrong PIN': 4, 'Provider Error': 3 });
     assert.equal(row.uniquePinVal, 33);
     assert.equal(row.sendConversion, 32);
     assert.equal(row.advCrPercent, 33.3);
@@ -163,7 +170,7 @@ describe('campaignVendorPerf', () => {
 });
 
 describe('apiExposePinStats', () => {
-  it('send conversion is validated minus the payout hold', () => {
+  it('send conversion is validated minus the payout hold and tracks failed verify', () => {
     const stats = apiExposePinStats({
       pinRequest: 200,
       pinSendSuccess: 180,
@@ -173,9 +180,11 @@ describe('apiExposePinStats', () => {
       pinValSuccess: 50,
       uniquePinVal: 48,
       held: 10,
+      failedVerify: 7,
     });
     assert.equal(stats.sendConversion, 40);
     assert.equal(stats.held, 10);
+    assert.equal(stats.pinValFailed, 7);
     assert.equal(stats.advCrPercent, 25);
     assert.equal(stats.pubCrPercent, 20);
   });

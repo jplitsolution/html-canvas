@@ -11,6 +11,7 @@ import { cappingService } from '../campaigns/capping.service.js';
 import { searchService } from '../search/search.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { campaignVendorPerf } from '../otp/helpers/conversion.js';
+import { normalizeFailureReason } from '../otp/helpers/failure-reason.js';
 import { resolveFlowOrBoth } from '../flow/flows/index.js';
 import { resolveConversionRule } from '../flow/flows/conversion-rule.js';
 import getConfig from '../../config/configuration.js';
@@ -436,7 +437,12 @@ export const createAnalyticsService = () => {
       requested: 0,
       liveVerified: 0,
       held: 0,
+      failedSend: 0,
+      failedVerify: 0,
       failedApi: 0,
+      failedBreakdown: {},
+      failedVerifyBreakdown: {},
+      failedSendBreakdown: {},
       subscribeSuccess: 0,
       postbacksMatched: 0,
       postbacksSent: 0,
@@ -463,6 +469,8 @@ export const createAnalyticsService = () => {
       prev.requested = Number(row.requested) || 0;
       prev.liveVerified = Number(row.liveVerified) || 0;
       prev.held = Number(row.held) || 0;
+      prev.failedSend = Number(row.failedSend) || 0;
+      prev.failedVerify = Number(row.failedVerify) || 0;
       prev.failedApi = (Number(row.failedSend) || 0) + (Number(row.failedVerify) || 0);
       prev.subscribeSuccess = Number(row.subscribeSuccess) || 0;
       prev.pinRequest = Number(row.pinRequest) || 0;
@@ -474,6 +482,67 @@ export const createAnalyticsService = () => {
       prev.subscribeClick = Number(row.subscribeClick) || 0;
       prev.cgRedirect = Number(row.cgRedirect) || 0;
     }
+
+    const failedQB = getVisitEventRepo()
+      .createQueryBuilder('event')
+      .innerJoin('event.visit', 'visit')
+      .select('visit.vendorId', 'vendorId')
+      .addSelect('event.eventType', 'eventType')
+      .addSelect('event.metadata', 'metadata')
+      .where('visit.campaignId = :cId', { cId })
+      .andWhere(`event.eventType IN ('OTP_VERIFY', 'OTP_SEND')`)
+      .andWhere(`NOT (${successTrue})`);
+    if (from) failedQB.andWhere('event.createdAt >= :since', { since: from });
+    if (to) failedQB.andWhere('event.createdAt <= :until', { until: to });
+    const failedRows = await failedQB.getRawMany();
+
+    for (const r of failedRows) {
+      const vid = Number(r.vendorId ?? r.visit_vendor_id ?? r.vendor_id) || 0;
+      const prev = ensure(vid);
+      let meta = r.metadata ?? r.event_metadata;
+      if (typeof meta === 'string') {
+        try {
+          meta = JSON.parse(meta);
+        } catch {}
+      }
+      const eventType = r.eventType ?? r.event_event_type ?? r.event_type;
+      const reason = normalizeFailureReason(meta, eventType);
+
+      prev.failedBreakdown[reason] = (prev.failedBreakdown[reason] || 0) + 1;
+      if (eventType === 'OTP_VERIFY') {
+        prev.failedVerifyBreakdown[reason] =
+          (prev.failedVerifyBreakdown[reason] || 0) + 1;
+      } else if (eventType === 'OTP_SEND') {
+        prev.failedSendBreakdown[reason] =
+          (prev.failedSendBreakdown[reason] || 0) + 1;
+      }
+    }
+
+    for (const [, prev] of statsByVendor.entries()) {
+      if (prev.failedVerify > 0) {
+        const verifyCount = Object.values(prev.failedVerifyBreakdown).reduce(
+          (a, b) => a + b,
+          0,
+        );
+        if (verifyCount < prev.failedVerify) {
+          const diff = prev.failedVerify - verifyCount;
+          prev.failedVerifyBreakdown['Wrong PIN'] =
+            (prev.failedVerifyBreakdown['Wrong PIN'] || 0) + diff;
+        }
+      }
+      if (prev.failedApi > 0) {
+        const apiCount = Object.values(prev.failedBreakdown).reduce(
+          (a, b) => a + b,
+          0,
+        );
+        if (apiCount < prev.failedApi) {
+          const diff = prev.failedApi - apiCount;
+          prev.failedBreakdown['Wrong PIN'] =
+            (prev.failedBreakdown['Wrong PIN'] || 0) + diff;
+        }
+      }
+    }
+
     for (const row of postbackRows) {
       const prev = ensure(row.vendorId);
       prev.postbacksMatched = Number(row.postbacksMatched) || 0;
