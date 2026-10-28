@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import { fetchFlowEntry, fetchFlowPage, prefetchFlowPage } from '../../services/api/flow'
 import { persistPhone, pickHeFailRedirectUrl } from '../../services/flow/resolvePhoneNumber'
 import { trackEvent } from '../../utils/analytics'
+import { trackGoogleAdsConversion } from '../../utils/googleAds'
 import { FLOW_FONT, FLOW_PAGE_CACHE_ENABLED, PRELOAD_BY_PAGE } from './constants'
 import { isHeSuppressedFunnelPage, isExternalHttpRedirect, normalizeDetectNextPage, shouldTreatCgAsHeFailRedirect } from './flowHelpers'
 
@@ -415,8 +416,14 @@ function useFlowPages({
       trackEvent('confirm_loaded')
     } else if (pageData.pageType === 'THANKYOU') {
       trackEvent('success_loaded')
+      trackGoogleAdsConversion({
+        transactionId: visitIdRef?.current || searchParams?.get('rcid') || searchParams?.get('click_id') || '',
+        value: selectedPackRef?.current?.price ?? 1.0,
+        currency: 'INR',
+        isPreview: Boolean(searchParams?.get('_t') || searchParams?.get('preview')),
+      })
     }
-  }, [pageData?.pageType])
+  }, [pageData?.pageType, searchParams, selectedPackRef, visitIdRef])
 
   useEffect(() => {
     if (!pageData?.pageType || !visitIdRef.current) return
