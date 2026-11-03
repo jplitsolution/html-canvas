@@ -158,10 +158,11 @@ export const createPostbackRegister = (deps) => {
       await resolvePostbackTemplate(vendorId);
     vendorId = resolvedVendorId || vendorId;
 
-    // No vendor on visit (opened without tracking vid) → campaign's assigned vendor.
-    if (!template) {
+    // No vendor on the visit (opened without ?vid=) → that campaign's assigned vendor.
+    // A visit that already has a vendor never borrows another vendor's callback URL.
+    if (!template && !vendorId) {
       const fromCampaign = await resolveVendorFromCampaign(campaignId);
-      if (fromCampaign.vendorId) vendorId = vendorId || fromCampaign.vendorId;
+      if (fromCampaign.vendorId) vendorId = fromCampaign.vendorId;
       if (fromCampaign.template) template = fromCampaign.template;
     }
 

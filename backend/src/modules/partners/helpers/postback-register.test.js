@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { createPostbackRegister } from './postback-register.js';
 import {
   affiliateRcidFromLandingUrl,
   affiliateRcidFromVisit,
@@ -63,6 +64,61 @@ describe('affiliateRcidFromVisit', () => {
       }),
       '',
     );
+  });
+});
+
+describe('registerPending vendor callback', () => {
+  it('does not copy another vendor URL when this vendor has none', async () => {
+    const saved = [];
+    const chain = {
+      where() {
+        return this;
+      },
+      orderBy() {
+        return this;
+      },
+      take() {
+        return this;
+      },
+      getOne: async () => null,
+    };
+    const { registerPending } = createPostbackRegister({
+      getPostbackRepo: () => ({
+        createQueryBuilder: () => chain,
+        create: (row) => row,
+        save: async (row) => {
+          const stored = { ...row, id: 5 };
+          saved.push(stored);
+          return stored;
+        },
+      }),
+      getVendorRepo: () => ({
+        findOne: async ({ where }) =>
+          where.id === 9
+            ? {
+                id: 9,
+                postbackUrl:
+                  'https://tickhigh.track-myds.com/postback?click_id={rcid}',
+              }
+            : { id: 15, postbackUrl: '  ' },
+      }),
+      getTrackingRepo: () => ({
+        find: async () => [{ vendorId: 9, active: true }],
+      }),
+      getVisitRepo: () => ({ findOne: async () => null }),
+    });
+
+    const out = await registerPending({
+      vendorId: 15,
+      campaignId: 3,
+      msisdn: '962777263748',
+      clickId: 'clk-15',
+      asReceived: true,
+    });
+
+    assert.equal(out.id, 5);
+    assert.equal(saved[0].vendorId, 15);
+    assert.equal(saved[0].postbackUrl, null);
   });
 });
 

@@ -31,12 +31,8 @@ import {
   resolvePurchaseTypeId,
   toVendorPurchaseTypes,
 } from './helpers/universe-dcb-purchase-types.js';
-import {
-  HELD_OTP_MESSAGE,
-  parsePayoutPercent,
-  payoutSeqKey,
-  shouldPayoutOtp,
-} from '../otp/helpers/payout.js';
+import { HELD_OTP_MESSAGE } from '../otp/helpers/payout.js';
+import { resolveApprovalHold } from '../otp/helpers/approval-control.js';
 
 const localCorrelations = new Map();
 const localConfirmLocks = new Set();
@@ -468,20 +464,6 @@ export const createUniverseDcbExposeService = (
     }
   };
 
-  const resolvePayoutHold = async (campaignId, vendorId, payoutPercentRaw) => {
-    const payoutPercent = parsePayoutPercent(payoutPercentRaw);
-    if (payoutPercent >= 100) {
-      return { held: false, seq: null, payoutPercent };
-    }
-    const seq = await redisService.incr(payoutSeqKey(campaignId, vendorId));
-    if (!seq) return { held: false, seq: null, payoutPercent };
-    return {
-      held: !shouldPayoutOtp(seq, payoutPercent),
-      seq,
-      payoutPercent,
-    };
-  };
-
   const callProvider = async ({ ctx, callType, action, execute, statusLabel }) => {
     try {
       const response = await execute();
@@ -895,11 +877,12 @@ export const createUniverseDcbExposeService = (
           ctx.tracking?.payoutPercent != null && ctx.tracking.payoutPercent !== ''
             ? ctx.tracking.payoutPercent
             : 100;
-        const decision = await resolvePayoutHold(
-          ctx.campaign.id,
-          ctx.vendor.id,
-          trackingPayout,
-        );
+        const decision = await resolveApprovalHold({
+          campaignId: ctx.campaign.id,
+          vendorId: ctx.vendor.id,
+          payoutPercent: trackingPayout,
+          decisionKey: String(ctx.visitId),
+        });
 
         await getVisitRepo().update(
           { id: ctx.visitId },

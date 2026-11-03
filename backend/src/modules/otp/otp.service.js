@@ -15,12 +15,13 @@ import { orangeBfService } from '../flow/orange-bf.service.js';
 import { flowEngineService } from '../flow/flow-engine.service.js';
 import { searchService } from '../search/search.service.js';
 import { cappingService } from '../campaigns/capping.service.js';
+import { HELD_OTP_MESSAGE, parsePayoutPercent } from './helpers/payout.js';
+import { resolveApprovalHold } from './helpers/approval-control.js';
 import {
-  HELD_OTP_MESSAGE,
-  parsePayoutPercent,
-  payoutSeqKey,
-  shouldPayoutOtp,
-} from './helpers/payout.js';
+  exposeVisitStatusPatch,
+  isAlreadySubscribedText,
+  isTerminalExposeVisit,
+} from './helpers/expose-visit.js';
 
 /**
  * Partner-API OTP only.
@@ -150,21 +151,14 @@ export const createOtpService = () => {
     campaignId,
     vendorId,
     payoutPercentRaw,
-  ) => {
-    const payoutPercent = parsePayoutPercent(payoutPercentRaw);
-    if (payoutPercent >= 100) {
-      return { held: false, seq: null, payoutPercent };
-    }
-    const seq = await redisService.incr(payoutSeqKey(campaignId, vendorId));
-    if (!seq) {
-      return { held: false, seq: null, payoutPercent };
-    }
-    return {
-      held: !shouldPayoutOtp(seq, payoutPercent),
-      seq,
-      payoutPercent,
-    };
-  };
+    decisionKey,
+  ) =>
+    resolveApprovalHold({
+      campaignId,
+      vendorId,
+      payoutPercent: payoutPercentRaw,
+      decisionKey,
+    });
 
   /** Digits-only MSISDN so 88889 / "88889 " always match the same session. */
   const normalizeMsisdn = (phone) => String(phone || '').replace(/\D/g, '');
@@ -206,8 +200,9 @@ export const createOtpService = () => {
       if (clientIp) {
         patch.ipAddress = String(clientIp).split(',')[0].trim();
       }
-      if (visitStatus) {
-        patch.visitStatus = visitStatus;
+      const nextStatus = exposeVisitStatusPatch(existing, visitStatus);
+      if (nextStatus) {
+        patch.visitStatus = nextStatus;
       }
       if (vid && !existing.vendorId) {
         patch.vendorId = vid;
@@ -301,11 +296,13 @@ export const createOtpService = () => {
           eventType,
           status: metadata?.held
             ? 'HELD'
-            : metadata?.success === false
-              ? 'FAILED'
-              : metadata?.success
-                ? 'SUCCESS'
-                : null,
+            : metadata?.alreadySubscribed
+              ? 'ALREADY_SUBSCRIBED'
+              : metadata?.success === false
+                ? 'FAILED'
+                : metadata?.success
+                  ? 'SUCCESS'
+                  : null,
           requestUrl: metadata?.partnerUrl || metadata?.inboundUrl || null,
           responseStatus: metadata?.httpStatus ?? null,
           success: metadata?.success,
@@ -335,6 +332,7 @@ export const createOtpService = () => {
     campaignId,
     phone,
     result,
+    statusLabel,
   }) => {
     try {
       await apiCallLogService.record({
@@ -350,7 +348,8 @@ export const createOtpService = () => {
         responseBody: serializeBody(result?.rawResponse),
         success: Boolean(result?.success),
         errorMessage: result?.success ? null : result?.error || null,
-        statusLabel: result?.success ? 'SUCCESS' : 'FAILED',
+        statusLabel:
+          statusLabel || (result?.success ? 'SUCCESS' : 'FAILED'),
       });
     } catch (err) {
       console.warn(`OTP api_call_logs write failed: ${err.message}`);
@@ -824,6 +823,11 @@ export const createOtpService = () => {
     };
 
     const sendResult = await provider.sendOtp(msisdn, '', providerConfig, context);
+    const alreadySubscribed =
+      !sendResult?.success &&
+      isTerminalExposeVisit(visit) &&
+      isAlreadySubscribedText(sendResult?.error, sendResult?.rawResponse);
+    const sendStatusLabel = alreadySubscribed ? 'ALREADY_SUBSCRIBED' : undefined;
 
     // Inbound first (client → us), then outbound (us → partner) for timeline order.
     const responsePayload = {
@@ -854,6 +858,7 @@ export const createOtpService = () => {
       errorMessage: sendResult?.success
         ? null
         : sendResult?.error || 'Failed to send OTP',
+      statusLabel: sendStatusLabel,
     });
 
     await logOtpApiCall({
@@ -862,6 +867,7 @@ export const createOtpService = () => {
       campaignId: cId,
       phone: msisdn,
       result: sendResult,
+      statusLabel: sendStatusLabel,
     });
 
     await logOtpEvent(visit.id, VisitEventType.OTP_SEND, {
@@ -874,6 +880,7 @@ export const createOtpService = () => {
       partnerUrl: sendResult?.requestUrl || null,
       responseCode: sendResult?.responseCode ?? null,
       success: Boolean(sendResult?.success),
+      alreadySubscribed,
       error: sendResult?.success ? undefined : sendResult?.error,
       httpStatus: sendResult?.httpStatus ?? null,
     });
@@ -1059,11 +1066,13 @@ export const createOtpService = () => {
         ? tracking.payoutPercent
         : providerConfig?.payoutPercent;
     let payoutPercent = parsePayoutPercent(trackingPayout);
+    const alreadyVerified = isTerminalExposeVisit(visit);
     if (verifyResult?.success) {
       const decision = await resolveExposePayoutHold(
         cId,
         vendor.id,
         trackingPayout,
+        visit.clickId || String(visit.id),
       );
       held = decision.held;
       payoutSeq = decision.seq;
@@ -1143,15 +1152,17 @@ export const createOtpService = () => {
       throw err;
     }
 
-    await getVisitRepo().update(
-      { id: visit.id },
-      { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
-    );
-    const convCampaignId = visit.campaignId || activeCId;
-    await cappingService.incrementCampaignConversionCount(
-      convCampaignId,
-      activeCampaign.cappingInterval,
-    );
+    if (!alreadyVerified) {
+      await getVisitRepo().update(
+        { id: visit.id },
+        { otpVerifiedAt: new Date(), visitStatus: VisitStatus.SUCCESS },
+      );
+      const convCampaignId = visit.campaignId || activeCId;
+      await cappingService.incrementCampaignConversionCount(
+        convCampaignId,
+        activeCampaign.cappingInterval,
+      );
+    }
     await redisService.del(exposePendingKey(activeCId, vendor.id, phone));
     await redisService.del(exposePendingKey(cId, vendor.id, phone));
 

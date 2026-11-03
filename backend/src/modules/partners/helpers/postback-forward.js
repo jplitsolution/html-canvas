@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { getRepository } from '../../../database/index.js';
 import { Vendor } from '../../../database/entities/vendor.entity.js';
-import { CampaignTracking } from '../../../database/entities/campaign-tracking.entity.js';
 import { Visit } from '../../../database/entities/visit.entity.js';
 import {
   ConversionPostback,
@@ -20,7 +19,6 @@ export const createPostbackForward = (deps) => {
   const {
     getPostbackRepo = () => getRepository(ConversionPostback),
     getVendorRepo = () => getRepository(Vendor),
-    getTrackingRepo = () => getRepository(CampaignTracking),
     getVisitRepo = () => getRepository(Visit),
     indexPostbackEvent,
     logApiCall,
@@ -71,25 +69,22 @@ export const createPostbackForward = (deps) => {
   };
 
   const resolveMissingPostbackUrl = async (row) => {
-    if (String(row.postbackUrl || '').trim()) return String(row.postbackUrl).trim();
     if (row.vendorId) {
       const vendor = await getVendorRepo().findOne({ where: { id: row.vendorId } });
-      if (vendor?.postbackUrl?.trim()) return vendor.postbackUrl.trim();
+      if (vendor) return vendor.postbackUrl?.trim() || '';
     }
-    if (!row.campaignId || !getTrackingRepo) return '';
-    const trackings = await getTrackingRepo().find({
-      where: { campaignId: parseInt(row.campaignId, 10), active: true },
-      order: { id: 'ASC' },
-      take: 20,
-    });
-    for (const tracking of trackings) {
-      if (!tracking.vendorId) continue;
-      const vendor = await getVendorRepo().findOne({ where: { id: tracking.vendorId } });
-      if (!vendor?.postbackUrl?.trim()) continue;
-      if (!row.vendorId) row.vendorId = tracking.vendorId;
-      return vendor.postbackUrl.trim();
-    }
-    return '';
+    return String(row.postbackUrl || '').trim();
+  };
+
+  const trackerRejected = (data) => {
+    if (data === false) return true;
+    const text =
+      typeof data === 'string'
+        ? data
+        : data == null
+          ? ''
+          : JSON.stringify(data);
+    return text.trim().toLowerCase() === 'false';
   };
 
   const firePostback = async (postbackId, options = {}) => {
@@ -106,7 +101,7 @@ export const createPostbackForward = (deps) => {
     }
 
     const resolvedUrl = await resolveMissingPostbackUrl(row);
-    if (resolvedUrl) row.postbackUrl = resolvedUrl;
+    if (row.vendorId || resolvedUrl) row.postbackUrl = resolvedUrl;
 
     if (row.visitId && getVisitRepo) {
       const visit = await getVisitRepo().findOne({
@@ -166,14 +161,20 @@ export const createPostbackForward = (deps) => {
           ? response.data.slice(0, 2000)
           : JSON.stringify(response.data).slice(0, 2000);
 
-      const ok = response.status >= 200 && response.status < 300;
+      const httpOk = response.status >= 200 && response.status < 300;
+      const rejected = httpOk && trackerRejected(response.data);
+      const ok = httpOk && !rejected;
       row.status = ok
         ? ConversionPostbackStatus.SENT
         : ConversionPostbackStatus.FAILED;
       row.httpStatus = response.status;
       row.responseBody = body;
       row.sentAt = new Date();
-      row.errorMessage = ok ? null : `HTTP ${response.status}`;
+      row.errorMessage = ok
+        ? null
+        : rejected
+          ? 'tracker rejected'
+          : `HTTP ${response.status}`;
       await getPostbackRepo().save(row);
 
       await logApiCall({
@@ -197,8 +198,12 @@ export const createPostbackForward = (deps) => {
         responseStatus: response.status,
         responseBody: body,
         success: ok,
-        errorMessage: ok ? null : `HTTP ${response.status}`,
-        statusLabel: ok ? 'SUCCESS' : 'FAILED',
+        errorMessage: ok
+          ? null
+          : rejected
+            ? 'tracker rejected'
+            : `HTTP ${response.status}`,
+        statusLabel: ok ? 'SUCCESS' : rejected ? 'REJECTED' : 'FAILED',
       });
 
       const eventType = ok
@@ -210,7 +215,9 @@ export const createPostbackForward = (deps) => {
           await logVisitEvent(row.visitId, eventType, {
             info: ok
               ? 'Vendor / affiliate CPA postback fired successfully.'
-              : `Vendor / affiliate CPA postback failed (HTTP ${response.status}).`,
+              : rejected
+                ? 'Vendor tracker rejected the postback (body false).'
+                : `Vendor / affiliate CPA postback failed (HTTP ${response.status}).`,
             postbackId: row.id,
             httpStatus: response.status,
             url,

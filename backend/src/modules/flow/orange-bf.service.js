@@ -12,11 +12,7 @@ import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
 import { postbackService } from '../partners/postback.service.js';
 import { affiliateRcidFromVisit } from '../partners/helpers/postback-template.js';
-import {
-  parsePayoutPercent,
-  payoutSeqKey,
-  shouldPayoutOtp,
-} from '../otp/helpers/payout.js';
+import { resolveApprovalHold } from '../otp/helpers/approval-control.js';
 import { orangeBfProvider, ORANGE_BF_DEFAULTS } from './orange-bf.provider.js';
 import { ORANGE_BF_OUTCOMES } from './helpers/orange-bf-normalizer.js';
 import { interpretChecksubResponse } from './helpers/checksub-rules.js';
@@ -54,20 +50,6 @@ const safeParseJson = (raw) => {
   }
 };
 
-const resolvePayoutHold = async (campaignId, vendorId, payoutPercentRaw) => {
-  const payoutPercent = parsePayoutPercent(payoutPercentRaw);
-  if (payoutPercent >= 100) {
-    return { held: false, seq: null, payoutPercent };
-  }
-  const seq = await redisService.incr(payoutSeqKey(campaignId, vendorId));
-  if (!seq) return { held: false, seq: null, payoutPercent };
-  return {
-    held: !shouldPayoutOtp(seq, payoutPercent),
-    seq,
-    payoutPercent,
-  };
-};
-
 const resolveVendorForPostback = async (campaignId, vendorId, visitId) => {
   if (vendorId) return parseInt(vendorId, 10);
   if (visitId) {
@@ -101,17 +83,17 @@ const queueOrangeBfPostback = async ({ campaign, visitId, vendorId, msisdn }) =>
     });
   }
 
-  const decision = await resolvePayoutHold(
-    campaign.id,
-    resolvedVendorId,
-    tracking?.payoutPercent,
-  );
-
   const parsedVisitId = visitId ? parseInt(visitId, 10) : null;
   const visit = parsedVisitId
     ? await getRepository(Visit).findOne({ where: { id: parsedVisitId } })
     : null;
-    const isTest = isOrangeBfTestMsisdn(msisdn);
+  const decision = await resolveApprovalHold({
+    campaignId: campaign.id,
+    vendorId: resolvedVendorId,
+    payoutPercent: tracking?.payoutPercent,
+    decisionKey: visit?.clickId || (parsedVisitId ? String(parsedVisitId) : ''),
+  });
+  const isTest = isOrangeBfTestMsisdn(msisdn);
   const queued = await postbackService.registerPending({
     visitId: parsedVisitId,
     msisdn,

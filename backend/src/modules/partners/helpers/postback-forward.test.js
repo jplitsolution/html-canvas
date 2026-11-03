@@ -95,13 +95,70 @@ describe('firePostback', () => {
     assert.equal(httpCalls.length, 0);
   });
 
+  it('does not borrow another vendor URL when this vendor has none', async () => {
+    const httpCalls = [];
+    const { firePostback } = createPostbackForward({
+      getPostbackRepo: () => ({
+        findOne: async () => ({
+          ...pendingRow,
+          vendorId: 15,
+          postbackUrl: 'https://tickhigh.track-myds.com/postback?click_id={rcid}',
+        }),
+        save: async (row) => row,
+      }),
+      getVendorRepo: () => ({
+        findOne: async ({ where }) =>
+          where.id === 9
+            ? {
+                id: 9,
+                code: 'other',
+                postbackUrl: 'https://tickhigh.track-myds.com/postback?click_id={rcid}',
+              }
+            : { id: 15, code: 'v15', postbackUrl: '' },
+      }),
+      getVisitRepo: () => ({ findOne: async () => null }),
+      indexPostbackEvent: async () => {},
+      logVisitEvent: async () => {},
+      logApiCall: async () => {},
+      httpClient: {
+        get: async (url) => {
+          httpCalls.push(url);
+          return { status: 200, data: 'OK' };
+        },
+      },
+    });
+    const out = await firePostback(11);
+    assert.equal(out.vendorSkipped, true);
+    assert.equal(out.reason, 'no postback_url on vendor');
+    assert.equal(httpCalls.length, 0);
+  });
+
+  it('marks HTTP 200 with body false as rejected', async () => {
+    const { firePostback, httpCalls, logs, saved } = makeForward({
+      row: { ...pendingRow },
+      vendor: { id: 4, code: 'v1', postbackUrl: pendingRow.postbackUrl },
+      http: async () => ({ status: 200, data: false }),
+    });
+    const out = await firePostback(11);
+    assert.equal(httpCalls.length, 1);
+    assert.equal(out.success, false);
+    assert.equal(out.status, 'failed');
+    assert.equal(saved.at(-1).errorMessage, 'tracker rejected');
+    assert.equal(logs[0].statusLabel, 'REJECTED');
+    assert.equal(logs[0].success, false);
+  });
+
   it('fills {click_id} with affiliate rcid, not our minted click', async () => {
     const { firePostback, httpCalls } = makeForward({
       row: {
         ...pendingRow,
         postbackUrl: 'https://demo.track-myads.com/postback?click_id={click_id}',
       },
-      vendor: { id: 4, code: 'v1' },
+      vendor: {
+        id: 4,
+        code: 'v1',
+        postbackUrl: 'https://demo.track-myads.com/postback?click_id={click_id}',
+      },
     });
     const out = await firePostback(11);
     assert.equal(out.success, true);
@@ -118,7 +175,11 @@ describe('firePostback', () => {
         ...pendingRow,
         postbackUrl: 'https://tickhigh.track-myads.com/postback?click_id={rcid}',
       },
-      vendor: { id: 4, code: 'v1' },
+      vendor: {
+        id: 4,
+        code: 'v1',
+        postbackUrl: 'https://tickhigh.track-myads.com/postback?click_id={rcid}',
+      },
     });
     const out = await firePostback(11);
     assert.equal(out.success, true);
@@ -145,7 +206,11 @@ describe('firePostback', () => {
         rcid: 'TH-AFF-42',
         landingUrl: 'https://wap.example/?click_id=TH-AFF-42',
       },
-      vendor: { id: 4, code: 'v1' },
+      vendor: {
+        id: 4,
+        code: 'v1',
+        postbackUrl: 'https://tickhigh.track-myads.com/postback?click_id={rcid}',
+      },
     });
     const out = await firePostback(11, { manual: true });
     assert.equal(out.success, true);
@@ -171,7 +236,11 @@ describe('firePostback', () => {
         rcid: '',
         landingUrl: 'https://wap.example/bf?click_id=FROM-LANDING',
       },
-      vendor: { id: 4, code: 'v1' },
+      vendor: {
+        id: 4,
+        code: 'v1',
+        postbackUrl: 'https://tickhigh.track-myads.com/postback?click_id={rcid}',
+      },
     });
     await firePostback(11, { manual: true });
     assert.equal(
