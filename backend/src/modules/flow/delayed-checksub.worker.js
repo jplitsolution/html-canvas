@@ -139,7 +139,7 @@ const loadProviderConfig = async (campaignId) => {
 /**
  * Process a single pending postback row.
  */
-const processRow = async (postback) => {
+const processRow = async (postback, { force = false } = {}) => {
   const { id, msisdn, campaignId } = postback;
   const lockKey = `checksub:delayed:lock:${msisdn}`;
 
@@ -167,7 +167,7 @@ const processRow = async (postback) => {
       return;
     }
 
-    if (fresh.delayedChecksubStatus !== 'pending') {
+    if (!force && fresh.delayedChecksubStatus !== 'pending') {
       console.log(
         `${LOG_PREFIX} Postback id=${id} status is '${fresh.delayedChecksubStatus}' (not pending) — skipping.`,
       );
