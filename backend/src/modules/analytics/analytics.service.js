@@ -785,8 +785,8 @@ export const createAnalyticsService = () => {
           : row.success
             ? 'SUCCESS'
             : null;
-      if (row.callType === 'checksub') {
-        statusLabel = checksubStatusLabel(responseBody, row.success);
+      if (row.callType === 'checksub' || row.callType === 'delayed_checksub') {
+        statusLabel = row.statusLabel || checksubStatusLabel(responseBody, row.success);
       } else if (row.callType === 'priority') {
         statusLabel = checksubStatusLabel(responseBody, row.success);
       } else if (
@@ -851,7 +851,7 @@ export const createAnalyticsService = () => {
         rcid: row.rcid,
         createdAt: row.createdAt,
         summary:
-          row.callType === 'checksub' || row.callType === 'priority' || row.callType === 'orange_bf_checksub' || row.callType === 'orange_bf_expose_check_in'
+          row.callType === 'checksub' || row.callType === 'delayed_checksub' || row.callType === 'priority' || row.callType === 'orange_bf_checksub' || row.callType === 'orange_bf_expose_check_in'
             ? {
                 currentStatus: nested.currentStatus ?? null,
                 subscriptionStatus: nested.subscriptionStatus ?? null,
@@ -934,6 +934,9 @@ export const createAnalyticsService = () => {
         operator: visit.operator,
         pageType: visit.pageType,
         visitStatus: visit.visitStatus,
+        checksubStatus: visit.checksubStatus || null,
+        checksubExecutedAt: visit.checksubExecutedAt || null,
+        checksubResponse: visit.checksubResponse || null,
         clickId: visit.clickId,
         rcid: visit.rcid,
         campid: visit.campid || null,

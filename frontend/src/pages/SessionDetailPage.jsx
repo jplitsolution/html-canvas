@@ -36,8 +36,15 @@ import {
   vendorFireSkipCopy,
 } from '../components/partners/AllowedCallbackStatusesField'
 
-function getEventIcon(eventType) {
+function getEventIcon(eventType, status) {
   const t = String(eventType || '').toUpperCase()
+  if (t === 'CHECKSUB_30M') {
+    const s = String(status || '').toUpperCase()
+    if (s === 'ACTIVE' || s.includes('SUCCESS')) {
+      return <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+    }
+    return <Activity className="w-4 h-4 text-amber-600" />
+  }
   if (t.startsWith('API_')) return <Code2 className="w-4 h-4 text-sky-600" />
   if (t.includes('SUBSCRIBED') || t.includes('SUCCESS')) {
     return <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -62,13 +69,13 @@ function getEventIcon(eventType) {
 
 function statusClass(status) {
   const s = String(status || '').toUpperCase()
-  if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
+  if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED') || s === 'SENT') {
     return 'text-emerald-700 bg-emerald-50 border-emerald-200'
   }
-  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING' || s === 'HELD') {
+  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s.includes('PARKING') || s === 'HELD') {
     return 'text-amber-700 bg-amber-50 border-amber-200'
   }
-  if (s.includes('FAILED') || s.includes('BLOCKED')) {
+  if (s.includes('FAILED') || s.includes('BLOCKED') || s.includes('UNSUB') || s.includes('SUSPEND') || s.includes('UNKNOWN')) {
     return 'text-rose-700 bg-rose-50 border-rose-200'
   }
   return 'text-gray-600 bg-gray-50 border-gray-200'
@@ -131,6 +138,8 @@ function eventDescription(eventType) {
       return 'Subscription failed or rejected by partner gateway.'
     case 'API_CHECKSUB':
       return 'Partner subscription status check (checksub).'
+    case 'CHECKSUB_30M':
+      return '30-minute post-conversion operator checksub audit.'
     case 'API_PRIORITY':
       return 'Priority Chain API check (page actions).'
     case 'API_SUBSCRIBE':
@@ -525,13 +534,24 @@ function categorizeTimelineItem(item, apiCall) {
   const type = String(item.eventType || '').toUpperCase()
   const callType = String(apiCall?.callType || '').toLowerCase()
 
+  // 30m Checksub audit belongs to Step 4 (Outcome / Final verification)
+  if (type === 'CHECKSUB_30M' || callType === 'delayed_checksub') {
+    return {
+      stepIndex: 4,
+      stepKey: 'OUTCOME',
+      stepTitle: 'Step 4: Activation, Billing & Postback',
+      badge: 'COMPLETION',
+      badgeColor: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    }
+  }
+
   // Step 1: Landing & MSISDN Detection / Identification
   if (
     type === 'VISIT' ||
     type === 'HOME_VIEW' ||
     type.includes('RESOLVE_MSISDN') ||
     type.includes('API_HE_') ||
-    type.includes('CHECKSUB') ||
+    (type.includes('CHECKSUB') && type !== 'CHECKSUB_30M') ||
     callType === 'checksub' ||
     callType.includes('he_') ||
     callType.includes('resolve')
@@ -595,9 +615,11 @@ function TimelineItemCard({ item, apiById, visit }) {
   const label =
     item.kind === 'api'
       ? apiCall?.statusLabel || item.metadata?.statusLabel
-      : item.metadata?.held
-        ? 'HELD'
-        : visit?.visitStatus
+      : item.eventType === 'CHECKSUB_30M'
+        ? item.metadata?.status || (item.metadata?.success ? 'ACTIVE' : 'FAILED')
+        : item.metadata?.held
+          ? 'HELD'
+          : item.metadata?.status || item.metadata?.operatorStatus || visit?.visitStatus
   const desc = eventDescription(item.eventType)
   const pack = eventPack(item.metadata)
   const billingBody = parseJsonish(apiCall?.requestBody)
@@ -621,7 +643,7 @@ function TimelineItemCard({ item, apiById, visit }) {
   return (
     <div className="relative pl-7">
       <div className="absolute left-0 top-0.5 w-6 h-6 rounded-full border bg-white flex items-center justify-center shadow-xs">
-        {getEventIcon(item.eventType)}
+        {getEventIcon(item.eventType, label)}
       </div>
       <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-2xs hover:border-gray-300 transition-colors">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -658,7 +680,26 @@ function TimelineItemCard({ item, apiById, visit }) {
           </span>
         </div>
         {desc && <p className="text-xs text-gray-500 mt-1.5">{desc}</p>}
-        {(apiCall?.callType === 'checksub' || apiCall?.callType === 'priority') &&
+        {item.eventType === 'CHECKSUB_30M' && (
+          <div className="mt-2 p-3 rounded-lg bg-gray-50 border border-gray-200 text-xs space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-gray-800">30-Minute Post-Conversion Operator Audit</span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass(item.metadata?.status)}`}>
+                {item.metadata?.status === 'ACTIVE' ? '✓ ACTIVE (BILLED)' : item.metadata?.status || (item.metadata?.success ? 'ACTIVE' : 'NON-ACTIVE')}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 font-mono mt-1 pt-1 border-t border-gray-200">
+              <div>Phone: <span className="font-semibold text-gray-800">{item.metadata?.phone || visit?.phone || '—'}</span></div>
+              <div>Source: <span className="font-semibold text-gray-800">{item.metadata?.source || 'checksub'}</span></div>
+            </div>
+            <p className="text-[11px] mt-1">
+              {item.metadata?.success
+                ? <span className="text-emerald-700 font-medium">✓ Subscriber is actively billed and confirmed with operator.</span>
+                : <span className="text-amber-800 font-medium">⚠ Operator returned non-active state ({item.metadata?.status || 'unsubscribed'}). Vendor CPA quality audit flagged.</span>}
+            </p>
+          </div>
+        )}
+        {(apiCall?.callType === 'checksub' || apiCall?.callType === 'delayed_checksub' || apiCall?.callType === 'priority') &&
           apiCall.summary && (
             <p className="text-xs text-gray-700 mt-1.5 font-medium">
               {apiCall.callType === 'priority' &&

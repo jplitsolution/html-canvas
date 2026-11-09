@@ -261,9 +261,9 @@ const processRow = async (postback, { force = false } = {}) => {
     await repo.update({ id }, updatePayload);
 
     // Update visits table for operator audit
+    let targetVisitId = fresh.visitId;
     try {
       const visitRepo = getRepository(Visit);
-      let targetVisitId = fresh.visitId;
       if (!targetVisitId && msisdn) {
         const v = await visitRepo.findOne({
           where: { phone: msisdn },
@@ -319,6 +319,8 @@ const processRow = async (postback, { force = false } = {}) => {
       }
 
       await apiCallLogService.record({
+        visitId: targetVisitId || null,
+        vendorId: fresh.vendorId || null,
         campaignId: campaignId ? parseInt(campaignId, 10) : null,
         msisdn,
         callType,
