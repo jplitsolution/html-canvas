@@ -126,6 +126,22 @@ export const VisitSchema = new EntitySchema({
       type: 'timestamp',
       nullable: true,
     },
+    checksubStatus: {
+      name: 'checksub_status',
+      type: 'varchar',
+      length: 32,
+      nullable: true,
+    },
+    checksubExecutedAt: {
+      name: 'checksub_executed_at',
+      type: 'timestamp',
+      nullable: true,
+    },
+    checksubResponse: {
+      name: 'checksub_response',
+      type: 'text',
+      nullable: true,
+    },
   },
   relations: {
     events: {

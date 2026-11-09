@@ -942,6 +942,20 @@ function SessionDetailPage() {
                   </span>
                 </p>
               </div>
+              {visit?.checksubStatus && (
+                <div>
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                    30m CheckSub
+                  </span>
+                  <p className="mt-1">
+                    <span
+                      className={`inline-flex px-2 py-0.5 rounded-md text-[10px] font-bold border ${statusClass(visit.checksubStatus)}`}
+                    >
+                      {visit.checksubStatus === 'ACTIVE' ? '✓ ACTIVE' : visit.checksubStatus}
+                    </span>
+                  </p>
+                </div>
+              )}
               {visit?.ipAddress && (
                 <div className="col-span-2">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">

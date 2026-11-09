@@ -49,25 +49,16 @@ const maybeScheduleDelayedChecksub = async (row) => {
       select: ['id', 'verificationMode'],
     });
 
-    const checksubConfig = apiConfig?.checksubConfigJson ? safeParseJson(apiConfig.checksubConfigJson) : null;
-    const otpConfig = apiConfig?.otpConfigJson ? safeParseJson(apiConfig.otpConfigJson) : null;
     const isOrangeBf = String(campaign?.verificationMode || '').toUpperCase() === 'ORANGE_BF';
-
-    const isExplicitlyEnabled =
-      checksubConfig?.delayedChecksubEnabled === true ||
-      otpConfig?.delayedChecksubEnabled === true;
-    const isOrangeBfDefault = isOrangeBf && otpConfig?.delayedChecksubEnabled !== false;
-
     const hasChecksubUrl = isOrangeBf || Boolean(apiConfig?.subscriptionApi);
 
-    if ((isExplicitlyEnabled || isOrangeBfDefault) && hasChecksubUrl) {
-      const delay =
-        Number(checksubConfig?.delayedChecksubDelayMinutes || otpConfig?.delayedChecksubDelayMinutes) || 30;
+    // Universal 30-min audit checksub for all conversions where checksub is available
+    if (hasChecksubUrl) {
       await scheduleDelayedChecksub({
         postbackId: row.id,
         msisdn: row.msisdn,
         campaignId: row.campaignId,
-        delayMinutes: delay,
+        delayMinutes: 30,
       });
     }
   } catch (err) {

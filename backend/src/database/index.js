@@ -68,6 +68,7 @@ export const initDatabase = async () => {
   await ensureFunnelLayoutColumn(dataSource);
   await ensureCampaignCappingColumns(dataSource);
   await ensureDelayedChecksubColumns(dataSource);
+  await ensureVisitsChecksubColumns(dataSource);
   await ensureDailyStatsTable(dataSource);
   await ensureOperatorStatusJsonOnDailyStats(dataSource);
   return dataSource;
@@ -438,6 +439,45 @@ async function ensureDelayedChecksubColumns(ds) {
     }
   } catch (err) {
     console.warn('ensureDelayedChecksubColumns:', err.message);
+  }
+}
+
+/** Delayed 30-min checksub columns on visits table for operator audit. */
+async function ensureVisitsChecksubColumns(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "visits"
+        ADD COLUMN IF NOT EXISTS "checksub_status" varchar(32),
+        ADD COLUMN IF NOT EXISTS "checksub_executed_at" TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS "checksub_response" text
+      `);
+      await ds.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_visits_checksub_status"
+        ON "visits" ("checksub_status")
+      `);
+    } else {
+      const cols = [
+        ['checksub_status', 'varchar(32) NULL'],
+        ['checksub_executed_at', 'timestamp NULL'],
+        ['checksub_response', 'text NULL'],
+      ];
+      for (const [col, typeDef] of cols) {
+        const rows = await ds.query(
+          `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'visits' AND COLUMN_NAME = '${col}'`,
+        );
+        const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+        if (!cnt) {
+          await ds.query(
+            `ALTER TABLE \`visits\` ADD COLUMN \`${col}\` ${typeDef}`,
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('ensureVisitsChecksubColumns:', err.message);
   }
 }
 

@@ -276,14 +276,30 @@ function PostbackDetailPage() {
                 <Field label="30m Delayed CheckSub">
                   {data.delayedChecksubStatus ? (
                     <div className="space-y-0.5">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        data.delayedChecksubStatus === 'completed'
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold ${
+                        String(data.delayedChecksubOutcome || '').toUpperCase() === 'ACTIVE'
                           ? 'bg-emerald-50 text-emerald-700'
-                          : data.delayedChecksubStatus === 'pending'
-                            ? 'bg-amber-50 text-amber-700'
-                            : 'bg-rose-50 text-rose-700'
+                          : String(data.delayedChecksubOutcome || '').toUpperCase() === 'GRACE'
+                            ? 'bg-amber-50 text-amber-800'
+                            : String(data.delayedChecksubOutcome || '').toUpperCase() === 'PARKING'
+                              ? 'bg-orange-50 text-orange-800'
+                              : String(data.delayedChecksubOutcome || '').toUpperCase() === 'SUSPENDED'
+                                ? 'bg-rose-50 text-rose-800'
+                                : data.delayedChecksubStatus === 'pending'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-rose-50 text-rose-700'
                       }`}>
-                        {data.delayedChecksubStatus}: {data.delayedChecksubOutcome || '—'}
+                        {String(data.delayedChecksubOutcome || '').toUpperCase() === 'ACTIVE'
+                          ? '✓ ACTIVE'
+                          : String(data.delayedChecksubOutcome || '').toUpperCase() === 'GRACE'
+                            ? '⚡ GRACE'
+                            : String(data.delayedChecksubOutcome || '').toUpperCase() === 'PARKING'
+                              ? '⊘ PARKING'
+                              : String(data.delayedChecksubOutcome || '').toUpperCase() === 'SUSPENDED'
+                                ? '✕ SUSPENDED'
+                                : data.delayedChecksubStatus === 'pending'
+                                  ? '⏱ Pending'
+                                  : `✕ ${data.delayedChecksubOutcome || 'Failed'}`}
                       </span>
                       {data.delayedChecksubExecutedAt && (
                         <div className="text-[11px] text-gray-400 font-mono">

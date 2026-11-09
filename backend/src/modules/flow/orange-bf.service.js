@@ -650,12 +650,11 @@ export const createOrangeBfService = () => {
       // Schedule 30-min delayed checksub — no operator billing callback in Orange BF,
       // so we verify subscription status after the provisioning window.
       try {
-        const delayMinutes = Number(safeParseJson(apiConfig?.otpConfigJson).delayedChecksubDelayMinutes) || 30;
         await scheduleDelayedChecksub({
           postbackId: queuedPostbackId,
           msisdn,
           campaignId: campaign?.id || (campaignId ? parseInt(campaignId, 10) : null),
-          delayMinutes,
+          delayMinutes: 30,
         });
       } catch (schedErr) {
         // Non-critical — log but do not fail the OTP verify response

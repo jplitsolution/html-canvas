@@ -10,6 +10,7 @@
 import { LessThanOrEqual } from 'typeorm';
 import { getRepository } from '../../database/index.js';
 import { ConversionPostback } from '../../database/entities/conversion-postback.entity.js';
+import { Visit } from '../../database/entities/visit.entity.js';
 import { ApiConfig } from '../../database/entities/api-config.entity.js';
 import { Campaign } from '../../database/entities/campaign.entity.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
@@ -17,6 +18,7 @@ import { redisService } from '../../common/services/redis.service.js';
 import { orangeBfProvider, ORANGE_BF_DEFAULTS } from './orange-bf.provider.js';
 import { partnerApiService } from './partner-api.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
+import { analyticsService } from '../analytics/analytics.service.js';
 import { interpretChecksubResponse } from './helpers/checksub-rules.js';
 import { CronJob } from 'cron';
 
@@ -36,6 +38,50 @@ const safeParseJson = (raw) => {
   } catch {
     return {};
   }
+};
+
+/**
+ * Classify operator checksub status.
+ * Per business requirement:
+ * Only 'ACTIVE' (or equivalent success indicators) is considered a success.
+ * 'GRACE', 'PARKING', 'PENDING', 'SUSPENDED', etc. are recorded as non-success.
+ */
+export const classifyChecksubStatus = (rawStatus) => {
+  const s = String(rawStatus || '').trim().toUpperCase();
+  if (s === 'ACTIVE' || s === 'ACT' || s === '1' || s === 'SUBSCRIBED' || s === 'SUCCESS') {
+    return {
+      statusLabel: 'ACTIVE',
+      isSuccess: true,
+    };
+  }
+  if (s.includes('GRACE')) {
+    return {
+      statusLabel: 'GRACE',
+      isSuccess: false,
+    };
+  }
+  if (s.includes('PARK')) {
+    return {
+      statusLabel: 'PARKING',
+      isSuccess: false,
+    };
+  }
+  if (s.includes('PENDING')) {
+    return {
+      statusLabel: 'PENDING',
+      isSuccess: false,
+    };
+  }
+  if (s.includes('SUSPEND')) {
+    return {
+      statusLabel: 'SUSPENDED',
+      isSuccess: false,
+    };
+  }
+  return {
+    statusLabel: s || 'FAILED',
+    isSuccess: false,
+  };
 };
 
 /**
@@ -198,33 +244,60 @@ const processRow = async (postback) => {
       return;
     }
 
-    // Build update payload
+    // Classify operator checksub status:
+    // Only ACTIVE is success. GRACE, PARKING, PENDING, SUSPENDED etc. are non-success.
+    const classification = classifyChecksubStatus(rawStatusValue);
+    const { statusLabel, isSuccess } = classification;
+
+    // Build update payload for conversion_postbacks
     const updatePayload = {
       delayedChecksubExecutedAt: new Date(),
       delayedChecksubResponse: JSON.stringify(rawResponse).slice(0, 2000),
+      delayedChecksubStatus: isSuccess ? 'completed' : 'failed',
+      delayedChecksubOutcome: statusLabel,
+      operatorStatus: statusLabel,
     };
 
-    if (checkResult.success) {
-      updatePayload.delayedChecksubStatus = 'completed';
-      updatePayload.delayedChecksubOutcome = rawStatusValue;
-
-      // Hydrate operator_status if currently blank so the dashboard picks it up
-      const currentOpStatus = fresh.operatorStatus;
-      if (rawStatusValue && (!currentOpStatus || currentOpStatus.trim() === '')) {
-        updatePayload.operatorStatus = rawStatusValue.toLowerCase();
-      }
-    } else {
-      updatePayload.delayedChecksubStatus = 'failed';
-      updatePayload.delayedChecksubOutcome = rawStatusValue || 'error';
-
-      // Even on failure/inactive, hydrate operator_status if blank
-      const currentOpStatus = fresh.operatorStatus;
-      if (!currentOpStatus || currentOpStatus.trim() === '') {
-        updatePayload.operatorStatus = (rawStatusValue || 'failed').toLowerCase();
-      }
-    }
-
     await repo.update({ id }, updatePayload);
+
+    // Update visits table for operator audit
+    try {
+      const visitRepo = getRepository(Visit);
+      let targetVisitId = fresh.visitId;
+      if (!targetVisitId && msisdn) {
+        const v = await visitRepo.findOne({
+          where: { phone: msisdn },
+          order: { id: 'DESC' },
+        });
+        if (v?.id) targetVisitId = v.id;
+      }
+
+      if (targetVisitId) {
+        await visitRepo.update(
+          { id: targetVisitId },
+          {
+            checksubStatus: statusLabel,
+            checksubExecutedAt: new Date(),
+            checksubResponse: JSON.stringify(rawResponse).slice(0, 2000),
+          },
+        );
+
+        try {
+          await analyticsService.logEvent(
+            targetVisitId,
+            'CHECKSUB_30M',
+            {
+              source: isOrangeBf ? 'orange_bf' : 'checksub',
+              phone: msisdn,
+              status: statusLabel,
+              success: isSuccess,
+            },
+          );
+        } catch {}
+      }
+    } catch (visitErr) {
+      console.warn(`${LOG_PREFIX} Failed to update visit for postback id=${id}:`, visitErr.message);
+    }
 
     console.log(
       `${LOG_PREFIX} Postback id=${id} → status=${updatePayload.delayedChecksubStatus}, outcome=${updatePayload.delayedChecksubOutcome}`,
