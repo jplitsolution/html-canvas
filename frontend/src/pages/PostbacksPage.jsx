@@ -14,6 +14,7 @@ import {
   Inbox,
   Zap,
   RotateCcw,
+  ScanSearch,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
@@ -25,7 +26,7 @@ import {
   getDateRangeForPreset,
   DEFAULT_TIMEZONE,
 } from '../utils/date'
-import { getPostbackSummary, listPostbacks, exportPostbackDayReport, firePostback } from '../services/api/partners'
+import { getPostbackSummary, listPostbacks, exportPostbackDayReport, firePostback, runChecksubNow } from '../services/api/partners'
 import useStore from '../store/useStore'
 
 const PAGE_SIZE = 25
@@ -121,6 +122,7 @@ function PostbacksPage() {
   })
   const [exporting, setExporting] = useState(false)
   const [firingId, setFiringId] = useState(null)
+  const [checksubingId, setChecksubingId] = useState(null)
   const addToast = useStore((s) => s.addToast)
 
   useEffect(() => {
@@ -247,6 +249,26 @@ function PostbacksPage() {
       addToast(err?.message || 'Failed to fire postback', 'error')
     } finally {
       setFiringId(null)
+    }
+  }
+
+  const handleRunChecksubNow = async (row, e) => {
+    e.stopPropagation()
+    if (!row?.id || checksubingId) return
+    setChecksubingId(row.id)
+    try {
+      const result = await runChecksubNow(row.id)
+      if (result?.error) {
+        addToast(result.error || 'Checksub failed', 'error')
+      } else {
+        const outcome = result?.outcome || result?.delayed_checksub_outcome || '—'
+        addToast(`Checksub done: ${outcome}`, 'success')
+      }
+      await load()
+    } catch (err) {
+      addToast(err?.message || 'Checksub failed', 'error')
+    } finally {
+      setChecksubingId(null)
     }
   }
 
@@ -695,6 +717,7 @@ function PostbacksPage() {
                     <th className="px-3 py-3 font-medium">Offer</th>
                     <th className="px-3 py-3 font-medium">MSISDN</th>
                     <th className="px-3 py-3 font-medium">Callback</th>
+                    <th className="px-3 py-3 font-medium">30m Check</th>
                     <th className="px-3 py-3 font-medium">Postback</th>
                     <th className="px-3 py-3 font-medium">Vendor</th>
                     <th className="px-3 py-3 font-medium">Click ID</th>
@@ -754,6 +777,23 @@ function PostbacksPage() {
                         </span>
                       </td>
                       <td className="px-3 py-3">
+                        {row.delayedChecksubStatus === 'completed' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700" title={row.delayedChecksubOutcome || ''}>
+                            ✓ {row.delayedChecksubOutcome || 'done'}
+                          </span>
+                        ) : row.delayedChecksubStatus === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                            ⏱ Pending
+                          </span>
+                        ) : row.delayedChecksubStatus === 'failed' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700">
+                            ✕ Failed
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
                         <span className={statusBadge(row.status)}>{row.status}</span>
                       </td>
                       <td className="px-3 py-3">
@@ -773,6 +813,15 @@ function PostbacksPage() {
                       </td>
                       <td className="px-3 py-3 text-right">
                         <div className="inline-flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            title="Run checksub now (verify subscription status with partner)"
+                            disabled={checksubingId === row.id}
+                            onClick={(e) => handleRunChecksubNow(row, e)}
+                          >
+                            <ScanSearch className={`w-4 h-4 ${checksubingId === row.id ? 'animate-pulse text-indigo-500' : 'text-gray-400'}`} />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"

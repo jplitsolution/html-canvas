@@ -4,6 +4,7 @@ import { postbackService } from './postback.service.js';
 import { writeDayReportFile } from './helpers/postback-day-report-file.js';
 import { formatDayReportCsv } from './helpers/postback-day-report.js';
 import { dailyStatsService } from '../analytics/daily-stats.service.js';
+import { runDelayedChecksubNow } from '../flow/delayed-checksub.worker.js';
 
 export const partnersController = {
   listVendors: asyncHandler(async (req, res) => {
@@ -72,6 +73,12 @@ export const partnersController = {
       { force },
     );
     res.json(data);
+  }),
+
+  runChecksubNow: asyncHandler(async (req, res) => {
+    const { runDelayedChecksubNow } = await import('../flow/delayed-checksub.worker.js');
+    const result = await runDelayedChecksubNow(req.params.id);
+    res.json(result);
   }),
 
   postbacksDayReport: asyncHandler(async (req, res) => {

@@ -106,6 +106,11 @@ export function createPostbackQuery(deps) {
       responseBody: row.responseBody,
       errorMessage: row.errorMessage,
       sentAt: row.sentAt,
+      delayedChecksubStatus: row.delayedChecksubStatus || null,
+      delayedChecksubScheduledAt: row.delayedChecksubScheduledAt || null,
+      delayedChecksubExecutedAt: row.delayedChecksubExecutedAt || null,
+      delayedChecksubOutcome: row.delayedChecksubOutcome || null,
+      delayedChecksubResponse: row.delayedChecksubResponse || null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };

@@ -1305,6 +1305,51 @@ function CampaignApiConfigModal({ isOpen, onClose, campaignId, campaign }) {
                   </datalist>
                 </Field>
 
+                {/* 30-Minute Delayed CheckSub for ALL flows */}
+                <div className="rounded-lg border border-border/80 p-3 bg-bg-base/70 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold text-fg">⏱️ 30-Minute Post-Conversion CheckSub</p>
+                      <p className="text-[11px] text-fg-muted">
+                        Automatically checks subscriber status with partner after conversion.
+                      </p>
+                    </div>
+                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-fg">
+                      <input
+                        type="checkbox"
+                        className="rounded border-border"
+                        checked={Boolean(checksubConfig.delayedChecksubEnabled)}
+                        onChange={(e) =>
+                          setChecksubConfig({
+                            ...checksubConfig,
+                            delayedChecksubEnabled: e.target.checked,
+                          })
+                        }
+                      />
+                      <span>Enable Delayed Check</span>
+                    </label>
+                  </div>
+                  {checksubConfig.delayedChecksubEnabled && (
+                    <div className="pt-1">
+                      <Field label="Delay (Minutes)" hint="Default: 30 minutes">
+                        <Input
+                          type="number"
+                          value={checksubConfig.delayedChecksubDelayMinutes ?? 30}
+                          onChange={(e) =>
+                            setChecksubConfig({
+                              ...checksubConfig,
+                              delayedChecksubDelayMinutes: parseInt(e.target.value, 10) || 30,
+                            })
+                          }
+                          placeholder="30"
+                          min={1}
+                          max={1440}
+                        />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-semibold text-fg">Rules (first match wins)</p>

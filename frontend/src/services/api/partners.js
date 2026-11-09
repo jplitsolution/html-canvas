@@ -72,6 +72,12 @@ export async function firePostback(id, { force = false } = {}) {
   })
 }
 
+export async function runChecksubNow(id) {
+  return apiClient(`/partners/postbacks/${id}/checksub-now`, {
+    method: 'POST',
+  })
+}
+
 export async function getPostbackStats({
   from,
   to,

@@ -629,6 +629,7 @@ export const createOrangeBfService = () => {
       let postbackStatus = null;
       let payoutHeld = false;
       let payoutPercent = null;
+      let queuedPostbackId = null;
       if (campaign) {
         try {
           const queued = await queueOrangeBfPostback({
@@ -640,9 +641,25 @@ export const createOrangeBfService = () => {
           postbackStatus = queued.status;
           payoutHeld = Boolean(queued.held);
           payoutPercent = queued.payoutPercent ?? null;
+          queuedPostbackId = queued.id || null;
         } catch (e) {
           console.warn('[OrangeBf] Failed to queue postback:', e.message);
         }
+      }
+
+      // Schedule 30-min delayed checksub — no operator billing callback in Orange BF,
+      // so we verify subscription status after the provisioning window.
+      try {
+        const delayMinutes = Number(safeParseJson(apiConfig?.otpConfigJson).delayedChecksubDelayMinutes) || 30;
+        await scheduleDelayedChecksub({
+          postbackId: queuedPostbackId,
+          msisdn,
+          campaignId: campaign?.id || (campaignId ? parseInt(campaignId, 10) : null),
+          delayMinutes,
+        });
+      } catch (schedErr) {
+        // Non-critical — log but do not fail the OTP verify response
+        console.warn('[OrangeBf] Failed to schedule delayed checksub:', schedErr.message);
       }
 
       if (visitId) {

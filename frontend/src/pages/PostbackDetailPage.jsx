@@ -10,11 +10,12 @@ import {
   Store,
   Clock,
   Zap,
+  ScanSearch,
 } from 'lucide-react'
 import AppShell from '../components/ui/AppShell'
 import Button from '../components/ui/Button'
 import { formatDate } from '../utils/date'
-import { firePostback, getPostback } from '../services/api/partners'
+import { firePostback, getPostback, runChecksubNow } from '../services/api/partners'
 import useStore from '../store/useStore'
 
 function Step({ done, failed, title, subtitle, children }) {
@@ -55,6 +56,7 @@ function PostbackDetailPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [firing, setFiring] = useState(false)
+  const [checksubing, setChecksubing] = useState(false)
   const [error, setError] = useState('')
 
   const load = useCallback(() => {
@@ -112,6 +114,25 @@ function PostbackDetailPage() {
     }
   }
 
+  const handleRunChecksub = async () => {
+    if (!data || checksubing) return
+    setChecksubing(true)
+    try {
+      const result = await runChecksubNow(postbackId)
+      if (result?.error) {
+        addToast(result.error || 'Checksub failed', 'error')
+      } else {
+        const outcome = result?.outcome || result?.delayed_checksub_outcome || '—'
+        addToast(`Checksub done: ${outcome}`, 'success')
+      }
+      await load()
+    } catch (err) {
+      addToast(err?.message || 'Checksub failed', 'error')
+    } finally {
+      setChecksubing(false)
+    }
+  }
+
   const life = data?.lifecycle || {}
   const fireFailed = life.vendorFireStatus === 'failed'
   const lastFiredUrl = [...(data?.relatedLogs || [])]
@@ -123,15 +144,27 @@ function PostbackDetailPage() {
       actions={
         <div className="flex items-center gap-2">
           {data ? (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={fireVendorPostback}
-              disabled={firing || loading}
-            >
-              <Zap className={`w-4 h-4 ${firing ? 'animate-pulse' : ''}`} />
-              {firing ? 'Firing…' : 'Fire postback'}
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleRunChecksub}
+                disabled={checksubing || loading}
+                title="Run checksub now with partner"
+              >
+                <ScanSearch className={`w-4 h-4 ${checksubing ? 'animate-pulse text-indigo-500' : ''}`} />
+                {checksubing ? 'Checking…' : 'Checksub Now'}
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={fireVendorPostback}
+                disabled={firing || loading}
+              >
+                <Zap className={`w-4 h-4 ${firing ? 'animate-pulse' : ''}`} />
+                {firing ? 'Firing…' : 'Fire postback'}
+              </Button>
+            </>
           ) : null}
           <Button variant="outline" size="sm" onClick={() => navigate('/postbacks')}>
             <ArrowLeft className="w-4 h-4" />
@@ -239,6 +272,28 @@ function PostbackDetailPage() {
                 </Field>
                 <Field label="Operator callback">
                   <span className="font-medium">{data.operatorStatus || '—'}</span>
+                </Field>
+                <Field label="30m Delayed CheckSub">
+                  {data.delayedChecksubStatus ? (
+                    <div className="space-y-0.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                        data.delayedChecksubStatus === 'completed'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : data.delayedChecksubStatus === 'pending'
+                            ? 'bg-amber-50 text-amber-700'
+                            : 'bg-rose-50 text-rose-700'
+                      }`}>
+                        {data.delayedChecksubStatus}: {data.delayedChecksubOutcome || '—'}
+                      </span>
+                      {data.delayedChecksubExecutedAt && (
+                        <div className="text-[11px] text-gray-400 font-mono">
+                          {formatDate(data.delayedChecksubExecutedAt)}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
                 </Field>
                 <Field label="Vendor postback">
                   <span className="font-medium">{data.status}</span>

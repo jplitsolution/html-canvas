@@ -24,6 +24,57 @@ export const maskPhone = (phone) => {
   return String(phone).trim();
 };
 
+const safeParseJson = (raw) => {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
+const maybeScheduleDelayedChecksub = async (row) => {
+  if (!row?.id || !row?.msisdn || !row?.campaignId) return;
+  try {
+    const { scheduleDelayedChecksub } = await import('../../flow/delayed-checksub.worker.js');
+    const { ApiConfig } = await import('../../../database/entities/api-config.entity.js');
+    const { Campaign } = await import('../../../database/entities/campaign.entity.js');
+
+    const apiConfig = await getRepository(ApiConfig).findOne({
+      where: { campaignId: parseInt(row.campaignId, 10) },
+    });
+    const campaign = await getRepository(Campaign).findOne({
+      where: { id: parseInt(row.campaignId, 10) },
+      select: ['id', 'verificationMode'],
+    });
+
+    const checksubConfig = apiConfig?.checksubConfigJson ? safeParseJson(apiConfig.checksubConfigJson) : null;
+    const otpConfig = apiConfig?.otpConfigJson ? safeParseJson(apiConfig.otpConfigJson) : null;
+    const isOrangeBf = String(campaign?.verificationMode || '').toUpperCase() === 'ORANGE_BF';
+
+    const isExplicitlyEnabled =
+      checksubConfig?.delayedChecksubEnabled === true ||
+      otpConfig?.delayedChecksubEnabled === true;
+    const isOrangeBfDefault = isOrangeBf && otpConfig?.delayedChecksubEnabled !== false;
+
+    const hasChecksubUrl = isOrangeBf || Boolean(apiConfig?.subscriptionApi);
+
+    if ((isExplicitlyEnabled || isOrangeBfDefault) && hasChecksubUrl) {
+      const delay =
+        Number(checksubConfig?.delayedChecksubDelayMinutes || otpConfig?.delayedChecksubDelayMinutes) || 30;
+      await scheduleDelayedChecksub({
+        postbackId: row.id,
+        msisdn: row.msisdn,
+        campaignId: row.campaignId,
+        delayMinutes: delay,
+      });
+    }
+  } catch (err) {
+    console.warn('[PostbackRegister] Failed to schedule delayed checksub:', err.message);
+  }
+};
+
 export {
   affiliateRcidFromLandingUrl,
   affiliateRcidFromVisit,
@@ -255,6 +306,8 @@ export const createPostbackRegister = (deps) => {
         }
       }
 
+      void maybeScheduleDelayedChecksub(row);
+
       if (input.fireImmediate) {
         return firePostback(row.id, { force: forceFire });
       }
@@ -301,6 +354,8 @@ export const createPostbackRegister = (deps) => {
         await indexPostbackEvent(row, 'POSTBACK_PENDING');
       }
     }
+
+    void maybeScheduleDelayedChecksub(row);
 
     if (input.fireImmediate) {
       return firePostback(row.id, { force: forceFire });

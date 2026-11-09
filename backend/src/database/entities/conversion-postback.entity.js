@@ -8,6 +8,7 @@ export const ConversionPostbackStatus = {
   SENT: 'sent',
   FAILED: 'failed',
   SKIPPED: 'skipped',
+  PENDING_CHECKSUB: 'pending_checksub', // Not needed in entity, used by worker
 };
 
 export const ConversionPostbackSchema = new EntitySchema({
@@ -129,6 +130,33 @@ export const ConversionPostbackSchema = new EntitySchema({
       type: 'timestamp',
       updateDate: true,
     },
+    delayedChecksubStatus: {
+      name: 'delayed_checksub_status',
+      type: 'varchar',
+      length: 32,
+      nullable: true,
+    },
+    delayedChecksubScheduledAt: {
+      name: 'delayed_checksub_scheduled_at',
+      type: 'timestamp',
+      nullable: true,
+    },
+    delayedChecksubExecutedAt: {
+      name: 'delayed_checksub_executed_at',
+      type: 'timestamp',
+      nullable: true,
+    },
+    delayedChecksubOutcome: {
+      name: 'delayed_checksub_outcome',
+      type: 'varchar',
+      length: 64,
+      nullable: true,
+    },
+    delayedChecksubResponse: {
+      name: 'delayed_checksub_response',
+      type: 'text',
+      nullable: true,
+    },
   },
   indices: [
     {
@@ -139,5 +167,6 @@ export const ConversionPostbackSchema = new EntitySchema({
     { name: 'IDX_postbacks_visit', columns: ['visitId'] },
     { name: 'IDX_postbacks_campid', columns: ['campid'] },
     { name: 'IDX_postbacks_click_id', columns: ['clickId'] },
+    { name: 'IDX_postbacks_delayed_checksub', columns: ['delayedChecksubStatus', 'delayedChecksubScheduledAt'] },
   ],
 });

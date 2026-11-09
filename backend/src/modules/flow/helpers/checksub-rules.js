@@ -61,12 +61,22 @@ export function parseChecksubConfig(raw) {
   const missGo = normalizeGo(parsed.missGo || 'continue');
   const missPage = normalizePage(parsed.missPage) || CampaignPageType.ERROR;
   const missUrl = parsed.missUrl != null ? String(parsed.missUrl).trim() : '';
+  const delayedChecksubEnabled = Boolean(parsed.delayedChecksubEnabled);
+  const delayedChecksubDelayMinutes = Number(parsed.delayedChecksubDelayMinutes) || 30;
 
-  if (rules.length === 0 && !parsed.statusField && !parsed.missGo) {
+  if (rules.length === 0 && !parsed.statusField && !parsed.missGo && !parsed.delayedChecksubEnabled) {
     return null;
   }
 
-  return { statusField, rules, missGo, missPage, missUrl };
+  return {
+    statusField,
+    rules,
+    missGo,
+    missPage,
+    missUrl,
+    delayedChecksubEnabled,
+    delayedChecksubDelayMinutes,
+  };
 }
 
 /**

@@ -258,6 +258,10 @@ export const createPostbackCallback = (deps) => {
       const decision = describeVendorFireDecision(status, allowedStatuses);
       const fireVendor = decision.shouldFire;
       pending.operatorStatus = status;
+      if (pending.delayedChecksubStatus === 'pending') {
+        pending.delayedChecksubStatus = 'skipped';
+        pending.delayedChecksubOutcome = 'callback_received';
+      }
       if (
         fireVendor &&
         pending.status !== ConversionPostbackStatus.SENT &&

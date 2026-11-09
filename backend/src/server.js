@@ -6,6 +6,7 @@ import { createApp } from './app.js';
 import getConfig from './config/configuration.js';
 import { searchService } from './modules/search/search.service.js';
 import { startAnalyticsScheduler } from './modules/analytics/analytics.scheduler.js';
+import { startDelayedChecksubWorker } from './modules/flow/delayed-checksub.worker.js';
 
 const start = async () => {
   try {
@@ -21,6 +22,7 @@ const start = async () => {
 
     await searchService.init();
     startAnalyticsScheduler();
+    startDelayedChecksubWorker();
 
     const app = await createApp();
 

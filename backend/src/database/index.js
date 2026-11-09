@@ -45,7 +45,7 @@ export const initDatabase = async () => {
     logging: false,
     entities,
     extra: isPostgres
-      ? { max: 20, idleTimeoutMillis: 30000, connectionTimeoutMillis: 5000 }
+      ? { max: 20, idleTimeoutMillis: 30000, connectionTimeoutMillis: 15000 }
       : { connectionLimit: 20, waitForConnections: true },
   });
 
@@ -67,6 +67,7 @@ export const initDatabase = async () => {
   await ensureDcbConfigJsonColumn(dataSource);
   await ensureFunnelLayoutColumn(dataSource);
   await ensureCampaignCappingColumns(dataSource);
+  await ensureDelayedChecksubColumns(dataSource);
   await ensureDailyStatsTable(dataSource);
   await ensureOperatorStatusJsonOnDailyStats(dataSource);
   return dataSource;
@@ -394,6 +395,49 @@ async function ensureCampaignCappingColumns(ds) {
     }
   } catch (err) {
     console.warn('ensureCampaignCappingColumns:', err.message);
+  }
+}
+
+/** Delayed 30-min checksub columns on conversion_postbacks. */
+async function ensureDelayedChecksubColumns(ds) {
+  const isPostgres = (ds.options.type || 'postgres') === 'postgres';
+  try {
+    if (isPostgres) {
+      await ds.query(`
+        ALTER TABLE "conversion_postbacks"
+        ADD COLUMN IF NOT EXISTS "delayed_checksub_status" varchar(32),
+        ADD COLUMN IF NOT EXISTS "delayed_checksub_scheduled_at" TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS "delayed_checksub_executed_at" TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS "delayed_checksub_outcome" varchar(64),
+        ADD COLUMN IF NOT EXISTS "delayed_checksub_response" text
+      `);
+      await ds.query(`
+        CREATE INDEX IF NOT EXISTS "IDX_postbacks_delayed_checksub_status_scheduled"
+        ON "conversion_postbacks" ("delayed_checksub_status", "delayed_checksub_scheduled_at")
+      `);
+    } else {
+      const cols = [
+        ['delayed_checksub_status', 'varchar(32) NULL'],
+        ['delayed_checksub_scheduled_at', 'timestamp NULL'],
+        ['delayed_checksub_executed_at', 'timestamp NULL'],
+        ['delayed_checksub_outcome', 'varchar(64) NULL'],
+        ['delayed_checksub_response', 'text NULL'],
+      ];
+      for (const [col, typeDef] of cols) {
+        const rows = await ds.query(
+          `SELECT COUNT(*) AS cnt FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'conversion_postbacks' AND COLUMN_NAME = '${col}'`,
+        );
+        const cnt = Number(rows?.[0]?.cnt ?? rows?.[0]?.CNT ?? 0);
+        if (!cnt) {
+          await ds.query(
+            `ALTER TABLE \`conversion_postbacks\` ADD COLUMN \`${col}\` ${typeDef}`,
+          );
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('ensureDelayedChecksubColumns:', err.message);
   }
 }
 
