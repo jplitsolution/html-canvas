@@ -167,9 +167,9 @@ const processRow = async (postback, { force = false } = {}) => {
       return;
     }
 
-    if (!force && fresh.delayedChecksubStatus !== 'pending') {
+    if (!force && fresh.delayedChecksubStatus !== 'pending' && fresh.delayedChecksubStatus !== null) {
       console.log(
-        `${LOG_PREFIX} Postback id=${id} status is '${fresh.delayedChecksubStatus}' (not pending) — skipping.`,
+        `${LOG_PREFIX} Postback id=${id} status is '${fresh.delayedChecksubStatus}' (already processed) — skipping.`,
       );
       return;
     }
@@ -368,7 +368,8 @@ const runTick = async () => {
   try {
     const repo = getRepository(ConversionPostback);
 
-    const pendingRows = await repo.find({
+    // 1. Fetch scheduled pending rows that are due
+    let rowsToProcess = await repo.find({
       where: {
         delayedChecksubStatus: 'pending',
         delayedChecksubScheduledAt: LessThanOrEqual(new Date()),
@@ -378,12 +379,33 @@ const runTick = async () => {
       select: ['id', 'msisdn', 'campaignId', 'operatorStatus', 'delayedChecksubStatus'],
     });
 
-    if (pendingRows.length === 0) return;
+    // 2. Also backfill uninitialized rows whose 30 minutes have passed
+    if (rowsToProcess.length < BATCH_LIMIT) {
+      const remaining = BATCH_LIMIT - rowsToProcess.length;
+      const uninit = await repo
+        .createQueryBuilder('p')
+        .where('p.delayedChecksubStatus IS NULL')
+        .andWhere('p.msisdn IS NOT NULL')
+        .andWhere("p.msisdn <> ''")
+        .andWhere('p.createdAt <= :thirtyMinsAgo', {
+          thirtyMinsAgo: new Date(Date.now() - 30 * 60 * 1000),
+        })
+        .orderBy('p.createdAt', 'DESC')
+        .take(remaining)
+        .select(['p.id', 'p.msisdn', 'p.campaignId', 'p.operatorStatus', 'p.delayedChecksubStatus'])
+        .getMany();
 
-    console.log(`${LOG_PREFIX} Tick: found ${pendingRows.length} pending row(s) to process.`);
+      if (uninit.length) {
+        rowsToProcess = rowsToProcess.concat(uninit);
+      }
+    }
+
+    if (rowsToProcess.length === 0) return;
+
+    console.log(`${LOG_PREFIX} Tick: found ${rowsToProcess.length} row(s) to process.`);
 
     // Sequential processing — avoids burst on partner APIs
-    for (const row of pendingRows) {
+    for (const row of rowsToProcess) {
       await processRow(row);
     }
   } catch (err) {
