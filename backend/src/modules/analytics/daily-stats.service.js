@@ -631,16 +631,19 @@ export const createDailyStatsService = () => {
         .addSelect('v.code', 'vendorCode')
         .addSelect('COUNT(*)', 'totalAttempts')
         .addSelect(
-          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) = 'active' OR p.delayedChecksubOutcome = 'ACTIVE' THEN 1 END)",
+          `COUNT(CASE 
+            WHEN (p.delayedChecksubStatus = 'completed' AND UPPER(COALESCE(p.delayedChecksubOutcome, '')) = 'ACTIVE')
+              OR (p.delayedChecksubStatus = 'skipped' AND LOWER(COALESCE(p.operatorStatus, '')) = 'active')
+            THEN 1 END)`,
           'checksubActive',
         )
         .addSelect(
-          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) LIKE '%park%' OR p.delayedChecksubOutcome = 'PARKING' THEN 1 END)",
+          `COUNT(CASE 
+            WHEN p.delayedChecksubStatus IN ('completed', 'failed')
+              AND NOT ((p.delayedChecksubStatus = 'completed' AND UPPER(COALESCE(p.delayedChecksubOutcome, '')) = 'ACTIVE')
+                   OR (p.delayedChecksubStatus = 'skipped' AND LOWER(COALESCE(p.operatorStatus, '')) = 'active'))
+            THEN 1 END)`,
           'checksubParking',
-        )
-        .addSelect(
-          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) LIKE '%grace%' OR p.delayedChecksubOutcome = 'GRACE' THEN 1 END)",
-          'checksubGrace',
         )
         .addSelect(
           "COUNT(CASE WHEN p.delayedChecksubStatus = 'pending' THEN 1 END)",
