@@ -618,6 +618,84 @@ export const createDailyStatsService = () => {
       };
     });
 
+    // Vendor Checksub / Quality breakdown (Subscribed Attempts vs Checksub Active / Parking / Grace)
+    let vendorQuality = [];
+    try {
+      const fromDate = new Date(`${from}T00:00:00.000Z`);
+      const toDate = new Date(`${to}T23:59:59.999Z`);
+      const qb = getPostbackRepo()
+        .createQueryBuilder('p')
+        .leftJoin(Vendor, 'v', 'v.id = p.vendorId')
+        .select('p.vendorId', 'vendorId')
+        .addSelect("COALESCE(v.name, 'Direct')", 'vendorName')
+        .addSelect('v.code', 'vendorCode')
+        .addSelect('COUNT(*)', 'totalAttempts')
+        .addSelect(
+          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) = 'active' OR p.delayedChecksubOutcome = 'ACTIVE' THEN 1 END)",
+          'checksubActive',
+        )
+        .addSelect(
+          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) LIKE '%park%' OR p.delayedChecksubOutcome = 'PARKING' THEN 1 END)",
+          'checksubParking',
+        )
+        .addSelect(
+          "COUNT(CASE WHEN LOWER(COALESCE(p.operatorStatus, '')) LIKE '%grace%' OR p.delayedChecksubOutcome = 'GRACE' THEN 1 END)",
+          'checksubGrace',
+        )
+        .addSelect(
+          "COUNT(CASE WHEN p.delayedChecksubStatus = 'pending' THEN 1 END)",
+          'checksubPending',
+        )
+        .where('p.createdAt BETWEEN :from AND :to', { from: fromDate, to: toDate });
+
+      const { campaignIds, vendorIds } = await resolveUserScope(userId);
+      if (campaignIds.length && vendorIds.length) {
+        qb.andWhere('(p.campaignId IN (:...campaignIds) OR p.vendorId IN (:...vendorIds))', {
+          campaignIds,
+          vendorIds,
+        });
+      } else if (campaignIds.length) {
+        qb.andWhere('p.campaignId IN (:...campaignIds)', { campaignIds });
+      } else if (vendorIds.length) {
+        qb.andWhere('p.vendorId IN (:...vendorIds)', { vendorIds });
+      }
+
+      const rawQuality = await qb
+        .groupBy('p.vendorId')
+        .addGroupBy('v.name')
+        .addGroupBy('v.code')
+        .getRawMany();
+
+      const visitsByVendor = Object.fromEntries(
+        (vendorReport.rows || []).map((r) => [r.vendorId, n(r.visits)]),
+      );
+
+      vendorQuality = rawQuality
+        .map((r) => {
+          const attempts = n(r.totalAttempts);
+          const active = n(r.checksubActive);
+          const parking = n(r.checksubParking);
+          const grace = n(r.checksubGrace);
+          const pending = n(r.checksubPending);
+          const qualityPct = attempts > 0 ? Number(((active / attempts) * 100).toFixed(1)) : 0;
+          return {
+            vendorId: r.vendorId ? parseInt(r.vendorId, 10) : null,
+            vendorName: r.vendorName || (r.vendorId ? `Vendor #${r.vendorId}` : 'Direct'),
+            vendorCode: r.vendorCode || null,
+            visits: visitsByVendor[r.vendorId] || 0,
+            totalAttempts: attempts,
+            checksubActive: active,
+            checksubParking: parking,
+            checksubGrace: grace,
+            checksubPending: pending,
+            qualityPct,
+          };
+        })
+        .sort((a, b) => b.totalAttempts - a.totalAttempts);
+    } catch (qErr) {
+      console.warn('Failed to compute vendorQuality in getDashboardSummary:', qErr.message);
+    }
+
     return {
       visits: n(totals.visits),
       conversions,
@@ -651,6 +729,7 @@ export const createDailyStatsService = () => {
           total: n(row.postbacksQueued),
         }))
         .sort((a, b) => b.total - a.total || b.visits - a.visits),
+      vendorQuality,
       since: dateReport.from,
       until: dateReport.to,
       timezone: dateReport.timezone,
