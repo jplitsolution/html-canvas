@@ -208,7 +208,7 @@ const processRow = async (postback) => {
       updatePayload.delayedChecksubStatus = 'completed';
       updatePayload.delayedChecksubOutcome = rawStatusValue;
 
-      // Also hydrate operator_status if currently blank so the dashboard picks it up
+      // Hydrate operator_status if currently blank so the dashboard picks it up
       const currentOpStatus = fresh.operatorStatus;
       if (rawStatusValue && (!currentOpStatus || currentOpStatus.trim() === '')) {
         updatePayload.operatorStatus = rawStatusValue.toLowerCase();
@@ -216,6 +216,12 @@ const processRow = async (postback) => {
     } else {
       updatePayload.delayedChecksubStatus = 'failed';
       updatePayload.delayedChecksubOutcome = rawStatusValue || 'error';
+
+      // Even on failure/inactive, hydrate operator_status if blank
+      const currentOpStatus = fresh.operatorStatus;
+      if (!currentOpStatus || currentOpStatus.trim() === '') {
+        updatePayload.operatorStatus = (rawStatusValue || 'failed').toLowerCase();
+      }
     }
 
     await repo.update({ id }, updatePayload);
