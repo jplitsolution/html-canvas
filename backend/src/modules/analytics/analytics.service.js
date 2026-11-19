@@ -16,6 +16,7 @@ import { resolveFlowOrBoth } from '../flow/flows/index.js';
 import { resolveConversionRule } from '../flow/flows/conversion-rule.js';
 import getConfig from '../../config/configuration.js';
 import { filledTrackingValue } from '../flow/helpers/placeholder-macro.js';
+import { isActiveSubscriberStatus } from '../flow/helpers/checksub-rules.js';
 import { resolveRangeBounds } from '../../common/zoned-day.js';
 
 export const createAnalyticsService = () => {
@@ -42,8 +43,19 @@ export const createAnalyticsService = () => {
     const sub = String(nested.subscriptionStatus || '')
       .trim()
       .toLowerCase();
+    const explicit = String(
+      nested.status || nested.outcome || body?.status || body?.outcome || '',
+    )
+      .trim()
+      .toLowerCase();
     // Prefer partner body (covers older logs that wrongly stored success=false for "new")
-    if (current === 'active' || sub === 'active') return 'ACTIVE';
+    if (
+      isActiveSubscriberStatus(current) ||
+      isActiveSubscriberStatus(sub) ||
+      isActiveSubscriberStatus(explicit)
+    ) {
+      return 'ACTIVE';
+    }
     if (current) return current.toUpperCase();
     if (sub) return sub.toUpperCase();
     const code = body?.responseCode;

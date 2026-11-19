@@ -4,6 +4,7 @@ export class ApiCallLog {}
 
 export const ApiCallType = {
   CHECKSUB: 'checksub',
+  DELAYED_CHECKSUB: 'delayed_checksub',
   SUBSCRIBE: 'subscribe',
   BLOCKLIST: 'blocklist',
   RESOLVE_MSISDN: 'resolve_msisdn',

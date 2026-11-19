@@ -138,6 +138,7 @@ export const createUniverseDcbProvider = (http = axios) => {
       endpointName,
       method,
       url: requestConfig.url,
+      requestBody: extra.payload || {},
       payload: extra.payload || {},
       serverRequestId,
     };
@@ -156,6 +157,7 @@ export const createUniverseDcbProvider = (http = axios) => {
         data: response.data,
         status: response.status,
         providerRequestId: requestIdFrom(response.data, config),
+        requestBody: extra.payload || {},
         logMeta: {
           ...baseLogMeta,
           latencyMs: Date.now() - startedAt,

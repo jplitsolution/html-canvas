@@ -36,11 +36,19 @@ import {
   vendorFireSkipCopy,
 } from '../components/partners/AllowedCallbackStatusesField'
 
+function isActiveStatusLabel(status) {
+  const s = String(status || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+  return s === 'active' || s === 'active_subscriber' || s === 'activesubscriber'
+}
+
 function getEventIcon(eventType, status) {
   const t = String(eventType || '').toUpperCase()
   if (t === 'CHECKSUB_30M') {
     const s = String(status || '').toUpperCase()
-    if (s === 'ACTIVE' || s.includes('SUCCESS')) {
+    if (isActiveStatusLabel(status) || s.includes('SUCCESS')) {
       return <CheckCircle2 className="w-4 h-4 text-emerald-600" />
     }
     return <Activity className="w-4 h-4 text-amber-600" />
@@ -69,7 +77,7 @@ function getEventIcon(eventType, status) {
 
 function statusClass(status) {
   const s = String(status || '').toUpperCase()
-  if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED') || s === 'SENT') {
+  if (isActiveStatusLabel(status) || s.includes('SUCCESS') || s.includes('SUBSCRIBED') || s === 'SENT') {
     return 'text-emerald-700 bg-emerald-50 border-emerald-200'
   }
   if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s.includes('PARKING') || s === 'HELD') {
@@ -138,6 +146,8 @@ function eventDescription(eventType) {
       return 'Subscription failed or rejected by partner gateway.'
     case 'API_CHECKSUB':
       return 'Partner subscription status check (checksub).'
+    case 'API_DELAYED_CHECKSUB':
+      return '30-minute checksub — the partner API this audit actually called.'
     case 'CHECKSUB_30M':
       return '30-minute post-conversion operator checksub audit.'
     case 'API_PRIORITY':
@@ -685,18 +695,33 @@ function TimelineItemCard({ item, apiById, visit }) {
             <div className="flex items-center justify-between">
               <span className="font-semibold text-gray-800">30-Minute Post-Conversion Operator Audit</span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${statusClass(item.metadata?.status)}`}>
-                {item.metadata?.status === 'ACTIVE' ? '✓ ACTIVE (BILLED)' : item.metadata?.status || (item.metadata?.success ? 'ACTIVE' : 'NON-ACTIVE')}
+                {isActiveStatusLabel(item.metadata?.status) ? '✓ ACTIVE (BILLED)' : item.metadata?.status || (item.metadata?.success ? 'ACTIVE' : 'NON-ACTIVE')}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-600 font-mono mt-1 pt-1 border-t border-gray-200">
               <div>Phone: <span className="font-semibold text-gray-800">{item.metadata?.phone || visit?.phone || '—'}</span></div>
               <div>Source: <span className="font-semibold text-gray-800">{item.metadata?.source || 'checksub'}</span></div>
             </div>
+            {(item.metadata?.url || item.metadata?.method) && (
+              <p className="text-[11px] font-mono text-sky-700 break-all">
+                {[item.metadata.method, item.metadata.url].filter(Boolean).join(' ')}
+                {item.metadata.httpStatus != null ? ` · HTTP ${item.metadata.httpStatus}` : ''}
+              </p>
+            )}
             <p className="text-[11px] mt-1">
-              {item.metadata?.success
+              {item.metadata?.success || isActiveStatusLabel(item.metadata?.status)
                 ? <span className="text-emerald-700 font-medium">✓ Subscriber is actively billed and confirmed with operator.</span>
                 : <span className="text-amber-800 font-medium">⚠ Operator returned non-active state ({item.metadata?.status || 'unsubscribed'}). Vendor CPA quality audit flagged.</span>}
             </p>
+            {item.metadata?.requestBody != null && (
+              <JsonBlock label="Request" value={item.metadata.requestBody} />
+            )}
+            {item.metadata?.responseBody != null && (
+              <JsonBlock label="Response" value={item.metadata.responseBody} />
+            )}
+            {item.metadata?.errorMessage && (
+              <p className="text-[11px] text-rose-700">{item.metadata.errorMessage}</p>
+            )}
           </div>
         )}
         {(apiCall?.callType === 'checksub' || apiCall?.callType === 'delayed_checksub' || apiCall?.callType === 'priority') &&
@@ -734,7 +759,7 @@ function TimelineItemCard({ item, apiById, visit }) {
               received: {item.metadata.receivedStatus || item.metadata.status || '—'}
             </p>
           )}
-        {item.kind === 'event' && item.metadata?.url && (
+        {item.kind === 'event' && item.eventType !== 'CHECKSUB_30M' && item.metadata?.url && (
           <p className="text-[11px] font-mono text-sky-700 mt-1 break-all">
             {item.metadata.url}
             {item.metadata.httpStatus != null
@@ -742,7 +767,7 @@ function TimelineItemCard({ item, apiById, visit }) {
               : ''}
           </p>
         )}
-        {item.kind === 'event' && item.metadata?.responseBody != null && (
+        {item.kind === 'event' && item.eventType !== 'CHECKSUB_30M' && item.metadata?.responseBody != null && (
           <JsonBlock label="Response" value={item.metadata.responseBody} />
         )}
         {item.kind === 'api' && apiCall?.requestUrl && (

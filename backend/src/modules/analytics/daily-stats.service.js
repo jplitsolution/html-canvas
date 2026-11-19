@@ -632,16 +632,16 @@ export const createDailyStatsService = () => {
         .addSelect('COUNT(*)', 'totalAttempts')
         .addSelect(
           `COUNT(CASE 
-            WHEN (p.delayedChecksubStatus = 'completed' AND UPPER(COALESCE(p.delayedChecksubOutcome, '')) = 'ACTIVE')
-              OR (p.delayedChecksubStatus = 'skipped' AND LOWER(COALESCE(p.operatorStatus, '')) = 'active')
+            WHEN (p.delayedChecksubStatus = 'completed' AND UPPER(REPLACE(REPLACE(COALESCE(p.delayedChecksubOutcome, ''), '-', '_'), ' ', '_')) IN ('ACTIVE', 'ACTIVE_SUBSCRIBER', 'ACTIVESUBSCRIBER'))
+              OR (p.delayedChecksubStatus = 'skipped' AND LOWER(REPLACE(REPLACE(COALESCE(p.operatorStatus, ''), '-', '_'), ' ', '_')) IN ('active', 'active_subscriber', 'activesubscriber'))
             THEN 1 END)`,
           'checksubActive',
         )
         .addSelect(
           `COUNT(CASE 
             WHEN p.delayedChecksubStatus IN ('completed', 'failed')
-              AND NOT ((p.delayedChecksubStatus = 'completed' AND UPPER(COALESCE(p.delayedChecksubOutcome, '')) = 'ACTIVE')
-                   OR (p.delayedChecksubStatus = 'skipped' AND LOWER(COALESCE(p.operatorStatus, '')) = 'active'))
+              AND NOT ((p.delayedChecksubStatus = 'completed' AND UPPER(REPLACE(REPLACE(COALESCE(p.delayedChecksubOutcome, ''), '-', '_'), ' ', '_')) IN ('ACTIVE', 'ACTIVE_SUBSCRIBER', 'ACTIVESUBSCRIBER'))
+                   OR (p.delayedChecksubStatus = 'skipped' AND LOWER(REPLACE(REPLACE(COALESCE(p.operatorStatus, ''), '-', '_'), ' ', '_')) IN ('active', 'active_subscriber', 'activesubscriber')))
             THEN 1 END)`,
           'checksubParking',
         )

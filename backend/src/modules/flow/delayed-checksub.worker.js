@@ -21,7 +21,10 @@ import { DCB_OUTCOMES, normalizeUniverseDcbResponse } from './helpers/universe-d
 import { partnerApiService } from './partner-api.service.js';
 import { apiCallLogService } from './api-call-log.service.js';
 import { analyticsService } from '../analytics/analytics.service.js';
-import { interpretChecksubResponse } from './helpers/checksub-rules.js';
+import {
+  interpretChecksubResponse,
+  isActiveSubscriberStatus,
+} from './helpers/checksub-rules.js';
 import { CronJob } from 'cron';
 
 // ─── constants ───────────────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ const safeParseJson = (raw) => {
 export const classifyChecksubStatus = (rawStatus) => {
   const s = String(rawStatus || '').trim().toUpperCase();
   if (
+    isActiveSubscriberStatus(s) ||
     s === 'ACTIVE' ||
     s === 'ACT' ||
     s === '1' ||
@@ -209,11 +213,17 @@ const processRow = async (postback, { force = false } = {}) => {
     let checkResult = null;
     let rawResponse = {};
     let rawStatusValue = '';
-    let callType = ApiCallType.CHECKSUB;
-    let requestUrl = '';
+    const callType = ApiCallType.DELAYED_CHECKSUB;
+    const httpTrace = {
+      method: 'GET',
+      requestUrl: '',
+      requestBody: null,
+      httpStatus: null,
+      responseBody: null,
+      errorMessage: null,
+    };
 
     if (isOrangeBf) {
-      callType = ApiCallType.ORANGE_BF_CHECKSUB;
       const config = await loadProviderConfig(campaignId);
       console.log(`${LOG_PREFIX} Calling Orange BF checkSubscription for postback id=${id}, msisdn=${msisdn}`);
       checkResult = await orangeBfProvider.checkSubscription({
@@ -230,12 +240,19 @@ const processRow = async (postback, { force = false } = {}) => {
         },
         config,
       });
-      requestUrl = checkResult.requestUrl;
-      rawResponse = checkResult.rawResponse || {};
+      httpTrace.method = config.checksubMethod || 'GET';
+      httpTrace.requestUrl = checkResult.requestUrl || '';
+      httpTrace.requestBody =
+        checkResult.requestBody || checkResult.requestParams || { msisdn };
+      httpTrace.httpStatus = checkResult.httpStatus ?? null;
+      httpTrace.responseBody = checkResult.rawResponse ?? {};
+      httpTrace.errorMessage = checkResult.success
+        ? null
+        : checkResult.error || checkResult.responseMessage || null;
+      rawResponse = httpTrace.responseBody;
       const interpreted = interpretChecksubResponse(rawResponse, config.checksubConfigJson);
       rawStatusValue = interpreted?.status || checkResult.outcome || '';
     } else if (isUniverseDcb && apiConfig?.dcbConfigJson) {
-      callType = ApiCallType.DCB_SUBSCRIPTIONS;
       console.log(`${LOG_PREFIX} Calling Universe DCB getSubscriptions for postback id=${id}, msisdn=${msisdn}`);
       const dcbConfig = safeParseJson(apiConfig.dcbConfigJson);
       try {
@@ -243,8 +260,13 @@ const processRow = async (postback, { force = false } = {}) => {
           msisdn,
           serviceId: campaign?.serviceId || dcbConfig.serviceId,
         });
-        requestUrl = getDcbEndpointUrl(dcbConfig.baseUrl, '/api/dcb/subscriptions');
-        rawResponse = dcbResp.data || {};
+        httpTrace.method = dcbResp.logMeta?.method || 'GET';
+        httpTrace.requestUrl =
+          dcbResp.logMeta?.url || getDcbEndpointUrl(dcbConfig.baseUrl, '/api/dcb/subscriptions');
+        httpTrace.requestBody = dcbResp.requestBody || dcbResp.logMeta?.requestBody || { msisdn };
+        httpTrace.httpStatus = dcbResp.status || 200;
+        httpTrace.responseBody = dcbResp.data || {};
+        rawResponse = httpTrace.responseBody;
         const normalized = normalizeUniverseDcbResponse(rawResponse, dcbConfig, {
           serviceId: campaign?.serviceId || dcbConfig.serviceId,
         });
@@ -254,24 +276,30 @@ const processRow = async (postback, { force = false } = {}) => {
             : (normalized?.status || normalized?.outcome || '');
         checkResult = {
           success: Boolean(rawStatusValue && rawStatusValue !== 'TERMINAL_FAILURE' && rawStatusValue !== 'PARSE_ERROR'),
-          httpStatus: dcbResp.status || 200,
+          httpStatus: httpTrace.httpStatus,
           outcome: rawStatusValue,
           rawResponse,
         };
       } catch (dcbErr) {
         console.warn(`${LOG_PREFIX} Universe DCB checksub error:`, dcbErr.message);
-        rawResponse = dcbErr.providerData || { error: dcbErr.message };
+        httpTrace.method = dcbErr.logMeta?.method || 'GET';
+        httpTrace.requestUrl =
+          dcbErr.logMeta?.url || getDcbEndpointUrl(dcbConfig.baseUrl, '/api/dcb/subscriptions');
+        httpTrace.requestBody = dcbErr.logMeta?.requestBody || { msisdn };
+        httpTrace.httpStatus = dcbErr.providerStatus || 500;
+        httpTrace.responseBody = dcbErr.providerData || { error: dcbErr.message };
+        httpTrace.errorMessage = dcbErr.message;
+        rawResponse = httpTrace.responseBody;
         rawStatusValue = dcbErr.operatorMessage || dcbErr.code || 'FAILED';
         checkResult = {
           success: false,
-          httpStatus: dcbErr.providerStatus || 500,
+          httpStatus: httpTrace.httpStatus,
           outcome: rawStatusValue,
           rawResponse,
           errorMessage: dcbErr.message,
         };
       }
     } else if (apiConfig?.subscriptionApi) {
-      callType = ApiCallType.CHECKSUB;
       console.log(`${LOG_PREFIX} Calling partnerApiService.checkSubscription for postback id=${id}, msisdn=${msisdn}`);
       const checkOutcome = await partnerApiService.checkSubscription(apiConfig, {
         phone: msisdn,
@@ -282,15 +310,27 @@ const processRow = async (postback, { force = false } = {}) => {
         operator: campaign?.operator,
         serviceId: campaign?.serviceId,
         skipCache: true,
+        skipLog: true,
       });
-      requestUrl = apiConfig.subscriptionApi;
-      rawResponse = checkOutcome;
+      httpTrace.method = checkOutcome.requestMethod || 'GET';
+      httpTrace.requestUrl = checkOutcome.requestUrl || apiConfig.subscriptionApi;
+      httpTrace.requestBody = checkOutcome.requestBody || { msisdn };
+      httpTrace.httpStatus = checkOutcome.httpStatus ?? null;
+      httpTrace.responseBody =
+        checkOutcome.rawResponse ?? { status: checkOutcome.status || 'unknown' };
+      httpTrace.errorMessage = checkOutcome.errorMessage || null;
+      rawResponse = httpTrace.responseBody;
       rawStatusValue = checkOutcome.status || (checkOutcome.isActive ? 'active' : 'inactive');
       checkResult = {
-        success: Boolean(checkOutcome.status && checkOutcome.status !== 'unknown'),
-        httpStatus: 200,
+        success: Boolean(
+          checkOutcome.httpStatus
+            ? checkOutcome.httpStatus < 400
+            : checkOutcome.status && checkOutcome.status !== 'failed',
+        ),
+        httpStatus: httpTrace.httpStatus,
         outcome: rawStatusValue,
-        rawResponse: checkOutcome,
+        rawResponse,
+        errorMessage: httpTrace.errorMessage,
       };
     } else {
       console.log(`${LOG_PREFIX} No checksub URL configured for campaign id=${campaignId} — skipping.`);
@@ -352,6 +392,12 @@ const processRow = async (postback, { force = false } = {}) => {
               phone: msisdn,
               status: statusLabel,
               success: isSuccess,
+              method: httpTrace.method || 'GET',
+              url: httpTrace.requestUrl || null,
+              httpStatus: httpTrace.httpStatus,
+              requestBody: httpTrace.requestBody,
+              responseBody: httpTrace.responseBody,
+              errorMessage: httpTrace.errorMessage,
             },
           );
         } catch {}
@@ -364,20 +410,16 @@ const processRow = async (postback, { force = false } = {}) => {
       `${LOG_PREFIX} Postback id=${id} → status=${updatePayload.delayedChecksubStatus}, outcome=${updatePayload.delayedChecksubOutcome}`,
     );
 
-    // Log the API call
+    // Log the actual partner HTTP call (URL, request, raw response).
     try {
-      const requestBodyRaw = checkResult.requestBody
-        ? typeof checkResult.requestBody === 'string'
-          ? checkResult.requestBody
-          : JSON.stringify(checkResult.requestBody)
-        : JSON.stringify({ msisdn, isDelayedChecksub: true });
-
-      let requestBodyParsed;
-      try {
-        requestBodyParsed = JSON.parse(requestBodyRaw);
-      } catch {
-        requestBodyParsed = { raw: requestBodyRaw };
-      }
+      const requestPayload =
+        httpTrace.requestBody && typeof httpTrace.requestBody === 'object'
+          ? { ...httpTrace.requestBody, isDelayedChecksub: true }
+          : {
+              body: httpTrace.requestBody ?? null,
+              msisdn,
+              isDelayedChecksub: true,
+            };
 
       await apiCallLogService.record({
         visitId: targetVisitId || null,
@@ -385,13 +427,13 @@ const processRow = async (postback, { force = false } = {}) => {
         campaignId: campaignId ? parseInt(campaignId, 10) : null,
         msisdn,
         callType,
-        requestUrl: requestUrl || checkResult.requestUrl,
-        requestBody: JSON.stringify({ ...requestBodyParsed, isDelayedChecksub: true }),
-        responseStatus: checkResult.httpStatus || 200,
-        responseBody: checkResult.rawResponse,
-        success: checkResult.success,
-        errorMessage: checkResult.success ? null : checkResult.responseMessage,
-        statusLabel: checkResult.outcome,
+        requestUrl: httpTrace.requestUrl || null,
+        requestBody: JSON.stringify(requestPayload),
+        responseStatus: httpTrace.httpStatus ?? checkResult?.httpStatus ?? null,
+        responseBody: httpTrace.responseBody,
+        success: httpTrace.httpStatus != null ? httpTrace.httpStatus < 400 : Boolean(checkResult?.success),
+        errorMessage: httpTrace.errorMessage,
+        statusLabel,
       });
     } catch (logErr) {
       console.warn(`${LOG_PREFIX} apiCallLogService.record failed for postback id=${id}:`, logErr.message);

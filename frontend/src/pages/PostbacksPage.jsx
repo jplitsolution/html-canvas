@@ -42,7 +42,7 @@ const STATUS_FILTERS = [
 function operatorStatusBadge(status) {
   const s = String(status || '').toLowerCase()
   const base = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium'
-  if (s === 'active' || s === 'success' || s === 'subscribed') return `${base} bg-emerald-50 text-emerald-700`
+  if (s === 'active' || s === 'active_subscriber' || s === 'activesubscriber' || s === 'success' || s === 'subscribed') return `${base} bg-emerald-50 text-emerald-700`
   if (s === 'grace' || s === 'parking') return `${base} bg-amber-50 text-amber-800`
   if (s.includes('unsub') || s === 'cancel' || s === 'cancelled') return `${base} bg-slate-100 text-slate-600`
   if (!s) return `${base} bg-slate-100 text-slate-400`
@@ -52,7 +52,12 @@ function operatorStatusBadge(status) {
 function delayedChecksubBadge(status, outcome) {
   const base = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold'
   const out = String(outcome || '').toUpperCase()
-  if (out === 'ACTIVE' || (status === 'completed' && out === 'ACTIVE')) {
+  if (
+    out === 'ACTIVE' ||
+    out === 'ACTIVE_SUBSCRIBER' ||
+    out === 'ACTIVESUBSCRIBER' ||
+    (status === 'completed' && (out === 'ACTIVE' || out === 'ACTIVE_SUBSCRIBER'))
+  ) {
     return <span className={`${base} bg-emerald-50 text-emerald-700`}>✓ ACTIVE</span>
   }
   if (out === 'GRACE') {

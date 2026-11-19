@@ -5,6 +5,23 @@ import {
 
 const PAGE_TYPES = new Set(Object.values(CampaignPageType));
 
+export function normalizeChecksubToken(raw) {
+  return String(raw || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_');
+}
+
+/** Partner tokens that mean a billed, active subscriber. */
+export function isActiveSubscriberStatus(raw) {
+  const token = normalizeChecksubToken(raw);
+  return (
+    token === 'active' ||
+    token === 'active_subscriber' ||
+    token === 'activesubscriber'
+  );
+}
+
 const normalizeGo = (raw) => {
   const g = String(raw || 'continue')
     .trim()
@@ -19,6 +36,16 @@ const normalizePage = (raw) => {
     .toUpperCase();
   return PAGE_TYPES.has(p) ? p : null;
 };
+
+const STATUS_KEYS = [
+  'currentStatus',
+  'subscriptionStatus',
+  'status',
+  'subscriberStatus',
+  'subStatus',
+  'userStatus',
+  'state',
+];
 
 const readObjectField = (obj, key) => {
   if (!obj || typeof obj !== 'object' || !key) return null;
@@ -145,6 +172,33 @@ export function extractChecksubStatus(rawData, statusField = 'currentStatus') {
   return '';
 }
 
+/** Look through common status keys when the configured field is empty. */
+function findSubscriberStatus(rawData) {
+  let data = rawData;
+  if (typeof rawData === 'string') {
+    const trimmed = rawData.trim();
+    if (isActiveSubscriberStatus(trimmed)) return trimmed;
+    try {
+      data = JSON.parse(trimmed);
+    } catch {
+      return '';
+    }
+  }
+  if (!data || typeof data !== 'object') return '';
+  const sources = [data, data.data, data.result, data.payload].filter(
+    (entry) => entry && typeof entry === 'object',
+  );
+  for (const source of sources) {
+    for (const key of STATUS_KEYS) {
+      const value = readObjectField(source, key);
+      if (value != null && typeof value !== 'object' && String(value).trim()) {
+        return String(value).trim();
+      }
+    }
+  }
+  return '';
+}
+
 const buildOutcome = (statusRaw, go, page, url) => {
   const status = String(statusRaw || '')
     .trim()
@@ -180,6 +234,18 @@ const buildOutcome = (statusRaw, go, page, url) => {
  * Only `new` continues the funnel; active / parking / grace / … skip subscribe.
  */
 export function mapLegacyChecksubBody(rawData) {
+  if (typeof rawData === 'string' && isActiveSubscriberStatus(rawData)) {
+    return {
+      currentStatus: 'active',
+      subscriptionStatus: null,
+      status: 'active',
+      isActive: true,
+      shouldSkipSubscribe: true,
+      go: null,
+      page: null,
+      url: null,
+    };
+  }
   const data =
     typeof rawData === 'string'
       ? (() => {
@@ -201,7 +267,8 @@ export function mapLegacyChecksubBody(rawData) {
     .toLowerCase();
 
   let isActive =
-    currentStatus === 'active' || subscriptionStatus === 'active';
+    isActiveSubscriberStatus(currentStatus) ||
+    isActiveSubscriberStatus(subscriptionStatus);
   if (!isActive && !currentStatus && !subscriptionStatus) {
     isActive = Boolean(
       nested.subscribed ??
@@ -213,9 +280,19 @@ export function mapLegacyChecksubBody(rawData) {
     );
   }
 
-  const apiStatus = String(nested.status || data.status || '')
+  const apiStatus = String(
+    nested.status || data.status || findSubscriberStatus(data) || '',
+  )
     .trim()
     .toLowerCase();
+  if (
+    !isActive &&
+    !currentStatus &&
+    !subscriptionStatus &&
+    isActiveSubscriberStatus(apiStatus)
+  ) {
+    isActive = true;
+  }
   const reason = String(nested.reason || data.reason || '')
     .trim()
     .toLowerCase();
@@ -224,6 +301,8 @@ export function mapLegacyChecksubBody(rawData) {
     currentStatus ||
     subscriptionStatus ||
     (isActive ? 'active' : 'unknown');
+
+  if (isActive) status = 'active';
 
   if (
     !isActive &&
@@ -270,13 +349,25 @@ export function evaluateChecksubRules(rawData, configOrJson) {
       : parseChecksubConfig(configOrJson);
   if (!config) return null;
 
-  const status = extractChecksubStatus(rawData, config.statusField);
-  const statusNorm = status.toLowerCase();
+  const extracted = extractChecksubStatus(rawData, config.statusField);
+  const status = extracted || findSubscriberStatus(rawData);
+  const statusNorm = normalizeChecksubToken(status);
 
   for (const rule of config.rules) {
-    if (String(rule.value).toLowerCase() === statusNorm) {
+    if (normalizeChecksubToken(rule.value) === statusNorm) {
       return buildOutcome(status, rule.go, rule.page, rule.url);
     }
+  }
+
+  // "active_subscriber" is the same subscriber state as "active".
+  if (isActiveSubscriberStatus(statusNorm)) {
+    const activeRule = config.rules.find((rule) =>
+      isActiveSubscriberStatus(rule.value),
+    );
+    if (activeRule) {
+      return buildOutcome('active', activeRule.go, activeRule.page, activeRule.url);
+    }
+    return buildOutcome('active', 'page', CampaignPageType.THANKYOU, '');
   }
 
   return buildOutcome(status, config.missGo, config.missPage, config.missUrl);

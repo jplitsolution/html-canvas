@@ -82,6 +82,12 @@ async function run() {
   const actLower = classifyChecksubStatus('active');
   assert(actLower.isSuccess === true && actLower.statusLabel === 'ACTIVE', "'active' (lowercase) is classified as success");
 
+  const activeSubscriber = classifyChecksubStatus('active_subscriber');
+  assert(
+    activeSubscriber.isSuccess === true && activeSubscriber.statusLabel === 'ACTIVE',
+    "'active_subscriber' is classified as ACTIVE",
+  );
+
   const graceClass = classifyChecksubStatus('GRACE');
   assert(graceClass.isSuccess === false && graceClass.statusLabel === 'GRACE', "'GRACE' is classified as non-success");
 

@@ -269,7 +269,7 @@ export const createPartnerApiService = () => {
 
     try {
       const headers = parseHeaders(config.headersJson);
-      const { url, requestBody, response } = await sendRequest(
+      const { url, method, requestBody, response } = await sendRequest(
         config.subscriptionApi,
         input,
         headers,
@@ -281,34 +281,58 @@ export const createPartnerApiService = () => {
         rawData,
         config.checksubConfigJson,
       );
-      await logCall({
-        callType: ApiCallType.CHECKSUB,
-        input,
+      const traced = {
+        ...result,
         requestUrl: url,
+        requestMethod: method,
         requestBody,
-        response,
-        success: true,
-        statusLabel: (result.status || 'UNKNOWN').toUpperCase(),
-      });
-      return result;
+        httpStatus: response.status ?? null,
+        rawResponse: rawData,
+      };
+      if (!input.skipLog) {
+        await logCall({
+          callType: ApiCallType.CHECKSUB,
+          input,
+          requestUrl: url,
+          requestBody,
+          response,
+          success: true,
+          statusLabel: (result.status || 'UNKNOWN').toUpperCase(),
+        });
+      }
+      return traced;
     } catch (err) {
       console.warn(`checkSubscription failed: ${err.message}`);
-      await logCall({
-        callType: ApiCallType.CHECKSUB,
-        input,
-        requestUrl:
-          err.requestUrl ||
-          resolveTemplate(config.subscriptionApi, buildVars(input)),
-        requestBody: err.requestBody || partnerRequestBody(input),
-        response: err.response,
-        success: false,
-        errorMessage:
-          err.response?.data?.message ||
-          err.response?.data?.error ||
-          err.message,
-        statusLabel: 'FAILED',
-      });
-      return { ...empty, status: 'failed' };
+      const requestUrl =
+        err.requestUrl ||
+        resolveTemplate(config.subscriptionApi, buildVars(input));
+      const requestBody = err.requestBody || partnerRequestBody(input);
+      const errorMessage =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message;
+      if (!input.skipLog) {
+        await logCall({
+          callType: ApiCallType.CHECKSUB,
+          input,
+          requestUrl,
+          requestBody,
+          response: err.response,
+          success: false,
+          errorMessage,
+          statusLabel: 'FAILED',
+        });
+      }
+      return {
+        ...empty,
+        status: 'failed',
+        requestUrl,
+        requestMethod: err.requestMethod || null,
+        requestBody,
+        httpStatus: err.response?.status ?? null,
+        rawResponse: err.response?.data ?? { error: errorMessage },
+        errorMessage,
+      };
     }
   };
 

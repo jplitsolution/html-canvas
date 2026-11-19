@@ -55,7 +55,15 @@ export const pageTypeForSubscriptionStatus = (status, isActive = false) => {
   const s = String(status || '')
     .trim()
     .toLowerCase();
-  if (isActive || s === 'active') return CampaignPageType.THANKYOU;
+  const token = s.replace(/[\s-]+/g, '_');
+  if (
+    isActive ||
+    token === 'active' ||
+    token === 'active_subscriber' ||
+    token === 'activesubscriber'
+  ) {
+    return CampaignPageType.THANKYOU;
+  }
   if (s === 'pending') return CampaignPageType.INPROGRESS;
   if (s === 'grace' || s === 'parking') return CampaignPageType.LOW_BALANCE;
   if (INACTIVE_OR_NEW_STATUSES.has(s)) {

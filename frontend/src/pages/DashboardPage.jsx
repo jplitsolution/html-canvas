@@ -61,7 +61,16 @@ const FUNNEL_FROM_STATS = [
 
 function operatorBarColor(status) {
   const s = String(status || '').toLowerCase()
-  if (s === 'active' || s === 'success' || s === 'ok' || s === 'subscribed' || s === 'true' || s === '1') {
+  if (
+    s === 'active' ||
+    s === 'active_subscriber' ||
+    s === 'activesubscriber' ||
+    s === 'success' ||
+    s === 'ok' ||
+    s === 'subscribed' ||
+    s === 'true' ||
+    s === '1'
+  ) {
     return '#10b981'
   }
   if (s === 'grace' || s === 'parking' || s === 'low_balance' || s === 'pending') {
@@ -95,7 +104,16 @@ const getEventTypeBadgeClass = (eventType) => {
 
 const getOperatorStatusBadgeClass = (status) => {
   const s = String(status || '').toLowerCase()
-  if (s === 'active' || s === 'success' || s === 'ok' || s === 'subscribed' || s === 'true' || s === '1') {
+  if (
+    s === 'active' ||
+    s === 'active_subscriber' ||
+    s === 'activesubscriber' ||
+    s === 'success' ||
+    s === 'ok' ||
+    s === 'subscribed' ||
+    s === 'true' ||
+    s === '1'
+  ) {
     return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20'
   }
   if (s === 'grace' || s === 'parking' || s === 'low_balance' || s === 'pending') {
