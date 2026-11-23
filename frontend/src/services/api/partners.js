@@ -139,7 +139,7 @@ function reportQuery({
 export async function getPostbackDayReport(opts = {}) {
   const params = reportQuery(opts)
   return apiClient(`/partners/postbacks/day-report?${params.toString()}`, {
-    timeout: 60000,
+    timeout: 180000,
   })
 }
 
@@ -160,7 +160,7 @@ export async function exportPostbackDayReport(opts = {}) {
   const params = reportQuery({ ...opts, format })
   const token = getAuthToken()
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 60000)
+  const timeoutId = setTimeout(() => controller.abort(), 180000)
   try {
     const response = await fetch(
       `${getApiBase()}/partners/postbacks/day-report?${params.toString()}`,

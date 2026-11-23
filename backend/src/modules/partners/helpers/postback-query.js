@@ -27,7 +27,6 @@ import {
   DAY_REPORT_HE_LOG_TYPES,
   DAY_REPORT_HIT_TYPES,
   DAY_REPORT_LOG_TYPES,
-  DAY_REPORT_MAX_NUMBERS,
   buildCallbackHit,
   buildNumberStory,
   digitsMsisdn,
@@ -710,7 +709,21 @@ export function createPostbackQuery(deps) {
         '(p.createdAt BETWEEN :from AND :to OR p.updatedAt BETWEEN :from AND :to OR p.sentAt BETWEEN :from AND :to)',
         { from, to },
       );
-    applyUserScope(pbQ, 'p', scopedCampaignIds, scopedVendorIds);
+    // A picked offer/vendor must narrow the query. OR-ing every vendor the
+    // user owns ignores the offer filter and pulls other offers into the file.
+    if (filters.campaignId) {
+      pbQ.andWhere('p.campaignId = :filterCampaignId', {
+        filterCampaignId: filters.campaignId,
+      });
+    }
+    if (filters.vendorId) {
+      pbQ.andWhere('p.vendorId = :filterVendorId', {
+        filterVendorId: filters.vendorId,
+      });
+    }
+    if (!filters.campaignId && !filters.vendorId) {
+      applyUserScope(pbQ, 'p', campaignIds, vendorIds);
+    }
     if (filters.q) {
       const like = `%${filters.q}%`;
       pbQ.andWhere(
@@ -718,10 +731,7 @@ export function createPostbackQuery(deps) {
         { like },
       );
     }
-    const postbacks = await pbQ
-      .orderBy('p.id', 'DESC')
-      .take(DAY_REPORT_MAX_NUMBERS)
-      .getMany();
+    const postbacks = await pbQ.orderBy('p.id', 'DESC').getMany();
 
     const seedMsisdns = [
       ...new Set(postbacks.map((p) => digitsMsisdn(p.msisdn)).filter(Boolean)),
@@ -750,24 +760,23 @@ export function createPostbackQuery(deps) {
       );
     }
     if (scopedCampaignIds.length) {
-      const parts = [`l.campaignId IN (:...campaignIds)`, unmatchedHits];
+      logQ.andWhere(
+        `(l.campaignId IN (:...campaignIds) OR ${unmatchedHits})`,
+        { campaignIds: scopedCampaignIds, hitTypes },
+      );
+    } else if (seedMsisdns.length || seedVisitIds.length) {
+      const parts = [unmatchedHits];
       if (seedMsisdns.length) parts.push('l.msisdn IN (:...seedMsisdns)');
       if (seedVisitIds.length) parts.push('l.visitId IN (:...seedVisitIds)');
       logQ.andWhere(`(${parts.join(' OR ')})`, {
-        campaignIds: scopedCampaignIds,
         hitTypes,
         ...(seedMsisdns.length ? { seedMsisdns } : {}),
         ...(seedVisitIds.length ? { seedVisitIds } : {}),
       });
-    } else if (seedMsisdns.length) {
-      logQ.andWhere(`(l.msisdn IN (:...seedMsisdns) OR ${unmatchedHits})`, {
-        seedMsisdns,
-        hitTypes,
-      });
     } else {
       logQ.andWhere(unmatchedHits, { hitTypes });
     }
-    const logs = await logQ.orderBy('l.id', 'ASC').take(8000).getMany();
+    const logs = await logQ.orderBy('l.id', 'ASC').getMany();
 
     let events = [];
     if (scopedCampaignIds.length) {
@@ -786,7 +795,7 @@ export function createPostbackQuery(deps) {
           vendorFilter: filters.vendorId,
         });
       }
-      events = await eventQ.orderBy('e.id', 'ASC').take(8000).getMany();
+      events = await eventQ.orderBy('e.id', 'ASC').getMany();
     }
 
     const byMsisdn = new Map();
@@ -923,15 +932,28 @@ export function createPostbackQuery(deps) {
       .filter((b) => !b.postback)
       .map((b) => b.msisdn);
     if (missingMsisdns.length) {
-      const extra = await getPostbackRepo().find({
-        where: { msisdn: In(missingMsisdns.slice(0, 2000)) },
-      });
+      const extra = [];
+      for (let i = 0; i < missingMsisdns.length; i += 1000) {
+        const chunk = missingMsisdns.slice(i, i + 1000);
+        const rows = await getPostbackRepo().find({
+          where: { msisdn: In(chunk) },
+        });
+        extra.push(...rows);
+      }
       for (const row of extra) {
         const bucket = ensure(row.msisdn);
         if (!bucket) continue;
+        const rowCampaignId = row.campaignId ? Number(row.campaignId) : null;
+        const rowVendorId = row.vendorId ? Number(row.vendorId) : null;
+        if (filters.campaignId && rowCampaignId !== Number(filters.campaignId)) {
+          continue;
+        }
+        if (filters.vendorId && rowVendorId !== Number(filters.vendorId)) {
+          continue;
+        }
         const inScope =
-          (row.campaignId && scopedCampaignIds.includes(Number(row.campaignId))) ||
-          (row.vendorId && scopedVendorIds.includes(Number(row.vendorId)));
+          (rowCampaignId && scopedCampaignIds.includes(rowCampaignId)) ||
+          (rowVendorId && scopedVendorIds.includes(rowVendorId));
         if (!inScope) continue;
         if (!bucket.postback || Number(row.id) > Number(bucket.postback.id)) {
           bucket.postback = row;
@@ -999,9 +1021,6 @@ export function createPostbackQuery(deps) {
       return (Number.isNaN(bt) ? 0 : bt) - (Number.isNaN(at) ? 0 : at);
     });
 
-    const truncated = numbers.length > DAY_REPORT_MAX_NUMBERS;
-    if (truncated) numbers = numbers.slice(0, DAY_REPORT_MAX_NUMBERS);
-
     let hits = logs
       .filter((l) => DAY_REPORT_HIT_TYPES.includes(l.callType))
       .map((l) => buildCallbackHit(l, timezone));
@@ -1010,10 +1029,15 @@ export function createPostbackQuery(deps) {
       ...new Set(hits.map((h) => h.visitId).filter(Boolean)),
     ];
     if (hitVisitIds.length) {
-      const visits = await getVisitRepo().find({
-        where: { id: In(hitVisitIds) },
-        select: ['id', 'vendorId', 'campaignId'],
-      });
+      const visits = [];
+      for (let i = 0; i < hitVisitIds.length; i += 1000) {
+        const chunk = hitVisitIds.slice(i, i + 1000);
+        const rows = await getVisitRepo().find({
+          where: { id: In(chunk) },
+          select: ['id', 'vendorId', 'campaignId'],
+        });
+        visits.push(...rows);
+      }
       const visitMap = Object.fromEntries(visits.map((v) => [v.id, v]));
       hits = hits.map((hit) => {
         const visit = hit.visitId ? visitMap[hit.visitId] : null;
@@ -1065,7 +1089,7 @@ export function createPostbackQuery(deps) {
       from: date,
       to: endDate,
       generatedAt,
-      truncated,
+      truncated: false,
       rangeClamped: Boolean(rangeClamped),
       summary,
       numbers: pageNumbers,
