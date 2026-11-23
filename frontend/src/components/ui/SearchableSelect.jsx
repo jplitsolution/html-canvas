@@ -10,6 +10,7 @@ export default function SearchableSelect({
   allOptionLabel = 'All',
   className = '',
   disabled = false,
+  multiple = false,
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
@@ -59,24 +60,53 @@ export default function SearchableSelect({
     })
   }, [options, searchTerm])
 
+  const selectedValues = useMemo(() => {
+    if (!multiple) return []
+    if (Array.isArray(value)) return value.map(String).filter(Boolean)
+    return value ? [String(value)] : []
+  }, [multiple, value])
+
   const selectedOption = useMemo(() => {
+    if (multiple) return null
     return options.find((opt) => String(opt.value) === String(value))
-  }, [options, value])
+  }, [multiple, options, value])
+
+  const triggerLabel = useMemo(() => {
+    if (!multiple) return selectedOption ? selectedOption.label : placeholder
+    const selected = options.filter((opt) => selectedValues.includes(String(opt.value)))
+    if (!selected.length) return placeholder
+    if (selected.length === 1) return selected[0].label
+    if (selected.length === 2) return selected.map((opt) => opt.label).join(', ')
+    return `${selected.length} selected`
+  }, [multiple, options, placeholder, selectedOption, selectedValues])
 
   const handleSelect = (val) => {
-    onChange(val)
-    setIsOpen(false)
+    if (!multiple) {
+      onChange(val)
+      setIsOpen(false)
+      return
+    }
+    if (!val) {
+      onChange([])
+      setIsOpen(false)
+      return
+    }
+    const key = String(val)
+    const next = selectedValues.includes(key)
+      ? selectedValues.filter((item) => item !== key)
+      : [...selectedValues, key]
+    onChange(next)
   }
 
   const handleClear = (e) => {
     e.stopPropagation()
-    onChange('')
+    onChange(multiple ? [] : '')
   }
 
   return (
     <div
       ref={containerRef}
-      className={`relative inline-block text-left ${className}`}
+      className={`relative block w-full text-left ${className}`}
     >
       {/* Trigger Button */}
       <div
@@ -103,11 +133,11 @@ export default function SearchableSelect({
         }`}
       >
         <span className="truncate flex-1 text-left font-normal">
-          {selectedOption ? selectedOption.label : placeholder}
+          {triggerLabel}
         </span>
 
         <div className="flex items-center gap-1 shrink-0">
-          {value && !disabled && (
+          {(multiple ? selectedValues.length > 0 : value) && !disabled && (
             <button
               type="button"
               onClick={handleClear}
@@ -165,19 +195,23 @@ export default function SearchableSelect({
                 type="button"
                 onClick={() => handleSelect('')}
                 className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs sm:text-sm cursor-pointer ${
-                  !value
+                  (multiple ? selectedValues.length === 0 : !value)
                     ? 'bg-blue-50 text-blue-800 font-semibold'
                     : 'text-gray-700 hover:bg-gray-50'
                 }`}
               >
                 <span>{allOptionLabel}</span>
-                {!value && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
+                {(multiple ? selectedValues.length === 0 : !value) && (
+                  <Check className="w-4 h-4 text-blue-600 shrink-0" />
+                )}
               </button>
             )}
 
             {filteredOptions.length > 0 ? (
               filteredOptions.map((opt) => {
-                const isSelected = String(opt.value) === String(value)
+                const isSelected = multiple
+                  ? selectedValues.includes(String(opt.value))
+                  : String(opt.value) === String(value)
                 return (
                   <button
                     key={opt.value}

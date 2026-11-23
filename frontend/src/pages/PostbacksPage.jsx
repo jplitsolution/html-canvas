@@ -26,18 +26,22 @@ import {
   getDateRangeForPreset,
   DEFAULT_TIMEZONE,
 } from '../utils/date'
-import { getPostbackSummary, listPostbacks, exportPostbackDayReport, firePostback, runChecksubNow } from '../services/api/partners'
+import { getPostbackSummary, listPostbacks, listPostbackStatusOptions, exportPostbackDayReport, firePostback, runChecksubNow } from '../services/api/partners'
+import { listMarkets } from '../services/api/markets'
 import useStore from '../store/useStore'
 
 const PAGE_SIZE = 25
-const STATUS_FILTERS = [
-  { id: 'all', label: 'All' },
-  { id: 'pending', label: 'Pending' },
-  { id: 'received', label: 'Received' },
-  { id: 'sent', label: 'Sent' },
-  { id: 'failed', label: 'Failed' },
-  { id: 'skipped', label: 'Skipped' },
-]
+
+function parseListParam(raw) {
+  return [
+    ...new Set(
+      String(raw || '')
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part && part.toLowerCase() !== 'all'),
+    ),
+  ]
+}
 
 function operatorStatusBadge(status) {
   const s = String(status || '').toLowerCase()
@@ -119,17 +123,21 @@ function PostbacksPage() {
   const fetchCampaigns = useStore((s) => s.fetchCampaigns)
   const vendors = useStore((s) => s.vendors)
   const fetchVendors = useStore((s) => s.fetchVendors)
+  const [markets, setMarkets] = useState([])
+  const [statusOptions, setStatusOptions] = useState({ statuses: [], checksub: [] })
   const [summary, setSummary] = useState(null)
   const [items, setItems] = useState([])
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const statusFromUrl = String(searchParams.get('status') || 'all').toLowerCase()
-  const [status, setStatus] = useState(
-    STATUS_FILTERS.some((f) => f.id === statusFromUrl) ? statusFromUrl : 'all',
+  const [statuses, setStatuses] = useState(() => parseListParam(searchParams.get('status')))
+  const [checksubStatuses, setChecksubStatuses] = useState(() =>
+    parseListParam(searchParams.get('checksubStatus')),
   )
   const [operatorStatus, setOperatorStatus] = useState(
     () => String(searchParams.get('operatorStatus') || '').trim().toLowerCase(),
   )
+  const [country, setCountry] = useState(() => searchParams.get('country') || '')
+  const [operator, setOperator] = useState(() => searchParams.get('operator') || '')
   const [campaignId, setCampaignId] = useState(
     () => searchParams.get('campaignId') || searchParams.get('offer') || '',
   )
@@ -160,6 +168,12 @@ function PostbacksPage() {
   useEffect(() => {
     fetchCampaigns().catch(() => {})
     fetchVendors().catch(() => {})
+    listMarkets()
+      .then((rows) => setMarkets(Array.isArray(rows) ? rows : []))
+      .catch(() => {})
+    listPostbackStatusOptions()
+      .then((rows) => setStatusOptions(rows || { statuses: [], checksub: [] }))
+      .catch(() => {})
   }, [fetchCampaigns, fetchVendors])
 
   const load = useCallback(async () => {
@@ -174,17 +188,22 @@ function PostbacksPage() {
       const [sum, list] = await Promise.all([
         getPostbackSummary({
           ...rangeParams,
+          country: country || undefined,
+          operator: operator || undefined,
           campaignId: campaignId || undefined,
           vendorId: vendorId || undefined,
         }),
         listPostbacks({
           page,
           limit: PAGE_SIZE,
-          status,
+          status: statuses,
+          checksubStatus: checksubStatuses,
           operatorStatus: operatorStatus || undefined,
           q,
           vendorId: vendorId || undefined,
           campaignId: campaignId || undefined,
+          country: country || undefined,
+          operator: operator || undefined,
           ...rangeParams,
         }),
       ])
@@ -196,7 +215,7 @@ function PostbacksPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, status, operatorStatus, q, vendorId, campaignId, dateRange.from, dateRange.to, timezone])
+  }, [page, statuses, checksubStatuses, operatorStatus, q, vendorId, campaignId, country, operator, dateRange.from, dateRange.to, timezone])
 
   useEffect(() => {
     load()
@@ -229,6 +248,8 @@ function PostbacksPage() {
     params.set('preset', datePreset)
     if (dateRange.from) params.set('from', dateRange.from)
     if (dateRange.to) params.set('to', dateRange.to)
+    if (country) params.set('country', country)
+    if (operator) params.set('operator', operator)
     if (campaignId) params.set('campaignId', campaignId)
     if (vendorId) params.set('vendorId', vendorId)
     if (extra.filter) params.set('filter', extra.filter)
@@ -245,6 +266,8 @@ function PostbacksPage() {
         timezone,
         campaignId: campaignId || undefined,
         vendorId: vendorId || undefined,
+        country: country || undefined,
+        operator: operator || undefined,
         format: 'csv',
       })
       addToast(`Exported ${result.filename} (also saved on server)`, 'success')
@@ -304,8 +327,141 @@ function PostbacksPage() {
     }
   }
 
+  const writeSearch = (mutate) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      mutate(next)
+      return next
+    })
+  }
+
+  const availableCountries = useMemo(() => {
+    const map = new Map()
+    markets.forEach((m) => {
+      const code = String(m.countryCode || '').trim().toUpperCase()
+      if (code && !map.has(code)) map.set(code, { code, name: m.countryName || code })
+    })
+    campaigns.forEach((c) => {
+      const code = String(c.countryCode || c.country || '').trim().toUpperCase()
+      if (code && !map.has(code)) map.set(code, { code, name: c.country || code })
+    })
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [markets, campaigns])
+
+  const availableOperators = useMemo(() => {
+    const map = new Map()
+    const targetCountry = country ? country.toUpperCase() : null
+    markets.forEach((m) => {
+      const cCode = String(m.countryCode || '').trim().toUpperCase()
+      if (targetCountry && cCode !== targetCountry) return
+      const opCode = String(m.operatorCode || '').trim().toLowerCase()
+      if (opCode && !map.has(opCode)) {
+        map.set(opCode, { code: opCode, name: m.operatorName || opCode.toUpperCase() })
+      }
+    })
+    campaigns.forEach((c) => {
+      const cCode = String(c.countryCode || c.country || '').trim().toUpperCase()
+      if (targetCountry && cCode !== targetCountry) return
+      const opCode = String(c.operatorCode || c.operator || '').trim().toLowerCase()
+      if (opCode && !map.has(opCode)) {
+        map.set(opCode, { code: opCode, name: (c.operator || opCode).toUpperCase() })
+      }
+    })
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name))
+  }, [markets, campaigns, country])
+
+  const filteredCampaigns = useMemo(() => {
+    const targetCountry = country ? country.toUpperCase() : null
+    const targetOp = operator ? operator.toLowerCase() : null
+    return campaigns.filter((c) => {
+      if (targetCountry) {
+        const cCode = String(c.countryCode || c.country || '').trim().toUpperCase()
+        if (cCode !== targetCountry) return false
+      }
+      if (targetOp) {
+        const opCode = String(c.operatorCode || c.operator || '').trim().toLowerCase()
+        if (opCode !== targetOp) return false
+      }
+      return true
+    })
+  }, [campaigns, country, operator])
+
+  const handleCountryChange = (nextCountry) => {
+    setCountry(nextCountry)
+    setPage(1)
+    let nextOperator = operator
+    let nextCampaign = campaignId
+    if (operator) {
+      const targetCountry = nextCountry ? nextCountry.toUpperCase() : null
+      const opStillValid =
+        markets.some((m) => {
+          const match = !targetCountry || String(m.countryCode || '').trim().toUpperCase() === targetCountry
+          return match && String(m.operatorCode || '').trim().toLowerCase() === operator.toLowerCase()
+        }) ||
+        campaigns.some((c) => {
+          const cCode = String(c.countryCode || c.country || '').trim().toUpperCase()
+          const match = !targetCountry || cCode === targetCountry
+          return match && String(c.operatorCode || c.operator || '').trim().toLowerCase() === operator.toLowerCase()
+        })
+      if (!opStillValid) {
+        nextOperator = ''
+        nextCampaign = ''
+        setOperator('')
+        setCampaignId('')
+      }
+    }
+    if (nextCampaign) {
+      const still = campaigns.some((c) => {
+        if (String(c.id) !== String(nextCampaign)) return false
+        if (!nextCountry) return true
+        return String(c.countryCode || c.country || '').trim().toUpperCase() === nextCountry.toUpperCase()
+      })
+      if (!still) {
+        nextCampaign = ''
+        setCampaignId('')
+      }
+    }
+    writeSearch((next) => {
+      if (nextCountry) next.set('country', nextCountry)
+      else next.delete('country')
+      if (nextOperator) next.set('operator', nextOperator)
+      else next.delete('operator')
+      if (nextCampaign) next.set('campaignId', nextCampaign)
+      else {
+        next.delete('campaignId')
+        next.delete('offer')
+      }
+    })
+  }
+
+  const handleOperatorChange = (nextOperator) => {
+    setOperator(nextOperator)
+    setPage(1)
+    let nextCampaign = campaignId
+    if (campaignId) {
+      const still = campaigns.some((c) => {
+        if (String(c.id) !== String(campaignId)) return false
+        if (!nextOperator) return true
+        return String(c.operatorCode || c.operator || '').trim().toLowerCase() === nextOperator.toLowerCase()
+      })
+      if (!still) {
+        nextCampaign = ''
+        setCampaignId('')
+      }
+    }
+    writeSearch((next) => {
+      if (nextOperator) next.set('operator', nextOperator)
+      else next.delete('operator')
+      if (nextCampaign) next.set('campaignId', nextCampaign)
+      else {
+        next.delete('campaignId')
+        next.delete('offer')
+      }
+    })
+  }
+
   const campaignOptions = useMemo(() => {
-    return campaigns.map((c) => ({
+    return filteredCampaigns.map((c) => ({
       value: String(c.id),
       label: `${c.name} (${c.id})`,
       sublabel: [
@@ -316,7 +472,42 @@ function PostbacksPage() {
         .join(' · '),
       searchKey: `${c.name} ${c.id} ${c.trackingId || ''} ${c.country || ''} ${c.operator || ''}`,
     }))
-  }, [campaigns])
+  }, [filteredCampaigns])
+
+  const postbackStatusOptions = useMemo(() => {
+    const map = new Map()
+    ;(statusOptions.statuses || []).forEach((row) => {
+      map.set(String(row.value), {
+        value: String(row.value),
+        label: row.label || row.value,
+        sublabel: row.count != null ? `${Number(row.count).toLocaleString()} rows` : '',
+      })
+    })
+    statuses.forEach((value) => {
+      if (!map.has(value)) map.set(value, { value, label: value })
+    })
+    return Array.from(map.values())
+  }, [statusOptions.statuses, statuses])
+
+  const checksubStatusOptions = useMemo(() => {
+    const map = new Map()
+    ;(statusOptions.checksub || []).forEach((row) => {
+      map.set(String(row.value), {
+        value: String(row.value),
+        label: row.label || row.value,
+        sublabel: [
+          row.group === 'job' ? 'Check job' : '30m result',
+          row.count != null ? `${Number(row.count).toLocaleString()} rows` : '',
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      })
+    })
+    checksubStatuses.forEach((value) => {
+      if (!map.has(value)) map.set(value, { value, label: value })
+    })
+    return Array.from(map.values())
+  }, [statusOptions.checksub, checksubStatuses])
 
   const vendorOptions = useMemo(() => {
     const map = new Map()
@@ -346,10 +537,13 @@ function PostbacksPage() {
   const handleResetFilters = () => {
     setCampaignId('')
     setVendorId('')
+    setCountry('')
+    setOperator('')
     setOperatorStatus('')
+    setStatuses([])
+    setChecksubStatuses([])
     setQ('')
     setSearchDraft('')
-    setStatus('all')
     applyDatePreset('today')
     setSearchParams({})
   }
@@ -503,6 +697,44 @@ function PostbacksPage() {
               />
             </div>
 
+            <div className="flex items-center gap-2">
+              <label htmlFor="filter-country" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Country:
+              </label>
+              <select
+                id="filter-country"
+                value={country}
+                onChange={(e) => handleCountryChange(e.target.value)}
+                className="h-[38px] max-w-[180px] border border-gray-300 rounded-md px-3 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+              >
+                <option value="">All countries</option>
+                {availableCountries.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.name} ({item.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label htmlFor="filter-operator" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Operator:
+              </label>
+              <select
+                id="filter-operator"
+                value={operator}
+                onChange={(e) => handleOperatorChange(e.target.value)}
+                className="h-[38px] max-w-[180px] border border-gray-300 rounded-md px-3 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+              >
+                <option value="">All operators</option>
+                {availableOperators.map((item) => (
+                  <option key={item.code} value={item.code}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             {/* Campaign / Offer Searchable Dropdown */}
             <div className="w-56 min-w-[190px]">
               <SearchableSelect
@@ -552,6 +784,46 @@ function PostbacksPage() {
               />
             </div>
 
+            <div className="w-52 min-w-[180px]">
+              <SearchableSelect
+                multiple
+                value={statuses}
+                onChange={(vals) => {
+                  const next = Array.isArray(vals) ? vals : []
+                  setStatuses(next)
+                  setPage(1)
+                  writeSearch((params) => {
+                    if (!next.length) params.delete('status')
+                    else params.set('status', next.join(','))
+                  })
+                }}
+                options={postbackStatusOptions}
+                placeholder="Postback status"
+                allOptionLabel="All postback statuses"
+                searchPlaceholder="Search status..."
+              />
+            </div>
+
+            <div className="w-56 min-w-[200px]">
+              <SearchableSelect
+                multiple
+                value={checksubStatuses}
+                onChange={(vals) => {
+                  const next = Array.isArray(vals) ? vals : []
+                  setChecksubStatuses(next)
+                  setPage(1)
+                  writeSearch((params) => {
+                    if (!next.length) params.delete('checksubStatus')
+                    else params.set('checksubStatus', next.join(','))
+                  })
+                }}
+                options={checksubStatusOptions}
+                placeholder="30m CheckSub status"
+                allOptionLabel="All 30m statuses"
+                searchPlaceholder="Search 30m status..."
+              />
+            </div>
+
             {/* Filter Button in the same line */}
             <button
               type="button"
@@ -566,7 +838,7 @@ function PostbacksPage() {
             </button>
 
             {/* Reset Button in the same line when active */}
-            {(campaignId || vendorId || operatorStatus || q || datePreset !== 'today') && (
+            {(campaignId || vendorId || country || operator || operatorStatus || statuses.length || checksubStatuses.length || q || datePreset !== 'today') && (
               <button
                 type="button"
                 onClick={handleResetFilters}
@@ -619,30 +891,6 @@ function PostbacksPage() {
           {/* Status Tabs and Search Input Row */}
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between pt-1">
             <div className="flex flex-wrap items-center gap-1.5">
-              {STATUS_FILTERS.map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => {
-                    setStatus(f.id)
-                    setPage(1)
-                    setSearchParams((prev) => {
-                      const next = new URLSearchParams(prev)
-                      if (f.id === 'all') next.delete('status')
-                      else next.set('status', f.id)
-                      return next
-                    })
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                    status === f.id
-                      ? 'bg-blue-600 text-white shadow-2xs'
-                      : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-                  }`}
-                >
-                  {f.label}
-                </button>
-              ))}
-
               {campaignId ? (
                 <button
                   type="button"

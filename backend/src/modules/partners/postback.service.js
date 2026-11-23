@@ -51,7 +51,7 @@ export const createPostbackService = () => {
     firePostback,
   });
 
-  const { getSummary, listPostbacks, getPostbackById, getDayReport } =
+  const { getSummary, listStatusOptions, listPostbacks, getPostbackById, getDayReport } =
     createPostbackQuery({
       getPostbackRepo,
       getVendorRepo,
@@ -78,6 +78,7 @@ export const createPostbackService = () => {
     fireManualPostback,
     processOperatorCallback,
     getSummary,
+    listStatusOptions,
     listPostbacks,
     getPostbackById,
     getDayReport,

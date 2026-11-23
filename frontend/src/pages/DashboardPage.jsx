@@ -450,6 +450,22 @@ function DashboardPage() {
     return `/analytics?${search.toString()}`
   }
 
+  const buildPostbacksUrl = (extraParams = {}) => {
+    const search = new URLSearchParams()
+    if (dateRange.from) search.set('from', dateRange.from)
+    if (dateRange.to) search.set('to', dateRange.to)
+    if (selectedCountry) search.set('country', selectedCountry)
+    if (selectedOperator) search.set('operator', selectedOperator)
+    if (selectedCampaignId) search.set('campaignId', selectedCampaignId)
+    Object.entries(extraParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        search.set(key, String(value))
+      }
+    })
+    const qs = search.toString()
+    return qs ? `/postbacks?${qs}` : '/postbacks'
+  }
+
   return (
     <AppShell>
       <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto min-w-0">
@@ -758,7 +774,7 @@ function DashboardPage() {
                 </p>
               </div>
               <Link
-                to="/postbacks"
+                to={buildPostbacksUrl()}
                 className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 shrink-0"
               >
                 Open postbacks <ChevronRight className="w-3.5 h-3.5" />
@@ -786,7 +802,7 @@ function DashboardPage() {
                     return (
                       <Link
                         key={row.status}
-                        to={`/postbacks?operatorStatus=${encodeURIComponent(row.status)}`}
+                        to={buildPostbacksUrl({ operatorStatus: row.status })}
                         className="block group"
                       >
                         <div className="flex items-center justify-between text-xs font-semibold gap-2">
@@ -828,7 +844,7 @@ function DashboardPage() {
                 </p>
               </div>
               <Link
-                to="/postbacks"
+                to={buildPostbacksUrl()}
                 className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 shrink-0"
               >
                 View queue <ChevronRight className="w-3.5 h-3.5" />
@@ -845,7 +861,7 @@ function DashboardPage() {
               ].map((card) => (
                 <Link
                   key={card.label}
-                  to={card.status === 'all' ? '/postbacks' : `/postbacks?status=${card.status}`}
+                  to={card.status === 'all' ? buildPostbacksUrl() : buildPostbacksUrl({ status: card.status })}
                   className="rounded-xl border border-border bg-bg-subtle/40 p-3 hover:border-accent/40 transition-colors"
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wider text-fg-muted">
@@ -873,11 +889,12 @@ function DashboardPage() {
                 </span>
               </div>
               <p className="text-[11px] text-fg-muted mt-1">
-                Subscribed attempts vs actually billed subscribers after the 30-minute checksub window.
+                Postback rows for this date range and the country, operator, and campaign filters above.
+                Active is a 30-minute result of ACTIVE. Parking is parking or zero-balance. Other is every remaining result.
               </p>
             </div>
             <Link
-              to="/postbacks"
+              to={buildPostbacksUrl()}
               className="text-xs font-semibold text-accent hover:underline flex items-center gap-1 shrink-0"
             >
               View in Postbacks <ChevronRight className="w-3.5 h-3.5" />
@@ -898,10 +915,11 @@ function DashboardPage() {
                 <thead>
                   <tr className="border-b border-border bg-bg-muted/30 text-fg-muted text-[11px] font-semibold uppercase tracking-wider">
                     <th className="px-5 py-3">Vendor</th>
-                    <th className="px-4 py-3 text-right">Attempts (Subscribed)</th>
-                    <th className="px-4 py-3 text-right">30m Active (Billed)</th>
+                    <th className="px-4 py-3 text-right">Attempts</th>
+                    <th className="px-4 py-3 text-right">30m Active</th>
                     <th className="px-4 py-3 text-right">Parking / Zero-Bal</th>
                     <th className="px-4 py-3 text-right">30m Pending</th>
+                    <th className="px-4 py-3 text-right">Other</th>
                     <th className="px-5 py-3 text-right">Quality % (Active / Attempt)</th>
                   </tr>
                 </thead>
@@ -915,7 +933,7 @@ function DashboardPage() {
                         className="hover:bg-bg-muted/40 transition-colors group cursor-pointer"
                         onClick={() =>
                           navigate(
-                            row.vendorId ? `/postbacks?vendorId=${row.vendorId}` : '/postbacks'
+                            buildPostbacksUrl(row.vendorId ? { vendorId: row.vendorId } : {})
                           )
                         }
                       >
@@ -932,16 +950,54 @@ function DashboardPage() {
                           </div>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-semibold text-fg">
-                          {Number(row.totalAttempts || 0).toLocaleString()}
+                          <Link
+                            to={buildPostbacksUrl(row.vendorId ? { vendorId: row.vendorId } : {})}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {Number(row.totalAttempts || 0).toLocaleString()}
+                          </Link>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                          {Number(row.checksubActive || 0).toLocaleString()}
+                          <Link
+                            to={buildPostbacksUrl({
+                              ...(row.vendorId ? { vendorId: row.vendorId } : {}),
+                              checksubStatus:
+                                'outcome:ACTIVE,outcome:ACTIVE_SUBSCRIBER,outcome:ACTIVESUBSCRIBER',
+                            })}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {Number(row.checksubActive || 0).toLocaleString()}
+                          </Link>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono font-medium text-amber-600 dark:text-amber-400">
-                          {Number(row.checksubParking || 0).toLocaleString()}
+                          <Link
+                            to={buildPostbacksUrl({
+                              ...(row.vendorId ? { vendorId: row.vendorId } : {}),
+                              checksubStatus:
+                                'outcome:PARKING,outcome:PARKING_PERIOD,outcome:ZERO_BAL,outcome:ZERO_BALANCE,outcome:INSUFFICIENT,outcome:INSUFFICIENT_BALANCE',
+                            })}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {Number(row.checksubParking || 0).toLocaleString()}
+                          </Link>
                         </td>
                         <td className="px-4 py-3.5 text-right font-mono text-fg-muted">
-                          {Number(row.checksubPending || 0).toLocaleString()}
+                          <Link
+                            to={buildPostbacksUrl({
+                              ...(row.vendorId ? { vendorId: row.vendorId } : {}),
+                              checksubStatus: 'job:pending',
+                            })}
+                            onClick={(event) => event.stopPropagation()}
+                            className="hover:underline"
+                          >
+                            {Number(row.checksubPending || 0).toLocaleString()}
+                          </Link>
+                        </td>
+                        <td className="px-4 py-3.5 text-right font-mono text-fg-muted">
+                          {Number(row.checksubOther || 0).toLocaleString()}
                         </td>
                         <td className="px-5 py-3.5 text-right">
                           <div className="flex items-center justify-end gap-2">

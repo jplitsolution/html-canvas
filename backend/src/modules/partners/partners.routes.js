@@ -14,6 +14,7 @@ router.delete('/vendors/:id', partnersController.removeVendor);
 
 router.get('/postbacks/summary', partnersController.postbacksSummary);
 router.get('/postbacks/stats', partnersController.postbacksStats);
+router.get('/postbacks/status-options', partnersController.postbackStatusOptions);
 router.get('/postbacks/day-report', partnersController.postbacksDayReport);
 router.get('/postbacks', partnersController.listPostbacks);
 router.post('/postbacks/:id/fire', partnersController.firePostback);

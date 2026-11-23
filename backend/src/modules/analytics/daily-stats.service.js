@@ -28,6 +28,7 @@ import {
   parseOperatorStatusMap,
   totalsFromRows,
 } from './helpers/daily-stats.js';
+import { filterCampaignsByMarket } from '../partners/helpers/campaign-market.js';
 
 const MAX_ROLLUP_DAYS = 93;
 
@@ -55,7 +56,7 @@ export const createDailyStatsService = () => {
     const [campaigns, vendors] = await Promise.all([
       getCampaignRepo().find({
         where: { userId },
-        select: ['id', 'name', 'verificationMode', 'flowConfig'],
+        relations: { marketOperator: { country: true } },
       }),
       getVendorRepo().find({
         where: { userId },
@@ -430,7 +431,14 @@ export const createDailyStatsService = () => {
 
     const campaignId = parseInt(query.campaignId, 10);
     const vendorId = parseInt(query.vendorId, 10);
-    if (Number.isFinite(campaignId) && campaignId > 0 && !campaignIds.includes(campaignId)) {
+    const countryFilter = String(query.country || '').trim();
+    const operatorFilter = String(query.operator || '').trim();
+    const hasCampaignPick = Number.isFinite(campaignId) && campaignId > 0;
+    const hasMarketFilter = Boolean(countryFilter || operatorFilter || hasCampaignPick);
+    const allowedCampaignIds = hasMarketFilter
+      ? filterCampaignsByMarket(campaigns, query).map((campaign) => campaign.id)
+      : null;
+    if (allowedCampaignIds && allowedCampaignIds.length === 0) {
       return empty(includesToday ? 'raw_today' : 'daily_stats');
     }
     if (Number.isFinite(vendorId) && vendorId > 0 && !vendorIds.includes(vendorId)) {
@@ -459,13 +467,9 @@ export const createDailyStatsService = () => {
     const inScope = (row) => {
       const cid = n(row.campaignId);
       const vid = n(row.vendorId);
-      if (Number.isFinite(campaignId) && campaignId > 0 && cid !== campaignId) return false;
-      if (
-        !(Number.isFinite(campaignId) && campaignId > 0) &&
-        campaignIds.length &&
-        cid !== 0 &&
-        !campaignIds.includes(cid)
-      ) {
+      if (allowedCampaignIds) {
+        if (!allowedCampaignIds.includes(cid)) return false;
+      } else if (campaignIds.length && cid !== 0 && !campaignIds.includes(cid)) {
         return false;
       }
       if (Number.isFinite(vendorId) && vendorId > 0 && vid !== vendorId) return false;
@@ -486,8 +490,8 @@ export const createDailyStatsService = () => {
         .createQueryBuilder('s')
         .where('s.statDate BETWEEN :from AND :to', { from: statsFrom, to: statsTo })
         .andWhere('s.timezone = :timezone', { timezone });
-      if (Number.isFinite(campaignId) && campaignId > 0) {
-        qb.andWhere('s.campaignId = :campaignId', { campaignId });
+      if (allowedCampaignIds) {
+        qb.andWhere('s.campaignId IN (:...allowedCampaignIds)', { allowedCampaignIds });
       } else if (campaignIds.length) {
         qb.andWhere('(s.campaignId IN (:...campaignIds) OR s.campaignId = 0)', {
           campaignIds,
@@ -618,11 +622,15 @@ export const createDailyStatsService = () => {
       };
     });
 
-    // Vendor Checksub / Quality breakdown (Subscribed Attempts vs Checksub Active / Parking / Grace)
+    // Vendor Checksub / Quality breakdown. Same timezone window and
+    // country / operator / campaign scope as the postback list.
     let vendorQuality = [];
     try {
-      const fromDate = new Date(`${from}T00:00:00.000Z`);
-      const toDate = new Date(`${to}T23:59:59.999Z`);
+      const { from: fromDate, to: toDate } = resolveRangeBounds({ from, to, timezone });
+      const outcomeNorm = `UPPER(REPLACE(REPLACE(COALESCE(p.delayedChecksubOutcome, ''), '-', '_'), ' ', '_'))`;
+      const notPendingJob = `COALESCE(p.delayedChecksubStatus, '') <> 'pending'`;
+      const activeSql = `${outcomeNorm} IN ('ACTIVE', 'ACTIVE_SUBSCRIBER', 'ACTIVESUBSCRIBER') AND ${notPendingJob}`;
+      const parkingSql = `${outcomeNorm} IN ('PARKING', 'PARKING_PERIOD', 'ZERO_BAL', 'ZERO_BALANCE', 'INSUFFICIENT', 'INSUFFICIENT_BALANCE') AND ${notPendingJob}`;
       const qb = getPostbackRepo()
         .createQueryBuilder('p')
         .leftJoin(Vendor, 'v', 'v.id = p.vendorId')
@@ -630,28 +638,15 @@ export const createDailyStatsService = () => {
         .addSelect("COALESCE(v.name, 'Direct')", 'vendorName')
         .addSelect('v.code', 'vendorCode')
         .addSelect('COUNT(*)', 'totalAttempts')
-        .addSelect(
-          `COUNT(CASE 
-            WHEN (p.delayedChecksubStatus = 'completed' AND UPPER(REPLACE(REPLACE(COALESCE(p.delayedChecksubOutcome, ''), '-', '_'), ' ', '_')) IN ('ACTIVE', 'ACTIVE_SUBSCRIBER', 'ACTIVESUBSCRIBER'))
-              OR (p.delayedChecksubStatus = 'skipped' AND LOWER(REPLACE(REPLACE(COALESCE(p.operatorStatus, ''), '-', '_'), ' ', '_')) IN ('active', 'active_subscriber', 'activesubscriber'))
-            THEN 1 END)`,
-          'checksubActive',
-        )
-        .addSelect(
-          `COUNT(CASE 
-            WHEN p.delayedChecksubStatus IN ('completed', 'failed')
-              AND NOT ((p.delayedChecksubStatus = 'completed' AND UPPER(REPLACE(REPLACE(COALESCE(p.delayedChecksubOutcome, ''), '-', '_'), ' ', '_')) IN ('ACTIVE', 'ACTIVE_SUBSCRIBER', 'ACTIVESUBSCRIBER'))
-                   OR (p.delayedChecksubStatus = 'skipped' AND LOWER(REPLACE(REPLACE(COALESCE(p.operatorStatus, ''), '-', '_'), ' ', '_')) IN ('active', 'active_subscriber', 'activesubscriber')))
-            THEN 1 END)`,
-          'checksubParking',
-        )
+        .addSelect(`COUNT(CASE WHEN ${activeSql} THEN 1 END)`, 'checksubActive')
+        .addSelect(`COUNT(CASE WHEN ${parkingSql} THEN 1 END)`, 'checksubParking')
         .addSelect(
           "COUNT(CASE WHEN p.delayedChecksubStatus = 'pending' THEN 1 END)",
           'checksubPending',
         )
         .where('p.createdAt BETWEEN :from AND :to', { from: fromDate, to: toDate });
 
-      const { campaignIds, vendorIds } = await resolveUserScope(userId);
+      const { campaignIds, vendorIds, campaigns: scopedCampaigns } = await resolveUserScope(userId);
       if (campaignIds.length && vendorIds.length) {
         qb.andWhere('(p.campaignId IN (:...campaignIds) OR p.vendorId IN (:...vendorIds))', {
           campaignIds,
@@ -663,7 +658,26 @@ export const createDailyStatsService = () => {
         qb.andWhere('p.vendorId IN (:...vendorIds)', { vendorIds });
       }
 
-      const rawQuality = await qb
+      const qualityCampaignId = parseInt(query.campaignId, 10);
+      const qualityVendorId = parseInt(query.vendorId, 10);
+      const wantsCampaignScope = Boolean(
+        String(query.country || '').trim() ||
+          String(query.operator || '').trim() ||
+          (Number.isFinite(qualityCampaignId) && qualityCampaignId > 0),
+      );
+      let qualityScopeEmpty = !fromDate || !toDate;
+      if (wantsCampaignScope) {
+        const qualityCampaignIds = filterCampaignsByMarket(scopedCampaigns, query).map(
+          (campaign) => campaign.id,
+        );
+        if (!qualityCampaignIds.length) qualityScopeEmpty = true;
+        else qb.andWhere('p.campaignId IN (:...qualityCampaignIds)', { qualityCampaignIds });
+      }
+      if (Number.isFinite(qualityVendorId) && qualityVendorId > 0) {
+        qb.andWhere('p.vendorId = :qualityVendorId', { qualityVendorId });
+      }
+
+      const rawQuality = qualityScopeEmpty ? [] : await qb
         .groupBy('p.vendorId')
         .addGroupBy('v.name')
         .addGroupBy('v.code')
@@ -678,8 +692,8 @@ export const createDailyStatsService = () => {
           const attempts = n(r.totalAttempts);
           const active = n(r.checksubActive);
           const parking = n(r.checksubParking);
-          const grace = n(r.checksubGrace);
           const pending = n(r.checksubPending);
+          const other = Math.max(0, attempts - active - parking - pending);
           const qualityPct = attempts > 0 ? Number(((active / attempts) * 100).toFixed(1)) : 0;
           return {
             vendorId: r.vendorId ? parseInt(r.vendorId, 10) : null,
@@ -689,8 +703,8 @@ export const createDailyStatsService = () => {
             totalAttempts: attempts,
             checksubActive: active,
             checksubParking: parking,
-            checksubGrace: grace,
             checksubPending: pending,
+            checksubOther: other,
             qualityPct,
           };
         })

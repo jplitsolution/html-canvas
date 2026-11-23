@@ -54,6 +54,11 @@ export const partnersController = {
     res.json(data);
   }),
 
+  postbackStatusOptions: asyncHandler(async (req, res) => {
+    const data = await postbackService.listStatusOptions(req.user.id);
+    res.json(data);
+  }),
+
   getPostback: asyncHandler(async (req, res) => {
     const data = await postbackService.getPostbackById(
       req.params.id,

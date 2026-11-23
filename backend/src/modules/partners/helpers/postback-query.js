@@ -22,6 +22,7 @@ import {
 import {
   describeVendorFireDecision,
 } from './operator-callback-status.js';
+import { filterCampaignsByMarket, parseMultiParam } from './campaign-market.js';
 import {
   DAY_REPORT_EVENT_TYPES,
   DAY_REPORT_HE_LOG_TYPES,
@@ -37,6 +38,42 @@ import {
   summarizeStories,
   todayYmd,
 } from './postback-day-report.js';
+
+function applyChecksubStatusFilter(qb, tokens) {
+  const outcomes = [];
+  const jobs = [];
+  let includeEmptyOutcome = false;
+  for (const token of tokens) {
+    const raw = String(token || '').trim();
+    if (!raw) continue;
+    if (raw === 'outcome:__none__' || raw.toLowerCase() === 'none') {
+      includeEmptyOutcome = true;
+      continue;
+    }
+    if (raw.toLowerCase().startsWith('job:')) {
+      const job = raw.slice(4).trim().toLowerCase();
+      if (job) jobs.push(job);
+      continue;
+    }
+    const outcome = raw.toLowerCase().startsWith('outcome:') ? raw.slice(8).trim() : raw;
+    if (outcome) outcomes.push(outcome.toLowerCase());
+  }
+  const parts = [];
+  const params = {};
+  if (outcomes.length) {
+    parts.push('LOWER(p.delayedChecksubOutcome) IN (:...checksubOutcomes)');
+    params.checksubOutcomes = [...new Set(outcomes)];
+  }
+  if (jobs.length) {
+    parts.push('LOWER(p.delayedChecksubStatus) IN (:...checksubJobs)');
+    params.checksubJobs = [...new Set(jobs)];
+  }
+  if (includeEmptyOutcome) {
+    parts.push("(p.delayedChecksubOutcome IS NULL OR p.delayedChecksubOutcome = '')");
+  }
+  if (!parts.length) return;
+  qb.andWhere(`(${parts.join(' OR ')})`, params);
+}
 
 export function createPostbackQuery(deps) {
   const {
@@ -148,40 +185,16 @@ export function createPostbackQuery(deps) {
       return emptySummary();
     }
 
-    const countryFilter = String(query.country || '').trim().toUpperCase();
-    const operatorFilter = String(query.operator || '').trim().toLowerCase();
-    const campaignIdFilter = query.campaignId
-      ? parseInt(query.campaignId, 10)
-      : null;
+    const campaignIdFilter = parseInt(query.campaignId, 10);
     const vendorIdFilter = query.vendorId
       ? parseInt(query.vendorId, 10)
       : null;
     const offerCodeFilter = String(query.offerCode || '').trim();
-
-    let scopedCampaigns = campaigns;
-    if (countryFilter) {
-      scopedCampaigns = scopedCampaigns.filter(
-        (c) =>
-          String(c.country || '').toUpperCase() === countryFilter ||
-          String(c.marketOperator?.country?.code || '').toUpperCase() === countryFilter ||
-          String(c.marketOperator?.country?.name || '').toUpperCase() === countryFilter,
-      );
-    }
-    if (operatorFilter) {
-      scopedCampaigns = scopedCampaigns.filter(
-        (c) =>
-          String(c.operator || '').toLowerCase() === operatorFilter ||
-          String(c.marketOperator?.code || '').toLowerCase() === operatorFilter ||
-          String(c.marketOperator?.name || '').toLowerCase() === operatorFilter,
-      );
-    }
-
-    let scopedCampaignIds = scopedCampaigns.map((c) => c.id);
-    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
-      if (!scopedCampaignIds.includes(campaignIdFilter)) {
-        return emptySummary();
-      }
-      scopedCampaignIds = [campaignIdFilter];
+    const scopedCampaigns = filterCampaignsByMarket(campaigns, query);
+    const scopedCampaignIds = scopedCampaigns.map((c) => c.id);
+    const askedForCampaign = Number.isFinite(campaignIdFilter) && campaignIdFilter > 0;
+    if (askedForCampaign && scopedCampaignIds.length === 0) {
+      return emptySummary();
     }
 
     if (scopedCampaignIds.length === 0 && !vendorIds.length) {
@@ -385,6 +398,101 @@ export function createPostbackQuery(deps) {
     };
   };
 
+  const listStatusOptions = async (userId) => {
+    const { campaignIds, vendorIds } = await resolveUserScope(userId);
+    if (!campaignIds.length && !vendorIds.length) {
+      return { statuses: [], checksub: [] };
+    }
+    const scoped = () => {
+      const qb = getPostbackRepo().createQueryBuilder('p');
+      if (campaignIds.length && vendorIds.length) {
+        qb.where(
+          '(p.campaignId IN (:...campaignIds) OR p.vendorId IN (:...vendorIds))',
+          { campaignIds, vendorIds },
+        );
+      } else if (campaignIds.length) {
+        qb.where('p.campaignId IN (:...campaignIds)', { campaignIds });
+      } else {
+        qb.where('p.vendorId IN (:...vendorIds)', { vendorIds });
+      }
+      return qb;
+    };
+
+    const statusRows = await scoped()
+      .select('p.status', 'value')
+      .addSelect('COUNT(*)', 'count')
+      .andWhere("p.status IS NOT NULL AND p.status <> ''")
+      .groupBy('p.status')
+      .orderBy('COUNT(*)', 'DESC')
+      .getRawMany();
+
+    const outcomeRows = await scoped()
+      .select('p.delayedChecksubOutcome', 'value')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('p.delayedChecksubOutcome')
+      .orderBy('COUNT(*)', 'DESC')
+      .getRawMany();
+
+    const jobRows = await scoped()
+      .select('p.delayedChecksubStatus', 'value')
+      .addSelect('COUNT(*)', 'count')
+      .andWhere("p.delayedChecksubStatus IS NOT NULL AND p.delayedChecksubStatus <> ''")
+      .groupBy('p.delayedChecksubStatus')
+      .orderBy('COUNT(*)', 'DESC')
+      .getRawMany();
+
+    const jobLabels = {
+      pending: 'Pending (not checked yet)',
+      completed: 'Completed',
+      failed: 'Check failed',
+      skipped: 'Skipped',
+    };
+    const checksub = [];
+    for (const row of outcomeRows) {
+      const value = String(row.value || '').trim();
+      const count = Number(row.count) || 0;
+      if (!value) {
+        if (count) {
+          checksub.push({
+            value: 'outcome:__none__',
+            label: 'No 30m result',
+            group: 'result',
+            count,
+          });
+        }
+        continue;
+      }
+      checksub.push({
+        value: `outcome:${value}`,
+        label: value,
+        group: 'result',
+        count,
+      });
+    }
+    for (const row of jobRows) {
+      const value = String(row.value || '').trim();
+      if (!value) continue;
+      const key = value.toLowerCase();
+      checksub.push({
+        value: `job:${key}`,
+        label: jobLabels[key] || value,
+        group: 'job',
+        count: Number(row.count) || 0,
+      });
+    }
+
+    return {
+      statuses: statusRows
+        .filter((row) => String(row.value || '').trim())
+        .map((row) => ({
+          value: String(row.value),
+          label: String(row.value),
+          count: Number(row.count) || 0,
+        })),
+      checksub,
+    };
+  };
+
   const listPostbacks = async (userId, query = {}) => {
     const { campaignIds, vendorIds, campaigns, vendors } = await resolveUserScope(userId);
     if (!campaignIds.length && !vendorIds.length) {
@@ -393,16 +501,20 @@ export function createPostbackQuery(deps) {
 
     const page = Math.max(1, parseInt(query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(query.limit, 10) || 25));
-    const status = String(query.status || '').trim().toLowerCase();
+    const statuses = parseMultiParam(query.status).map((value) => value.toLowerCase());
+    const checksubTokens = parseMultiParam(query.checksubStatus);
     const operatorStatus = String(query.operatorStatus || '').trim().toLowerCase();
     const q = String(query.q || '').trim();
     const vendorIdFilter = query.vendorId
       ? parseInt(query.vendorId, 10)
       : null;
-    const campaignIdFilter = query.campaignId
-      ? parseInt(query.campaignId, 10)
-      : null;
+    const campaignIdFilter = parseInt(query.campaignId, 10);
     const offerCodeFilter = String(query.offerCode || '').trim();
+    const wantsCampaignScope = Boolean(
+      String(query.country || '').trim() ||
+        String(query.operator || '').trim() ||
+        (Number.isFinite(campaignIdFilter) && campaignIdFilter > 0),
+    );
 
     const qb = getPostbackRepo().createQueryBuilder('p');
     if (campaignIds.length && vendorIds.length) {
@@ -416,20 +528,26 @@ export function createPostbackQuery(deps) {
       qb.where('p.vendorId IN (:...vendorIds)', { vendorIds });
     }
 
-    if (
-      status &&
-      Object.values(ConversionPostbackStatus).includes(status)
-    ) {
-      qb.andWhere('p.status = :status', { status });
+    if (wantsCampaignScope) {
+      const matchedCampaignIds = filterCampaignsByMarket(campaigns, query).map((c) => c.id);
+      if (!matchedCampaignIds.length) {
+        return { total: 0, page, limit, items: [] };
+      }
+      qb.andWhere('p.campaignId IN (:...matchedCampaignIds)', { matchedCampaignIds });
+    }
+    if (statuses.length === 1) {
+      qb.andWhere('LOWER(p.status) = :status', { status: statuses[0] });
+    } else if (statuses.length > 1) {
+      qb.andWhere('LOWER(p.status) IN (:...statuses)', { statuses });
+    }
+    if (checksubTokens.length) {
+      applyChecksubStatusFilter(qb, checksubTokens);
     }
     if (operatorStatus) {
       qb.andWhere('LOWER(p.operatorStatus) = :operatorStatus', { operatorStatus });
     }
     if (vendorIdFilter && !Number.isNaN(vendorIdFilter)) {
       qb.andWhere('p.vendorId = :vendorIdFilter', { vendorIdFilter });
-    }
-    if (campaignIdFilter && !Number.isNaN(campaignIdFilter)) {
-      qb.andWhere('p.campaignId = :campaignIdFilter', { campaignIdFilter });
     }
     if (offerCodeFilter) {
       qb.andWhere('p.offerCode = :offerCodeFilter', { offerCodeFilter });
@@ -1117,6 +1235,7 @@ export function createPostbackQuery(deps) {
 
   return {
     getSummary,
+    listStatusOptions,
     listPostbacks,
     getPostbackById,
     getDayReport,

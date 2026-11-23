@@ -20,6 +20,10 @@ export async function deleteVendor(id) {
   return apiClient(`/partners/vendors/${id}`, { method: 'DELETE' })
 }
 
+export async function listPostbackStatusOptions() {
+  return apiClient('/partners/postbacks/status-options')
+}
+
 export async function getPostbackSummary({ days, from, to, timezone, country, operator, campaignId, offerCode, vendorId } = {}) {
   const params = new URLSearchParams()
   if (days) params.set('days', String(days))
@@ -39,10 +43,13 @@ export async function listPostbacks({
   page = 1,
   limit = 25,
   status,
+  checksubStatus,
   operatorStatus,
   q,
   vendorId,
   campaignId,
+  country,
+  operator,
   offerCode,
   from,
   to,
@@ -51,11 +58,18 @@ export async function listPostbacks({
   const params = new URLSearchParams()
   params.set('page', String(page))
   params.set('limit', String(limit))
-  if (status && status !== 'all') params.set('status', status)
+  const statusValue = Array.isArray(status) ? status.filter(Boolean).join(',') : status
+  const checksubValue = Array.isArray(checksubStatus)
+    ? checksubStatus.filter(Boolean).join(',')
+    : checksubStatus
+  if (statusValue && statusValue !== 'all') params.set('status', statusValue)
+  if (checksubValue) params.set('checksubStatus', checksubValue)
   if (operatorStatus) params.set('operatorStatus', operatorStatus)
   if (q) params.set('q', q)
   if (vendorId) params.set('vendorId', String(vendorId))
   if (campaignId) params.set('campaignId', String(campaignId))
+  if (country) params.set('country', country)
+  if (operator) params.set('operator', operator)
   if (offerCode) params.set('offerCode', offerCode)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
