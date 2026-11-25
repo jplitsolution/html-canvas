@@ -51,6 +51,7 @@ export async function listPostbacks({
   country,
   operator,
   offerCode,
+  campid,
   from,
   to,
   timezone,
@@ -71,6 +72,7 @@ export async function listPostbacks({
   if (country) params.set('country', country)
   if (operator) params.set('operator', operator)
   if (offerCode) params.set('offerCode', offerCode)
+  if (campid) params.set('campid', campid)
   if (from) params.set('from', from)
   if (to) params.set('to', to)
   if (timezone) params.set('timezone', timezone)

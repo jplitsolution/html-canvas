@@ -146,6 +146,8 @@ function PostbacksPage() {
   )
   const [q, setQ] = useState('')
   const [searchDraft, setSearchDraft] = useState('')
+  const [campid, setCampid] = useState(() => searchParams.get('campid') || '')
+  const [campidDraft, setCampidDraft] = useState(() => searchParams.get('campid') || '')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [datePreset, setDatePreset] = useState(() => {
@@ -200,6 +202,7 @@ function PostbacksPage() {
           checksubStatus: checksubStatuses,
           operatorStatus: operatorStatus || undefined,
           q,
+          campid: campid || undefined,
           vendorId: vendorId || undefined,
           campaignId: campaignId || undefined,
           country: country || undefined,
@@ -215,7 +218,7 @@ function PostbacksPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, statuses, checksubStatuses, operatorStatus, q, vendorId, campaignId, country, operator, dateRange.from, dateRange.to, timezone])
+  }, [page, statuses, checksubStatuses, operatorStatus, q, campid, vendorId, campaignId, country, operator, dateRange.from, dateRange.to, timezone])
 
   useEffect(() => {
     load()
@@ -544,6 +547,8 @@ function PostbacksPage() {
     setChecksubStatuses([])
     setQ('')
     setSearchDraft('')
+    setCampid('')
+    setCampidDraft('')
     applyDatePreset('today')
     setSearchParams({})
   }
@@ -824,12 +829,43 @@ function PostbacksPage() {
               />
             </div>
 
+            <div className="flex items-center gap-2">
+              <label htmlFor="filter-campid" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                Campid:
+              </label>
+              <input
+                id="filter-campid"
+                type="text"
+                value={campidDraft}
+                placeholder="Search campid"
+                onChange={(e) => setCampidDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return
+                  e.preventDefault()
+                  const next = e.currentTarget.value.trim()
+                  setPage(1)
+                  setCampid(next)
+                  writeSearch((params) => {
+                    if (next) params.set('campid', next)
+                    else params.delete('campid')
+                  })
+                }}
+                className="h-[38px] w-40 border border-gray-300 rounded-md px-3 text-sm text-gray-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 shadow-2xs"
+              />
+            </div>
+
             {/* Filter Button in the same line */}
             <button
               type="button"
               onClick={() => {
+                const next = campidDraft.trim()
                 setPage(1)
-                load()
+                setCampid(next)
+                writeSearch((params) => {
+                  if (next) params.set('campid', next)
+                  else params.delete('campid')
+                })
+                if (next === campid) load()
               }}
               className="h-[38px] bg-blue-600 text-white font-medium px-6 rounded-md shadow-sm text-sm flex items-center justify-center gap-2 cursor-pointer transition-none shrink-0"
             >
@@ -838,7 +874,7 @@ function PostbacksPage() {
             </button>
 
             {/* Reset Button in the same line when active */}
-            {(campaignId || vendorId || country || operator || operatorStatus || statuses.length || checksubStatuses.length || q || datePreset !== 'today') && (
+            {(campaignId || vendorId || country || operator || operatorStatus || statuses.length || checksubStatuses.length || q || campid || datePreset !== 'today') && (
               <button
                 type="button"
                 onClick={handleResetFilters}

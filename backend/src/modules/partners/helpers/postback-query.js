@@ -510,6 +510,7 @@ export function createPostbackQuery(deps) {
       : null;
     const campaignIdFilter = parseInt(query.campaignId, 10);
     const offerCodeFilter = String(query.offerCode || '').trim();
+    const campidFilter = String(query.campid || '').trim();
     const wantsCampaignScope = Boolean(
       String(query.country || '').trim() ||
         String(query.operator || '').trim() ||
@@ -551,6 +552,13 @@ export function createPostbackQuery(deps) {
     }
     if (offerCodeFilter) {
       qb.andWhere('p.offerCode = :offerCodeFilter', { offerCodeFilter });
+    }
+    if (campidFilter) {
+      const campidLike = `%${campidFilter.replace(/[\\%_]/g, '\\$&')}%`;
+      qb.andWhere(
+        "(LOWER(p.campid) LIKE :campidLike OR LOWER(p.trackingCampid) LIKE :campidLike)",
+        { campidLike: campidLike.toLowerCase() },
+      );
     }
     if (q) {
       const like = `%${q}%`;
