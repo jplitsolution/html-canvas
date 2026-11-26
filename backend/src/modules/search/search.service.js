@@ -181,6 +181,38 @@ export const createSearchService = () => {
     }
   };
 
+  const applyStatusFilter = (queryBuilder, status) => {
+    if (!status) return;
+    if (status === 'HELD') {
+      const heldTrue = jsonBoolSql('ve_held.metadata', 'held');
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM visit_events ve_held
+          WHERE ve_held.visit_id = visit.id
+            AND ve_held.event_type = 'OTP_VERIFY'
+            AND ${heldTrue}
+        )`,
+      );
+      return;
+    }
+    if (status === 'SUCCESS_SENT') {
+      const heldTrue = jsonBoolSql('ve_held.metadata', 'held');
+      queryBuilder.andWhere('visit.visitStatus IN (:...sentStatuses)', {
+        sentStatuses: ['SUCCESS', 'SUBSCRIBED'],
+      });
+      queryBuilder.andWhere(
+        `NOT EXISTS (
+          SELECT 1 FROM visit_events ve_held
+          WHERE ve_held.visit_id = visit.id
+            AND ve_held.event_type = 'OTP_VERIFY'
+            AND ${heldTrue}
+        )`,
+      );
+      return;
+    }
+    queryBuilder.andWhere('visit.visitStatus = :status', { status });
+  };
+
   const applyDbFilters = (queryBuilder, params, options = {}) => {
     if (Array.isArray(params.campaignId)) {
       queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
@@ -204,9 +236,7 @@ export const createSearchService = () => {
       });
     }
     if (params.status) {
-      queryBuilder.andWhere('visit.visitStatus = :status', {
-        status: params.status,
-      });
+      applyStatusFilter(queryBuilder, params.status);
     }
     if (params.vendorId) {
       queryBuilder.andWhere('visit.vendorId = :vendorId', {
@@ -304,9 +334,7 @@ export const createSearchService = () => {
       );
     }
     if (params.status) {
-      queryBuilder.andWhere('visit.visitStatus = :status', {
-        status: params.status,
-      });
+      applyStatusFilter(queryBuilder, params.status);
     }
     if (params.q) {
       const dbQuery = params.q.replace(/\*/g, '_');
@@ -345,6 +373,7 @@ export const createSearchService = () => {
 
     const eventCountByVisit = new Map();
     const lastEventByVisit = new Map();
+    const heldVisitIds = new Set();
     if (ids.length > 0) {
       const counts = await getRepository(VisitEvent)
         .createQueryBuilder('e')
@@ -355,6 +384,18 @@ export const createSearchService = () => {
         .getRawMany();
       for (const row of counts) {
         eventCountByVisit.set(Number(row.visitId), Number(row.cnt) || 0);
+      }
+
+      const heldTrue = jsonBoolSql('e.metadata', 'held');
+      const heldRows = await getRepository(VisitEvent)
+        .createQueryBuilder('e')
+        .select('DISTINCT e.visitId', 'visitId')
+        .where('e.visitId IN (:...ids)', { ids })
+        .andWhere("e.eventType = 'OTP_VERIFY'")
+        .andWhere(heldTrue)
+        .getRawMany();
+      for (const row of heldRows) {
+        heldVisitIds.add(Number(row.visitId));
       }
 
       const dbType = getDataSource().options.type;
@@ -399,6 +440,8 @@ export const createSearchService = () => {
       eventType: lastEventByVisit.get(visit.id) || null,
       eventCount: eventCountByVisit.get(visit.id) || 0,
       status: visit.visitStatus,
+      held: heldVisitIds.has(visit.id),
+      otpVerified: Boolean(visit.otpVerifiedAt),
       ip: visit.ipAddress,
       userAgent: visit.userAgent,
       timestamp: (visit.updatedAt || visit.createdAt)?.toISOString?.()
@@ -468,7 +511,12 @@ export const createSearchService = () => {
       return searchSessionsFromDb(params);
     }
 
-    if (client && !connectionFailed) {
+    if (
+      client &&
+      !connectionFailed &&
+      params.status !== 'HELD' &&
+      params.status !== 'SUCCESS_SENT'
+    ) {
       try {
         const res = await client.search({
           index: indexName,
@@ -687,7 +735,12 @@ export const createSearchService = () => {
       timeZone = 'Asia/Kolkata';
     }
 
-    if (client && !connectionFailed) {
+    if (
+      client &&
+      !connectionFailed &&
+      params.status !== 'HELD' &&
+      params.status !== 'SUCCESS_SENT'
+    ) {
       try {
         const res = await client.search({
           index: indexName,

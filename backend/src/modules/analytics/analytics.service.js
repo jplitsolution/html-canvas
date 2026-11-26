@@ -17,6 +17,7 @@ import { resolveConversionRule } from '../flow/flows/conversion-rule.js';
 import getConfig from '../../config/configuration.js';
 import { filledTrackingValue } from '../flow/helpers/placeholder-macro.js';
 import { isActiveSubscriberStatus } from '../flow/helpers/checksub-rules.js';
+import { HELD_OTP_MESSAGE } from '../otp/helpers/payout.js';
 import { resolveRangeBounds } from '../../common/zoned-day.js';
 
 export const createAnalyticsService = () => {
@@ -791,6 +792,24 @@ export const createAnalyticsService = () => {
       order: { createdAt: 'ASC' },
     });
 
+    const hasHeldOtpVerify = (visit.events || []).some(
+      (e) => e.eventType === VisitEventType.OTP_VERIFY && e.metadata?.held === true,
+    );
+
+    const sanitizeResponseBody = (body) => {
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+      let next = body;
+      if ('held' in next) {
+        const { held: _omitted, ...rest } = next;
+        next = rest;
+      }
+      if (next.data && typeof next.data === 'object' && !Array.isArray(next.data) && 'held' in next.data) {
+        const { held: _nestedOmitted, ...restData } = next.data;
+        next = { ...next, data: restData };
+      }
+      return next;
+    };
+
     const apiCalls = apiLogs.map((row) => {
       const responseBody = parseJsonSafe(row.responseBody);
       const requestBody = parseJsonSafe(row.requestBody);
@@ -812,7 +831,14 @@ export const createAnalyticsService = () => {
         row.callType === 'otp_expose_verify_in'
       ) {
         const nestedOtp = responseBody?.data ?? responseBody ?? {};
-        if (nestedOtp.held === true || responseBody?.held === true) {
+        const isHeldOtp =
+          nestedOtp.held === true ||
+          responseBody?.held === true ||
+          (row.callType === 'otp_expose_verify_in' &&
+            hasHeldOtpVerify &&
+            (row.errorMessage === HELD_OTP_MESSAGE ||
+              responseBody?.message === HELD_OTP_MESSAGE));
+        if (isHeldOtp) {
           statusLabel = 'HELD';
         } else {
           statusLabel =
@@ -824,6 +850,14 @@ export const createAnalyticsService = () => {
                   ? 'SUCCESS'
                   : null;
         }
+      } else if (
+        row.callType === 'dcb_expose_confirm_in' &&
+        (responseBody?.code === 'DCB_HELD' ||
+          (hasHeldOtpVerify &&
+            (row.errorMessage === HELD_OTP_MESSAGE ||
+              responseBody?.error === HELD_OTP_MESSAGE)))
+      ) {
+        statusLabel = 'HELD';
       } else if (row.callType === 'subscribe' && responseBody?.skipped) {
         statusLabel =
           responseBody.statusLabel ||
@@ -858,7 +892,7 @@ export const createAnalyticsService = () => {
         requestUrl: row.requestUrl,
         requestBody,
         responseStatus: row.responseStatus,
-        responseBody,
+        responseBody: sanitizeResponseBody(responseBody),
         success: row.success,
         statusLabel,
         errorMessage: row.errorMessage,

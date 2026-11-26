@@ -48,7 +48,7 @@ import {
   getAllCampaignLogAggregations,
   downloadLogsExport,
 } from '../services/api/logs'
-import { normalizeModeId } from '../components/flow/verificationModes'
+import { isApiExposeCampaign, normalizeModeId } from '../components/flow/verificationModes'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
@@ -502,7 +502,14 @@ export function eventLabel(type, flowType) {
   return standard[type] || type.replace(/_/g, ' ')
 }
 
-export function statusLabel(status, flowType) {
+export function statusLabel(status, flowType, options = {}) {
+  const hasHoldStatusOptions = Boolean(options?.hasHoldStatusOptions)
+  if (hasHoldStatusOptions) {
+    if (status === 'SUCCESS') return 'Success — All (Sent & Held)'
+    if (status === 'SUCCESS_SENT') return 'Success — Sent (Not Held)'
+    if (status === 'HELD') return 'Success — Held (Withheld)'
+  }
+
   if (flowType === 'ORANGE_BF') {
     const obf = {
       VISIT: '1. Landed (Dropped at Screen 1)',
@@ -579,6 +586,8 @@ export function statusLabel(status, flowType) {
     OTP_SHOWN: 'OTP Shown',
     SUBSCRIBED: 'Subscribed (Success)',
     SUCCESS: 'Success',
+    SUCCESS_SENT: 'Success — Sent (Not Held)',
+    HELD: 'Success — Held (Withheld)',
     FAILED: 'Failed',
     BLOCKED: 'Blocked',
     ACTIVE: 'Active',
@@ -728,7 +737,7 @@ const getStatusBadgeClass = (status) => {
   if (s === 'ACTIVE' || s.includes('SUCCESS') || s.includes('SUBSCRIBED')) {
     return 'text-emerald-600';
   }
-  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING') {
+  if (s === 'NEW' || s === 'INACTIVE' || s === 'PENDING' || s === 'GRACE' || s === 'PARKING' || s === 'HELD') {
     return 'text-amber-600';
   }
   if (s.includes('FAILED') || s.includes('BLOCKED')) {
@@ -894,6 +903,12 @@ function CampaignLogsPage() {
     return COMPARE_PRESETS
   }, [currentFlowSpec])
 
+  const hasHoldStatusOptions = useMemo(() => {
+    if (!selectedCampaign) return true
+    if (isApiExposeCampaign(selectedCampaign) || flowType === 'ORANGE_BF') return true
+    return Number(aggs?.otpStats?.held) > 0
+  }, [selectedCampaign, flowType, aggs?.otpStats?.held])
+
   // Synchronize compare events and active filter when switching campaigns/flow
   useEffect(() => {
     if (!currentFlowSpec) return
@@ -905,10 +920,15 @@ function CampaignLogsPage() {
     if (filters.eventType && !allowed.has(filters.eventType)) {
       setFilters((f) => ({ ...f, eventType: '' }))
     }
-    if (filters.status && currentFlowSpec.statuses && !currentFlowSpec.statuses.includes(filters.status)) {
+    const allowedStatuses = new Set(currentFlowSpec.statuses || [])
+    if (hasHoldStatusOptions) {
+      allowedStatuses.add('SUCCESS_SENT')
+      allowedStatuses.add('HELD')
+    }
+    if (filters.status && currentFlowSpec.statuses && !allowedStatuses.has(filters.status)) {
       setFilters((f) => ({ ...f, status: '' }))
     }
-  }, [currentFlowSpec])
+  }, [currentFlowSpec, hasHoldStatusOptions])
 
   const getCampaignLabel = useCallback((campaignId) => {
     if (!campaignId) return '—'
@@ -1031,31 +1051,33 @@ function CampaignLogsPage() {
   }, [aggs, filters.eventType, currentFlowSpec, flowType])
 
   const statusOptions = useMemo(() => {
-    if (currentFlowSpec?.statuses) {
-      const set = new Set(currentFlowSpec.statuses)
-      if (aggs?.byStatus) {
-        aggs.byStatus.forEach((item) => {
-          if (item.key && item.count > 0) set.add(item.key)
-        })
+    const base = currentFlowSpec?.statuses
+      ? [...currentFlowSpec.statuses]
+      : [
+          'VISIT',
+          'HOME_SHOWN',
+          'CONFIRM_SHOWN',
+          'OTP_SHOWN',
+          'SUBSCRIBED',
+          'SUCCESS',
+          'FAILED',
+          'BLOCKED',
+          'ACTIVE',
+          'PENDING',
+        ]
+    const set = new Set()
+    for (const st of base) {
+      set.add(st)
+      if (st === 'SUCCESS' && hasHoldStatusOptions) {
+        set.add('SUCCESS_SENT')
+        set.add('HELD')
       }
-      if (filters.status && !set.has(filters.status)) {
-        set.add(filters.status)
-      }
-      return Array.from(set)
     }
-    const defaultStatuses = [
-      'VISIT',
-      'HOME_SHOWN',
-      'CONFIRM_SHOWN',
-      'OTP_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-      'ACTIVE',
-      'PENDING',
-    ]
-    const set = new Set(defaultStatuses)
+    if (hasHoldStatusOptions) {
+      set.add('SUCCESS')
+      set.add('SUCCESS_SENT')
+      set.add('HELD')
+    }
     if (aggs?.byStatus) {
       aggs.byStatus.forEach((item) => {
         if (item.key && item.count > 0) set.add(item.key)
@@ -1065,7 +1087,7 @@ function CampaignLogsPage() {
       set.add(filters.status)
     }
     return Array.from(set)
-  }, [currentFlowSpec, aggs, filters.status])
+  }, [currentFlowSpec, hasHoldStatusOptions, aggs, filters.status])
 
   const [chartEventCategory, setChartEventCategory] = useState('funnel')
 
@@ -1350,7 +1372,7 @@ function CampaignLogsPage() {
                 <option value="">— All Statuses —</option>
                 {statusOptions.map((st) => (
                   <option key={st} value={st}>
-                    {statusLabel(st, flowType)}
+                    {statusLabel(st, flowType, { hasHoldStatusOptions })}
                   </option>
                 ))}
               </select>
@@ -1880,9 +1902,20 @@ function CampaignLogsPage() {
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">
                           {row.status ? (
-                            <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
-                              {row.status}
-                            </span>
+                            <div className="inline-flex items-center gap-1.5">
+                              <span className={`font-bold tracking-wide text-[11px] ${getStatusBadgeClass(row.status)}`}>
+                                {row.status}
+                              </span>
+                              {row.held ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border text-amber-700 bg-amber-50 border-amber-200">
+                                  HELD
+                                </span>
+                              ) : row.otpVerified && (row.status === 'SUCCESS' || row.status === 'SUBSCRIBED') ? (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold border text-emerald-700 bg-emerald-50 border-emerald-200">
+                                  SENT
+                                </span>
+                              ) : null}
+                            </div>
                           ) : '—'}
                         </td>
                         <td className="px-4 py-3 text-xs whitespace-nowrap">

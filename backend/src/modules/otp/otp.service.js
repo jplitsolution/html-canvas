@@ -1435,7 +1435,6 @@ export const createOtpService = () => {
           statusCode: 400,
           error: 'Error',
           message: HELD_OTP_MESSAGE,
-          held: true,
         }
       : {
           message: clientSuccess
