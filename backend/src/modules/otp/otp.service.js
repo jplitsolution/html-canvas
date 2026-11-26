@@ -29,13 +29,16 @@ import {
 } from './helpers/expose-visit.js';
 
 /**
- * Number was just submitted. Landing checksub only runs when a phone is
- * already known (header). This call uses the typed MSISDN before any OTP.
- * Returns a redirect when the partner says this number should not get an OTP.
- * A failed lookup throws so OTP is not sent.
+ * Pre-OTP checksub (OTP_ONLY / BOTH / partner flows).
+ * - No subscriptionApi → skip (return null)
+ * - Has subscriptionApi → always call (drives next page when already subscribed)
+ * - Call/network/partner failure → soft-continue; do NOT block OTP send
+ * - Success + active/rule hit → return redirect (skip OTP)
+ * - Success + new/inactive → continue to OTP send
  */
 async function checksubBeforePartnerOtp(apiConfig, { phone, visitId, campaign }) {
-  if (!apiConfig?.subscriptionApi || !phone) return null;
+  const checksubUrl = String(apiConfig?.subscriptionApi || '').trim();
+  if (!checksubUrl || !phone) return null;
 
   const country = campaign?.country?.code || campaign?.country || '';
   const operator = campaign?.operator?.code || campaign?.operator || '';
@@ -50,20 +53,30 @@ async function checksubBeforePartnerOtp(apiConfig, { phone, visitId, campaign })
       serviceId: campaign?.serviceId,
       bypassCache: true,
     });
-  } catch {
-    return null;
+  } catch (err) {
+    console.warn(
+      `[otp] checksub failed (continuing to OTP send): ${err?.message || err}`,
+    );
+    return { ran: true, continue: true, status: 'FAILED', softFail: true };
   }
 
+  // Partner down / bad response — still send OTP; do not stop the funnel.
   if (!subCheck || subCheck.status === 'failed') {
-    const detail = subCheck?.errorMessage ? `: ${subCheck.errorMessage}` : '';
-    const err = new Error(`Subscription check failed${detail}. OTP was not sent.`);
-    err.statusCode = 502;
-    throw err;
+    console.warn(
+      `[otp] checksub returned failed (continuing to OTP send): ${
+        subCheck?.errorMessage || 'unknown'
+      }`,
+    );
+    return { ran: true, continue: true, status: 'FAILED', softFail: true };
   }
-  if (subCheck.go === 'continue') return null;
+
+  if (subCheck.go === 'continue') {
+    return { ran: true, continue: true, status: String(subCheck.status || 'NEW').toUpperCase() };
+  }
 
   if (subCheck.go === 'external' && subCheck.url) {
     return {
+      ran: true,
       status: String(subCheck.status || 'ACTIVE').toUpperCase(),
       forwardUrl: subCheck.url,
       nextPage: null,
@@ -73,6 +86,7 @@ async function checksubBeforePartnerOtp(apiConfig, { phone, visitId, campaign })
 
   if (subCheck.go === 'page' && subCheck.page) {
     return {
+      ran: true,
       status: String(subCheck.status || subCheck.page).toUpperCase(),
       forwardUrl: null,
       nextPage: subCheck.page,
@@ -81,9 +95,12 @@ async function checksubBeforePartnerOtp(apiConfig, { phone, visitId, campaign })
   }
 
   const mapped = pageTypeForSubscriptionStatus(subCheck.status, subCheck.isActive);
-  if (!subCheck.isActive && !subCheck.shouldSkipSubscribe && !mapped) return null;
+  if (!subCheck.isActive && !subCheck.shouldSkipSubscribe && !mapped) {
+    return { ran: true, continue: true, status: String(subCheck.status || 'NEW').toUpperCase() };
+  }
 
   return {
+    ran: true,
     status: String(subCheck.status || 'ACTIVE').toUpperCase(),
     forwardUrl: null,
     nextPage: mapped || CampaignPageType.THANKYOU,
@@ -515,22 +532,24 @@ export const createOtpService = () => {
     }
 
     const apiConfig = await getApiConfigForCampaign(campaign?.id);
-    const alreadySubscribed = await checksubBeforePartnerOtp(apiConfig, {
+    const checksubResult = await checksubBeforePartnerOtp(apiConfig, {
       phone: String(phone).trim(),
       visitId,
       campaign,
     });
-    if (alreadySubscribed) {
+    // Already subscribed / rule redirect — do not send OTP.
+    if (checksubResult && !checksubResult.continue) {
       return {
-        message: alreadySubscribed.message,
+        message: checksubResult.message,
         phone: String(phone).trim(),
         provider: 'partner',
         remoteVerify: true,
         isSubscribed: true,
-        status: alreadySubscribed.status,
-        forwardUrl: alreadySubscribed.forwardUrl || null,
-        nextPage: alreadySubscribed.nextPage || null,
+        status: checksubResult.status,
+        forwardUrl: checksubResult.forwardUrl || null,
+        nextPage: checksubResult.nextPage || null,
         otpSkipped: true,
+        checksubRan: true,
       };
     }
 
@@ -613,6 +632,8 @@ export const createOtpService = () => {
       remoteVerify: true,
       responseCode: sendResult.responseCode ?? null,
       providerRequestId: sendResult.providerRequestId || null,
+      checksubRan: Boolean(checksubResult?.ran),
+      checksubStatus: checksubResult?.status || null,
     };
   };
 

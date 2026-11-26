@@ -18,9 +18,12 @@ import {
   Clock
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useEditor } from '../context/EditorContext';
 import { setCanvasZoom, getCanvasZoom, syncCanvasFrameHeight } from '../plugins/canvasEnhancements';
+import { funnelPageLabel, getEditorPageNavItems } from '../../services/api/campaigns';
+import { campaignEditPath } from '../../utils/routes';
+import useStore from '../../store/useStore';
 
 export function EditorToolbar({
   projectTitle,
@@ -34,18 +37,73 @@ export function EditorToolbar({
   onExportCurrent,
   onExportAll,
 }) {
-  const { editor, device, setDevice, switchDevice, zoom, setZoom, customWidth, customHeight, setCustomWidth, setCustomHeight, funnelPageType } = useEditor();
-  const [exportOpen, setExportOpen] = useState(false);
+  const {
+    editor,
+    device,
+    setDevice,
+    switchDevice,
+    zoom,
+    setZoom,
+    customWidth,
+    customHeight,
+    setCustomWidth,
+    setCustomHeight,
+    funnelPageType,
+    verificationMode,
+    step,
+    campaignId,
+    countryCode,
+    operatorCode,
+  } = useEditor();
+  const navigate = useNavigate();
+  const campaign = useStore((s) => s.campaign);
+  const campaignPages = campaign?.pages;
+  const [menu, setMenu] = useState(null);
   const exportRef = useRef(null);
+  const pagesRef = useRef(null);
 
   useEffect(() => {
-    if (!exportOpen) return;
+    if (!menu) return;
     const close = (e) => {
-      if (exportRef.current && !exportRef.current.contains(e.target)) setExportOpen(false);
+      const inExport = exportRef.current && exportRef.current.contains(e.target);
+      const inPages = pagesRef.current && pagesRef.current.contains(e.target);
+      if (!inExport && !inPages) setMenu(null);
     };
     document.addEventListener('mousedown', close);
     return () => document.removeEventListener('mousedown', close);
-  }, [exportOpen]);
+  }, [menu]);
+
+  const currentPage = String(funnelPageType || '').toUpperCase();
+  const currentStep = String(step || '').toLowerCase();
+  const pageNavItems = getEditorPageNavItems(campaign, verificationMode);
+  const currentPageLabel = currentPage
+    ? funnelPageLabel(currentPage, verificationMode, currentStep)
+    : 'Pages';
+  const pagesWithContent = new Set(
+    (campaignPages || [])
+      .filter((page) => page.hasContent)
+      .map((page) => String(page.pageType || '').toUpperCase()),
+  );
+
+  const openPage = async (item) => {
+    setMenu(null);
+    const next = String(item?.pageType || '').toUpperCase();
+    if (!next || !campaignId) return;
+    const nextStep = item?.step ? String(item.step).toLowerCase() : '';
+    const samePage = next === currentPage;
+    const sameStep = (nextStep || '') === (currentStep || '');
+    if (samePage && sameStep) return;
+    if (isDirty && onSave) await onSave();
+    navigate(
+      campaignEditPath(
+        countryCode,
+        operatorCode,
+        campaignId,
+        next,
+        nextStep ? { step: nextStep } : null,
+      ),
+    );
+  };
 
   const handleZoom = (delta) => {
     if (!editor) return;
@@ -210,6 +268,53 @@ export function EditorToolbar({
           </button>
         </div>
 
+        {campaignId && (
+          <div className="relative" ref={pagesRef}>
+            <button
+              type="button"
+              onClick={() => setMenu((open) => (open === 'pages' ? null : 'pages'))}
+              disabled={saving}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm max-w-[11rem] disabled:opacity-50"
+              title={currentPageLabel}
+            >
+              <span className="truncate">{currentPageLabel}</span>
+              <ChevronDown className="w-3 h-3 opacity-60 shrink-0" />
+            </button>
+            {menu === 'pages' && (
+              <div className="absolute right-0 top-full mt-2 z-50 min-w-[220px] py-1.5 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden">
+                <p className="px-4 pt-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                  Go to page
+                </p>
+                {pageNavItems.map((item) => {
+                  const itemStep = String(item.step || '').toLowerCase();
+                  const effectiveStep =
+                    currentPage === 'OTP' ? currentStep || 'number' : currentStep;
+                  const active =
+                    item.pageType === currentPage &&
+                    (itemStep ? itemStep === effectiveStep : !itemStep);
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={`w-full text-left px-4 py-2 text-xs font-semibold flex items-center gap-2 transition-colors ${
+                        active
+                          ? 'bg-indigo-50 text-indigo-700'
+                          : 'text-slate-700 hover:bg-slate-100'
+                      }`}
+                      onClick={() => openPage(item)}
+                    >
+                      <span className="flex-1 truncate">{item.label}</span>
+                      {pagesWithContent.has(item.pageType) && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" title="Has content" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         <button
           type="button"
           onClick={onPreview}
@@ -222,20 +327,20 @@ export function EditorToolbar({
         <div className="relative hidden sm:block" ref={exportRef}>
           <button
             type="button"
-            onClick={() => setExportOpen((v) => !v)}
+            onClick={() => setMenu((open) => (open === 'export' ? null : 'export'))}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"
           >
             <Download className="w-3.5 h-3.5 text-slate-500" />
             <span>Export</span>
             <ChevronDown className="w-3 h-3 opacity-60" />
           </button>
-          {exportOpen && (
+          {menu === 'export' && (
             <div className="absolute right-0 top-full mt-2 z-50 min-w-[200px] py-2 rounded-2xl border border-slate-200 bg-white shadow-xl overflow-hidden animate-in fade-in slide-in-from-top-2 duration-150">
               <button
                 type="button"
                 className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 onClick={() => {
-                  setExportOpen(false);
+                  setMenu(null);
                   onExportCurrent();
                 }}
               >
@@ -245,7 +350,7 @@ export function EditorToolbar({
                 type="button"
                 className="w-full text-left px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 onClick={() => {
-                  setExportOpen(false);
+                  setMenu(null);
                   onExportAll();
                 }}
               >

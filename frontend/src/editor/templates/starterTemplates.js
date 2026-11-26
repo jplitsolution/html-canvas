@@ -849,8 +849,8 @@ const moovNumberHtml = `
     <p class="ms-sub">Nous allons vous envoyer un code de confirmation gratuit à 4 chiffres par SMS.</p>
     <div class="ms-phone">
       <span class="ms-flag">🇧🇫</span>
-      <span class="ms-cc">+226</span>
-      <input data-otp-field="phone" inputmode="numeric" maxlength="8" data-min-length="8" data-max-length="8" placeholder="70 45 89 12" />
+      <span class="ms-cc" data-country-code="+226">+226</span>
+      <input data-otp-field="phone" data-country-code="+226" inputmode="numeric" maxlength="8" data-min-length="8" data-max-length="8" placeholder="70 45 89 12" />
     </div>
     <div data-otp-slot="error" class="ms-error"></div>
     <div data-otp-slot="status" class="ms-status"></div>
@@ -921,8 +921,8 @@ const moovThankyouHtml = `
 export const OTP_NUMBER_STARTER_TEMPLATES = [
   {
     id: 'otp-moov-sante-number',
-    name: 'Moov Santé+ (Numéro)',
-    description: 'Moov Burkina Faso screen 2: +226 number, then Recevoir le code.',
+    name: 'Moov Santé+ (Numéro only)',
+    description: 'Number entry only. Prefer “Moov Santé+ (Numéro + code)” on the OTP page for the full live flow.',
     thumb: 'contact',
     previewImage: '',
     css: moovSanteCss,
@@ -951,8 +951,8 @@ export const OTP_NUMBER_STARTER_TEMPLATES = [
 export const OTP_VERIFY_STARTER_TEMPLATES = [
   {
     id: 'otp-moov-sante-verify',
-    name: 'Moov Santé+ (Code SMS)',
-    description: 'Moov Burkina Faso screen 3: 4-digit PIN and Confirmer l’abonnement.',
+    name: 'Moov Santé+ (Code SMS only)',
+    description: 'PIN screen only — no number field. Do not use alone on OTP or Subscribe jumps straight here.',
     thumb: 'contact',
     previewImage: '',
     css: moovSanteCss,

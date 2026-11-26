@@ -15,13 +15,16 @@ export function getCountryCodeFromDom(phoneInput, shadow) {
     if (attr && attr.trim()) return attr.trim()
   }
   if (shadow) {
-    const badge = shadow.querySelector('[data-country-code], [data-phone-prefix]')
+    const badge = shadow.querySelector(
+      '[data-country-code], [data-phone-prefix], .ms-cc, .wjo-country-code, .bf-country-prefix, .country-code-prefix, .phone-prefix-badge',
+    )
     if (badge) {
       const val =
         badge.getAttribute('data-country-code') ||
         badge.getAttribute('data-phone-prefix') ||
+        badge.textContent ||
         ''
-      if (val && val.trim()) return val.trim()
+      if (val && String(val).trim()) return String(val).trim()
     }
   }
   return ''

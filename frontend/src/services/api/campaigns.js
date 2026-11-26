@@ -23,6 +23,90 @@ export const PAGE_TYPE_LABELS = {
   API_EXPOSE: 'API expose',
 }
 
+/** Toolbar / editor label for a funnel page, including mode-specific names. */
+export function funnelPageLabel(pageType, verificationMode, step = null) {
+  const type = String(pageType || '').toUpperCase()
+  const mode = String(verificationMode || '').toUpperCase()
+  const otpStep = String(step || '').toLowerCase()
+  if (type === 'OTP' && (otpStep === 'number' || otpStep === 'otp' || otpStep === 'pin')) {
+    if (otpStep === 'number') return 'Number / PIN entry'
+    return mode === 'UNIVERSE_DCB' ? 'Confirm PIN' : 'OTP / code entry'
+  }
+  if (mode === 'ORANGE_BF') {
+    if (type === 'HOME') return 'Enter PIN / Number'
+    if (type === 'CONFIRM') return 'Confirm / Plan'
+    if (type === 'OTP') return 'Verify PIN / OTP'
+    if (type === 'THANKYOU') return 'Thank you'
+  }
+  if (mode === 'UNIVERSE_DCB') {
+    if (type === 'HOME') return 'Choose pack'
+    if (type === 'OTP') return 'Number then PIN'
+  }
+  if (mode === 'OTP_ONLY' && type === 'OTP') return 'OTP (number + code)'
+  return PAGE_TYPE_LABELS[type] || pageType
+}
+
+/**
+ * Editor "Go to page" list from the campaign flow graph.
+ * OTP_ONLY / DCB: OTP expands into Number entry + Code entry (same page, ?step=).
+ * CONFIRM is omitted when it is not in the flow (e.g. packs-on-home OTP_ONLY).
+ */
+export function getEditorPageNavItems(campaign, verificationMode) {
+  const mode = String(verificationMode || campaign?.verificationMode || '').toUpperCase()
+  const nodes = campaign?.flowConfig?.nodes
+  const fromFlow = Array.isArray(nodes)
+    ? nodes
+        .map((n) => String(n.pageType || n.id || '').toUpperCase())
+        .filter((t) => t && PAGE_TYPES.includes(t) && t !== 'API_EXPOSE')
+    : []
+
+  const unique = []
+  const seen = new Set()
+  const push = (type) => {
+    if (!type || seen.has(type) || !PAGE_TYPES.includes(type)) return
+    seen.add(type)
+    unique.push(type)
+  }
+
+  if (fromFlow.length > 0) {
+    // Prefer flow order: HOME → OTP → outcomes
+    const preferred = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU', 'INPROGRESS', 'LOW_BALANCE', 'BLOCKED', 'ERROR']
+    preferred.forEach((t) => {
+      if (fromFlow.includes(t)) push(t)
+    })
+    fromFlow.forEach(push)
+  } else {
+    PAGE_TYPES.forEach(push)
+  }
+
+  const splitOtp = mode === 'OTP_ONLY' || mode === 'UNIVERSE_DCB' || mode === 'BOTH'
+  const items = []
+  unique.forEach((pageType) => {
+    if (pageType === 'OTP' && splitOtp) {
+      items.push({
+        key: 'OTP:number',
+        pageType: 'OTP',
+        step: 'number',
+        label: 'Number / PIN entry',
+      })
+      items.push({
+        key: 'OTP:otp',
+        pageType: 'OTP',
+        step: 'otp',
+        label: mode === 'UNIVERSE_DCB' ? 'Confirm PIN' : 'OTP / code entry',
+      })
+      return
+    }
+    items.push({
+      key: pageType,
+      pageType,
+      step: null,
+      label: funnelPageLabel(pageType, mode),
+    })
+  })
+  return items
+}
+
 export const REQUIRED_PAGE_TYPES = ['HOME', 'OTP', 'CONFIRM', 'THANKYOU']
 
 /** Status / outcome pages — optional for go-live but always editable per campaign. */

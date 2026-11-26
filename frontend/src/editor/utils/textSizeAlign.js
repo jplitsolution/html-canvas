@@ -167,7 +167,10 @@ function resolveFlowButtonWidth(style = {}, el = null) {
     } catch (_) {}
   }
 
-  if (!raw || raw === 'auto') return 'auto'
+  // Class rules like .ms-btn { width:100% } are not on the component style.
+  // Treating that as auto + inline-flex overrides the class and pulls the next
+  // control onto the same line after save.
+  if (!raw || raw === 'auto') return '100%'
   return raw
 }
 
@@ -217,30 +220,57 @@ export function keepFlowButtonInFlow(component) {
   stripAbsoluteStyleAttribute(comp)
 
   const prev = comp.getStyle?.() || {}
-  let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
-  if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
-
   const el = typeof component.getEl === 'function' ? component.getEl() : null
-  const width = resolveFlowButtonWidth(prev, el)
-  const customWidth = width !== '100%'
-  // Reasonable shrink floor — never equal current width (that made handles refuse to shrink).
-  const minWidth = customWidth ? `${MIN_BTN_WIDTH}px` : '0'
-  const alignSelf = customWidth ? 'center' : 'stretch'
-
+  const boxSet = (value) => value != null && String(value).trim() !== ''
   const pos = String(prev.position || '').toLowerCase()
   const hasAbsGeo =
     pos === 'absolute' ||
     pos === 'fixed' ||
-    prev.top != null ||
-    prev.left != null ||
-    prev.right != null ||
-    prev.bottom != null
+    boxSet(prev.top) ||
+    boxSet(prev.left) ||
+    boxSet(prev.right) ||
+    boxSet(prev.bottom)
 
   const elPos = String(el?.style?.position || '').toLowerCase()
   const elHasAbs =
     elPos === 'absolute' ||
     elPos === 'fixed' ||
-    !!(el?.style?.top || el?.style?.left || el?.style?.right || el?.style?.bottom)
+    boxSet(el?.style?.top) ||
+    boxSet(el?.style?.left) ||
+    boxSet(el?.style?.right) ||
+    boxSet(el?.style?.bottom)
+
+  // Template CSS already sizes these (full-width CTA, text link under it).
+  // Rewriting display/width on save overrides that and shifts every screen.
+  // Drop a previous save's inline-flex + width:auto so the class layout comes back.
+  if (!hasAbsGeo && !elHasAbs) {
+    const display = String(prev.display || '').toLowerCase()
+    const width = String(prev.width || '').trim()
+    const hasClasses = (comp.getClasses?.() || []).length > 0
+    if (hasClasses && display === 'inline-flex' && (width === 'auto' || width === '')) {
+      for (const key of ['display', 'width', 'min-width', 'max-width', 'align-self', 'position']) {
+        comp.removeStyle?.(key)
+      }
+      if (el?.style) {
+        el.style.display = ''
+        el.style.width = ''
+        el.style.minWidth = ''
+        el.style.maxWidth = ''
+        el.style.alignSelf = ''
+        if (el.style.position === 'relative') el.style.position = ''
+      }
+    }
+    return
+  }
+
+  let minH = parsePx(prev['min-height']) ?? parsePx(prev.height) ?? MIN_BTN_HEIGHT
+  if (!Number.isFinite(minH) || minH < MIN_BTN_HEIGHT) minH = MIN_BTN_HEIGHT
+
+  const width = resolveFlowButtonWidth(prev, el)
+  const customWidth = width !== '100%'
+  // Reasonable shrink floor — never equal current width (that made handles refuse to shrink).
+  const minWidth = customWidth ? `${MIN_BTN_WIDTH}px` : '0'
+  const alignSelf = customWidth ? 'center' : 'stretch'
 
   const alreadyInFlow =
     !hasAbsGeo &&
