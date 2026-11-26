@@ -106,6 +106,53 @@ require_frontend_env() {
   fi
 }
 
+# Vite empties dist/ before writing new hashes. An open tab still requests the
+# previous TemplateEditor-*.js; if that file is gone, nginx returns index.html
+# and the browser throws "Failed to fetch dynamically imported module".
+# Keep one previous generation of hashed files (manifest lists only the last build).
+stash_previous_frontend_assets() {
+  local assets_dir="$FRONTEND_DIR/dist/assets"
+  local stash manifest name
+  stash="$(mktemp -d)"
+  manifest="$assets_dir/.deploy-manifest"
+
+  if [ -d "$assets_dir" ]; then
+    if [ -f "$manifest" ]; then
+      while IFS= read -r name || [ -n "${name:-}" ]; do
+        [ -n "${name:-}" ] || continue
+        [ -f "$assets_dir/$name" ] || continue
+        cp -a "$assets_dir/$name" "$stash/$name"
+      done < "$manifest"
+    else
+      find "$assets_dir" -maxdepth 1 -type f ! -name '.deploy-manifest' -exec cp -a {} "$stash/" \;
+    fi
+  fi
+  printf '%s\n' "$stash"
+}
+
+restore_previous_frontend_assets() {
+  local stash="$1"
+  local assets_dir="$FRONTEND_DIR/dist/assets"
+  local file base
+
+  if [ ! -d "$assets_dir" ]; then
+    rm -rf "$stash"
+    return 0
+  fi
+
+  # Record this build only, then copy the previous generation back beside it.
+  find "$assets_dir" -maxdepth 1 -type f ! -name '.deploy-manifest' -printf '%f\n' > "$assets_dir/.deploy-manifest"
+
+  for file in "$stash"/*; do
+    [ -f "$file" ] || continue
+    base="$(basename "$file")"
+    if [ ! -e "$assets_dir/$base" ]; then
+      cp -a "$file" "$assets_dir/$base"
+    fi
+  done
+  rm -rf "$stash"
+}
+
 git_hard_reset_current_branch() {
   require_cmd git
   local branch
@@ -166,6 +213,8 @@ build_frontend() {
     npm install --save-dev --include=dev --ignore-scripts serve
   fi
   # Vite reads frontend/.env.production (and .env) — do not overwrite those files
+  local asset_stash
+  asset_stash="$(stash_previous_frontend_assets)"
   npm run build
 
   if [ -n "$saved_node_env" ]; then
@@ -178,7 +227,8 @@ build_frontend() {
   if grep -Rqe 'http://[^"'\'' ]*:3000/api' dist/assets/index-*.js 2>/dev/null; then
     die "Frontend build still contains http://*:3000/api — mixed content will break HTTPS"
   fi
-  log "Frontend build OK (no hardcoded http API URL)"
+  restore_previous_frontend_assets "$asset_stash"
+  log "Frontend build OK (no hardcoded http API URL; previous hashed assets kept)"
 }
 
 start_pm2_apps() {

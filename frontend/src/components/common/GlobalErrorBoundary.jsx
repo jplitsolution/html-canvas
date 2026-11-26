@@ -2,6 +2,7 @@ import { Component } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import useStore from '../../store/useStore';
 import Button from '../ui/Button';
+import { hardReloadForStaleChunk, isChunkLoadError, reloadOnceForStaleChunk } from '../../utils/lazyWithRetry';
 
 export default class GlobalErrorBoundary extends Component {
   constructor(props) {
@@ -14,6 +15,10 @@ export default class GlobalErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
+    if (isChunkLoadError(error) && reloadOnceForStaleChunk()) {
+      return;
+    }
+
     // Safely call logError if it exists
     try {
       const store = useStore.getState();
@@ -28,7 +33,11 @@ export default class GlobalErrorBoundary extends Component {
   }
 
   handleReload = () => {
-    this.setState({ hasError: false, error: null });
+    if (isChunkLoadError(this.state.error)) {
+      hardReloadForStaleChunk();
+      return;
+    }
+    window.location.reload();
   };
 
   handleSafeMode = () => {

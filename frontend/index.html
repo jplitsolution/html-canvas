@@ -22,6 +22,40 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Stale hashed chunks after deploy: the missing file is served as HTML
+      // and the dynamic import rejects. Reload once against a new URL so the
+      // browser cannot reuse a cached index.html.
+      (function () {
+        var KEY = 'chunk-reload-at'
+        function reloadFresh() {
+          try {
+            var last = Number(sessionStorage.getItem(KEY) || 0)
+            if (Date.now() - last < 15000) return
+            sessionStorage.setItem(KEY, String(Date.now()))
+          } catch (e) {
+            return
+          }
+          var url = new URL(window.location.href)
+          url.searchParams.set('v', Date.now().toString())
+          window.location.replace(url.toString())
+        }
+        window.addEventListener('vite:preloadError', function (event) {
+          event.preventDefault()
+          reloadFresh()
+        })
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event.reason
+          var msg = String((reason && reason.message) || reason || '')
+          if (
+            msg.indexOf('dynamically imported module') === -1 &&
+            msg.indexOf('Importing a module script failed') === -1
+          ) return
+          event.preventDefault()
+          reloadFresh()
+        })
+      })()
+    </script>
     <script type="module" src="/src/app/main.jsx"></script>
   </body>
 </html>

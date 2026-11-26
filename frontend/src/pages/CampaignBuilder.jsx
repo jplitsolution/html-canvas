@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import useStore from '../store/useStore'
 import { PAGE_TYPE_LABELS, getCampaignPagePreviewUrl } from '../services/api/campaigns'
@@ -10,8 +10,9 @@ import {
   campaignDetailPath,
   resolveMarketCodes,
 } from '../utils/routes'
+import { lazyWithRetry } from '../utils/lazyWithRetry'
 
-const TemplateEditor = lazy(() => import('../editor/TemplateEditor'))
+const TemplateEditor = lazyWithRetry(() => import('../editor/TemplateEditor'))
 
 function BuilderFallback() {
   return (
