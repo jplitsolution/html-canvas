@@ -7,7 +7,10 @@ import { Vendor } from '../../database/entities/vendor.entity.js';
 import { Visit, VisitStatus } from '../../database/entities/visit.entity.js';
 import { VisitEvent, VisitEventType } from '../../database/entities/visit-event.entity.js';
 import { ApiCallType } from '../../database/entities/api-call-log.entity.js';
-import { CampaignPageType } from '../../database/entities/campaign-page.entity.js';
+import {
+  CampaignPageType,
+  pageTypeForSubscriptionStatus,
+} from '../../database/entities/campaign-page.entity.js';
 import { smsProviderManager } from './providers/sms-provider.manager.js';
 import { redisService } from '../../common/services/redis.service.js';
 import { apiCallLogService } from '../flow/api-call-log.service.js';
@@ -24,6 +27,69 @@ import {
   isAlreadySubscribedText,
   isTerminalExposeVisit,
 } from './helpers/expose-visit.js';
+
+/**
+ * Number was just submitted. Landing checksub only runs when a phone is
+ * already known (header). This call uses the typed MSISDN before any OTP.
+ * Returns a redirect when the partner says this number should not get an OTP.
+ * A failed lookup throws so OTP is not sent.
+ */
+async function checksubBeforePartnerOtp(apiConfig, { phone, visitId, campaign }) {
+  if (!apiConfig?.subscriptionApi || !phone) return null;
+
+  const country = campaign?.country?.code || campaign?.country || '';
+  const operator = campaign?.operator?.code || campaign?.operator || '';
+  let subCheck;
+  try {
+    subCheck = await partnerApiService.checkSubscription(apiConfig, {
+      phone,
+      visitId,
+      campaignId: campaign?.id,
+      country: typeof country === 'string' ? country : '',
+      operator: typeof operator === 'string' ? operator : '',
+      serviceId: campaign?.serviceId,
+      bypassCache: true,
+    });
+  } catch {
+    return null;
+  }
+
+  if (!subCheck || subCheck.status === 'failed') {
+    const detail = subCheck?.errorMessage ? `: ${subCheck.errorMessage}` : '';
+    const err = new Error(`Subscription check failed${detail}. OTP was not sent.`);
+    err.statusCode = 502;
+    throw err;
+  }
+  if (subCheck.go === 'continue') return null;
+
+  if (subCheck.go === 'external' && subCheck.url) {
+    return {
+      status: String(subCheck.status || 'ACTIVE').toUpperCase(),
+      forwardUrl: subCheck.url,
+      nextPage: null,
+      message: 'Already subscribed',
+    };
+  }
+
+  if (subCheck.go === 'page' && subCheck.page) {
+    return {
+      status: String(subCheck.status || subCheck.page).toUpperCase(),
+      forwardUrl: null,
+      nextPage: subCheck.page,
+      message: 'Already subscribed',
+    };
+  }
+
+  const mapped = pageTypeForSubscriptionStatus(subCheck.status, subCheck.isActive);
+  if (!subCheck.isActive && !subCheck.shouldSkipSubscribe && !mapped) return null;
+
+  return {
+    status: String(subCheck.status || 'ACTIVE').toUpperCase(),
+    forwardUrl: null,
+    nextPage: mapped || CampaignPageType.THANKYOU,
+    message: 'Already subscribed',
+  };
+}
 
 /**
  * Partner-API OTP only.
@@ -449,6 +515,25 @@ export const createOtpService = () => {
     }
 
     const apiConfig = await getApiConfigForCampaign(campaign?.id);
+    const alreadySubscribed = await checksubBeforePartnerOtp(apiConfig, {
+      phone: String(phone).trim(),
+      visitId,
+      campaign,
+    });
+    if (alreadySubscribed) {
+      return {
+        message: alreadySubscribed.message,
+        phone: String(phone).trim(),
+        provider: 'partner',
+        remoteVerify: true,
+        isSubscribed: true,
+        status: alreadySubscribed.status,
+        forwardUrl: alreadySubscribed.forwardUrl || null,
+        nextPage: alreadySubscribed.nextPage || null,
+        otpSkipped: true,
+      };
+    }
+
     const { providerConfig, provider } = smsProviderManager.getProvider(apiConfig);
 
     if (!(providerConfig.sendUrl || providerConfig.send_url || providerConfig.url)) {

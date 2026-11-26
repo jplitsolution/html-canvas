@@ -759,7 +759,175 @@ const wellnessJoVerifyHtml = `
 </div>
 `
 
+const moovSanteCss = `
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Inter, system-ui, -apple-system, sans-serif; background: #eef3f8; color: #1e293b; }
+.ms-page { width: 100%; max-width: 390px; margin: 0 auto; min-height: 100vh; background: #f4f7fb; }
+.ms-top { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 10px; background: #fff; }
+.ms-brand { display: flex; align-items: center; gap: 8px; }
+.ms-logo { width: 28px; height: 28px; border-radius: 8px; background: #0b3a66; color: #fff; font-weight: 800; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+.ms-brand-name { font-size: 12px; font-weight: 800; color: #0f172a; line-height: 1.15; }
+.ms-brand-sub { font-size: 9px; letter-spacing: 0.06em; color: #64748b; font-weight: 700; }
+.ms-pill { background: #fff4ec; color: #ea580c; border-radius: 999px; padding: 4px 8px; font-size: 10px; font-weight: 800; }
+.ms-hero { position: relative; height: 168px; background: linear-gradient(160deg, #0f2744 0%, #1d4ed8 45%, #fb923c 100%); overflow: hidden; }
+.ms-hero-copy { position: absolute; left: 16px; right: 16px; bottom: 16px; color: #fff; font-size: 22px; font-weight: 800; line-height: 1.15; text-shadow: 0 2px 10px rgba(0,0,0,0.35); }
+.ms-sheet { margin-top: -18px; background: #fff; border-radius: 22px 22px 0 0; padding: 18px 16px 28px; position: relative; }
+.ms-kicker { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; color: #64748b; }
+.ms-price-row { display: flex; align-items: flex-end; justify-content: space-between; margin: 6px 0 8px; }
+.ms-price { font-size: 34px; font-weight: 800; color: #f97316; line-height: 1; }
+.ms-price span { font-size: 16px; color: #334155; font-weight: 700; }
+.ms-badge { background: #fff7ed; color: #c2410c; border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 700; }
+.ms-note { font-size: 12px; color: #64748b; margin-bottom: 14px; }
+.ms-feature { display: flex; gap: 10px; align-items: flex-start; background: #f8fafc; border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; font-size: 13px; font-weight: 650; color: #0f172a; }
+.ms-dot { width: 22px; height: 22px; border-radius: 999px; background: #ffedd5; color: #ea580c; display: flex; align-items: center; justify-content: center; font-size: 12px; flex: none; }
+.ms-btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 52px; margin-top: 14px; border: none; border-radius: 14px; background: #f97316; color: #fff; font-size: 16px; font-weight: 800; cursor: pointer; text-decoration: none; }
+.ms-btn:active { transform: scale(0.99); }
+.ms-legal { margin-top: 10px; font-size: 11px; line-height: 1.45; color: #94a3b8; text-align: center; }
+.ms-back { background: none; border: none; color: #ea580c; font-size: 13px; font-weight: 700; cursor: pointer; padding: 0; }
+.ms-progress { height: 6px; background: #e2e8f0; border-radius: 99px; margin: 8px 16px 0; overflow: hidden; }
+.ms-progress > div { height: 100%; background: #f97316; }
+.ms-step { font-size: 11px; font-weight: 700; color: #64748b; text-align: right; padding: 6px 16px 0; }
+.ms-card { margin: 16px; background: #fff; border-radius: 18px; padding: 18px 16px 20px; box-shadow: 0 8px 24px rgba(15,23,42,0.06); }
+.ms-plan { display: flex; justify-content: space-between; align-items: center; background: #fff7ed; border-radius: 12px; padding: 10px 12px; margin-bottom: 14px; font-size: 13px; font-weight: 700; }
+.ms-title { font-size: 22px; font-weight: 800; color: #0f172a; margin-bottom: 6px; }
+.ms-sub { font-size: 13px; color: #64748b; line-height: 1.45; margin-bottom: 14px; }
+.ms-phone { display: flex; align-items: center; gap: 8px; border: 1.5px solid #fed7aa; background: #fff; border-radius: 14px; height: 56px; padding: 0 12px; }
+.ms-flag { font-size: 18px; }
+.ms-cc { font-weight: 800; color: #0f172a; }
+.ms-phone input { flex: 1; border: none; outline: none; font-size: 18px; font-weight: 700; letter-spacing: 0.08em; background: transparent; width: 100%; }
+.ms-otp { width: 100%; height: 64px; border: 1.5px solid #fed7aa; border-radius: 14px; text-align: center; font-size: 28px; font-weight: 800; letter-spacing: 0.4em; color: #0f172a; }
+.ms-link { display: block; width: 100%; margin-top: 8px; background: none; border: none; color: #64748b; font-size: 13px; font-weight: 700; cursor: pointer; text-align: center; }
+.ms-error { min-height: 16px; color: #dc2626; font-size: 12px; font-weight: 700; text-align: center; margin-top: 8px; }
+.ms-status { min-height: 16px; color: #16a34a; font-size: 12px; font-weight: 700; text-align: center; margin-top: 4px; }
+.ms-ok { width: 64px; height: 64px; border-radius: 999px; background: #dcfce7; color: #16a34a; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 8px auto 12px; }
+.ms-chip { display: inline-block; background: #dcfce7; color: #15803d; border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 800; }
+.ms-tip { background: #eff6ff; border-radius: 14px; padding: 12px; font-size: 13px; color: #1e3a8a; line-height: 1.45; margin-top: 12px; }
+`
+
+const moovHomeHtml = `
+<div class="ms-page">
+  <div class="ms-top">
+    <div class="ms-brand">
+      <div class="ms-logo">M</div>
+      <div>
+        <div class="ms-brand-name">Moov Africa</div>
+        <div class="ms-brand-sub">BURKINA FASO</div>
+      </div>
+    </div>
+    <div class="ms-pill">Moov Santé+</div>
+  </div>
+  <div class="ms-hero">
+    <div class="ms-hero-copy">Votre coach santé &amp; bien-être au quotidien</div>
+  </div>
+  <div class="ms-sheet">
+    <div class="ms-kicker">ABONNEMENT QUOTIDIEN</div>
+    <div class="ms-price-row">
+      <div class="ms-price">53 FCFA <span>/ jour</span></div>
+      <div class="ms-badge">TTC · Sans engagement</div>
+    </div>
+    <p class="ms-note">TTC · Débité sur votre crédit Moov Africa · Résiliable à tout moment.</p>
+    <div class="ms-feature"><div class="ms-dot">☺</div><div>Séances de yoga &amp; conseils santé</div></div>
+    <div class="ms-feature"><div class="ms-dot">＋</div><div>Nutrition équilibrée &amp; activité</div></div>
+    <div class="ms-feature"><div class="ms-dot">!</div><div>Rappels bien-être quotidiens</div></div>
+    <button type="button" data-action="SUBSCRIBE" class="ms-btn">S'abonner</button>
+    <p class="ms-legal">Abonnement renouvelé automatiquement chaque jour à 53 FCFA/jour.</p>
+  </div>
+</div>
+`
+
+const moovNumberHtml = `
+<div class="ms-page">
+  <div class="ms-top">
+    <button type="button" data-action="HOME" class="ms-back">← Retour</button>
+    <div class="ms-pill">Moov Santé+</div>
+  </div>
+  <div class="ms-progress"><div style="width:50%"></div></div>
+  <div class="ms-step">Étape 1 sur 2</div>
+  <div class="ms-card">
+    <div class="ms-plan"><span>Moov Santé+</span><span>53 FCFA / jour TTC</span></div>
+    <h1 class="ms-title">Entrez votre numéro Moov</h1>
+    <p class="ms-sub">Nous allons vous envoyer un code de confirmation gratuit à 4 chiffres par SMS.</p>
+    <div class="ms-phone">
+      <span class="ms-flag">🇧🇫</span>
+      <span class="ms-cc">+226</span>
+      <input data-otp-field="phone" inputmode="numeric" maxlength="8" data-min-length="8" data-max-length="8" placeholder="70 45 89 12" />
+    </div>
+    <div data-otp-slot="error" class="ms-error"></div>
+    <div data-otp-slot="status" class="ms-status"></div>
+    <button type="button" data-otp-action="send" class="ms-btn">Recevoir le code</button>
+    <p class="ms-legal">Vous recevrez un PIN gratuit par SMS pour confirmer votre abonnement quotidien de 53 FCFA/jour.</p>
+  </div>
+</div>
+`
+
+const moovVerifyHtml = `
+<div class="ms-page">
+  <div class="ms-top">
+    <button type="button" data-action="HOME" class="ms-back">← Retour</button>
+    <div class="ms-pill">Moov Santé+</div>
+  </div>
+  <div class="ms-progress"><div style="width:100%"></div></div>
+  <div class="ms-step">Étape 2 sur 2</div>
+  <div class="ms-card">
+    <div class="ms-plan"><span>Moov Santé+ · Quotidien</span><span>53 FCFA / jour</span></div>
+    <h1 class="ms-title">Entrez le code reçu par SMS</h1>
+    <p class="ms-sub">Code à 4 chiffres envoyé sur votre numéro Moov.</p>
+    <input class="ms-otp" data-otp-field="otp" inputmode="numeric" maxlength="4" data-min-length="4" data-max-length="4" placeholder="••••" />
+    <button type="button" data-otp-action="send" class="ms-link">Renvoyer le code</button>
+    <div data-otp-slot="error" class="ms-error"></div>
+    <div data-otp-slot="status" class="ms-status"></div>
+    <button type="button" data-otp-action="verify" class="ms-btn">Confirmer l'abonnement</button>
+    <p class="ms-legal">En cliquant sur Confirmer l'abonnement, vous acceptez la facturation de 53 FCFA/jour sur votre solde Moov Africa.</p>
+  </div>
+</div>
+`
+
+const moovOtpHtml = `
+<div class="ms-page">
+  <div data-otp-step="1">
+    ${moovNumberHtml.trim()}
+  </div>
+  <div data-otp-step="2">
+    ${moovVerifyHtml.trim()}
+  </div>
+</div>
+`
+
+const moovThankyouHtml = `
+<div class="ms-page">
+  <div class="ms-top">
+    <div class="ms-brand">
+      <div class="ms-logo">M</div>
+      <div>
+        <div class="ms-brand-name">Moov Africa</div>
+        <div class="ms-brand-sub">BURKINA FASO</div>
+      </div>
+    </div>
+    <div class="ms-pill">Moov Santé+</div>
+  </div>
+  <div class="ms-hero" style="height:120px"></div>
+  <div class="ms-sheet" style="text-align:center">
+    <div class="ms-ok">✓</div>
+    <div class="ms-chip">ABONNEMENT ACTIVÉ</div>
+    <h1 class="ms-title" style="margin-top:12px">Merci pour votre inscription !</h1>
+    <p class="ms-sub">Bienvenue sur Moov Santé+. Votre abonnement quotidien est actif et vous recevrez chaque jour vos conseils santé, yoga et bien-être par SMS.</p>
+    <div class="ms-tip"><strong>CONSEIL BIEN-ÊTRE &amp; YOGA DU JOUR</strong><br />Buvez un grand verre d'eau au réveil puis réalisez 3 respirations profondes.</div>
+    <a class="ms-btn" href="#">Accéder au portail Bien-être</a>
+    <button type="button" data-action="HOME" class="ms-link">Retour à l'accueil</button>
+  </div>
+</div>
+`
+
 export const OTP_NUMBER_STARTER_TEMPLATES = [
+  {
+    id: 'otp-moov-sante-number',
+    name: 'Moov Santé+ (Numéro)',
+    description: 'Moov Burkina Faso screen 2: +226 number, then Recevoir le code.',
+    thumb: 'contact',
+    previewImage: '',
+    css: moovSanteCss,
+    html: moovNumberHtml,
+  },
   {
     id: 'otp-wellness-jo-number',
     name: 'Wellness 360 (Mobile Number)',
@@ -781,6 +949,15 @@ export const OTP_NUMBER_STARTER_TEMPLATES = [
 ]
 
 export const OTP_VERIFY_STARTER_TEMPLATES = [
+  {
+    id: 'otp-moov-sante-verify',
+    name: 'Moov Santé+ (Code SMS)',
+    description: 'Moov Burkina Faso screen 3: 4-digit PIN and Confirmer l’abonnement.',
+    thumb: 'contact',
+    previewImage: '',
+    css: moovSanteCss,
+    html: moovVerifyHtml,
+  },
   {
     id: 'otp-wellness-jo-verify',
     name: 'Wellness 360 (Verify OTP)',
@@ -837,6 +1014,15 @@ export const OTP_STARTER_TEMPLATES = [
     previewImage: '',
     css: wellnessOtpCss,
     html: wellnessOtpHtml,
+  },
+  {
+    id: 'otp-moov-sante',
+    name: 'Moov Santé+ (Numéro + code)',
+    description: 'Moov Burkina Faso screens 2 and 3 on one OTP page. Live view splits number, then PIN.',
+    thumb: 'contact',
+    previewImage: '',
+    css: moovSanteCss,
+    html: moovOtpHtml,
   },
   {
     id: 'otp-royal',
@@ -1390,6 +1576,15 @@ export const HOME_STARTER_TEMPLATES = [
     html: wellnessHomeHtml,
   },
   {
+    id: 'home-moov-sante',
+    name: 'Moov Santé+ (Burkina Faso)',
+    description: 'Moov Africa Burkina Faso. Screen 1: daily pack 53 FCFA and S’abonner.',
+    thumb: 'hero',
+    previewImage: '',
+    css: moovSanteCss,
+    html: moovHomeHtml,
+  },
+  {
     id: 'home-brutalist',
     name: 'Neo-Brutalist Yellow',
     description: 'Bold yellow card with thick borders — every line editable.',
@@ -1578,6 +1773,15 @@ export const THANKYOU_STARTER_TEMPLATES = [
     previewImage: '',
     css: wellnessThankyouCss,
     html: wellnessThankyouHtml,
+  },
+  {
+    id: 'thankyou-moov-sante',
+    name: 'Moov Santé+ (Merci)',
+    description: 'Moov Burkina Faso screen 4: subscription active and portal link.',
+    thumb: 'cta',
+    previewImage: '',
+    css: moovSanteCss,
+    html: moovThankyouHtml,
   },
   {
     id: 'thankyou-classic',

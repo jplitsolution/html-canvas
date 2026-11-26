@@ -447,7 +447,7 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
       pageCacheRef?.current?.delete('THANKYOU')
       trackEvent('otp_sent')
       
-      if (data?.isSubscribed || data?.status === 'ACTIVE') {
+      if (data?.otpSkipped || data?.isSubscribed || data?.nextPage) {
         if (data.forwardUrl) {
           setSlotText(statusSlot, 'Abonnement déjà actif ! Redirection en cours...')
           setTimeout(() => {
@@ -455,6 +455,12 @@ function setupOtpBindings(shadow, { transitionFlow, cachePage, loadPage, country
           }, 800)
           return
         }
+        const dest = String(data.nextPage || 'THANKYOU').toUpperCase()
+        setSlotText(statusSlot, 'Abonnement déjà actif.')
+        if (loadPage) {
+          await loadPage(dest, { direct: true })
+        }
+        return
       }
 
       if (!otpInput) {
