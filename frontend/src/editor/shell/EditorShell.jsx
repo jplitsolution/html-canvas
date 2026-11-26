@@ -104,10 +104,14 @@ export function EditorShell({
         <main className="tc-canvas-area flex-1 min-w-0 flex flex-col relative overflow-hidden bg-[#e2e8f0]">
           <FunnelGuideBanner pageType={funnelPageType} />
 
-          {/* Canva Contextual Format Bar */}
-          <ContextualFormatBar />
-
           <div className="flex-1 min-h-0 overflow-auto p-6 md:p-10 flex flex-col items-center justify-start relative" style={{ scrollBehavior: 'smooth' }}>
+            {/* Overlay — must not take flex space or Grapes tools drift below the element */}
+            <div className="sticky top-0 z-40 w-full flex justify-center pointer-events-none mb-0 h-0 overflow-visible">
+              <div className="pointer-events-auto -translate-y-1">
+                <ContextualFormatBar />
+              </div>
+            </div>
+
             {/* Artboard Frame Header Badge */}
             <div className="mb-3 px-3.5 py-1 rounded-full bg-white border border-slate-300 text-[11px] font-semibold text-slate-700 flex items-center gap-2 shadow-sm shrink-0">
               <DeviceIcon className="w-3.5 h-3.5 text-purple-600" />

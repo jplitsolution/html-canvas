@@ -34,7 +34,7 @@ import { listSectionAnchorsOnPage } from './utils/sectionAnchor'
 import { trackEvent } from '../utils/analytics'
 import { injectStylesheetsIntoCanvas, runDevModeStylesValidation } from './utils/styleUtils'
 import { safeGetWrapper, getComp } from './utils/editorUtils'
-import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, configureBlockResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
+import { applyTextSizeAlignment, healFlowButtonsInEditor, configureFlowButtonResizable, ensureComponentResizable, isFlowLayoutButton, keepFlowButtonInFlow, isButtonLikeComponent } from './utils/textSizeAlign'
 import { markAsAbsoluteOverlay, promoteOverlayIfNeeded, dropPointHitsImage, isImageComponent, healEditorHotspot, wrapImageAsBanner, IMAGE_BANNER_STYLE, HOTSPOT_RESIZABLE, freezeHotspotToPixels } from './utils/overlayStacking'
 import { setDcbEditorPreview } from '../services/flow/dcbStageUi'
 
@@ -684,13 +684,11 @@ export default function TemplateEditor({
           configureFlowButtonResizable(component)
         } else if (isButton && isOverlay) {
           configureFlowButtonResizable(component)
-        } else if (isButton || isImageComponent(component)) {
-          component.set('resizable', true)
         } else if (component.getAttributes()?.['data-tc-type'] === 'hotspot') {
           component.set('resizable', HOTSPOT_RESIZABLE)
           freezeHotspotToPixels(component)
         } else {
-          configureBlockResizable(component)
+          ensureComponentResizable(component)
         }
       }, 50)
     })
@@ -758,7 +756,7 @@ export default function TemplateEditor({
     ed.on('component:selected', () => mounted && refreshSelection())
     ed.on('component:deselected', () => mounted && refreshSelection())
 
-    // If an absolute button is selected over an image, keep it above
+    // Enable border resize handles + keep absolute CTAs above images
     ed.on('component:selected', (component) => {
       if (!mounted || !component) return
       if (isButtonLikeComponent(component) || isFlowLayoutButton(component)) {
@@ -766,18 +764,18 @@ export default function TemplateEditor({
         if (String(style.position || '').toLowerCase() === 'absolute') {
           promoteOverlayIfNeeded(component)
         }
-        configureFlowButtonResizable(component)
-        return
       }
-      // Existing sections/blocks may never have been marked resizable on load
-      const before = component.get('resizable')
-      configureBlockResizable(component)
-      if (!before && component.get('resizable')) {
-        // Grapes builds tools before our handler; refresh so handles appear on first click
-        setTimeout(() => {
-          try { ed.Canvas?.refresh?.() } catch (_) { /* noop */ }
-        }, 0)
-      }
+      ensureComponentResizable(component)
+      // Clear cached frame/canvas offsets and realign tools after layout settles.
+      // Do NOT reselect — that races Grapes initResize and leaves a stale smaller box.
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!mounted || editorRef.current !== ed) return
+          try {
+            ed.Canvas?.refresh?.({ all: true })
+          } catch (_) { /* noop */ }
+        })
+      })
     })
     ed.on('page:select', () => injectStylesheetsIntoCanvas(ed))
     ed.on('canvas:ready', () => injectStylesheetsIntoCanvas(ed))
@@ -870,8 +868,8 @@ export default function TemplateEditor({
           }
           if (isFlowLayoutButton(cmp)) {
             configureFlowButtonResizable(cmp)
-          } else if (!isAbsolute) {
-            configureBlockResizable(cmp)
+          } else if (!isHotspot) {
+            ensureComponentResizable(cmp)
           }
           cmp.components().forEach(walk)
         }

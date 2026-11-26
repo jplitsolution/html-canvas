@@ -1197,11 +1197,35 @@ function InputFieldControls({ selected, editor, update }) {
 
   const countryCode = attrs['data-country-code'] || attrs['data-phone-prefix'] || '';
   const parent = selected?.parent?.();
+  // Badge only — never match the phone <input> itself (it also has data-country-code).
+  // Old selector deleted the input when "Show visual badge" was toggled off.
   const prefixBadgeSelector =
-    '[data-country-code], [data-phone-prefix], .wjo-country-code, .phone-prefix-badge, .country-code-prefix, .bf-country-prefix'
-  const existingBadge = parent
-    ? parent.find?.(prefixBadgeSelector)?.[0]
-    : null;
+    'span[data-country-code], span[data-phone-prefix], .wjo-country-code, .phone-prefix-badge, .country-code-prefix, .bf-country-prefix, .ms-cc'
+  const isPrefixBadge = (comp) => {
+    if (!comp || comp === selected) return false
+    const tag = String(comp.get?.('tagName') || comp.tagName || '').toLowerCase()
+    if (tag === 'input' || tag === 'button' || tag === 'textarea' || tag === 'select') return false
+    const a = comp.getAttributes?.() || {}
+    if (a['data-otp-field'] || a['data-dcb-field'] || a['data-otp-action'] || a['data-action']) {
+      return false
+    }
+    const classes = comp.getClasses?.() || []
+    if (
+      classes.includes('wjo-country-code') ||
+      classes.includes('phone-prefix-badge') ||
+      classes.includes('country-code-prefix') ||
+      classes.includes('bf-country-prefix') ||
+      classes.includes('ms-cc')
+    ) {
+      return true
+    }
+    return Boolean(a['data-country-code'] || a['data-phone-prefix'])
+  }
+  const findPrefixBadges = () => {
+    if (!parent?.find) return []
+    return (parent.find(prefixBadgeSelector) || []).filter(isPrefixBadge)
+  }
+  const existingBadge = findPrefixBadges()[0] || null;
   const [showBadge, setShowBadge] = useState(() => Boolean(existingBadge));
 
   useEffect(() => {
@@ -1210,7 +1234,7 @@ function InputFieldControls({ selected, editor, update }) {
 
   const syncBadgeInCanvas = (code) => {
     if (!parent) return;
-    const badge = parent.find?.(prefixBadgeSelector)?.[0];
+    const badge = findPrefixBadges()[0];
     if (badge) {
       badge.set('content', code);
       badge.addAttributes({ 'data-country-code': code });
@@ -1219,7 +1243,7 @@ function InputFieldControls({ selected, editor, update }) {
       parent.components().add(
         {
           tagName: 'span',
-          classes: ['wjo-country-code', 'phone-prefix-badge'],
+          classes: ['wjo-country-code', 'phone-prefix-badge', 'ms-cc'],
           attributes: { 'data-country-code': code },
           content: code,
           style: {
@@ -1243,9 +1267,7 @@ function InputFieldControls({ selected, editor, update }) {
   };
 
   const removeBadgeFromCanvas = () => {
-    if (!parent) return;
-    const badges = parent.find?.(prefixBadgeSelector) || [];
-    badges.forEach((b) => b.remove());
+    findPrefixBadges().forEach((b) => b.remove());
   };
 
   const handleCountryCodeChange = (val) => {
@@ -1267,8 +1289,12 @@ function InputFieldControls({ selected, editor, update }) {
     setShowBadge(enable);
     if (!enable) {
       removeBadgeFromCanvas();
-    } else if (countryCode) {
-      syncBadgeInCanvas(countryCode);
+    } else {
+      const code = countryCode || '+226';
+      if (!countryCode) {
+        selected.addAttributes({ 'data-country-code': code });
+      }
+      syncBadgeInCanvas(code);
     }
     update();
   };

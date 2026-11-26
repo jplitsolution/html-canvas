@@ -446,6 +446,20 @@ export const ABSOLUTE_BLOCK_RESIZABLE = {
   ratioDefault: 0,
 }
 
+/** Text, badges, inputs — border drag resize (width + height). */
+export const INLINE_ELEMENT_RESIZABLE = {
+  tl: 1,
+  tc: 1,
+  tr: 1,
+  cl: 1,
+  cr: 1,
+  bl: 1,
+  bc: 1,
+  br: 1,
+  minDim: 16,
+  ratioDefault: 0,
+}
+
 /** Sections / generic containers users expect to stretch — not text, CTAs, images, hotspots. */
 export function isResizableBlockContainer(component) {
   const comp = getComp(component)
@@ -475,6 +489,69 @@ export function configureBlockResizable(component) {
     String(style.position || '').toLowerCase() === 'absolute' ||
     comp.getAttributes?.()?.['data-tc-absolute'] === '1'
   comp.set('resizable', isAbs ? ABSOLUTE_BLOCK_RESIZABLE : FLOW_BLOCK_RESIZABLE)
+}
+
+/**
+ * Turn on border resize handles for almost any selected canvas element.
+ * Grapes defaults many types (text/span) to resizable:false — operators then
+ * can drag but cannot shrink/grow by grabbing the blue outline.
+ */
+export function ensureComponentResizable(component) {
+  const comp = getComp(component)
+  if (!comp) return false
+
+  const tag = String((typeof comp.get === 'function' ? comp.get('tagName') : comp.tagName) || '').toLowerCase()
+  const type = String((typeof comp.get === 'function' ? comp.get('type') : comp.type) || '').toLowerCase()
+  const attrs = comp.getAttributes?.() || {}
+  const tcType = attrs['data-tc-type']
+
+  if (type === 'wrapper' || tag === 'body' || tag === 'html') return false
+
+  if (tcType === 'hotspot') {
+    // Hotspot geometry is managed elsewhere; leave its config alone.
+    return Boolean(comp.get('resizable'))
+  }
+
+  if (isFlowLayoutButton(comp) || isButtonLikeComponent(comp)) {
+    configureFlowButtonResizable(comp)
+    return true
+  }
+
+  if (type === 'image' || tag === 'img' || tcType === 'image') {
+    comp.set('resizable', true)
+    return true
+  }
+
+  if (isResizableBlockContainer(comp)) {
+    configureBlockResizable(comp)
+    return true
+  }
+
+  // Text, spans (country badge), inputs, labels, etc.
+  if (
+    TEXT_TAGS.has(tag) ||
+    type === 'text' ||
+    type === 'label' ||
+    tag === 'input' ||
+    tag === 'textarea' ||
+    tag === 'select' ||
+    tag === 'img' ||
+    tag === 'svg' ||
+    tag === 'i' ||
+    tag === 'strong' ||
+    tag === 'em'
+  ) {
+    // Do not mutate display here — addStyle during select shifts layout after Grapes
+    // places tools, which makes the resize box appear below the element.
+    comp.set('resizable', INLINE_ELEMENT_RESIZABLE)
+    return true
+  }
+
+  // Fallback: any other element operators click should grow/shrink
+  if (!comp.get('resizable')) {
+    comp.set('resizable', INLINE_ELEMENT_RESIZABLE)
+  }
+  return true
 }
 
 export function applyTextSizeAlignment(component, opts = {}) {

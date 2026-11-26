@@ -3,6 +3,7 @@ import { safeGetWrapper } from '../utils/editorUtils'
 import {
   applyTextSizeAlignment,
   configureFlowButtonResizable,
+  ensureComponentResizable,
   healFlowButtonsInEditor,
   keepFlowButtonInFlow,
   isFlowLayoutButton,
@@ -300,15 +301,15 @@ export function syncCanvasFrameHeight(editor, options = {}) {
         doc.documentElement.style.background = '#ffffff'
       }
 
+      // frameEl.parent = .gjs-frame-wrapper; its parent is .gjs-cv-canvas__frames (NOT .gjs-cv-canvas).
+      // Only size the wrapper — never poke top on the frames layer (that desyncs #gjs-tools).
       const frameWrapper = frameEl.parentElement
-      const cvCanvas = frameWrapper?.parentElement
-      if (cvCanvas) {
-        cvCanvas.style.height = '100%'
-        cvCanvas.style.top = '0px'
-      }
       if (frameWrapper) {
         frameWrapper.style.height = '100%'
-        frameWrapper.style.top = '0px'
+      }
+      const cvCanvas = frameEl.closest?.('.gjs-cv-canvas') || editor.Canvas?.getElement?.()
+      if (cvCanvas) {
+        cvCanvas.style.height = '100%'
       }
     })
   }, 50)
@@ -467,19 +468,39 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
 
   let rafHandlesPending = false
   const refreshHandles = () => {
-    if (rafHandlesPending) return
+    if (rafHandlesPending || isLiveDrag()) return
     rafHandlesPending = true
     requestAnimationFrame(() => {
       rafHandlesPending = false
-      try { editor.Canvas.refresh() } catch (_) { /* noop */ }
+      if (!alive || isLiveDrag()) return
+      try { editor.Canvas.refresh({ all: true }) } catch (_) { /* noop */ }
     })
   }
 
+  const outerScrollers = new Set()
   const attachScrollSync = () => {
     const frameEl = editor.Canvas?.getFrameEl?.()
     const frameWin = frameEl?.contentWindow
     if (frameWin) {
       frameWin.addEventListener('scroll', refreshHandles, { passive: true })
+    }
+    // Artboard shell scrolls outside the iframe — Grapes only watches frame scroll by default
+    try {
+      const host = editor.getContainer?.() || editor.Canvas?.getElement?.()
+      let node = host?.parentElement
+      while (node && node !== document.body) {
+        const style = window.getComputedStyle(node)
+        const oy = style.overflowY
+        if (oy === 'auto' || oy === 'scroll' || oy === 'overlay') {
+          if (!outerScrollers.has(node)) {
+            node.addEventListener('scroll', refreshHandles, { passive: true })
+            outerScrollers.add(node)
+          }
+        }
+        node = node.parentElement
+      }
+    } catch (_) {
+      /* noop */
     }
   }
 
@@ -541,10 +562,15 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
 
   editor.on('component:selected', (component) => {
     if (!alive || !component) return
-    configureFlowButtonResizable(component)
+    ensureComponentResizable(component)
     if (component.getAttributes?.()?.['data-tc-type'] === 'hotspot') {
       freezeHotspotToPixels(component)
     }
+    // Realign tools after resizable flag + any layout from selection UI
+    requestAnimationFrame(() => {
+      if (!alive) return
+      refreshHandles()
+    })
   })
 
   editor.on('component:resize:end', protectFlowButton)
@@ -639,11 +665,19 @@ export function setupCanvasEnhancements(editor, onEmptyChange) {
   return () => {
     alive = false
     window.removeEventListener('resize', handleWindowResize)
+    outerScrollers.forEach((node) => {
+      try { node.removeEventListener('scroll', refreshHandles) } catch (_) { /* noop */ }
+    })
+    outerScrollers.clear()
   }
 }
 
 export function setCanvasZoom(editor, zoom) {
   editor.Canvas?.setZoom(zoom)
+  // Zoom scales frames but tools are siblings — force offset recompute
+  requestAnimationFrame(() => {
+    try { editor.Canvas?.refresh?.({ all: true }) } catch (_) { /* noop */ }
+  })
 }
 
 export function getCanvasZoom(editor) {

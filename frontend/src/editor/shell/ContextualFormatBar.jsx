@@ -134,7 +134,7 @@ export function ContextualFormatBar() {
   const isTextElement = ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'span', 'a', 'button', 'label', 'b', 'strong', 'i', 'em'].includes(tagName) || componentType === 'text';
 
   return (
-    <div className="canva-format-bar sticky top-2 z-40 self-center mx-auto my-1.5 flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-xl shadow-slate-900/10 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
+    <div className="canva-format-bar z-40 flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/95 backdrop-blur-md border border-slate-200 shadow-xl shadow-slate-900/10 text-slate-800 animate-in fade-in zoom-in-95 duration-150">
       {/* Component Tag Badge */}
       <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-100 text-[11px] font-bold text-slate-600 uppercase tracking-wider shrink-0">
         <Layers className="w-3 h-3 text-indigo-600" />

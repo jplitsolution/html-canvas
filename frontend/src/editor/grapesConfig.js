@@ -8,7 +8,9 @@ export function createGrapesConfig(container) {
     fromElement: false,
     storageManager: false,
     noticeOnUnload: false,
-    showOffsets: true,
+    /** Avoid Grapes default panel offset (--gjs-canvas-top: 40px) fighting our full-bleed canvas. */
+    customUI: true,
+    showOffsets: false,
     showStylesOnChange: true,
     avoidInlineStyle: false,
     mediaCondition: 'max-width',
