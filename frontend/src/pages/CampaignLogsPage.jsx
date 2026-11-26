@@ -48,7 +48,15 @@ import {
   getAllCampaignLogAggregations,
   downloadLogsExport,
 } from '../services/api/logs'
-import { isApiExposeCampaign, normalizeModeId } from '../components/flow/verificationModes'
+import {
+  eventLabel,
+  getEventTypeOptions,
+  getStatusesForEvent,
+  getVendorOptionsForCampaign,
+  isForeignFlowEvent,
+  resolveCampaignProfile,
+  statusLabel,
+} from '../utils/campaignLogsFilters'
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6']
 const PAGE_SIZE = 25
@@ -61,566 +69,15 @@ const LOGS_DATE_PRESETS = [
 const COMPARE_COLORS = ['#3b82f6', '#f59e0b', '#14b8a6', '#8b5cf6']
 const MAX_COMPARE_EVENTS = 4
 
-export const FLOW_SPECS = {
-  ORANGE_BF: {
-    label: 'Orange Burkina Faso (DCB)',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'CONFIRM_VIEW',
-      'CONFIRM_CLICK',
-      'OTP_VIEW',
-      'OTP_SEND',
-      'OTP_VERIFY',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_ORANGE_BF_CHECKSUB',
-      'API_ORANGE_BF_OTP_SEND',
-      'API_ORANGE_BF_OTP_VERIFY',
-      'API_ORANGE_BF_SYNC',
-      'API_ORANGE_BF_EXPOSE_SEND_IN',
-      'API_ORANGE_BF_EXPOSE_VERIFY_IN',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'RATE_LIMIT_HIT',
-      'BRUTE_FORCE_ATTEMPT',
-      'BLOCKED_REQUEST',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'CONFIRM_SHOWN',
-      'OTP_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-      'ACTIVE',
-    ],
-    presets: [
-      { id: 'obf-funnel', label: 'Screen Funnel (Visit → Confirm → OTP → Success)', events: ['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
-      { id: 'obf-screens', label: 'Screens (Home → Confirm → OTP)', events: ['HOME_VIEW', 'CONFIRM_VIEW', 'OTP_VIEW'] },
-      { id: 'obf-otp', label: 'OTP: Send vs Verify', events: ['API_ORANGE_BF_OTP_SEND', 'API_ORANGE_BF_OTP_VERIFY'] },
-      { id: 'obf-checksub', label: 'Visit vs CheckSub', events: ['VISIT', 'API_ORANGE_BF_CHECKSUB'] },
-    ],
-    defaultCompare: ['VISIT', 'CONFIRM_VIEW', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
-  },
-  UNIVERSE_DCB: {
-    label: 'Universe Telecom DCB',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'PLAN_VIEW',
-      'CONFIRM_VIEW',
-      'OTP_VIEW',
-      'OTP_SEND',
-      'OTP_VERIFY',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_DCB_CONFIG',
-      'API_DCB_SUBSCRIPTIONS',
-      'API_DCB_PINCODE',
-      'API_DCB_CONFIRM',
-      'API_DCB_EXPOSE_CONFIG_IN',
-      'API_DCB_EXPOSE_PINCODE_IN',
-      'API_DCB_EXPOSE_CONFIRM_IN',
-      'API_DCB_EXPOSE_STATUS_IN',
-      'API_BILLING_CALLBACK',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'RATE_LIMIT_HIT',
-      'BLOCKED_REQUEST',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'CONFIRM_SHOWN',
-      'OTP_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-      'ACTIVE',
-      'PENDING',
-    ],
-    presets: [
-      { id: 'dcb-funnel', label: 'DCB Funnel (Visit → PIN → Confirm → Success)', events: ['VISIT', 'API_DCB_PINCODE', 'API_DCB_CONFIRM', 'SUBSCRIBE_SUCCESS'] },
-      { id: 'dcb-api', label: 'PIN Send vs PIN Confirm', events: ['API_DCB_EXPOSE_PINCODE_IN', 'API_DCB_EXPOSE_CONFIRM_IN'] },
-      { id: 'dcb-conv', label: 'Success vs Postback', events: ['SUBSCRIBE_SUCCESS', 'POSTBACK_SENT'] },
-    ],
-    defaultCompare: ['VISIT', 'API_DCB_PINCODE', 'API_DCB_CONFIRM', 'SUBSCRIBE_SUCCESS'],
-  },
-  OTP_ONLY: {
-    label: 'OTP Only Flow',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'SUBSCRIBE_CLICK',
-      'OTP_VIEW',
-      'OTP_SEND',
-      'OTP_VERIFY',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_OTP_SEND',
-      'API_OTP_VERIFY',
-      'API_OTP_EXPOSE_SEND_IN',
-      'API_OTP_EXPOSE_VERIFY_IN',
-      'API_CHECKSUB',
-      'API_SUBSCRIBE',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'RATE_LIMIT_HIT',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'OTP_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-    ],
-    presets: [
-      { id: 'otp-funnel', label: 'OTP Funnel (Visit → Send → Verify → Success)', events: ['VISIT', 'OTP_SEND', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
-      { id: 'otp-screens', label: 'Visit vs Home vs OTP', events: ['VISIT', 'HOME_VIEW', 'OTP_VERIFY'] },
-    ],
-    defaultCompare: ['VISIT', 'OTP_SEND', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
-  },
-  HEADER_INJECTION: {
-    label: 'Header Injection',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'PLAN_VIEW',
-      'CONFIRM_VIEW',
-      'CONFIRM_CLICK',
-      'SUBSCRIBE_CLICK',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_HE_TOKEN',
-      'API_HE_MSISDN',
-      'API_HE_RESOLVE',
-      'API_HE_REDIRECT',
-      'API_RESOLVE_MSISDN',
-      'API_CHECKSUB',
-      'API_SUBSCRIBE',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'CONFIRM_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-    ],
-    presets: [
-      { id: 'he-funnel', label: 'HE Funnel (Visit → HE Resolve → Click → Success)', events: ['VISIT', 'API_HE_RESOLVE', 'SUBSCRIBE_CLICK', 'SUBSCRIBE_SUCCESS'] },
-    ],
-    defaultCompare: ['VISIT', 'API_HE_RESOLVE', 'SUBSCRIBE_CLICK', 'SUBSCRIBE_SUCCESS'],
-  },
-  BOTH: {
-    label: 'Header Injection + OTP',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'PLAN_VIEW',
-      'CONFIRM_VIEW',
-      'CONFIRM_CLICK',
-      'SUBSCRIBE_CLICK',
-      'OTP_VIEW',
-      'OTP_SEND',
-      'OTP_VERIFY',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_HE_TOKEN',
-      'API_HE_MSISDN',
-      'API_HE_RESOLVE',
-      'API_HE_REDIRECT',
-      'API_RESOLVE_MSISDN',
-      'API_CHECKSUB',
-      'API_SUBSCRIBE',
-      'API_OTP_SEND',
-      'API_OTP_VERIFY',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'CONFIRM_SHOWN',
-      'OTP_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-    ],
-    presets: [
-      { id: 'both-funnel', label: 'Funnel: Visit → OTP → Success', events: ['VISIT', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'] },
-      { id: 'both-he-otp', label: 'HE vs OTP Verify', events: ['API_HE_RESOLVE', 'OTP_VERIFY'] },
-    ],
-    defaultCompare: ['VISIT', 'OTP_VERIFY', 'SUBSCRIBE_SUCCESS'],
-  },
-  NONE: {
-    label: 'Consent Gateway / Redirect',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'SUBSCRIBE_CLICK',
-      'CG_REDIRECT',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_CG_REDIRECT',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-    ],
-    presets: [
-      { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
-      { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
-      { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
-    ],
-    defaultCompare: ['VISIT', 'CG_REDIRECT'],
-  },
-  CG_HOME: {
-    label: 'CG via Home',
-    funnelEvents: [
-      'VISIT',
-      'HOME_VIEW',
-      'SUBSCRIBE_CLICK',
-      'CG_REDIRECT',
-      'SUBSCRIBE_SUCCESS',
-      'SUBSCRIBE_FAILED',
-    ],
-    apiEvents: [
-      'API_CG_REDIRECT',
-      'CALLBACK_RECEIVED',
-      'POSTBACK_PENDING',
-      'POSTBACK_SENT',
-      'POSTBACK_FAILED',
-      'BLOCKED',
-    ],
-    statuses: [
-      'VISIT',
-      'HOME_SHOWN',
-      'SUBSCRIBED',
-      'SUCCESS',
-      'FAILED',
-      'BLOCKED',
-    ],
-    presets: [
-      { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
-      { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
-      { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
-    ],
-    defaultCompare: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'],
-  },
-}
-
-export function isForeignFlowEvent(eventType, flowType) {
-  if (!flowType) return false
-  const t = String(eventType).toUpperCase()
-  if (flowType === 'ORANGE_BF') {
-    return t.includes('DCB') || t.includes('API_HE') || t.includes('CG_REDIRECT')
-  }
-  if (flowType === 'UNIVERSE_DCB') {
-    return t.includes('ORANGE_BF') || t.includes('API_HE') || t.includes('CG_REDIRECT')
-  }
-  if (flowType === 'OTP_ONLY') {
-    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('API_HE') || t.includes('CG_REDIRECT')
-  }
-  if (flowType === 'HEADER_INJECTION') {
-    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('CG_REDIRECT')
-  }
-  if (flowType === 'NONE' || flowType === 'CG_HOME') {
-    return t.includes('ORANGE_BF') || t.includes('DCB') || t.includes('API_HE') || t.includes('OTP_')
-  }
-  return false
-}
-
 const COMPARE_PRESETS = [
   { id: 'visit-cg', label: 'Visit vs CG', events: ['VISIT', 'CG_REDIRECT'] },
   { id: 'visit-home-cg', label: 'Visit vs Home vs CG', events: ['VISIT', 'HOME_VIEW', 'CG_REDIRECT'] },
   { id: 'visit-banner-cg', label: 'Visit vs Banner vs CG', events: ['VISIT', 'SUBSCRIBE_CLICK', 'CG_REDIRECT'] },
 ]
 
-export function eventLabel(type, flowType) {
-  if (flowType === 'ORANGE_BF') {
-    const obf = {
-      VISIT: 'Ad Visit (Landing)',
-      HOME_VIEW: 'Screen 1: Mobile Number Entry',
-      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
-      CONFIRM_CLICK: 'Screen 2: Confirm Click',
-      OTP_VIEW: 'Screen 3: Enter 4-Digit OTP',
-      OTP_SEND: 'OTP Sent to User',
-      OTP_VERIFY: 'Screen 3: OTP Verified',
-      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed & Charged',
-      SUBSCRIBE_FAILED: 'Subscription Failed',
-      API_ORANGE_BF_CHECKSUB: 'API: CheckSub (Operator)',
-      API_ORANGE_BF_OTP_SEND: 'API: Send OTP (Operator)',
-      API_ORANGE_BF_OTP_VERIFY: 'API: Verify OTP (Operator)',
-      API_ORANGE_BF_SYNC: 'API: Sync Subscription',
-      API_ORANGE_BF_EXPOSE_SEND_IN: 'API: Expose Send In',
-      API_ORANGE_BF_EXPOSE_VERIFY_IN: 'API: Expose Verify In',
-      CALLBACK_RECEIVED: 'Operator Callback Received',
-      POSTBACK_SENT: 'Affiliate Postback Sent',
-      POSTBACK_FAILED: 'Affiliate Postback Failed',
-      RATE_LIMIT_HIT: 'Rate Limit Hit',
-      BRUTE_FORCE_ATTEMPT: 'Brute Force Attempt',
-      BLOCKED_REQUEST: 'Blocked Request',
-      BLOCKED: 'Blocked Traffic',
-    }
-    if (obf[type]) return obf[type]
-  }
-
-  if (flowType === 'UNIVERSE_DCB') {
-    const dcb = {
-      VISIT: 'Ad Visit (Landing)',
-      HOME_VIEW: 'Screen 1: Welcome & Overview',
-      PLAN_VIEW: 'Screen 2: Select Pack',
-      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
-      OTP_VIEW: 'Screen 3: Enter PIN Code',
-      OTP_SEND: 'PIN Requested',
-      OTP_VERIFY: 'Screen 3: Confirm PIN',
-      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed & Charged',
-      SUBSCRIBE_FAILED: 'Subscription Failed',
-      API_DCB_PINCODE: 'API: Send PIN (Universe DCB)',
-      API_DCB_CONFIRM: 'API: Confirm PIN (Universe DCB)',
-      API_DCB_CONFIG: 'API: DCB Config',
-      API_DCB_EXPOSE_PINCODE_IN: 'API: PIN Send In',
-      API_DCB_EXPOSE_CONFIRM_IN: 'API: PIN Confirm In',
-      API_BILLING_CALLBACK: 'API: Billing Callback',
-      CALLBACK_RECEIVED: 'Callback Received',
-      POSTBACK_SENT: 'Affiliate Postback Sent',
-      BLOCKED: 'Blocked Traffic',
-    }
-    if (dcb[type]) return dcb[type]
-  }
-
-  if (flowType === 'OTP_ONLY') {
-    const otpOnly = {
-      VISIT: 'Ad Visit (Landing)',
-      HOME_VIEW: 'Screen 1: Welcome & Mobile Number',
-      OTP_VIEW: 'Screen 2: Enter OTP',
-      OTP_SEND: 'OTP Sent to User',
-      OTP_VERIFY: 'Screen 2: OTP Verified',
-      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed',
-      SUBSCRIBE_FAILED: 'Subscription Failed',
-      API_OTP_SEND: 'API: Send OTP Gateway',
-      API_OTP_VERIFY: 'API: Verify OTP Gateway',
-      POSTBACK_SENT: 'Affiliate Postback Sent',
-      BLOCKED: 'Blocked Traffic',
-    }
-    if (otpOnly[type]) return otpOnly[type]
-  }
-
-  if (flowType === 'HEADER_INJECTION') {
-    const he = {
-      VISIT: 'Ad Visit (Landing)',
-      HOME_VIEW: 'Screen 1: Welcome (HE Number Resolved)',
-      CONFIRM_VIEW: 'Screen 2: Confirm Pack',
-      SUBSCRIBE_CLICK: 'Subscribe Click',
-      SUBSCRIBE_SUCCESS: 'Conversion: Subscribed',
-      SUBSCRIBE_FAILED: 'Subscription Failed',
-      API_HE_RESOLVE: 'API: Resolve Carrier Header',
-      API_HE_TOKEN: 'API: Carrier Token',
-      API_HE_MSISDN: 'API: Decrypt MSISDN',
-      POSTBACK_SENT: 'Affiliate Postback Sent',
-      BLOCKED: 'Blocked / Non-Carrier IP',
-    }
-    if (he[type]) return he[type]
-  }
-
-  if (flowType === 'NONE' || flowType === 'CG_HOME') {
-    const cg = {
-      VISIT: 'Ad Visit (Landing)',
-      HOME_VIEW: 'Screen 1: Landing Page',
-      SUBSCRIBE_CLICK: 'Continue / Subscribe Click',
-      CG_REDIRECT: 'Redirected to Telecom Consent Gateway',
-      SUBSCRIBE_SUCCESS: 'Conversion: Operator CG Success',
-      SUBSCRIBE_FAILED: 'Gateway Subscription Failed',
-      API_CG_REDIRECT: 'API: Consent Gateway Redirect',
-      CALLBACK_RECEIVED: 'Telecom Callback Received',
-      POSTBACK_SENT: 'Affiliate Postback Sent',
-      BLOCKED: 'Blocked Traffic',
-    }
-    if (cg[type]) return cg[type]
-  }
-
-  const standard = {
-    VISIT: 'Ad Visit (Landing)',
-    HOME_VIEW: 'Screen 1: Home Shown',
-    CONFIRM_VIEW: 'Screen 2: Confirm Shown',
-    OTP_VIEW: 'Screen 3: OTP Box',
-    OTP_SEND: 'OTP Send',
-    OTP_VERIFY: 'Screen 3: OTP Verify',
-    SUBSCRIBE_SUCCESS: 'Subscribe Success (Converted)',
-    SUBSCRIBE_FAILED: 'Subscribe Failed',
-    CG_REDIRECT: 'CG Redirect',
-    POSTBACK_SENT: 'Postback Sent',
-    BLOCKED: 'Blocked',
-  }
-  return standard[type] || type.replace(/_/g, ' ')
-}
-
-export function statusLabel(status, flowType, options = {}) {
-  const hasHoldStatusOptions = Boolean(options?.hasHoldStatusOptions)
-  if (hasHoldStatusOptions) {
-    if (status === 'SUCCESS') return 'Success — All (Sent & Held)'
-    if (status === 'SUCCESS_SENT') return 'Success — Sent (Not Held)'
-    if (status === 'HELD') return 'Success — Held (Withheld)'
-  }
-
-  if (flowType === 'ORANGE_BF') {
-    const obf = {
-      VISIT: '1. Landed (Dropped at Screen 1)',
-      HOME_SHOWN: '1. Screen 1: Home / Number Shown',
-      CONFIRM_SHOWN: '2. Screen 2: Reached Pack Confirm',
-      OTP_SHOWN: '3. Screen 3: Reached OTP Screen',
-      SUBSCRIBED: '4. Subscribed & Charged (Success)',
-      SUCCESS: '4. Subscribed & Charged (Success)',
-      FAILED: 'Failed / Insufficient Balance',
-      BLOCKED: 'Blocked (Anti-Fraud / Wrong Carrier)',
-      ACTIVE: 'Already Active Subscriber',
-    }
-    if (obf[status]) return obf[status]
-  }
-
-  if (flowType === 'UNIVERSE_DCB') {
-    const dcb = {
-      VISIT: '1. Landed (Dropped at Landing)',
-      HOME_SHOWN: '1. Screen 1: Home Shown',
-      CONFIRM_SHOWN: '2. Screen 2: Reached Pack Selection',
-      OTP_SHOWN: '3. Screen 3: Reached PIN Entry',
-      SUBSCRIBED: '4. Subscribed & Charged (Success)',
-      SUCCESS: '4. Subscribed & Charged (Success)',
-      FAILED: 'Failed / Insufficient Balance',
-      BLOCKED: 'Blocked Traffic',
-      ACTIVE: 'Active Subscriber',
-      PENDING: 'Pending Confirmation',
-    }
-    if (dcb[status]) return dcb[status]
-  }
-
-  if (flowType === 'OTP_ONLY') {
-    const otp = {
-      VISIT: '1. Landed (Dropped at Landing)',
-      HOME_SHOWN: '1. Screen 1: Home Shown',
-      OTP_SHOWN: '2. Screen 2: Reached OTP Screen',
-      SUBSCRIBED: '3. Subscribed (Success)',
-      SUCCESS: '3. Subscribed (Success)',
-      FAILED: 'Failed',
-      BLOCKED: 'Blocked',
-    }
-    if (otp[status]) return otp[status]
-  }
-
-  if (flowType === 'HEADER_INJECTION') {
-    const he = {
-      VISIT: '1. Landed (Dropped at Landing)',
-      HOME_SHOWN: '1. Screen 1: Home Shown (HE Resolved)',
-      CONFIRM_SHOWN: '2. Screen 2: Reached Confirm Pack',
-      SUBSCRIBED: '3. Subscribed (Success)',
-      SUCCESS: '3. Subscribed (Success)',
-      FAILED: 'Failed',
-      BLOCKED: 'Blocked (Non-Carrier IP)',
-    }
-    if (he[status]) return he[status]
-  }
-
-  if (flowType === 'NONE' || flowType === 'CG_HOME') {
-    const cg = {
-      VISIT: '1. Landed (Dropped at Landing)',
-      HOME_SHOWN: '1. Screen 1: Home Shown',
-      SUBSCRIBED: '2. Converted (Operator CG Success)',
-      SUCCESS: '2. Success',
-      FAILED: 'Failed at Operator Gateway',
-      BLOCKED: 'Blocked Traffic',
-    }
-    if (cg[status]) return cg[status]
-  }
-
-  const standard = {
-    VISIT: 'Visit (Landed)',
-    HOME_SHOWN: 'Home Shown',
-    CONFIRM_SHOWN: 'Confirm Shown',
-    OTP_SHOWN: 'OTP Shown',
-    SUBSCRIBED: 'Subscribed (Success)',
-    SUCCESS: 'Success',
-    SUCCESS_SENT: 'Success — Sent (Not Held)',
-    HELD: 'Success — Held (Withheld)',
-    FAILED: 'Failed',
-    BLOCKED: 'Blocked',
-    ACTIVE: 'Active',
-    PENDING: 'Pending',
-  }
-  return standard[status] || status
-}
-
 function seriesColor(index) {
   return COMPARE_COLORS[index % COMPARE_COLORS.length]
 }
-
-const STANDARD_EVENT_TYPES = [
-  'VISIT',
-  'HOME_VIEW',
-  'CONFIRM_VIEW',
-  'OTP_VIEW',
-  'OTP_SEND',
-  'OTP_VERIFY',
-  'SUBSCRIBE_SUCCESS',
-  'SUBSCRIBE_FAILED',
-  'API_ORANGE_BF_OTP_SEND',
-  'API_ORANGE_BF_OTP_VERIFY',
-  'API_ORANGE_BF_CHECKSUB',
-  'API_DCB_PINCODE',
-  'API_DCB_CONFIRM',
-  'API_HE_RESOLVE',
-  'CG_REDIRECT',
-  'CALLBACK_RECEIVED',
-  'POSTBACK_SENT',
-  'POSTBACK_FAILED',
-  'BLOCKED',
-]
 
 
 function resolveInterval(preset, from, to) {
@@ -858,15 +315,111 @@ function CampaignLogsPage() {
   }, [selectedId, datePreset, compareEvents, filters, page])
 
   const [aggs, setAggs] = useState(null)
+  const [knownVendorsByCampaign, setKnownVendorsByCampaign] = useState({})
   const [logs, setLogs] = useState({ items: [], total: 0, page: 1, size: PAGE_SIZE })
   const [loading, setLoading] = useState(false)
   const [exportingFormat, setExportingFormat] = useState(null)
+
+  const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
+  const isHourly = chartInterval === 'hour'
+
+  const selectedCampaign = useMemo(() => {
+    if (!selectedId || selectedId === 'all') return null
+    return campaigns.find((item) => String(item.id) === String(selectedId)) || null
+  }, [campaigns, selectedId])
+
+  const campaignProfile = useMemo(
+    () => resolveCampaignProfile(selectedCampaign),
+    [selectedCampaign],
+  )
+  const flowType = campaignProfile.flowType
+  const currentFlowSpec = campaignProfile.flowSpec
+
+  const activePresets = useMemo(() => {
+    if (currentFlowSpec?.presets) return currentFlowSpec.presets
+    return COMPARE_PRESETS
+  }, [currentFlowSpec])
+
+  const hasHoldStatusOptions = useMemo(() => {
+    if (!selectedCampaign) return true
+    if (campaignProfile.isApiExpose || flowType === 'ORANGE_BF') return true
+    return Number(aggs?.otpStats?.held) > 0
+  }, [selectedCampaign, campaignProfile.isApiExpose, flowType, aggs?.otpStats?.held])
+
+  const eventTypeOptions = useMemo(
+    () => getEventTypeOptions({ profile: campaignProfile, aggsByEventType: aggs?.byEventType }),
+    [campaignProfile, aggs?.byEventType],
+  )
+
+  const effectiveEventType = useMemo(() => {
+    if (!filters.eventType) return ''
+    if (selectedId && selectedId !== 'all' && campaigns.length === 0) return filters.eventType
+    return eventTypeOptions.includes(filters.eventType) ? filters.eventType : ''
+  }, [filters.eventType, selectedId, campaigns.length, eventTypeOptions])
+
+  const statusOptions = useMemo(
+    () =>
+      getStatusesForEvent({
+        profile: campaignProfile,
+        eventType: effectiveEventType,
+        hasHoldStatusOptions,
+        aggsByStatus: aggs?.byStatus,
+      }),
+    [campaignProfile, effectiveEventType, hasHoldStatusOptions, aggs?.byStatus],
+  )
+
+  const effectiveStatus = useMemo(() => {
+    if (!filters.status) return ''
+    if (selectedId && selectedId !== 'all' && campaigns.length === 0) return filters.status
+    return statusOptions.includes(filters.status) ? filters.status : ''
+  }, [filters.status, selectedId, campaigns.length, statusOptions])
+
+  const vendorOptions = useMemo(
+    () =>
+      getVendorOptionsForCampaign({
+        selectedCampaign,
+        allVendors: vendors,
+        knownVendorIds: knownVendorsByCampaign[String(selectedId)] || [],
+        aggsByVendor: aggs?.byVendor,
+      }),
+    [selectedCampaign, vendors, knownVendorsByCampaign, selectedId, aggs?.byVendor],
+  )
+
+  const effectiveVendorId = useMemo(() => {
+    if (!filters.vendorId) return ''
+    if (vendors.length === 0 || (selectedId && selectedId !== 'all' && campaigns.length === 0)) {
+      return filters.vendorId
+    }
+    return vendorOptions.some((v) => String(v.id) === String(filters.vendorId))
+      ? filters.vendorId
+      : ''
+  }, [filters.vendorId, vendors.length, selectedId, campaigns.length, vendorOptions])
+
+  const effectiveCompareEvents = useMemo(() => {
+    if (!currentFlowSpec) return compareEvents
+    const allowedSet = new Set(eventTypeOptions)
+    const hasInvalid = compareEvents.some((ev) => !allowedSet.has(ev))
+    if (hasInvalid && currentFlowSpec.defaultCompare) {
+      return currentFlowSpec.defaultCompare
+    }
+    return compareEvents
+  }, [currentFlowSpec, eventTypeOptions, compareEvents])
+
+  const effectiveFilters = useMemo(
+    () => ({
+      ...filters,
+      eventType: effectiveEventType,
+      status: effectiveStatus,
+      vendorId: effectiveVendorId,
+    }),
+    [filters, effectiveEventType, effectiveStatus, effectiveVendorId],
+  )
 
   const handleExport = useCallback(async (format = 'csv') => {
     if (!selectedId || exportingFormat) return
     setExportingFormat(format)
     try {
-      const exportParams = { ...filters, timezone, view: 'sessions' }
+      const exportParams = { ...effectiveFilters, timezone, view: 'sessions' }
       if (datePreset === 'all') {
         delete exportParams.from
         delete exportParams.to
@@ -878,57 +431,7 @@ function CampaignLogsPage() {
     } finally {
       setExportingFormat(null)
     }
-  }, [selectedId, filters, datePreset, timezone, exportingFormat, addToast])
-
-  const chartInterval = resolveInterval(datePreset, filters.from, filters.to)
-  const isHourly = chartInterval === 'hour'
-
-  const selectedCampaign = useMemo(() => {
-    if (!selectedId || selectedId === 'all') return null
-    return campaigns.find((item) => String(item.id) === String(selectedId)) || null
-  }, [campaigns, selectedId])
-
-  const flowType = useMemo(() => {
-    if (!selectedCampaign) return null
-    return normalizeModeId(selectedCampaign.verificationMode)
-  }, [selectedCampaign])
-
-  const currentFlowSpec = useMemo(() => {
-    if (!flowType) return null
-    return FLOW_SPECS[flowType] || null
-  }, [flowType])
-
-  const activePresets = useMemo(() => {
-    if (currentFlowSpec?.presets) return currentFlowSpec.presets
-    return COMPARE_PRESETS
-  }, [currentFlowSpec])
-
-  const hasHoldStatusOptions = useMemo(() => {
-    if (!selectedCampaign) return true
-    if (isApiExposeCampaign(selectedCampaign) || flowType === 'ORANGE_BF') return true
-    return Number(aggs?.otpStats?.held) > 0
-  }, [selectedCampaign, flowType, aggs?.otpStats?.held])
-
-  // Synchronize compare events and active filter when switching campaigns/flow
-  useEffect(() => {
-    if (!currentFlowSpec) return
-    const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
-    const hasInvalid = compareEvents.some((ev) => !allowed.has(ev))
-    if (hasInvalid && currentFlowSpec.defaultCompare) {
-      setCompareEvents(currentFlowSpec.defaultCompare)
-    }
-    if (filters.eventType && !allowed.has(filters.eventType)) {
-      setFilters((f) => ({ ...f, eventType: '' }))
-    }
-    const allowedStatuses = new Set(currentFlowSpec.statuses || [])
-    if (hasHoldStatusOptions) {
-      allowedStatuses.add('SUCCESS_SENT')
-      allowedStatuses.add('HELD')
-    }
-    if (filters.status && currentFlowSpec.statuses && !allowedStatuses.has(filters.status)) {
-      setFilters((f) => ({ ...f, status: '' }))
-    }
-  }, [currentFlowSpec, hasHoldStatusOptions])
+  }, [selectedId, effectiveFilters, datePreset, timezone, exportingFormat, addToast])
 
   const getCampaignLabel = useCallback((campaignId) => {
     if (!campaignId) return '—'
@@ -975,14 +478,14 @@ function CampaignLogsPage() {
     if (!selectedId) return
     setLoading(true)
     try {
-      const interval = resolveInterval(datePreset, filters.from, filters.to)
+      const interval = resolveInterval(datePreset, effectiveFilters.from, effectiveFilters.to)
       const aggParams = {
-        ...filters,
+        ...effectiveFilters,
         interval,
         timezone,
-        compareEvents: compareEvents.join(','),
+        compareEvents: effectiveCompareEvents.join(','),
       }
-      const params = { ...filters, page, size: PAGE_SIZE, timezone, view: 'sessions' }
+      const params = { ...effectiveFilters, page, size: PAGE_SIZE, timezone, view: 'sessions' }
       if (datePreset === 'all') {
         delete aggParams.from
         delete aggParams.to
@@ -995,13 +498,28 @@ function CampaignLogsPage() {
         isAll ? searchAllCampaignLogs(params) : searchCampaignLogs(selectedId, params),
       ])
       setAggs(aggRes)
+      if (Array.isArray(aggRes?.byVendor) && aggRes.byVendor.length > 0) {
+        const key = String(selectedId)
+        setKnownVendorsByCampaign((prev) => {
+          const merged = new Set(prev[key] || [])
+          let changed = false
+          for (const item of aggRes.byVendor) {
+            if (item?.key && item.key !== 'null' && !merged.has(String(item.key))) {
+              merged.add(String(item.key))
+              changed = true
+            }
+          }
+          if (!changed) return prev
+          return { ...prev, [key]: Array.from(merged) }
+        })
+      }
       setLogs(logRes)
     } catch (err) {
       addToast(err.message || 'Failed to load logs', 'error')
     } finally {
       setLoading(false)
     }
-  }, [selectedId, filters, page, addToast, datePreset, timezone, compareEvents])
+  }, [selectedId, effectiveFilters, page, addToast, datePreset, timezone, effectiveCompareEvents])
 
   useEffect(() => {
     fetchData()
@@ -1022,73 +540,6 @@ function CampaignLogsPage() {
     holdPercent: 0,
   }
 
-  const eventTypeOptions = useMemo(() => {
-    if (currentFlowSpec) {
-      const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
-      if (aggs?.byEventType) {
-        aggs.byEventType.forEach((item) => {
-          if (item.key && !isForeignFlowEvent(item.key, flowType)) {
-            allowed.add(item.key)
-          }
-        })
-      }
-      if (filters.eventType) {
-        allowed.add(filters.eventType)
-      }
-      return Array.from(allowed)
-    }
-
-    const set = new Set(STANDARD_EVENT_TYPES)
-    if (aggs?.byEventType) {
-      aggs.byEventType.forEach((item) => {
-        if (item.key) set.add(item.key)
-      })
-    }
-    if (filters.eventType && !set.has(filters.eventType)) {
-      set.add(filters.eventType)
-    }
-    return Array.from(set).sort()
-  }, [aggs, filters.eventType, currentFlowSpec, flowType])
-
-  const statusOptions = useMemo(() => {
-    const base = currentFlowSpec?.statuses
-      ? [...currentFlowSpec.statuses]
-      : [
-          'VISIT',
-          'HOME_SHOWN',
-          'CONFIRM_SHOWN',
-          'OTP_SHOWN',
-          'SUBSCRIBED',
-          'SUCCESS',
-          'FAILED',
-          'BLOCKED',
-          'ACTIVE',
-          'PENDING',
-        ]
-    const set = new Set()
-    for (const st of base) {
-      set.add(st)
-      if (st === 'SUCCESS' && hasHoldStatusOptions) {
-        set.add('SUCCESS_SENT')
-        set.add('HELD')
-      }
-    }
-    if (hasHoldStatusOptions) {
-      set.add('SUCCESS')
-      set.add('SUCCESS_SENT')
-      set.add('HELD')
-    }
-    if (aggs?.byStatus) {
-      aggs.byStatus.forEach((item) => {
-        if (item.key && item.count > 0) set.add(item.key)
-      })
-    }
-    if (filters.status && !set.has(filters.status)) {
-      set.add(filters.status)
-    }
-    return Array.from(set)
-  }, [currentFlowSpec, hasHoldStatusOptions, aggs, filters.status])
-
   const [chartEventCategory, setChartEventCategory] = useState('funnel')
 
   const eventsByTypeData = useMemo(() => {
@@ -1102,9 +553,12 @@ function CampaignLogsPage() {
 
     const allowed = new Set([...currentFlowSpec.funnelEvents, ...currentFlowSpec.apiEvents])
     return raw.filter(
-      (item) => (allowed.has(item.key) || !isForeignFlowEvent(item.key, flowType)) && item.count > 0,
+      (item) =>
+        (allowed.has(item.key) ||
+          !isForeignFlowEvent(item.key, flowType, { isApiExpose: campaignProfile.isApiExpose })) &&
+        item.count > 0,
     )
-  }, [aggs, currentFlowSpec, flowType, chartEventCategory])
+  }, [aggs, currentFlowSpec, flowType, campaignProfile.isApiExpose, chartEventCategory])
 
   const statusDistributionData = useMemo(() => {
     const raw = aggs?.byStatus || []
@@ -1134,12 +588,12 @@ function CampaignLogsPage() {
 
   const selectedSeries = useMemo(
     () =>
-      compareEvents.map((key, index) => ({
+      effectiveCompareEvents.map((key, index) => ({
         key,
-        label: eventLabel(key),
+        label: eventLabel(key, flowType),
         color: seriesColor(index),
       })),
-    [compareEvents],
+    [effectiveCompareEvents, flowType],
   )
 
   const funnelTotals = aggs?.funnelTotals || {}
@@ -1148,34 +602,106 @@ function CampaignLogsPage() {
     count: Number(funnelTotals[s.key]) || 0,
     fill: s.color,
   }))
-  const firstCount = Number(funnelTotals[compareEvents[0]]) || 0
-  const lastCount = Number(funnelTotals[compareEvents[compareEvents.length - 1]]) || 0
+  const firstCount = Number(funnelTotals[effectiveCompareEvents[0]]) || 0
+  const lastCount =
+    Number(funnelTotals[effectiveCompareEvents[effectiveCompareEvents.length - 1]]) || 0
   const compareRatio =
-    compareEvents.length >= 2 && firstCount > 0
+    effectiveCompareEvents.length >= 2 && firstCount > 0
       ? `${((lastCount / firstCount) * 100).toFixed(1)}%`
       : '—'
   const compareRatioHint =
-    compareEvents.length >= 2
-      ? `${eventLabel(compareEvents[compareEvents.length - 1])} ÷ ${eventLabel(compareEvents[0])}`
+    effectiveCompareEvents.length >= 2
+      ? `${eventLabel(effectiveCompareEvents[effectiveCompareEvents.length - 1], flowType)} ÷ ${eventLabel(effectiveCompareEvents[0], flowType)}`
       : 'Pick 2 events'
 
   const toggleCompareEvent = (type) => {
     setCompareEvents((prev) => {
-      if (prev.includes(type)) {
-        if (prev.length <= 1) return prev
-        return prev.filter((key) => key !== type)
+      const base =
+        currentFlowSpec && prev.some((ev) => !eventTypeOptions.includes(ev))
+          ? effectiveCompareEvents
+          : prev
+      if (base.includes(type)) {
+        if (base.length <= 1) return base
+        return base.filter((key) => key !== type)
       }
-      if (prev.length >= MAX_COMPARE_EVENTS) {
+      if (base.length >= MAX_COMPARE_EVENTS) {
         addToast(`Pick up to ${MAX_COMPARE_EVENTS} events`, 'warning')
-        return prev
+        return base
       }
-      return [...prev, type]
+      return [...base, type]
     })
+  }
+
+  const handleCampaignChange = (nextId) => {
+    setPage(1)
+    setSelectedId(nextId)
+
+    const nextCampaign =
+      nextId && nextId !== 'all'
+        ? campaigns.find((item) => String(item.id) === String(nextId)) || null
+        : null
+    const nextProfile = resolveCampaignProfile(nextCampaign)
+    const nextHasHold = !nextCampaign
+      ? true
+      : nextProfile.isApiExpose || nextProfile.flowType === 'ORANGE_BF'
+
+    const nextEvents = getEventTypeOptions({ profile: nextProfile })
+    const nextEventType =
+      filters.eventType && nextEvents.includes(filters.eventType) ? filters.eventType : ''
+
+    const nextStatuses = getStatusesForEvent({
+      profile: nextProfile,
+      eventType: nextEventType,
+      hasHoldStatusOptions: nextHasHold,
+    })
+    const nextStatus =
+      filters.status && nextStatuses.includes(filters.status) ? filters.status : ''
+
+    const nextVendors = getVendorOptionsForCampaign({
+      selectedCampaign: nextCampaign,
+      allVendors: vendors,
+      knownVendorIds: knownVendorsByCampaign[String(nextId)] || [],
+    })
+    const nextVendorId =
+      filters.vendorId && nextVendors.some((v) => String(v.id) === String(filters.vendorId))
+        ? filters.vendorId
+        : ''
+
+    if (nextProfile.flowSpec) {
+      const allowedSet = new Set(nextEvents)
+      if (
+        compareEvents.some((ev) => !allowedSet.has(ev)) &&
+        nextProfile.flowSpec.defaultCompare
+      ) {
+        setCompareEvents(nextProfile.flowSpec.defaultCompare)
+      }
+    }
+
+    setFilters((f) => ({
+      ...f,
+      eventType: nextEventType,
+      status: nextStatus,
+      vendorId: nextVendorId,
+    }))
   }
 
   const updateFilter = (key, value) => {
     setPage(1)
     if (key === 'from' || key === 'to') setDatePreset('custom')
+    if (key === 'eventType') {
+      const nextStatuses = getStatusesForEvent({
+        profile: campaignProfile,
+        eventType: value,
+        hasHoldStatusOptions,
+        aggsByStatus: aggs?.byStatus,
+      })
+      setFilters((f) => ({
+        ...f,
+        eventType: value,
+        status: f.status && nextStatuses.includes(f.status) ? f.status : '',
+      }))
+      return
+    }
     setFilters((f) => ({ ...f, [key]: value }))
   }
 
@@ -1302,10 +828,7 @@ function CampaignLogsPage() {
               <select
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200"
                 value={selectedId}
-                onChange={(e) => {
-                  setPage(1)
-                  setSelectedId(e.target.value)
-                }}
+                onChange={(e) => handleCampaignChange(e.target.value)}
               >
                 <option value="all">— All Campaigns —</option>
                 {campaigns.map((c) => (
@@ -1324,7 +847,7 @@ function CampaignLogsPage() {
               </label>
               <select
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
-                value={filters.eventType}
+                value={effectiveEventType}
                 onChange={(e) => updateFilter('eventType', e.target.value)}
               >
                 <option value="">— All Event Types —</option>
@@ -1335,20 +858,16 @@ function CampaignLogsPage() {
                         .filter((t) => eventTypeOptions.includes(t))
                         .map((type) => (
                           <option key={type} value={type}>
-                            {eventLabel(type)}
+                            {eventLabel(type, flowType)}
                           </option>
                         ))}
                     </optgroup>
                     <optgroup label="API & Background Events">
                       {eventTypeOptions
-                        .filter(
-                          (t) =>
-                            !currentFlowSpec.funnelEvents.includes(t) &&
-                            (currentFlowSpec.apiEvents.includes(t) || !isForeignFlowEvent(t, flowType))
-                        )
+                        .filter((t) => !currentFlowSpec.funnelEvents.includes(t))
                         .map((type) => (
                           <option key={type} value={type}>
-                            {eventLabel(type)}
+                            {eventLabel(type, flowType)}
                           </option>
                         ))}
                     </optgroup>
@@ -1366,7 +885,7 @@ function CampaignLogsPage() {
               <label className="block text-xs font-bold text-gray-500 mb-1.5">Verification Status</label>
               <select
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
-                value={filters.status || ''}
+                value={effectiveStatus}
                 onChange={(e) => updateFilter('status', e.target.value)}
               >
                 <option value="">— All Statuses —</option>
@@ -1381,11 +900,11 @@ function CampaignLogsPage() {
               <label className="block text-xs font-bold text-gray-500 mb-1.5">Vendor</label>
               <select
                 className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2 bg-gray-50/40 text-gray-800 font-medium focus:ring-2 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all duration-200 cursor-pointer"
-                value={filters.vendorId}
+                value={effectiveVendorId}
                 onChange={(e) => updateFilter('vendorId', e.target.value)}
               >
                 <option value="">— All Vendors —</option>
-                {vendors.map((v) => (
+                {vendorOptions.map((v) => (
                   <option key={v.id} value={v.id}>
                     {v.name} ({v.code})
                   </option>
@@ -1448,8 +967,8 @@ function CampaignLogsPage() {
           <div className="flex flex-wrap gap-2 mb-3">
             {activePresets.map((preset) => {
               const active =
-                preset.events.length === compareEvents.length &&
-                preset.events.every((e, i) => e === compareEvents[i])
+                preset.events.length === effectiveCompareEvents.length &&
+                preset.events.every((e, i) => e === effectiveCompareEvents[i])
               return (
                 <button
                   key={preset.id}
@@ -1480,7 +999,7 @@ function CampaignLogsPage() {
                 <span className="opacity-80">×</span>
               </button>
             ))}
-            {compareEvents.length < MAX_COMPARE_EVENTS ? (
+            {effectiveCompareEvents.length < MAX_COMPARE_EVENTS ? (
               <select
                 className="text-[11px] font-semibold border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-700"
                 value=""
@@ -1491,10 +1010,10 @@ function CampaignLogsPage() {
               >
                 <option value="">+ Add event</option>
                 {eventTypeOptions
-                  .filter((type) => !compareEvents.includes(type))
+                  .filter((type) => !effectiveCompareEvents.includes(type))
                   .map((type) => (
                     <option key={type} value={type}>
-                      {eventLabel(type)}
+                      {eventLabel(type, flowType)}
                     </option>
                   ))}
               </select>
@@ -1514,9 +1033,9 @@ function CampaignLogsPage() {
               colorClass="from-indigo-500 to-blue-500"
             />
           ))}
-          {compareEvents.length >= 2 ? (
+          {effectiveCompareEvents.length >= 2 ? (
             <StatCard
-              label={`${eventLabel(compareEvents[compareEvents.length - 1])} / ${eventLabel(compareEvents[0])}`}
+              label={`${eventLabel(effectiveCompareEvents[effectiveCompareEvents.length - 1], flowType)} / ${eventLabel(effectiveCompareEvents[0], flowType)}`}
               value={compareRatio}
               hint={compareRatioHint}
               icon={Percent}

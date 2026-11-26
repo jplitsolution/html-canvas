@@ -213,6 +213,37 @@ export const createSearchService = () => {
     queryBuilder.andWhere('visit.visitStatus = :status', { status });
   };
 
+  const applyEventFilter = (
+    queryBuilder,
+    eventType,
+    { mode = 'sessions' } = {},
+  ) => {
+    if (!eventType) return;
+    const upper = String(eventType).trim().toUpperCase();
+    if (upper.startsWith('API_') && upper.length > 4) {
+      const apiCallType = upper.slice(4).toLowerCase();
+      queryBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM api_call_logs acl
+          WHERE acl.visit_id = visit.id AND acl.call_type = :apiCallType
+        )`,
+        { apiCallType },
+      );
+      return;
+    }
+    if (mode === 'events') {
+      queryBuilder.andWhere('event.eventType = :eventType', { eventType });
+      return;
+    }
+    queryBuilder.andWhere(
+      `EXISTS (
+        SELECT 1 FROM visit_events ve
+        WHERE ve.visit_id = visit.id AND ve.event_type = :eventType
+      )`,
+      { eventType },
+    );
+  };
+
   const applyDbFilters = (queryBuilder, params, options = {}) => {
     if (Array.isArray(params.campaignId)) {
       queryBuilder.where('visit.campaignId IN (:...campaignIds)', {
@@ -231,9 +262,7 @@ export const createSearchService = () => {
     }
 
     if (params.eventType && !options.ignoreEventType) {
-      queryBuilder.andWhere('event.eventType = :eventType', {
-        eventType: params.eventType,
-      });
+      applyEventFilter(queryBuilder, params.eventType, { mode: 'events' });
     }
     if (params.status) {
       applyStatusFilter(queryBuilder, params.status);
@@ -325,13 +354,7 @@ export const createSearchService = () => {
       if (to) queryBuilder.andWhere('visit.createdAt <= :to', { to });
     }
     if (params.eventType) {
-      queryBuilder.andWhere(
-        `EXISTS (
-          SELECT 1 FROM visit_events ve
-          WHERE ve.visit_id = visit.id AND ve.event_type = :eventType
-        )`,
-        { eventType: params.eventType },
-      );
+      applyEventFilter(queryBuilder, params.eventType, { mode: 'sessions' });
     }
     if (params.status) {
       applyStatusFilter(queryBuilder, params.status);
