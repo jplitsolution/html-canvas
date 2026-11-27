@@ -152,14 +152,34 @@ export function createPostbackQuery(deps) {
     };
   };
 
+  /**
+   * Date chips mean activity in this window, not "row first inserted today".
+   * Operator callbacks (unrenewed, parking, unsub) update an existing MSISDN row
+   * and only bump updatedAt. Filtering createdAt alone hides those hits even
+   * though the callback mix counted them from today's api_call_logs.
+   */
   const applyCreatedAtRange = (qb, alias, query = {}) => {
     const { from, to } = resolveRangeBounds({
       from: query.from,
       to: query.to,
       timezone: query.timezone,
     });
-    if (from) qb.andWhere(`${alias}.createdAt >= :from`, { from });
-    if (to) qb.andWhere(`${alias}.createdAt <= :to`, { to });
+    if (from && to) {
+      qb.andWhere(
+        `(${alias}.createdAt BETWEEN :from AND :to OR ${alias}.updatedAt BETWEEN :from AND :to OR ${alias}.sentAt BETWEEN :from AND :to)`,
+        { from, to },
+      );
+    } else if (from) {
+      qb.andWhere(
+        `(${alias}.createdAt >= :from OR ${alias}.updatedAt >= :from OR ${alias}.sentAt >= :from)`,
+        { from },
+      );
+    } else if (to) {
+      qb.andWhere(
+        `(${alias}.createdAt <= :to OR ${alias}.updatedAt <= :to OR ${alias}.sentAt <= :to)`,
+        { to },
+      );
+    }
     return { from, to };
   };
 
@@ -571,7 +591,8 @@ export function createPostbackQuery(deps) {
 
     const total = await qb.clone().getCount();
     const rows = await qb
-      .orderBy('p.id', 'DESC')
+      .orderBy('p.updatedAt', 'DESC')
+      .addOrderBy('p.id', 'DESC')
       .skip((page - 1) * limit)
       .take(limit)
       .getMany();
